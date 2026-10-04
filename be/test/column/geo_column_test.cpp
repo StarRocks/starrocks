@@ -388,15 +388,19 @@ TEST(GeoColumnTest, MysqlWkbUsesExistingBinaryEncoding) {
     EXPECT_FALSE(column->has_wkb_cache());
 }
 
-TEST(GeoColumnTest, GenericCreationCannotRelabelTypedPayload) {
+TEST(GeoColumnTest, GenericCreationPreservesTypedPayload) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto desc =
                 descriptor(primitive == TYPE_GEOGRAPHY ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY);
         auto source = GeoColumn::create(desc);
         source->append_wkb(Slice(point()));
         auto destination = ColumnHelper::create_column(TypeDescriptor::create_geo_type(primitive, desc.type), false);
-        EXPECT_THROW(destination->append(*source, 0, 1), std::invalid_argument);
-        EXPECT_EQ(0, destination->size());
+        // The factory already fixes the semantic type; an empty destination can acquire storage metadata.
+        ASSERT_NO_THROW(destination->append(*source, 0, 1));
+        ASSERT_EQ(1, destination->size());
+        EXPECT_EQ(desc, down_cast<const GeoColumn*>(destination.get())->descriptor());
+        EXPECT_EQ(point(), down_cast<const GeoColumn*>(destination.get())->get_wkb(0).to_string());
+        EXPECT_EQ(desc, source->descriptor());
         auto copied = source->clone();
         EXPECT_EQ(desc, down_cast<const GeoColumn*>(copied.get())->descriptor());
         EXPECT_EQ(point(), down_cast<const GeoColumn*>(copied.get())->get_wkb(0).to_string());
