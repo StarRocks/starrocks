@@ -18,12 +18,15 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -291,6 +294,22 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature");
         analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 2)",
                 "No matching function with signature");
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyRejectsMissingDescriptor() {
+        // Native SQL constructors attach a CRS; exercise the guard with a descriptorless resolved slot.
+        ScalarType geometryType = new ScalarType(PrimitiveType.GEOMETRY);
+        SlotRef geometry = new SlotRef(null, "geometry_without_crs");
+        geometry.setType(geometryType);
+        FloatLiteral tolerance = new FloatLiteral(1.0);
+        FunctionCallExpr call = new FunctionCallExpr(FunctionSet.ST_SIMPLIFY_PRESERVE_TOPOLOGY,
+                List.of(geometry, tolerance));
+
+        SemanticException error = Assertions.assertThrows(SemanticException.class,
+                () -> FunctionAnalyzer.getAnalyzedFunction(getConnectContext(), call,
+                        new Type[] {geometryType, tolerance.getType()}));
+        Assertions.assertEquals("st_simplifypreservetopology requires a GEOMETRY CRS descriptor", error.getDetailMsg());
     }
 
     @Test
