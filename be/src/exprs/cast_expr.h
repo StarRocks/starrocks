@@ -268,7 +268,7 @@ public:
             // that are not "simple keys" (anything outside [a-zA-Z0-9_], e.g. a leading
             // '$' or an embedded '.'), even though such names are perfectly valid object
             // keys, e.g. STRUCT<`$currency` STRING>.
-            _variant_paths.emplace_back(std::vector<VariantSegment>{VariantSegment::make_object(field_name)});
+            _variant_paths.emplace_back(std::vector<VariantPathExtraction>{VariantObjectExtraction(field_name)});
         }
     }
 

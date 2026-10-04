@@ -12,11 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD
-=======
-#include "base/simd/simd.h"
-#include "base/string/slice.h"
->>>>>>> ce24142 ([BugFix] Fix variant paths for struct casts with special chars (#74168))
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -30,6 +25,7 @@
 #include "gutil/strings/substitute.h"
 #include "jsonpath.h"
 #include "runtime/memory/memory_resource.h"
+#include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/slice.h"
 #include "velocypack/Iterator.h"
