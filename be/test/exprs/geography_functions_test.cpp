@@ -1973,10 +1973,9 @@ TEST_F(geographyFunctionsTest, nativeGeoHistoricalFunctionIds) {
         node.__set_num_children(arguments);
         TFunction fn;
         TFunctionName name;
-        name.__set_function_name(arguments == 2 ? "st_distance"
-                                                : (result_type == TYPE_VARCHAR ? "st_geometrytype"
-                                                   : planar                    ? "st_x"
-                                                                               : "st_y"));
+        name.__set_function_name(
+                arguments == 2 ? "st_distance"
+                               : (result_type == TYPE_VARCHAR ? "st_geometrytype" : planar ? "st_x" : "st_y"));
         fn.__set_name(name);
         fn.__set_binary_type(TFunctionBinaryType::BUILTIN);
         fn.__set_fid(id);
