@@ -220,9 +220,7 @@ TEST(GeoCoverageTest, AdmissionLimitsBeforeKernel) {
         ASSERT_TRUE(c->append(Slice(inputs[0])).ok());
         auto status = c->append(Slice(inputs[1]));
         ASSERT_FALSE(status.ok());
-        EXPECT_NE(status.to_string().find(limit == 0   ? "max_rows"
-                                          : limit == 1 ? "max_vertices"
-                                                       : "max_input_bytes"),
+        EXPECT_NE(status.to_string().find(limit == 0 ? "max_rows" : limit == 1 ? "max_vertices" : "max_input_bytes"),
                   std::string::npos);
         EXPECT_EQ(c->kernel_calls(), 0);
         EXPECT_FALSE(c->result(0).ok());
