@@ -19,6 +19,7 @@
 #include <random>
 #include <vector>
 
+#include "base/compiler_util.h"
 #include "base/simd/simd_utils.h"
 #include "base/testutil/parallel_test.h"
 #include "gtest/gtest.h"
@@ -64,6 +65,12 @@ PARALLEL_TEST(RleSimdTest, simd_fill_int32) {
     }
 }
 
+// For 1-byte T, GCC lowers std::fill_n inside simd_fill to memset and reports a -Wstringop-overflow false positive
+// ("specified bound 18446744073709551615") on an unreachable path; n only takes the sizes listed below.
+DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wstringop-overflow")
+#endif
 template <class T>
 static void test_simdutils_fill(T value, T sentinel) {
     for (size_t n :
@@ -76,6 +83,7 @@ static void test_simdutils_fill(T value, T sentinel) {
         ASSERT_EQ(dst.back(), sentinel) << "n=" << n << " sentinel";
     }
 }
+DIAGNOSTIC_POP
 
 PARALLEL_TEST(RleSimdTest, simdutils_simd_fill) {
     test_simdutils_fill<int8_t>(0x55, static_cast<int8_t>(-1));
