@@ -278,6 +278,19 @@ public class ViewsSystemTable extends SystemTable {
     }
 
     /**
+     * Whether the table passes the TABLE_NAME and pattern filters of the request. Evaluated twice
+     * per table - once as a cheap pre-filter outside the table lock and once under it - so it is
+     * kept in one place to make sure the two never drift apart.
+     */
+    private static boolean matchesNameFilters(Table table, String paramTableName, String paramPattern,
+                                              PatternMatcher matcher, boolean caseSensitive) {
+        if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
+            return false;
+        }
+        return Strings.isNullOrEmpty(paramTableName) || table.getName().equalsIgnoreCase(paramTableName);
+    }
+
+    /**
      * if the limit is reached, false is returned, otherwise true will be returned.
      */
     private static boolean collectViewsInDb(ConnectContext context, Database db,
@@ -287,25 +300,87 @@ public class ViewsSystemTable extends SystemTable {
         if (db == null) {
             return true;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        String dbName = db.getFullName();
+        // A DB-wide READ lock must not be used here, because this method runs in two very
+        // different scopes: the thrift `listTableStatus` handler, which holds no meta lock, and
+        // SchemaTableEvaluateRule during optimization, which runs inside PlannerMetaLocker and
+        // therefore already holds an INTENTION_SHARED lock on every database referenced by the
+        // query. Hierarchical locking forbids requesting a plain database READ lock inside an
+        // intention scope - MultiUserLock#tryLock throws NotSupportLockException - which fails
+        // the whole query, both for information_schema itself and for every user database the
+        // query touches.
+        //
+        // Instead this follows the split design fe/AGENTS.md prescribes for "snapshot a table
+        // list, then do per-table work", in the shape TabletScheduler#getTabletBalanceTypes uses:
+        // a database INTENTION_SHARED lock scopes the snapshot only, and each table is then
+        // visited under its own intensive READ lock (IS on the database + READ on the table).
+        // Keeping the IS to the snapshot means CREATE/DROP TABLE, which take DB WRITE, are only
+        // blocked while the list is read rather than for the whole walk.
+        //
+        // Everything a reported row is built from - the database name, the name and pattern
+        // match, the authorization decision and the row itself - is read under that per-table
+        // lock. That matters for two different renames:
+        //
+        //   ALTER TABLE ... RENAME takes IX on the database plus WRITE on the table
+        //   (AlterJobExecutor#visitTableRenameClause). IS does not conflict with IX, so only the
+        //   table READ half keeps a rename from landing between a name check and the row being
+        //   built - which would emit a row carrying the new name while it was selected by the
+        //   old one, and would let a name-based external authorizer decide on the pre-rename
+        //   name.
+        //
+        //   ALTER DATABASE ... RENAME takes DB WRITE (LocalMetastore#renameDatabase), which the
+        //   IS half does conflict with. Reading db.getFullName() before the lock would leave
+        //   TABLE_SCHEMA and that same authorization decision pointing at a stale namespace, so
+        //   the name is read inside the lock, per row.
+        //
+        // A cheap copy of the name filters also runs outside the lock, purely so that a
+        // selective request does not lock and authorize every table; that call site explains it.
+        List<Table> tables;
+        Locker dbLocker = new Locker();
+        dbLocker.lockDatabase(db.getId(), LockType.INTENTION_SHARED);
         try {
-            List<Table> tables = listingViews ? db.getViews() :
+            tables = listingViews ? db.getViews() :
                     GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-            OUTER:
-            for (Table table : tables) {
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
-                } catch (AccessDeniedException e) {
+        } finally {
+            dbLocker.unLockDatabase(db.getId(), LockType.INTENTION_SHARED);
+        }
+
+        OUTER:
+        for (Table table : tables) {
+            // Cheap pre-filter, outside the lock: without it a request that names one table or a
+            // selective pattern would still take a table lock and run an authorization check for
+            // every table in the database, and with no TABLE_SCHEMA filter that is every table in
+            // the catalog. The name is read unsynchronized here, so a table renamed *into* the
+            // filter while the scan is running can be missed; that is acceptable for a concurrent
+            // metadata listing, and the evaluation under the lock below stays authoritative for
+            // everything that is reported.
+            if (!matchesNameFilters(table, paramTableName, paramPattern, matcher, caseSensitive)) {
+                continue;
+            }
+
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                // The snapshot was taken under a lock that has since been released, so skip a
+                // table that a concurrent DROP removed in the meantime.
+                if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), table.getId()) == null) {
                     continue;
                 }
 
-                if (!PatternMatcher.matchPattern(paramPattern, table.getName(), matcher, caseSensitive)) {
+                // Stable under the IS half of this lock, which conflicts with the DB WRITE that
+                // ALTER DATABASE ... RENAME takes.
+                String dbName = db.getFullName();
+
+                // Authoritative re-evaluation: the name is stable under the table lock, so a
+                // rename that raced with the pre-filter cannot make the emitted row disagree
+                // with the filter that selected it.
+                if (!matchesNameFilters(table, paramTableName, paramPattern, matcher, caseSensitive)) {
                     continue;
                 }
-                if (!Strings.isNullOrEmpty(paramTableName) &&
-                        !table.getName().equalsIgnoreCase(paramTableName)) {
+
+                try {
+                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
+                } catch (AccessDeniedException e) {
                     continue;
                 }
 
@@ -329,10 +404,10 @@ public class ViewsSystemTable extends SystemTable {
                         List<TableName> allTables = view.getTableRefs();
                         for (TableName tableName : allTables) {
                             Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                    .getTable(db.getFullName(), tableName.getTbl());
+                                    .getTable(dbName, tableName.getTbl());
                             if (tbl != null) {
                                 try {
-                                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
+                                    Authorizer.checkAnyActionOnTableLikeObject(context, dbName, tbl);
                                 } catch (AccessDeniedException e) {
                                     continue OUTER;
                                 }
@@ -349,9 +424,9 @@ public class ViewsSystemTable extends SystemTable {
                 if (limit > 0 && result.size() >= limit) {
                     return false;
                 }
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
         }
         return true;
     }
