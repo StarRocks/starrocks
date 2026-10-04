@@ -2768,7 +2768,14 @@ static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPt
 
     ObjectPool pool;
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
-    MockExpr child(TypeDescriptor(TYPE_VARIANT), column);
+    // Build the child from a SLOT_REF node: Expr(TypeDescriptor) has no literal node type for VARIANT.
+    TExprNode child_node;
+    child_node.node_type = TExprNodeType::SLOT_REF;
+    child_node.type = gen_type_desc(TPrimitiveType::VARIANT);
+    child_node.child_type = TPrimitiveType::VARIANT;
+    child_node.num_children = 0;
+    child_node.__isset.child_type = true;
+    MockExpr child(child_node, column);
     expr->_children.push_back(&child);
     return expr->evaluate(nullptr, nullptr);
 }
