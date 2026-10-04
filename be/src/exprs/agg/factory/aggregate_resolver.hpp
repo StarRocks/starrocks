@@ -140,6 +140,15 @@ public:
     }
 
     template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_window_mapping_native(const std::string& name, SpecificAggFunctionPtr fun) {
+        track_function(fun);
+        // The function itself handles NULL geometry and plan-constant NULL
+        // parameters. Never register this as a mergeable ordinary aggregate.
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), fun);
+    }
+
+    template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);

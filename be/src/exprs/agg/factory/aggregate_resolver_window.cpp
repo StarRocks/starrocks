@@ -50,6 +50,8 @@ struct WindowDispatcher {
 };
 
 void AggregateFuncResolver::register_window() {
+    add_window_mapping_native<TYPE_GEOMETRY, TYPE_GEOMETRY>("st_coveragesimplify",
+                                                            AggregateFactory::MakeCoverageWindowFunction());
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, WindowDispatcher(), this);
     }

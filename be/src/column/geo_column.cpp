@@ -64,6 +64,25 @@ GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
         throw std::invalid_argument("GeoColumn requires WKB encoding");
 }
 
+GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, ContainerResource resource, AdaptiveOffsets offsets,
+                     std::shared_ptr<GeoColumnViewOwner> owner)
+        : _descriptor(std::move(descriptor)),
+          _data(std::make_unique<BinaryColumn>(std::move(resource), std::move(offsets), true)),
+          _view_owner(std::move(owner)) {
+    if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
+        throw std::invalid_argument("GeoColumn requires WKB encoding");
+}
+
+size_t GeoColumn::allocation_footprint(const memory::Allocator& allocator) const {
+    auto capacity = [&](size_t bytes) -> size_t { return bytes ? allocator.nallox(bytes) : 0; };
+    const auto& offsets = _data->get_offset();
+    const auto offset_bytes = offsets.capacity() * offsets.element_size();
+    return capacity(sizeof(GeoColumn)) + capacity(sizeof(BinaryColumn)) +
+           capacity(_data->owned_bytes_capacity() ? _data->owned_bytes_capacity() + 16 : 0) + capacity(offset_bytes) +
+           (_view_owner ? _view_owner->retained_bytes() : 0) +
+           (_descriptor.type.crs.size() > 15 ? capacity(_descriptor.type.crs.capacity() + 1) : 0);
+}
+
 GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
         : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{}),
                                         {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
@@ -213,6 +232,7 @@ void GeoColumn::swap_column(Column& rhs) {
     swap(_descriptor, geo._descriptor);
     swap(_limits, geo._limits);
     swap(_data, geo._data);
+    swap(_view_owner, geo._view_owner);
     swap(_delete_state, geo._delete_state);
     clear_wkb_cache();
     geo.clear_wkb_cache();
@@ -222,6 +242,7 @@ void GeoColumn::reset_column() {
     Column::reset_column();
     clear_wkb_cache();
     _data->reset_column();
+    _view_owner.reset();
 }
 
 size_t GeoColumn::container_memory_usage() const {

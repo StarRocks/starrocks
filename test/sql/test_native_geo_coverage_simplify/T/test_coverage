@@ -1,0 +1,15 @@
+-- name: test_native_geo_coverage_simplify
+
+SET enable_spill=false;
+SET pipeline_dop=4;
+CREATE TABLE coverage_fixture (district_id INT, coverage_id INT, wkt VARCHAR(256)) DUPLICATE KEY(district_id) DISTRIBUTED BY HASH(district_id) BUCKETS 3 PROPERTIES("replication_num"="1");
+INSERT INTO coverage_fixture VALUES (1,7,'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))'),(2,7,'POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))'),(3,7,NULL),(4,7,'MULTIPOLYGON EMPTY'),(5,8,'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))'),(6,8,'POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))');
+SELECT district_id, ST_AsText(ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,FALSE) OVER(PARTITION BY coverage_id)) FROM coverage_fixture ORDER BY district_id;
+SET pipeline_dop=1;
+SELECT district_id, ST_AsText(ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),1,FALSE) OVER(PARTITION BY coverage_id)) FROM coverage_fixture ORDER BY district_id;
+SELECT district_id, ST_SRID(ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:4326'),0) OVER(PARTITION BY coverage_id)) FROM coverage_fixture ORDER BY district_id;
+SELECT district_id, ST_AsBinary(ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),0) OVER(PARTITION BY coverage_id)) = ST_AsBinary(ST_GeomFromText(wkt,'EPSG:3857')) FROM coverage_fixture ORDER BY district_id;
+SELECT ST_AsText(ST_CoverageSimplify(ST_GeomFromText('MULTIPOLYGON EMPTY','EPSG:4326'),1) OVER());
+SELECT ST_AsText(ST_CoverageSimplify(ST_GeomFromText('POLYGON EMPTY','EPSG:3857'),0,NULL) OVER());
+SELECT district_id, ST_AsText(ST_CoverageSimplify(ST_GeomFromText(wkt,'EPSG:3857'),NULL) OVER()) FROM coverage_fixture ORDER BY district_id;
+DROP TABLE coverage_fixture;

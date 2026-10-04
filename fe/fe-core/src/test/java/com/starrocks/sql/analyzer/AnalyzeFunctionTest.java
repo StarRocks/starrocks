@@ -18,6 +18,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.AnalyticExpr;
 import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
@@ -266,7 +267,7 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature");
         for (String function : new String[] {"ST_CoverageSimplify"}) {
             analyzeFail("select " + function + "(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1)",
-                    "No matching function with signature");
+                    "only used in analytic function");
         }
     }
 
@@ -294,6 +295,54 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature");
         analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 2)",
                 "No matching function with signature");
+    }
+
+    @Test
+    public void testNativeGeoCoverageWindowSignaturesAndDescriptors() {
+        for (String crs : new String[] {"EPSG:4326", "EPSG:3857"}) {
+            String geometry = "ST_GeomFromText('POLYGON EMPTY', '" + crs + "')";
+            for (String tail : new String[] {"0", "1 + 2", "NULL", "1, TRUE", "1, FALSE", "1, NULL"}) {
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                        "select ST_CoverageSimplify(" + geometry + ", " + tail + ") over ()")).getQueryRelation();
+                AnalyticExpr call = (AnalyticExpr) ((SelectRelation) relation).getOutputExpression().get(0);
+                Assertions.assertEquals(tail.contains(",") ? 120431 : 120421,
+                        call.getFnCall().getFn().getFunctionId());
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs),
+                        ((ScalarType) call.getType()).getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_CoverageSimplify(g, cast(1+2 as double), 1=1) over (partition by v1) " +
+                "from (select v1, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857') g from t0) q");
+        // A NULL optional parameter suppresses the kernel after constness/type checks.
+        analyzeSuccess("select ST_CoverageSimplify(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), -1, NULL) over ()");
+    }
+
+    @Test
+    public void testNativeGeoCoverageWindowRejectsUnsupportedForms() {
+        String geometry = "ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857')";
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1)", "only used in analytic function");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", v1) over () from t0", "plan-constant");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", v1, NULL) over () from t0", "plan-constant");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, v1=1) over () from t0", "plan-constant");
+        for (String parameter : new String[] {"-1", "1e200"}) {
+            analyzeFail("select ST_CoverageSimplify(" + geometry + ", " + parameter + ") over ()",
+                    "finite nonnegative tolerance");
+        }
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 'x') over ()", "tolerance must be numeric");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, 1) over ()", "boundary must be BOOLEAN");
+        analyzeFail("select ST_CoverageSimplify(ST_GeogFromText('POLYGON EMPTY'), 1) over ()",
+                    "native GEOMETRY CRS descriptor");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) over (order by v1) from t0", "full partition");
+        analyzeFail("select ST_CoverageSimplify(" + geometry +
+                ", 1) over (order by v1 rows between unbounded preceding and unbounded following) from t0",
+                "full partition");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) over ([skew] partition by v1) from t0");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) ignore nulls over ()");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1) respect nulls over ()");
+        analyzeFail("select ST_CoverageSimplify(distinct " + geometry + ", 1) over ()");
+        analyzeFail("select ST_CoverageSimplify_state(" + geometry + ", 1)");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ") over ()", "two or three arguments");
+        analyzeFail("select ST_CoverageSimplify(" + geometry + ", 1, TRUE, TRUE) over ()", "two or three arguments");
     }
 
     @Test

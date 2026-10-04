@@ -128,7 +128,7 @@ The native overloads do not renumber or replace the existing `VARCHAR` functions
 
 ## Upgrade and reference-test contract
 
-For a rolling upgrade, upgrade BEs before FEs. These functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. A newer FE with an older BE is not a supported upgrade order.
+For a rolling upgrade, upgrade BEs before FEs. Native scalar functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. The coverage window registry is described below. A newer FE with an older BE is not a supported upgrade order.
 
 The contract is enforced by focused FE analyzer tests for overload resolution, return types, legacy compatibility, and function IDs, and by BE registry tests for every native ID. Existing BE function tests cover constant, nullable, varying, `EMPTY`, malformed-input, family, dimension, CRS, and descriptor behavior.
 
@@ -174,3 +174,14 @@ These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the ce
 | `H3_Resolution(BIGINT)` | 120504 | `INT` |
 | `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
 | `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
+
+## Joint coverage simplification (window)
+
+Both overloads process the whole partition jointly and return one XY GEOMETRY per row with the original family and CRS. Parameters must be foldable plan constants; OVER is required. No inner ORDER BY, explicit frame, ordinary aggregate or spill support. See [ST_CoverageSimplify](st_coveragesimplify.md) for topology, NULL/EMPTY, tolerance and resource limits.
+
+| Signature | Function ID |
+| --- | ---: |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+
+GEOGRAPHY counterparts 120420 and 120430 are reserved without registration. FE records these IDs; BE resolves this window function by name and logical argument/result types through the window registry. Upgrade BEs before FEs.

@@ -128,7 +128,7 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 ## 升级与参考测试契约
 
-滚动升级时，应先升级 BE，再升级 FE。这些函数使用普通的稳定函数 ID 分发，不引入单独的 GEO 版本门控。不支持新 FE 与旧 BE 的升级顺序。
+滚动升级时，应先升级 BE，再升级 FE。原生标量函数使用普通的稳定函数 ID 分发，不引入单独的 GEO 版本门控。覆盖窗口注册表见下文。不支持新 FE 与旧 BE 的升级顺序。
 
 该契约由聚焦的 FE analyzer 测试验证重载解析、返回类型、旧版兼容性和函数 ID，并由 BE registry 测试验证每个原生 ID。现有 BE 函数测试覆盖常量、Nullable、变化输入、`EMPTY`、格式错误输入、类型、维度、CRS 和描述符行为。
 
@@ -174,3 +174,14 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `H3_Resolution(BIGINT)` | 120504 | `INT` |
 | `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
 | `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
+
+## 联合覆盖简化（窗口）
+
+两个重载共同处理整个分区，每行返回保留原类型和 CRS 的 XY GEOMETRY。参数必须为可折叠的计划常量，OVER 必需。不支持窗口内 ORDER BY、显式 frame、普通聚合及 spill。拓扑、NULL/EMPTY、容差与资源限制参见 [ST_CoverageSimplify](st_coveragesimplify.md)。
+
+| 签名 | Function ID |
+| --- | ---: |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+
+GEOGRAPHY 对应 ID 120420 和 120430 仅保留，未注册。FE 记录这些 ID；BE 根据名称及逻辑参数/返回类型在窗口注册表中解析。升级时先升级 BE，再升级 FE。

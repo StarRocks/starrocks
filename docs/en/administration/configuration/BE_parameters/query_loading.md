@@ -40,6 +40,30 @@ This topic introduces the following types of BE configurations:
 
 ## Query
 
+### Coverage simplification resource limits
+
+These mutable positive settings are captured per complete ST_CoverageSimplify window partition. Limits are rows (including NULL/EMPTY), original WKB coordinate positions (including closures/repetitions), input WKB bytes, and retained working bytes. Shared native backing, models, indices, mapping and output capacities count toward working memory. Query memory limits also apply. Admission checks precede window accumulation; exceeded limits return an error naming the setting, without partial partition results. See [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md).
+
+#### geo_coverage_max_rows_per_partition
+
+- Default: 10000
+- Is mutable: Yes
+
+#### geo_coverage_max_vertices_per_partition
+
+- Default: 1000000
+- Is mutable: Yes
+
+#### geo_coverage_max_input_bytes_per_partition
+
+- Default: 67108864
+- Is mutable: Yes
+
+#### geo_coverage_max_working_bytes_per_partition
+
+- Default: 268435456
+- Is mutable: Yes
+
 ### H3 resource limits
 
 These mutable positive BE settings limit one H3 function row. Exceeding a setting returns an error, not a partial result. See [H3 functions](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) for signatures and the center-fill model.

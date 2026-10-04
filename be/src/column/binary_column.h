@@ -110,6 +110,14 @@ public:
     }
 
     explicit BinaryColumnBase(ContainerResource resource, Offsets offsets);
+    // Immutable execution backing is independent of the page-cache setting.
+    BinaryColumnBase(ContainerResource resource, Offsets offsets, bool immutable_execution_backing);
+    void finish_resource_view(size_t bytes) {
+        CHECK(!_resource.empty());
+        CHECK_LE(bytes, _resource.length());
+        CHECK_EQ(bytes, _offsets.back());
+        _resource.set_length(bytes);
+    }
 
     DISALLOW_COPY_TEMPLATE(BinaryColumnBase, BinaryColumnBase<T>);
 
@@ -380,6 +388,7 @@ public:
         _ensure_materialized();
         return _bytes;
     }
+    size_t owned_bytes_capacity() const { return _bytes.capacity(); }
 
     ImmBytes get_immutable_bytes() const {
         if (!_resource.empty()) {

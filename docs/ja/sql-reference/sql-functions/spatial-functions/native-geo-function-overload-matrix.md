@@ -128,7 +128,7 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 ## アップグレードと参照テストの契約
 
-ローリングアップグレードでは、FE より先に BE をアップグレードしてください。これらの関数は通常の安定した関数 ID ディスパッチを使用し、独立した GEO バージョンゲートは導入しません。新しい FE と古い BE の組み合わせは、サポートされるアップグレード順序ではありません。
+ローリングアップグレードでは、FE より先に BE をアップグレードしてください。ネイティブスカラー関数は通常の安定した関数 ID ディスパッチを使用し、独立した GEO バージョンゲートは導入しません。coverage のウィンドウレジストリについては後述します。新しい FE と古い BE の組み合わせは、サポートされるアップグレード順序ではありません。
 
 この契約は、オーバーロード解決、戻り型、レガシー互換性、関数 ID を確認する FE analyzer テストと、各ネイティブ ID を確認する BE registry テストで検証されます。既存の BE 関数テストは、定数、Nullable、可変入力、`EMPTY`、不正入力、ファミリ、次元、CRS、ディスクリプタの動作を網羅します。
 
@@ -174,3 +174,14 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | `H3_Resolution(BIGINT)` | 120504 | `INT` |
 | `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
 | `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
+
+## 共同 coverage 簡略化（ウィンドウ）
+
+両 overload はパーティション全体を共同処理し、元の型と CRS を維持する XY GEOMETRY を各行に返します。引数は折り畳み可能なプラン定数で、OVER が必須です。内部 ORDER BY、明示 frame、通常の集約、spill は未サポートです。トポロジー、NULL/EMPTY、許容値と資源制限は [ST_CoverageSimplify](st_coveragesimplify.md) を参照してください。
+
+| シグネチャ | Function ID |
+| --- | ---: |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+
+GEOGRAPHY 用 ID 120420 と 120430 は予約のみで、未登録です。FE が ID を記録し、BE は名前と論理引数/結果型によってウィンドウレジストリで解決します。BE を FE より先にアップグレードしてください。
