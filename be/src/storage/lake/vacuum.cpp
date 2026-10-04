@@ -65,6 +65,12 @@ struct VacuumTabletMetaVerionRange {
     // any tablet still retains.
     bool intersect_low = false;
 
+    // True when nothing is deletable: either no tablet ever merged a range (the initial {0, 0} -- e.g.
+    // the grace period stopped every tablet from advancing), or the merged range came out degenerate
+    // (low >= high, e.g. an empty intersection across tablets). Callers must check this before acting
+    // on |min_version| / |max_version|: on an empty range they carry no meaning.
+    bool empty() const { return min_version >= max_version; }
+
     /*
     * if tablet a has version range [1, ..., 10) ,
     * and tablet b has version range [5, ..., 15),
@@ -513,6 +519,12 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     // or when the very first read returns NotFound, i.e. the metadata at and below the retain
     // boundary has already been vacuumed away by a previous run.
     bool read_any_metadata = false;
+    // Whether the walk stopped because a metadata read returned NotFound rather than because the loop
+    // guard dropped below |min_version|. Combined with |read_any_metadata| it identifies an ANCHORED
+    // NotFound: the walk read a real metadata and then followed its |prev_garbage_version| to a version
+    // that no longer exists. That pointer links only materialized versions, so such a NotFound is the
+    // genuine chain bottom -- nothing exists at or below it.
+    bool walk_hit_missing_version = false;
     size_t extra_file_size = 0;
     int64_t prepare_vacuum_file_size = 0;
     // Starting at |*final_retain_version|, read the tablet metadata forward along
@@ -527,6 +539,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                 vacuum_version_range != nullptr /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
+            walk_hit_missing_version = true;
             break;
         } else if (!res.ok()) {
             return res.status();
@@ -598,6 +611,27 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             // never below `final_retain_version` (which itself no longer exists).
             *vacuumed_version = std::max<int64_t>(final_retain_version, min_version - 1);
             return Status::OK();
+        }
+        // The grace period stopped this round from deleting anything, so |final_retain_version| must NOT
+        // become the new floor: the versions between the walk terminus and the retain boundary still
+        // exist and still reference garbage files that a later round must collect once they age past the
+        // grace timestamp. Advancing the floor past them would strand that work forever.
+        //
+        // But an ANCHORED NotFound did prove something the next round can reuse: the chain bottom sits at
+        // |version|, so nothing exists at or below it. Without recording it, the BE echoes back the floor
+        // the FE sent, the next round re-walks the same versions and re-pays the same NotFound, once per
+        // tablet per round for as long as the partition keeps being written inside the grace window.
+        //
+        // |version + 1| is the only bound the walk established -- the very same bound the success path
+        // feeds to vacuum_version_range->merge(version + 1, final_retain_version). std::max keeps the
+        // floor monotonic so a stale request can never move it backwards.
+        //
+        // Deliberately restricted to the anchored case. An un-anchored NotFound (the first read, handled
+        // by the branch above) is NOT proof of a chain bottom: |min_retain_version| can be lowered to a
+        // bookmark fence version that this tablet never materialized because batch publish folded it into
+        // a later snapshot, and treating that hole as the bottom would strand every version below it.
+        if (walk_hit_missing_version) {
+            tablet_info.set_min_version(std::max<int64_t>(min_version, version + 1));
         }
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
@@ -703,7 +737,15 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         // if a table enables shared cleanup and finished alter job, the new created tablet will create initial tablet metadata
         // its own tablet_id to avoid overwriting the initial tablet metadata.
         // After that, we need to vacuum these metadata file using its own tablet_id
-        if (vacuum_version_range->min_version <= 1) {
+        //
+        // Only when version 1 actually falls inside the deletable range. Testing `min_version <= 1` alone
+        // also matched the empty range {0, 0} -- the normal state when the grace period stopped every
+        // tablet from advancing -- and vacuum then issued a speculative delete of every tablet's version-1
+        // metadata and reported them as vacuumed, even though nothing was deletable this round. For a
+        // freshly created partition still inside the grace window that file is the tablet's only metadata.
+        // A merged range always has min_version >= 1 (it is a `version + 1`), so a non-empty range with
+        // min_version <= 1 is exactly one that contains version 1.
+        if (!vacuum_version_range->empty() && vacuum_version_range->min_version <= 1) {
             for (auto& tablet_info : tablet_infos) {
                 RETURN_IF_ERROR(metafile_deleter.delete_file(
                         join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
@@ -1470,11 +1512,10 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
 
 static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
         const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
-    RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_path));
-    ASSIGN_OR_RETURN(auto input_file, fs->new_random_access_file(opts, meta_path));
     // Read the entire file content into a string.
-    ASSIGN_OR_RETURN(auto serialized_string, input_file->read_all());
+    ASSIGN_OR_RETURN(auto serialized_string, TabletManager::read_bundle_metadata_file_with_meter(
+                                                     fs.get(), meta_path, /*skip_fill_local_cache=*/true));
     // Parse the bundle tablet metadata from the serialized string.
     ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(meta_path, serialized_string));
     bool shared_meta_contains_deleted_tablet = false;

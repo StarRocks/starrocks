@@ -51,7 +51,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -77,6 +76,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PreResolvedViewBodies;
+import com.starrocks.sql.analyzer.PreResolvedWriteTargets;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -247,6 +248,13 @@ public class ConnectContext {
     // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
     private final Set<String> viewExpansionPath = Sets.newHashSet();
 
+    // Names of the recursive CTEs whose recursive member is currently being analyzed. Like
+    // viewExpansionPath it lives on the session (not on a single QueryAnalyzer.Visitor) so it is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // recursive reference routed through such a subquery would otherwise not see the enclosing
+    // recursive CTE, fall through to the optimizer and expand without end (StackOverflowError).
+    private final Set<String> recursiveCteAnalysisPath = Sets.newHashSet();
+
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
     // Control whether to read Iceberg caches without populating/updating them for the current execution.
@@ -261,6 +269,14 @@ public class ConnectContext {
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
     private StatisticsLoadBudget statisticsLoadBudget;
+
+    // View bodies the unlocked pre-pass resolved for the statement being planned, handed to the locked
+    // analyzer when it expands those views. Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedViewBodies preResolvedViewBodies = new PreResolvedViewBodies();
+
+    // The DML write target the same pre-pass resolved, when it lives in an external catalog and so is not
+    // an object the meta lock covers. Scoped to one statement, cleared alongside the view bodies.
+    private final PreResolvedWriteTargets preResolvedWriteTargets = new PreResolvedWriteTargets();
 
     // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
     // its per-statement timings here so the eventual profile can attach them. Broker Load instead
@@ -1377,6 +1393,10 @@ public class ConnectContext {
         return viewExpansionPath;
     }
 
+    public Set<String> getRecursiveCteAnalysisPath() {
+        return recursiveCteAnalysisPath;
+    }
+
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -1399,6 +1419,14 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public PreResolvedViewBodies getPreResolvedViewBodies() {
+        return preResolvedViewBodies;
+    }
+
+    public PreResolvedWriteTargets getPreResolvedWriteTargets() {
+        return preResolvedWriteTargets;
     }
 
     public StatisticsLoadBudget getStatisticsLoadBudget() {
@@ -1904,7 +1932,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1912,7 +1940,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time

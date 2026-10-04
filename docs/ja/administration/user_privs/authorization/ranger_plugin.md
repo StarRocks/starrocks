@@ -7,6 +7,7 @@ sidebar_position: 40
 # Apache Ranger で権限を管理する
 
 import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
+import EditionSpecificRangerClusterConfig from '../../../_assets/commonMarkdown/Edition_Specific_Ranger_Cluster_Config.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) は、ユーザーが視覚的なウェブページを通じてアクセス ポリシーをカスタマイズできる集中型のセキュリティ管理フレームワークを提供します。これにより、どの役割がどのデータにアクセスできるかを決定し、Hadoop エコシステム内のさまざまなコンポーネントとサービスに対してきめ細かいデータ アクセス制御を実行できます。
 
@@ -142,84 +143,8 @@ Ranger クラスターを操作する権限がない場合や、この機能が�
    ![added service](../../../_assets/ranger_added_service.png)
 
 5. **Test connection** をクリックして接続性をテストし、接続が成功したら保存します。ranger-starrocks-plugin をインストールしていない場合は、接続テストをスキップして直接作成できます。
-6. StarRocks クラスターの各 FE マシンで、`fe/conf` フォルダーに [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml) を作成し、内容をコピーします。次の 2 つのパラメーターを変更し、変更を保存する必要があります。
 
-   - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
-   - `ranger.plugin.starrocks.policy.rest the url`: Ranger Admin のアドレスに変更します。
-
-   他の設定を変更する必要がある場合は、Apache Ranger の公式ドキュメントを参照してください。たとえば、`ranger.plugin.starrocks.policy.pollIntervalMs` を変更してポリシー変更の取得間隔を変更できます。
-
-   ```SQL
-   vim ranger-starrocks-security.xml
-
-   ...
-       <property>
-           <name>ranger.plugin.starrocks.service.name</name>
-           <value>starrocks</value> -- StarRocks Service 名に変更します。
-           <description>
-               Name of the Ranger service containing policies for this StarRocks instance
-           </description>
-       </property>
-   ...
-
-   ...
-       <property>
-           <name>ranger.plugin.starrocks.policy.rest.url</name>
-           <value>http://localhost:6080</value> -- Ranger Admin アドレスに変更します。
-           <description>
-               URL to Ranger Admin
-           </description>
-       </property>   
-   ...
-   ```
-
-7. (オプション) Ranger の監査ログサービスを使用する場合は、各 FE マシンの `fe/conf` フォルダーに [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml) ファイルを作成します。内容をコピーし、**`xasecure.audit.solr.solr_url` の `solr_url` を自分の `solr_url` に置き換えて**、ファイルを保存します。
-
-8. すべての FE 設定ファイルに `access_control = ranger` の設定を追加します。
-
-   ```SQL
-   vim fe.conf
-   access_control=ranger 
-   ```
-
-9. すべての FE マシンを再起動します。
-
-   ```SQL
-   -- FE フォルダーに切り替えます。
-   cd..
-
-   bin/stop_fe.sh
-   bin/start_fe.sh
-   ```
-
-## 他のサービスを再利用して外部テーブルへのアクセスを制御する
-
-External Catalog については、外部サービス (Hive Service など) を再利用してアクセス制御を行うことができます。StarRocks は、異なる Catalog に対して異なる Ranger 外部サービスを一致させることをサポートしています。ユーザーが外部テーブルにアクセスする際、システムは対応する外部テーブルの Ranger サービスのアクセス ポリシーに基づいてアクセス制御を実施します。ユーザーの権限は、同じ名前の Ranger ユーザーと一致します。
-
-1. Hive の Ranger 設定ファイル [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) と [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) をすべての FE マシンの `fe/conf` ファイルにコピーします。Ranger の IP とポートが正しいことを確認してください。
-2. すべての FE マシンを再起動します。
-3. External Catalog を設定します。
-
-   - External Catalog を作成する際に、プロパティ `"ranger.plugin.hive.service.name"` を追加します。
-
-      ```SQL
-        CREATE EXTERNAL CATALOG hive_catalog_1
-        PROPERTIES (
-            "type" = "hive",
-            "hive.metastore.type" = "hive",
-            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
-        )
-      ```
-
-   - 既存の External Catalog にもこのプロパティを追加できます。
-  
-       ```SQL
-       ALTER CATALOG hive_catalog_1
-       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
-       ```
-
-​    この操作により、既存の Catalog の認証方法が Ranger ベースの認証に変更されます。
+<EditionSpecificRangerClusterConfig />
 
 ## 次のステップ
 

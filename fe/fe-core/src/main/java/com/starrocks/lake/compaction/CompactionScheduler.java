@@ -62,6 +62,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -465,6 +466,14 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
+        // An explicit manual request is an operator override. The forbidden
+        // ranges only limit automatic base compaction.
+        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
+                !CompactionControlScheduler.isBaseCompactionForbidden(
+                        table.getBaseCompactionForbiddenTimeRanges(), new Date());
+    }
+
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
@@ -474,6 +483,7 @@ public class CompactionScheduler extends Daemon {
         // Get parallel compaction configuration from table property
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+        boolean allowBaseCompaction = allowBaseCompaction(table, priority);
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -491,6 +501,7 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
@@ -538,7 +549,10 @@ public class CompactionScheduler extends Daemon {
             }
             candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
-            nodePB.setHost(node.getHost());
+            // Resolved IP rather than hostname, for the same reason as the aggregate publish path:
+            // the aggregator feeds this straight into LakeServiceBrpcStubCache::get_stub(), which
+            // must resolve before it can even look up its cache. See Utils#createSubRequestForAggregatePublish.
+            nodePB.setHost(node.getIP());
             nodePB.setBrpcPort(node.getBrpcPort());
             nodePB.setId(entry.getKey());
 
@@ -550,6 +564,7 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction(table, priority);
             request.skipWriteTxnlog = true;
             request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 

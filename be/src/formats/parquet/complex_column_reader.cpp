@@ -2254,6 +2254,15 @@ bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
                   << " because leaf reader/type is unavailable";
         return false;
     }
+    // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
+    // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
+    // the converted predicate to leaf statistics can incorrectly prune matching rows.
+    if (*leaf_type != _virtual_slot_type) {
+        VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
+                  << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
+                  << ", virtual slot type=" << _virtual_slot_type.debug_string();
+        return false;
+    }
     // Variant shredding only permits data skipping on typed_value statistics when the paired
     // fallback `value` column is null for the entire row group. Otherwise min/max/bloom on
     // typed_value cover only the typed subset, while the engine may still match fallback rows

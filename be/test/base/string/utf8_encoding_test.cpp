@@ -46,6 +46,17 @@ TEST(Utf8EncodingTest, encodesAsciiAndMultibyteCharacters) {
     EXPECT_EQ(std::string_view(input + 4, 4), encoded_value_as_string_view(values[2]));
 }
 
+TEST(Utf8EncodingTest, clampsTruncatedTailLeadByteToInput) {
+    const char input[] = {'a', static_cast<char>(0xF0)};
+    std::vector<EncodedUtf8Char> values;
+
+    EXPECT_EQ(2, encode_utf8_chars(Slice(input, sizeof(input)), &values));
+    ASSERT_EQ(2, values.size());
+
+    EXPECT_EQ(std::string_view(input, 1), encoded_value_as_string_view(values[0]));
+    EXPECT_EQ(std::string_view(input + 1, 1), encoded_value_as_string_view(values[1]));
+}
+
 TEST(Utf8EncodingTest, defaultValueConvertsToEmptySlice) {
     EncodedUtf8Char value;
     Slice slice = value;

@@ -137,6 +137,27 @@ This is StarRocks’ query audit log, which records detailed information about a
 - `audit_log_json_format`: Whether to log in JSON format. Default is false
 - `audit_log_enable_compress`: Whether compression is enabled
 
+#### AI execution fields
+
+When AI execution statistics are available, the following fields describe observed, completed AI tasks. Tasks still in flight are not included. These statistics follow query reporting semantics: failures, cancellation, asynchronous reporting, and mixed-version execution can leave partial observations. They are not an exactly-once billing record.
+
+| Field | Description |
+| --- | --- |
+| `AITaskCount` | Completed AI tasks, including failed or cancelled tasks. SQL NULL inputs and inputs rejected before task creation are not counted. |
+| `AIRequestCount` | Accepted HTTP submissions for the completed tasks, including accepted retries. Rejected submissions are not counted. |
+| `AIRetryCount` | Accepted retry submissions for the completed tasks. |
+| `AITimeoutCount` | Observed HTTP timeout and task-deadline events in the AI response-processing path. This is not a count of all cancelled tasks. |
+| `AIErrorCount` | Tasks ending in a row-level failure. Lifecycle cancellation is excluded; failed attempts followed by a successful retry are not terminal errors. |
+| `AIHttpTimeNs` | Sum of elapsed nanoseconds from accepted HTTP submission to transport callback. Excludes retry backoff, response parsing, and completion-queue time. |
+| `AIPromptTokens` | Sum of valid provider-reported prompt token usage. |
+| `AICompletionTokens` | Sum of valid provider-reported completion token usage. |
+| `AITotalTokens` | Sum of valid provider-reported total token usage; not calculated from prompt and completion tokens. |
+| `AIPromptUsageCount` | Number of responses containing valid prompt token usage, including explicitly reported zero. |
+| `AICompletionUsageCount` | Number of responses containing valid completion token usage, including explicitly reported zero. |
+| `AITotalUsageCount` | Number of responses containing valid total token usage, including explicitly reported zero. |
+
+Each token field has its own coverage count. Missing or invalid usage is unknown, not zero. A token field is omitted when no valid usage was observed; an explicitly reported zero is logged as `0`. Coverage can be partial, so compare each token sum with its corresponding usage count. AI fields are omitted when no AI statistics are available. Only numeric counters are recorded; these fields contain no prompts, responses, model credentials, or provider error strings.
+
 ### `fe.big_query.log`
 
 This is StarRocks’ dedicated Big Query log file, used to monitor and analyze queries with high resource consumption. Its structure is similar to the audit log, but it includes three additional fields:

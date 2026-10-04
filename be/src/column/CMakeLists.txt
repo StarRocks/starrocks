@@ -19,6 +19,7 @@ ADD_BE_LIB(ColumnCore
         array_view_column.cpp
         map_column.cpp
         struct_column.cpp
+        file_column.cpp
         raw_buffer.cpp
         column.cpp
         column_visitor.cpp
@@ -65,6 +66,7 @@ ADD_BE_LIB(ColumnCore
         column_hash/column_hash.cpp
         adaptive_offsets.cpp
         serde/column_array_serde.cpp
+        geo_column.cpp
 )
 
 target_link_libraries(ColumnCore PRIVATE arrow streamvbyte)

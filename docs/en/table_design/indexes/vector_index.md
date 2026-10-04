@@ -12,8 +12,6 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 This topic introduces the vector index feature of StarRocks and how to perform an approximate nearest neighbor search (ANNS) with it.
 
-The vector index feature is only supported in shared-nothing clusters of v3.4 or later.
-
 ## Overview
 
 Currently, StarRocks supports vector indexing at the Segment file level. The index maps each search item to its row ID within Segment files, allowing fast data retrieval by directly locating the corresponding data rows without brute-force vector distance calculations. The system now provides two types of vector indexing: Inverted File with Product Quantization (IVFPQ) and Hierarchical Navigable Small World (HNSW), each with its own organizational structure.
@@ -45,7 +43,11 @@ HNSW offers both efficiency and precision, making it adaptable to various data a
 
 ## Usage
 
-Each table supports only one vector index.
+### Prerequisites
+
+- Each table supports only one vector index.
+- The indexed column must be `ARRAY<FLOAT> NOT NULL`.
+- Only native DUPLICATE KEY and PRIMARY KEY tables support vector indexing.
 
 ### Create vector index
 
@@ -88,6 +90,41 @@ This tutorial creates vector indexes while creating tables. You can also append 
     DUPLICATE KEY(id)
     DISTRIBUTED BY HASH(id) BUCKETS 1;
     ```
+
+- The following example creates an HNSW vector index on a cloud-native table in a shared-data cluster using `async` build mode.
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    You can view the asynchronous build progress by querying `information_schema.partitions_meta`.
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - When `MIN_VI_BUILT_VERSION` equals `VISIBLE_VERSION`, it indicates that the indexes of all tablets within the partition have reached the visible versions.
+    - When `MIN_VI_BUILT_VERSION` is less than `VISIBLE_VERSION`, it indicates that at least one index is under construction. Queries involving such segments will fall back to a brute-force scan.
+    - When `MIN_VI_BUILT_VERSION` is less than `MAX_VI_BUILT_VERSION`, it indicates that different tablets vary in index building progress.
 
 #### Index construction parameters
 
@@ -150,6 +187,12 @@ This tutorial creates vector indexes while creating tables. You can also append 
 - **Required**: No
 - **Description**: HNSW-specific parameter. The size of the candidate list containing the nearest neighbors.  It must be an integer greater than or equal to `1`. It is used to control the search depth during the graph construction process. Specifically, `efconstruction` defines the size of the search list (also known as the candidate list) for each vertex during the graph construction process. This candidate list is used to store the neighbor candidates of the current vertex, and the size of the list is `efconstruction`. The larger the value of `efconstruction`, the more candidates is considered as the neighbors of the vertex during the graph construction process, and, as a result, the better quality (such as better connectivity) of the graph, but also the higher time consumption and computation complexity of graph construction.
 
+##### efsearch
+
+- **Default**: 40
+- **Required**: No
+- **Description**: HNSW-specific parameter. Parameter that controls the precision-speed tradeoff. During a hierarchical graph structure search, this parameter controls the size of the candidate list during the search. The larger the value of `efsearch`, the higher the accuracy, but the lower the speed. This parameter can be specified during index creation. If the `ann_params` in a query does not contain this parameter, the system will perform adaptive scaling based on this value. An explicit query-level value takes precedence and bypasses adaptive scaling.
+
 ##### quantizer
 
 - **Default**: `flat` (no quantization)
@@ -192,6 +235,10 @@ This tutorial creates vector indexes while creating tables. You can also append 
 #### Append vector index
 
 You can also add vector indexes to an existing table using [CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md) or [ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
+
+:::note
+For cloud-native tables in shared-data clusters, ALTER TABLE ADD INDEX statements will rewrite the existing data and build the index on it. Even with `index_build_mode` set to `async`, the system will finish the index building before the Schema Change completes.
+:::
 
 Example:
 
@@ -577,7 +624,3 @@ Example:
 |      avgRowSize=4.0                                                                                                                                 |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
-
-## Limitations
-
-- Each table supports only one vector index.

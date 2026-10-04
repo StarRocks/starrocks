@@ -363,7 +363,7 @@ public class StarOSAgentTest {
 
         new Expectations(client) {
             {
-                client.createShard("1", (List<CreateShardInfo>) any);
+                client.createShard("1", (List<CreateShardInfo>) any, anyLong);
                 result = shards;
                 client.createShardGroup("1", (List<CreateShardGroupInfo>) any);
                 result = groups;

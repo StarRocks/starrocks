@@ -27,11 +27,11 @@ JDK_NAME="OpenJDK17U-jdk_aarch64_linux_hotspot_17.0.13_11.tar.gz"
 JDK_SOURCE="jdk-17.0.13+11"
 JDK_MD5SUM="2e942562e2ffa7378c4948041911c3bb"
 
-# HYPERSCAN for aarch64, provided by huawei kunpeng.
-HYPERSCAN_DOWNLOAD="https://github.com/kunpengcompute/hyperscan/archive/refs/tags/v5.3.0.aarch64.tar.gz"
-HYPERSCAN_NAME="hyperscan-5.3.0.aarch64.tar.gz"
-HYPERSCAN_SOURCE="hyperscan-5.3.0.aarch64"
-HYPERSCAN_MD5SUM="ef337257bde6583242a739fab6fb161f"
+# HYPERSCAN for aarch64, provided by vectorscan.
+HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz"
+HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
+HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
+HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
 
 # jindosdk for Aliyun OSS
 JINDOSDK_DOWNLOAD="https://cdn-thirdparty.starrocks.com/jindosdk-4.6.8-linux-el7-aarch64.tar.gz"
@@ -51,10 +51,10 @@ TENANN_MD5SUM="6f3b7f3c8144f855edfd8a9abf04f82e"
 #TENANN_MD5SUM="8b056305af24dab45ad21f6a037163b8"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc2/starcache-centos7_arm64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.2-rc5/starcache-centos7_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="3cfef8be7a06a71108174599eac6a9c9"
+STARCACHE_MD5SUM="ca2000ecc4c7f50c456f6101a2e89d26"
 
 # pprof
 PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260814/pprof-linux-arm64"

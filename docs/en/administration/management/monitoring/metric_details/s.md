@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - Unit: Count
 - Description: Number of small file caches.
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- Unit: Count
+- Description: Cumulative number of times data-page sort-key sampling declined a segment and fell back to that segment's coarse `[min, max]` range: an unexpected schema, a `sort_key_idxes` that is not the segment schema's own, a failed page read, a short read, or a sample outside the segment's declared bounds. Sampling is fail-open, so this never fails a split; a rising value means tablet split and range-split compaction are working from coarser boundaries than intended.
+
+## `sort_key_sampling_data_page_latency`
+
+- Unit: us
+- Description: Time spent sampling one segment's sort key from its data pages, published as a bvar latency series (average, percentiles, max, qps and count). Covers every attempt that got past the sample-budget check, including attempts that then fell back, so a tablet that is slow and keeps failing open is still visible here.
+
+## `sort_key_sampling_data_page_segments_total`
+
+- Unit: Count
+- Description: Cumulative number of segments for which sampling committed to the data-page path. Counted once the sampling geometry is settled and before the first read, so a segment whose read then falls back is counted too — the counter exists to show that the free short-key-index path was NOT taken. For the I/O actually paid, read `sort_key_sampling_read_bytes_total` instead.
+
+## `sort_key_sampling_read_bytes_total`
+
+- Unit: Bytes
+- Description: Cumulative compressed bytes read from segment data pages while sampling sort keys. Charged from the page reader's own accounting, so it counts only transfers that really happened, including those on an attempt that later fell back. This is the metric to watch for the I/O cost of split-point sampling.
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- Unit: Count
+- Description: Cumulative number of rowsets whose segment files were opened in order to sample them. The open is gated on at least one of the rowset's segments having a non-zero sample budget, so this rises only where sampling is actually attempted. Read it against `sort_key_sampling_samples_total`: rowsets opened while no samples are published means the sample budget is not reaching the segments being read.
+
+## `sort_key_sampling_samples_total`
+
+- Unit: Count
+- Description: Cumulative number of sort-key samples published, by either sampling path. An increase here with no increase in `sort_key_sampling_data_page_segments_total` means the samples came from the free short-key-index path.
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- Unit: Count
+- Description: Cumulative number of times short-key-index sort-key sampling was entered for a segment and then declined it: geometry that does not cross-check against the segment's own row count, an index entry that fails to decode, or a sample that is out of order or outside the segment's declared bounds. Declining is not the end of the road for the segment: it goes on to data-page sampling whenever a data-page budget was apportioned to it, and only falls back to its coarse `[min, max]` range if that budget is zero or that path yields nothing either. Note what this does NOT count: a segment of fewer than two index blocks, which leaves this path without incrementing anything and gets sampled at row granularity instead; and a schema whose short key index cannot encode the whole sort key (a VARCHAR key, for example), which never enters this path at all, so such tables leave this counter at zero and appear in `sort_key_sampling_data_page_segments_total` instead.
+
+## `sort_key_sampling_short_key_index_latency`
+
+- Unit: us
+- Description: Time spent sampling one segment's sort key from its short key index, published as a bvar latency series (average, percentiles, max, qps and count). This path reads no data pages, so values here should stay far below `sort_key_sampling_data_page_latency`.
+
 ## `spill_disk_bytes_used`
 
 - Unit: Bytes
@@ -61,6 +101,13 @@ description: "Alphabetical s"
 
 - Unit: -
 - Description: Metrics returned by `/proc/net/snmp`.
+
+## `starrocks_be_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the BE node. The metric value is always `1`.
 
 ## `starrocks_be_clone_task_copy_bytes`
 
@@ -188,6 +235,12 @@ description: "Alphabetical s"
 - Unit: Count
 - Type: Cumulative
 - Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of remote storage read attempts for lake tablet metadata that return `NotFound`. A tablet's metadata lives either in its own metadata object or inside a bundled metadata file, never in both, and reads of either location are counted, including the bundle reads issued by vacuum. Each failed fallback read is counted separately. Cache misses and successful reads do not increment this metric. Reads of a source cluster's metadata during replication and of snapshot metadata during restore are not counted.
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -343,6 +396,13 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: The total number of backup snapshots deleted from their repository, whether by automatic TTL cleanup or by DROP SNAPSHOT.
 
+## `starrocks_fe_build_info`
+
+- Unit: -
+- Type: Instantaneous
+- Labels: `version`, `commit_hash`
+- Description: Build information for the FE node. The metric value is always `1`.
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - Unit: Bytes
@@ -372,6 +432,12 @@ description: "Alphabetical s"
 - Unit: ms
 - Type: Instantaneous
 - Description: Indicates the end time of the last query or loading under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
+
+## `starrocks_fe_max_journal_replay_lag`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The largest number of metadata journals that any alive Follower or Observer FE still has to replay to catch up with the Leader. Reported only by the Leader FE (`is_leader="true"`), which is the only node that knows both its own journal write position and, through heartbeats, every other node's replayed journal ID. FE nodes that are not alive are excluded, because the journal ID they last reported is frozen at their final successful heartbeat; use the `Alive` column of `SHOW FRONTENDS` to detect those instead. It returns `0` when every other node has caught up, when no other FE node is alive, and on a single-FE cluster. A high or continuously growing value means metadata replay on at least one node is falling behind, which causes that node to serve stale metadata and, once `meta_delay_toleration_second` is exceeded, to forward its queries to the Leader.
 
 ## `starrocks_fe_memory_usage`
 
@@ -570,7 +636,7 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets). Derived-tier values (the refresh of a range-distributed incremental materialized view, whose boundaries are derived rather than sampled): `materialized_view_target` (the target is a materialized view the derived tier cannot key — not an incremental materialized view, more than one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no boundary source serves yet), `row_id_span_too_small` (the estimated output is too small for the row-id key space to be carved usefully — a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind, so the split would be unbalanced rather than helpful), `row_id_space_not_pristine` (the target's auto-increment counter has already handed out ids, so compute nodes may hold cached id intervals the planner cannot account for; only a pristine id space lets the boundaries be derived), `estimate_unavailable` (no usable output-size estimate, so the tablet count cannot be chosen), `multiple_temporary_partitions` (the refresh writes more than one replacement partition; a row-id key comes from one counter for the whole table, so ids for a single partition form a contiguous band and cuts spanning the whole id space would leave most of each partition's tablets empty — enabling the feature would not change this, which is why it is reported separately from `disabled_by_config`), `derivation_failed` (the boundary source threw or produced boundaries that failed validation — distinct from `tablet_pre_split_sampler_failed{reason=sample_failed}`, which belongs to the sampling tiers), `stale_catalog_state` (derived tier: the target's visible-index set changed between deriving the cuts and building the job — the same stale-snapshot race as the multi-partition meaning above, observed on a different snapshot), `submit_failed` (derived tier: the derived cuts could not be turned into an admitted job — either the reshard-job factory refused to build one, or `TabletReshardJobMgr` rejected it. Distinct from `derivation_failed`, which means the cuts themselves could not be produced. The sampling tiers record this same label under `tablet_pre_split_sampler_failed` instead, because there a sampler did run).
+- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `source_missing_sampled_column` (an INSERT from `FILES()` whose sampled target column is absent from the resolved INSERT projection, leaving the sampler without a FILES source column or literal to project), `unsupported_sampled_projection` (a sampled target column is supplied by an expression that the sampler cannot reproduce, such as `from_unixtime(ts)`, which depends on the session time zone, or NULL; the FILES source column may exist. A deterministic expression such as `date_trunc('day', ts)` is sampled directly and does not record this value), `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `no_matching_partition` (manually range-partitioned target: a sampled partition value lies outside every declared range the load may write; the value is dropped rather than turned into a new partition), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets). Derived-tier values (the refresh of a range-distributed incremental materialized view, whose boundaries are derived rather than sampled): `materialized_view_target` (the target is a materialized view the derived tier cannot key — not an incremental materialized view, more than one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no boundary source serves yet), `row_id_span_too_small` (the estimated output is too small for the row-id key space to be carved usefully — a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind, so the split would be unbalanced rather than helpful), `row_id_space_not_pristine` (the target's auto-increment counter has already handed out ids, so compute nodes may hold cached id intervals the planner cannot account for; only a pristine id space lets the boundaries be derived), `estimate_unavailable` (no usable output-size estimate, so the tablet count cannot be chosen; INSERT-from-table loads record it too, when an external-catalog source cannot be sized from its table statistics), `multiple_temporary_partitions` (the refresh writes more than one replacement partition; a row-id key comes from one counter for the whole table, so ids for a single partition form a contiguous band and cuts spanning the whole id space would leave most of each partition's tablets empty — enabling the feature would not change this, which is why it is reported separately from `disabled_by_config`), `derivation_failed` (the boundary source threw or produced boundaries that failed validation — distinct from `tablet_pre_split_sampler_failed{reason=sample_failed}`, which belongs to the sampling tiers), `stale_catalog_state` (derived tier: the target's visible-index set changed between deriving the cuts and building the job — the same stale-snapshot race as the multi-partition meaning above, observed on a different snapshot), `submit_failed` (derived tier: the derived cuts could not be turned into an admitted job — either the reshard-job factory refused to build one, or `TabletReshardJobMgr` rejected it. Distinct from `derivation_failed`, which means the cuts themselves could not be produced. The sampling tiers record this same label under `tablet_pre_split_sampler_failed` instead, because there a sampler did run).
 - Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve. Derived-tier skips land here as well rather than under `tablet_pre_split_sampler_failed`, because the derived tier reads nothing at all and therefore never runs a sampler — `derivation_failed` included.
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
@@ -609,7 +675,7 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+- Description: Multi-partition counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the heaviest partitions (by input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise by sample count) and drops the lightest; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

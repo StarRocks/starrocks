@@ -41,6 +41,157 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
+### H3 リソース制限
+
+以下の変更可能な正の BE 設定は H3 関数の 1 行を制限します。超過時は部分結果ではなくエラーになります。関数と中心フィルについては [H3 関数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) を参照してください。
+
+#### h3_max_cells_per_row
+
+- Default: 100000
+- Is mutable: Yes
+- Limit: cells / pre-deduplication expansion slots.
+
+#### h3_max_grid_disk_k
+
+- Default: 128
+- Is mutable: Yes
+- Limit: grid steps.
+
+#### h3_max_polygon_vertices
+
+- Default: 10000
+- Is mutable: Yes
+- Limit: coordinate positions including ring closure.
+
+#### h3_max_polygon_components
+
+- Default: 256
+- Is mutable: Yes
+- Limit: polygon components including empty components.
+
+#### h3_max_working_bytes
+
+- Default: 67108864
+- Is mutable: Yes
+- Limit: bytes of per-worker preparation and temporary buffers.
+
+#### h3_max_estimated_work_per_row
+
+- Default: 10000000
+- Is mutable: Yes
+- Limit: sum of estimated slots times (component positions + 1).
+
+
+### ai_function_request_timeout_ms
+
+- デフォルト: 600000
+- タイプ: Int
+- 単位: ミリ秒
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: admission、最初の HTTP attempt、すべての retry と backoff、および completion の分類を含む、1 つの AI task の独立した最大存続時間です。これらの段階は 1 つの絶対 request deadline を共有し、attempt ごとにタイムアウトが再開されることはありません。各非同期境界では、この不変の request deadline とクエリの現在の deadline のうち早い方が実際の deadline になります。クエリのキャンセルと deadline の更新は task の存続期間中、常にリアルタイムで反映されます。`0` を指定すると独立した request 上限が無効になり、動的なクエリ lifecycle のみが適用されます。遅いモデル呼び出しを早く失敗させるには値を小さくします。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_connect_timeout_ms
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: ミリ秒
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: AI HTTP attempt が接続を確立するまでの最大時間です。独立した request deadline が有効な場合、transport は残りの request 存続時間でも接続確立を制限し、その deadline 自体は延長しません。`0` を指定すると独立した接続上限が無効になります。両方の独立した上限が `0` の場合、transport は静的な connection timeout と request timeout を設定しませんが、クエリのキャンセルと deadline は引き続きリアルタイムで確認されます。到達不能なモデル endpoint を早く検出するには値を小さくし、接続確立が遅いネットワークでは値を大きくします。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_response_bytes
+
+- デフォルト: 8388608
+- タイプ: Int
+- 単位: バイト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 1 回の AI HTTP attempt から受け付ける response body の最大サイズです。この上限を超えたレスポンスは Provider による解析前に拒否され、BE のメモリ消費を制限します。モデルが正当に大きなレスポンスを返す場合にのみ値を増やしてください。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_worker_thread_num
+
+- デフォルト: 16
+- タイプ: Int
+- 単位: スレッド
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: AI HTTP completion とレスポンス分類を処理する worker の数です。completion 処理が滞留する場合は増やし、CPU とメモリのオーバーヘッドを抑える場合は減らします。この値を変更しても、BE 起動時に確定した AI completion queue の固定容量は変わりません。実行時の変更は worker pool のリサイズとして即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_sub_chunk_size
+
+- デフォルト: 64
+- タイプ: Int
+- 単位: 行
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: AI 実行の sub-chunk にまとめる最大行数です。小さい値はスケジューリングとキャンセルの粒度を細かくしますが、スケジューリングのオーバーヘッドが増えます。大きい値はそのオーバーヘッドを減らしますが、タスクごとに保持する行数が増えます。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_retries
+
+- デフォルト: 3
+- タイプ: Int
+- 単位: 回
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: 直前の失敗が再試行可能な転送エラーまたは Provider エラーの場合に許可される、共有 retry ordinal の上限です。最初の HTTP attempt は含みません。通常の retry と throttle retry は同じ retry ordinal を消費し、この上限が throttle の上限に加算されることはありません。`0` を指定すると通常の再試行可能エラー後の retry が無効になります。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_retries_on_throttle
+
+- デフォルト: 5
+- タイプ: Int
+- 単位: 回
+- 有効な値: 0 以上の整数
+- 変更可能: はい
+- 説明: 直前の失敗が HTTP 429 などの Provider スロットリングの場合に許可される、共有 retry ordinal の上限です。最初の HTTP attempt は含みません。通常の retry と throttle retry は同じ retry ordinal を消費するため、これは現在の失敗種別に適用する別の上限であり、独立した retry budget ではありません。`0` を指定するとスロットリング後の retry が無効になります。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_on_error
+
+- デフォルト: ignore
+- タイプ: String
+- 単位: -
+- 有効な値: `ignore`、`fail`
+- 変更可能: はい
+- 説明: AI 関数の行単位エラー処理を制御します。`ignore` は失敗した行に NULL を返してクエリを続行し、`fail` はクエリを中止します。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_rate_limit_qps_chat
+
+- デフォルト: 128
+- タイプ: Int
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: endpoint、credential、capability ごとに分けられた chat/text bucket に対する、BE 単位のリクエスト admission rate です。Provider のクォータに合わせる、または送信負荷を抑える場合は値を小さくし、Provider と BE の両方に十分な容量がある場合にのみ増やします。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_rate_limit_qps_embedding
+
+- デフォルト: 128
+- タイプ: Int（32 ビット）
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。SYSTEM と AI provider 指定の埋め込み呼び出しに適用され、リトライも含みます。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_inflight
+
+- デフォルト: 512
+- タイプ: Int
+- 単位: リクエスト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: プロセス全体で同時に in-flight admission permit を保持できる AI HTTP attempt の上限です。値を小さくすると HTTP と response memory の負荷を制限できます。これはグローバルな admission 制限であり、クエリごとのクォータではありません。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。BE 起動時に確定した completion queue の固定容量は変わりません。
+- 導入バージョン: -
+
 ### agg_hash_map_prefetch_dist
 
 - デフォルト: 16
@@ -98,6 +249,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ビットマップインデックスのメモリキャッシュを有効にするかどうか。ポイントクエリを高速化するためにビットマップインデックスを使用したい場合は、メモリキャッシュを推奨します。
 - 導入バージョン: v3.1
+
+### enable_default_value_column_zonemap_filter
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 有効な値: `true`、`false`
+- 変更可能: はい
+- 説明: セグメントに物理的に存在しない列の値を定数畳み込みしてデータをプルーニングするかどうか。fast schema evolution (`ALTER TABLE ... ADD COLUMN`) で追加された列は既存のセグメントには書き込まれないため、その列の各行は列のデフォルト値 (または `NULL`) になります。`true` の場合、その列に対する述語はこの定数に対して評価され、一致する可能性がなければセグメント全体がスキップされます。`false` の場合、それらのセグメントは全体が読み取られ、各バッチが削除条件に対して再チェックされます。これはこのオプションが導入される前の動作です。列を追加したテーブルでクエリ結果が想定と異なる場合は、`false` に設定してロールバックできます。このオプションは `enable_index_page_level_zonemap_filter` とは独立しています。後者はランタイムフィルターの経路をカバーしないためです。
+- 導入バージョン: -
 
 ### フラットJSON圧縮有効化
 
@@ -396,13 +557,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: オブジェクトストレージとのソケット接続を確立するためのタイムアウト期間。`-1` は、SDK構成のデフォルトのタイムアウト期間を使用することを示します。
 - 導入バージョン: v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: AWS SDK で Poco HTTP クライアントを使用するかどうかを指定します。`true` の場合、AWS SDK のデフォルトの curl HTTP クライアントを Poco に置き換えます。`false` の場合、デフォルトの curl クライアントを使用します。
+- 導入バージョン: -
+
 ### object_storage_request_timeout_ms
 
-- デフォルト: -1
+- デフォルト: 10000
 - タイプ: Int
 - 単位: ミリ秒
-- 変更可能: いいえ
-- 説明: オブジェクトストレージとのHTTP接続を確立するためのタイムアウト期間。`-1` は、SDK構成のデフォルトのタイムアウト期間を使用することを示します。
+- 変更可能: はい
+- 説明: オブジェクトストレージへのリクエストが停滞してから、クライアントが中断して再試行するまでの時間。リクエスト全体の期限ではありません。curl クライアントでは低速時間 (転送速度が 1 バイト/秒を下回ったまま経過できる時間)、Poco クライアントではソケットの送受信タイムアウトを指します。転送が進行し続けている限り、どれだけ長くても中断されません。`0` はこのチェックを無効にします。負の値はクライアント自身のデフォルト (Poco の場合は 60 秒) を使用します。
 - 導入バージョン: v3.0.9
 
 ### parquet_late_materialization_enable
@@ -520,6 +690,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: いいえ
 - 説明: パイプライン実行エンジンのSCANスレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+### case_when_selective_eval_ratio
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 検索 `CASE WHEN` の各 `THEN` 分岐を、チャンク全体で評価してから行を選び出すのではなく、その分岐が実際に所有する行だけで評価するかどうかを制御します。`CASE` がコレクション型 (ARRAY/MAP/STRUCT) または VARIANT 型を返す場合にのみ適用されます。これらの型は 1 行の実体化コストが高く、分岐の入力行をサブチャンクに圧縮するコストを回収できるためです。分岐が圧縮されるのは `owned_rows * case_when_selective_eval_ratio < chunk_rows` の場合、つまり分岐が所有する行がチャンクの `1 / case_when_selective_eval_ratio` 未満の場合のみです。しきい値を超える分岐はチャンク全体で評価されます。入力の圧縮コストが省略できる評価コストを上回るためです。`1` に設定すると、チャンク全体を占有しないすべての分岐が圧縮されます。`0` または負の値に設定すると最適化が完全に無効になり、以前の動作に戻ります。これには、どの行も選択しない `THEN` や `ELSE` がエラーを発生させるものであっても評価されなくなるという動作の変更も含まれます。
 - 導入バージョン: -
 
 ### enable_lock_free_scan_task_queue
@@ -1092,6 +1271,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 有効にすると、ロードチャネルオープンRPC（例: `PTabletWriterOpen`）の処理がBRPCワーカーから専用のスレッドプールにオフロードされます。リクエストハンドラは`ChannelOpenTask`を作成し、`LoadChannelMgr::_open`をインラインで実行する代わりに、内部の`_async_rpc_pool`に送信します。これにより、BRPCスレッド内の作業とブロッキングが減少し、`load_channel_rpc_thread_pool_num`と`load_channel_rpc_thread_pool_queue_size`を介して同時実行性を調整できます。スレッドプールの送信が失敗した場合（プールが満杯またはシャットダウンされている場合）、リクエストはキャンセルされ、エラー状態が返されます。プールは`LoadChannelMgr::close()`でシャットダウンされるため、この機能を有効にする場合は、リクエストの拒否や処理の遅延を避けるために、容量とライフサイクルを考慮してください。
 - 導入バージョン: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: いいえ
+- 説明: この BE が、ロード時に行を対象 tablet を保持する BE へルーティングするホップ（tablet sink RPC）において、全行が NULL である列のコンパクトなエンコーディングに参加するかどうかを制御します。有効にすると、受信側の BE は tablet writer の open レスポンスでこのエンコーディングへの対応を通知し、その通知を受け取った送信側の BE は、全行が NULL の列について、行ごとの NULL フラグとオフセットの代わりに行数のみを送信します。列数が多く、その大半にデータが入っていないワイドテーブルで特に効果が大きく、このホップの転送バイト数と送受信両側のシリアライズ処理がいずれも削減されます。このエンコーディングは RPC の両端が対応している場合にのみ使用されるため、バージョンが混在するクラスタやダウングレード後は自動的に従来のレイアウトにフォールバックします。送信側または受信側のいずれかの BE でこの項目を `false` に設定すると、そのノードを経由するロードではエンコーディングが無効になります。この項目は動的に変更できません。受信側の BE はこの値を、対応の通知と、送信側が宣言したエンコーディングを適用するかどうかの判断の両方に使用するため、実行中に変更すると両者が一致しなくなります。
+- 導入バージョン: v4.2.0
 
 ### enable_load_diagnose
 

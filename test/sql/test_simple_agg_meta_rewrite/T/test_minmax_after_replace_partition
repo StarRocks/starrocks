@@ -1,4 +1,5 @@
 -- name: test_minmax_after_replace_partition
+admin set frontend config ("min_max_stats_collect_interval_sec" = "0");
 
 -- Regression for min()/max() constant folding returning the values of a partition that
 -- REPLACE PARTITION has already swapped OUT.

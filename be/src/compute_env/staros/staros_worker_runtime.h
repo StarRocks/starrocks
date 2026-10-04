@@ -16,7 +16,9 @@
 
 #ifdef USE_STAROS
 
+#include <cstdint>
 #include <memory>
+#include <optional>
 
 namespace starcache {
 class StarCache;
@@ -31,17 +33,26 @@ namespace starrocks {
 class StarOSWorker;
 class TableMetricsManager;
 
+std::optional<int32_t> starlet_request_timeout_ms(int64_t configured_timeout_ms, bool use_poco_client);
+
 std::shared_ptr<StarOSWorker> get_staros_worker();
-staros::starlet::Starlet* get_starlet();
+// Returns a strong reference, or nullptr once `shutdown_staros_worker()` has released the runtime.
+// Callers must hold the returned pointer for as long as they use it: shutdown drops the global at
+// any moment, and a raw pointer would dangle across the blocking starmgr RPCs behind these calls.
+std::shared_ptr<staros::starlet::Starlet> get_starlet();
 
 void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
                         TableMetricsManager* table_metrics_mgr = nullptr);
 void shutdown_staros_worker();
 void set_starlet_in_shutdown();
 
+// Applies the starlet_fslib_*_part_size BE configs to their starlet gflags, validating each value
+// with starlet's own predicate. Called during worker init; exposed for tests.
+void apply_starlet_upload_threshold_configs();
+
 #ifdef BE_TEST
 void set_staros_worker_for_test(std::shared_ptr<StarOSWorker> worker);
-std::unique_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::unique_ptr<staros::starlet::Starlet> starlet);
+std::shared_ptr<staros::starlet::Starlet> swap_starlet_for_test(std::shared_ptr<staros::starlet::Starlet> starlet);
 #endif
 
 } // namespace starrocks

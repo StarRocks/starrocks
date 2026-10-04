@@ -241,13 +241,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 new Column("id", IntegerType.INT, true),
                 new Column("data", StringType.STRING, true),
                 new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
+                new Column("geography_col", UnknownType.UNKNOWN_TYPE, true),
                 new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
         schemas = addMetaColumns(schemas);
 
         Schema schema = new Schema(
                 required(3, "id", Types.IntegerType.get()),
                 required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.StringType.get()),
+                required(5, "geo_col", Types.GeometryType.crs84()),
+                required(7, "geography_col", Types.GeographyType.crs84()),
                 required(6, "ts_nano_col", Types.StringType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
@@ -255,7 +257,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_UNKNOWN_TYPE_TABLE_NAME), MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 schema, spec, 3);
 
-        MockIcebergTable mockIcebergTable = new MockIcebergTable(2, MOCKED_UNKNOWN_TYPE_TABLE_NAME,
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(MOCKED_UNKNOWN_TYPE_TABLE_NAME.hashCode(),
+                MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
                 MOCKED_UNKNOWN_TYPE_TABLE_NAME, schemas, baseTable, null, "");
 

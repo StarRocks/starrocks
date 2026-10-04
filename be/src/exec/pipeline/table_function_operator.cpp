@@ -26,9 +26,32 @@ void TableFunctionOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
+// Whether the current table-function result still owes the operator rows.
+//
+// This is the single source of truth for that question and must stay so: has_output(), pull_chunk()'s
+// drain loop and _copy_result()'s emit loop all have to agree, or the operator either spins on an
+// exhausted result or abandons rows it still owed. An earlier version of the LEFT JOIN work inlined
+// this test in each of those places and missed one of them, which silently dropped injected rows.
+//
+// Two modes, because the two cursors measure different things:
+//   * normally, progress is a position in the element column, and the result is drained when that
+//     position reaches the end;
+//   * under LEFT JOIN, _copy_result also injects a row for every zero-length bracket. Such a row
+//     consumes no source element, so the element position can already sit at the end while brackets
+//     are still owed. Progress then has to be counted in brackets.
+bool TableFunctionOperator::_result_has_output() const {
+    if (_table_function_result.first.empty() || _table_function_result.second == nullptr ||
+        _table_function_result.second->size() <= 1) {
+        return false;
+    }
+    const auto offsets_data = _table_function_result.second->immutable_data();
+    const bool inject_missing_rows = _table_function_state != nullptr && _table_function_state->get_is_left_join();
+    return inject_missing_rows ? _next_output_row_offset + 1 < offsets_data.size()
+                               : _next_output_row < offsets_data.back();
+}
+
 bool TableFunctionOperator::has_output() const {
-    if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
-        _next_output_row < _table_function_result.second->immutable_data().back()) {
+    if (_result_has_output()) {
         return true;
     }
     if (_input_chunk != nullptr && _table_function_state != nullptr &&
@@ -131,8 +154,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     }
 
     while (output_columns[0]->size() < max_chunk_size) {
-        if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
-            _next_output_row < _table_function_result.second->immutable_data().back()) {
+        if (_result_has_output()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function(state));
@@ -220,20 +242,82 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
 }
 
 void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
-    DCHECK(_table_function_result.second->size() > 1 &&
-           _next_output_row < _table_function_result.second->immutable_data().back());
-    DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
-    uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
     const auto offsets_data = offsets_col->immutable_data();
+
+    // A LEFT JOIN keeps the left row even when its expansion is empty, as a single NULL row. That
+    // extra element exists in no source column, so a table function can only express it by rebuilding
+    // its whole element column. Injecting it here instead - while assembling an output chunk that is
+    // already bounded by max_output_size - lets Unnest hand back the source elements and offsets by
+    // reference for LEFT JOIN as well, rather than materializing the entire chunk expansion.
+    //
+    // Gated on is_left_join, which only Unnest and MultiUnnest ever set, so every other table function
+    // runs the same code as before. MultiUnnest is unaffected too: it already emits a length-1 bracket
+    // for an empty expansion under LEFT JOIN (multi_unnest.h), so no bracket here is ever zero-length
+    // and nothing gets injected twice.
+    const bool inject_missing_rows = _table_function_state != nullptr && _table_function_state->get_is_left_join();
+
+    DCHECK(offsets_col->size() > 1);
+    DCHECK_LT(_next_output_row_offset, offsets_col->size());
+    uint32_t curr_output_size = columns[0]->size();
+
+    // Pending contiguous run of the fn-result columns, flushed as a single append per column. Only an
+    // injected row breaks a run, so a query with nothing to inject performs exactly one append per
+    // column, as before.
     uint32_t fn_result_start = _next_output_row;
     uint32_t fn_result_count = 0;
-    while (curr_output_size < max_output_size && _next_output_row < offsets_data.back()) {
+    auto flush_fn_result = [&]() {
+        if (_fn_result_required && fn_result_count > 0) {
+            for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                columns[_outer_slots.size() + i]->as_mutable_raw_ptr()->append(*(fn_result_cols[i]), fn_result_start,
+                                                                               fn_result_count);
+            }
+        }
+        fn_result_count = 0;
+    };
+    // Build outer data for the current bracket, repeated `times`.
+    //
+    // Takes the (const Column&, index, size) overload rather than routing through a Datum. For a binary
+    // column that overload precomputes the destination extent and does a single offsets/bytes resize
+    // followed by a memcpy loop, whereas the Datum overload reserves only the added byte count - which
+    // is a no-op once the column already holds rows - and then grows both buffers incrementally.
+    // NullableColumn's overload handles NULLs and maintains _has_null itself, so no null branch is
+    // needed here either.
+    auto append_outer = [&](uint32_t times) {
+        const auto input_row = static_cast<uint32_t>(_input_index_of_first_result + _next_output_row_offset);
+        for (size_t i = 0; i < _outer_slots.size(); ++i) {
+            const ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
+            columns[i]->as_mutable_raw_ptr()->append_value_multiple_times(*input_column_ptr, input_row, times);
+        }
+    };
+
+    while (curr_output_size < max_output_size && _result_has_output()) {
         uint32_t start = _next_output_row;
         uint32_t end = offsets_data[_next_output_row_offset + 1];
         DCHECK_GE(start, offsets_data[_next_output_row_offset]);
         DCHECK_LE(start, end);
+
+        if (inject_missing_rows && end == start) {
+            // No source element is consumed, so _next_output_row stays put. The loop condition
+            // guarantees room for at least one row, so an injected row never has to be split across
+            // calls and needs no intra-bracket cursor.
+            flush_fn_result();
+            append_outer(1);
+            if (_fn_result_required) {
+                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                    // ArrayColumn guarantees nullable elements (see its constructor), and the rebuild
+                    // path already relies on this to append its own NULLs.
+                    DCHECK(columns[_outer_slots.size() + i]->is_nullable());
+                    down_cast<NullableColumn*>(columns[_outer_slots.size() + i]->as_mutable_raw_ptr())->append_nulls(1);
+                }
+            }
+            curr_output_size += 1;
+            _next_output_row_offset++;
+            fn_result_start = _next_output_row;
+            continue;
+        }
+
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
         VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
                 << " copy_rows=" << copy_rows << " input_size=" << offsets_data.back()
@@ -241,17 +325,7 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
                 << " _input_index_of_first_result=" << _input_index_of_first_result;
 
         if (copy_rows > 0) {
-            // Build outer data, repeat multiple times
-            for (size_t i = 0; i < _outer_slots.size(); ++i) {
-                ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
-                Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
-                if (value.is_null()) {
-                    DCHECK(columns[i]->is_nullable());
-                    down_cast<NullableColumn*>(columns[i]->as_mutable_raw_ptr())->append_nulls(copy_rows);
-                } else {
-                    columns[i]->as_mutable_raw_ptr()->append_value_multiple_times(&value, copy_rows);
-                }
-            }
+            append_outer(copy_rows);
         }
 
         curr_output_size += copy_rows;
@@ -263,12 +337,6 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
         }
     }
 
-    // Build table function result
-    if (_fn_result_required) {
-        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-            columns[_outer_slots.size() + i]->as_mutable_raw_ptr()->append(*(fn_result_cols[i]), fn_result_start,
-                                                                           fn_result_count);
-        }
-    }
+    flush_fn_result();
 }
 } // namespace starrocks::pipeline

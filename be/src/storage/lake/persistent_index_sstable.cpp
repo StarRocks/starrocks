@@ -79,6 +79,10 @@ Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const 
         options.filter_policy = _filter_policy.get();
     }
     options.block_cache = cache;
+    // Verify block checksums when reading the index/meta blocks, so corrupted bytes
+    // (usually from the local cache) fail deterministically as Corruption instead of
+    // being misparsed, and can be healed by the drop-cache-and-retry below.
+    options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Table> table;
     auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
@@ -208,21 +212,25 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
-    std::unique_ptr<RandomAccessFile> rf;
-    if (config::enable_pk_index_parallel_execution) {
-        RandomAccessFileOptions opts;
-        if (!_sstable_pb.encryption_meta().empty()) {
-            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
-            opts.encryption_info = std::move(info);
-        }
-        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, _rf->filename()));
+    // Catch corrupted data blocks as Corruption (instead of silently returning wrong
+    // index values) so the drop-cache-and-retry below can heal a bad local cache.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+    // Read through a per-call file handle instead of the shared `_rf`: multi_get runs concurrently
+    // on the pk index execution pool, and file-class state must not be shared across those readers.
+    // A fresh handle also starts its IO counters at 0, so the deltas below are the absolute IO done
+    // by this multi_get.
+    RandomAccessFileOptions opts;
+    if (!_sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
     }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _rf->filename()));
+    // Test seam: the per-call handle is the only thing the IO-breakdown counters below measure, so a
+    // UT has to be able to wrap it in a stream that reports synthetic local/remote statistics. A
+    // shared-nothing POSIX file exposes none, which would leave the counters pinned at zero.
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:opened_file", &rf);
     options.file = rf.get();
-    // When parallel execution opens a fresh `rf`, its IO counters start at 0 so the delta below
-    // equals the absolute IO done by this multi_get. Otherwise `_rf` is reused across calls and
-    // we measure the delta against its running totals.
-    RandomAccessFile* active_rf = (rf != nullptr) ? rf.get() : _rf.get();
-    io::IoStatsSnapshot io_snap_before = take_sstable_io_snapshot(active_rf);
+    io::IoStatsSnapshot io_snap_before = take_sstable_io_snapshot(rf.get());
     // Currently, there is no need to set predicate for MultiGet of persistent index sstable. Because predicate
     // only used for sstable compaction to filter out some keys for tablet split purpose and such keys can not
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
@@ -244,13 +252,14 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         return multiget_st;
     }
     auto end_ts = butil::gettimeofday_us();
-    io::IoStatsSnapshot io_snap_after = take_sstable_io_snapshot(active_rf);
+    io::IoStatsSnapshot io_snap_after = take_sstable_io_snapshot(rf.get());
     TRACE_COUNTER_INCREMENT("multi_get_us", end_ts - start_ts);
     TRACE_COUNTER_INCREMENT("read_block_hit_cache_cnt", stat.block_cnt_from_cache);
     TRACE_COUNTER_INCREMENT("read_block_miss_cache_cnt", stat.block_cnt_from_file);
     // Break down the misses into reads served by the local data cache vs. reads that went out to
-    // the remote object store (S3/OSS/etc.). Deltas are clamped at 0 because cumulative counters
-    // should never decrease, but we guard against the file being swapped underneath us in retries.
+    // the remote object store (S3/OSS/etc.). The per-call handle above makes the before-snapshot all
+    // zero and the same object is measured twice, so the deltas cannot go negative on their own; the
+    // clamp stays as a cheap guard against a stream implementation reporting non-monotonic counters.
     TRACE_COUNTER_INCREMENT(
             "sstable_io_local_disk_bytes",
             std::max<int64_t>(0, io_snap_after.bytes_read_local_disk - io_snap_before.bytes_read_local_disk));
@@ -274,7 +283,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
             return Status::InternalError("parse index value info failed");
         }
         // Check if this rowid is already filtered by delvec
-        if (_delvec) {
+        if (_delvec && !_delvec->empty()) {
             if (_delvec->roaring()->contains(index_value_with_ver_pb.values(0).rowid())) {
                 ++i;
                 continue;
@@ -342,6 +351,9 @@ Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, 
 
     sstable::ReadOptions options;
     options.fill_cache = false;
+    // The seeks below read real data blocks; catch corrupted bytes as Corruption
+    // instead of letting them feed wrong keys into the split samples.
+    options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
     std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
     for (const auto& separator : separators) {
         iterator->Seek(Slice(separator));

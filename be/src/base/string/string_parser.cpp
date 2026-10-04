@@ -24,4 +24,7 @@ __int128 StringParser::numeric_limits<__int128>(bool negative) {
     return negative ? INT128_MIN : INT128_MAX;
 }
 
+template float StringParser::string_to_float_internal<float>(const char* s, int len, ParseResult* result);
+template double StringParser::string_to_float_internal<double>(const char* s, int len, ParseResult* result);
+
 } // namespace starrocks

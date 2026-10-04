@@ -22,8 +22,10 @@ import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
@@ -115,7 +117,54 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testRetainedJournalMetrics() {
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 10L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 11L, 1L, 100L);
+        MetricRepo.initializeEditLogRetained(JournalType.STAR_MGR, 21L, 25L);
+        MetricRepo.recordEditLogBatch(JournalType.STAR_MGR, 26L, 1L, 200L);
 
+        MetricRepo.updateEditLogRetainedMinJournalId(JournalType.FE_META, 6L);
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(600L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+        Assertions.assertEquals(1200L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricRepo.getMetricsByName("edit_log_retained").forEach(visitor::visit);
+        MetricRepo.getMetricsByName("edit_log_retained_bytes_estimate").forEach(visitor::visit);
+        String output = visitor.build();
+        Assertions.assertTrue(output.contains("journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains("journal=\"star_mgr\""), output);
+    }
+
+    @Test
+    public void testBuildInfoMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("build_info");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        Assertions.assertEquals(1L, metric.getValue());
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
+        visitor.visit(metric);
+        String output = visitor.build();
+
+        Assertions.assertTrue(
+                output.contains("# HELP starrocks_fe_build_info StarRocks FE build information"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_build_info gauge"), output);
+
+        String buildInfoLine = output.lines()
+                .filter(line -> line.startsWith("starrocks_fe_build_info{"))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertTrue(
+                buildInfoLine.contains("version=\"" + Version.STARROCKS_VERSION + "\""), buildInfoLine);
+        Assertions.assertTrue(
+                buildInfoLine.contains("commit_hash=\"" + Version.STARROCKS_COMMIT_HASH + "\""), buildInfoLine);
+        Assertions.assertTrue(buildInfoLine.endsWith("} 1"), buildInfoLine);
+    }
+
+    @Test
     public void testSPMMetricsExposure() {
         MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
         MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
@@ -130,6 +179,18 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
         Assertions.assertTrue(output.contains("result=\"hit\""));
         Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
+    public void testMaxJournalReplayLagMetricsExposure() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        // registered by MetricRepo.init(), and leader-aware so it always carries the is_leader label
+        Assertions.assertTrue(output.contains("max_journal_replay_lag"), output);
+        Assertions.assertTrue(output.contains("max_journal_replay_lag{is_leader="), output);
     }
 
     @Test

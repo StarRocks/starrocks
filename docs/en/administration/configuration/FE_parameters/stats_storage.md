@@ -88,6 +88,44 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Maximum total size (in bytes) of the low-cardinality global dictionary cache (`CacheDictManager`). The cache is bounded by the combined byte size of its cached dictionaries rather than by entry count, so its memory footprint is bounded directly (each dictionary can be up to ~1 MB). When the limit is reached the least-valuable dictionaries are evicted, and affected columns fall back to non-dictionary query plans until re-collected. Changes apply to the live cache within one config-refresh cycle. The current tracked size is exported via the `low_cardinality_dict_cache_bytes` metric.
 - Introduced in: v4.1.0
+
+### `enable_dict_thrash_guard`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the global-dictionary thrash guard. A "rolling" low-cardinality column—whose instantaneous distinct value count stays below the dictionary threshold but whose value set keeps rotating (for example, a daily-partitioned column that is reloaded with fresh values)—never trips the cardinality blacklist, yet every load introduces values missing from the current global dictionary and invalidates it. Each invalidation forces a full-table dictionary re-collection, which wastes IO and, in shared-data clusters, contends heavily on the segment metadata cache lock. When this guard is enabled, StarRocks counts how often each column's dictionary is invalidated within `dict_thrash_guard_window_sec`; once a column reaches `dict_thrash_guard_threshold` invalidations, StarRocks forbids collecting that column's global dictionary. The forbid takes effect immediately and is persisted as the table's `no_dict_columns` property, so it survives FE restart and leader failover. To re-enable dictionary collection for a column, run `ALTER TABLE ... ENABLE DICTIONARY (column)`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The length of the time window (in seconds) over which the global-dictionary thrash guard counts how often a column's dictionary is invalidated. This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of dictionary invalidations within `dict_thrash_guard_window_sec` at which the global-dictionary thrash guard forbids collecting a column's global dictionary. Set to `0` to disable the count check while keeping the guard enabled (no column is automatically forbidden). This parameter takes effect only when `enable_dict_thrash_guard` is set to `true`.
+- Introduced in: v4.2.0
+
+
+### `min_max_stats_collect_interval_sec`
+
+- Default: 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Minimum interval between two min/max statistics collections for the same column. Min/max stats (used to constant-fold `min()`/`max()` and to build compressed group-by keys) are collected on demand via a `[_META_]` MetaScan that reads every segment's zone-map metadata; without throttling a frequently loaded column re-scans on every load, contending on the segment metadata cache the same way global-dictionary re-collection does. Within the interval the min/max optimization is skipped rather than re-collected -- a stale value is never served, so this only affects the optimization, never correctness. Set to `0` to disable throttling.
+- Introduced in: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - Default: true
@@ -115,7 +153,25 @@ This topic introduces the following types of FE configurations:
 - Description: The TTL of the in-memory cache that serves external table predicate column queries (for example, during automatic ANALYZE column selection). A shorter value makes newly recorded usage visible sooner but increases the query load on the underlying storage table; a longer value reduces that load at the cost of staleness.
 - Introduced in: v4.2.0
 
+### `enable_temporary_table_statistic_collect`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether analyze jobs collect statistics for temporary tables. It applies to the collection jobs built from analyze job definitions, that is, the automatic analyze jobs and the jobs created with CREATE ANALYZE. When this item is set to `false`, temporary tables are skipped while those jobs are built, and only non-temporary tables are analyzed. A one-off `ANALYZE TABLE` statement is not affected and still collects statistics for a temporary table. Set it to `false` when short-lived temporary tables generate collection work whose cost outweighs the value of their statistics.
+- Introduced in: v3.4.0
+
 ## Storage
+
+### `allow_implicit_key_column_in_agg_add_column`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether `ALTER TABLE ... ADD COLUMN` on an Aggregate table may create a key column when the new column specifies neither an aggregate function nor the `KEY` keyword. Such a statement is ambiguous, and creating a key column changes the table's aggregation key and rewrites existing data. When set to `false`, the statement is rejected and the error names both options. Set to `true` to restore the earlier behavior, where the column is created as a key column. This item is mutable but is not persisted across a restart unless it is set with `WITH PERSISTENT`.
+- Introduced in: v4.2.0
 
 ### `alter_table_timeout_second`
 
@@ -596,7 +652,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Bytes
 - Is mutable: Yes
-- Description: The target size of the tablets after the SPLIT or MERGE operation.
+- Description: The target size of tablets after a SPLIT or MERGE operation. `0` disables automatic size-based tablet splitting and merging. When a shared-data online range rewrite runs with this value set to `0`, it uses each latest base index's current tablet count as the requested count and recomputes boundaries in the new sort-key space instead of reusing the old boundaries. The actual count can be smaller if sampling cannot produce enough distinct boundaries.
 - Introduced in: v4.1.0
 
 ### `tablet_reshard_max_split_count`
@@ -704,7 +760,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP or external Iceberg table. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP table or a table in an external catalog, such as Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, or Elasticsearch. Views are not supported as a source. When an external source cannot be sized from its table statistics, the load skips pre-split. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. For `INSERT INTO`, it also supports manually range-partitioned targets, whose existing empty partitions are split without creating any partition. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -743,6 +799,30 @@ This topic introduces the following types of FE configurations:
 - Description: Soft byte cap on the FE-side accumulation buffer of the data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
 - Introduced in: v4.1.0
 
+### `tablet_pre_split_data_tier_scan_byte_limit`
+
+- Default: 4294967296 (4 GiB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Soft limit on the source-file bytes the data tier of Sample-Based Tablet Pre-Split scans for a Broker Load or `INSERT INTO ... SELECT FROM FILES()` load. When the input is larger, the sample reads a subset of the files instead of every file, so sampling time no longer grows with the input. The exception is a partition column read from the file data rather than from the path, or path and literal partition columns mixed: every file is then still scanned, because a subset could miss whole partitions. Files are sorted by path and picked at even byte intervals, which favors larger files. When the partition column comes from the file path (`COLUMNS FROM PATH` or `columns_from_path`), each partition gets a share of the limit in proportion to its bytes and at least one file (unless the load has more partitions than `tablet_pre_split_data_tier_max_scan_files`), and each partition's size is taken from the bytes of all of its files. Files are taken whole, so the scan can exceed the limit, for example when a single file is larger than it. The tablet count is still sized from the whole input. Set to `0` to scan every file.
+
+### `tablet_pre_split_data_tier_min_scan_files`
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum number of files the data tier of Sample-Based Tablet Pre-Split scans once it samples a subset of a load's files (see `tablet_pre_split_data_tier_scan_byte_limit`), so that the sample spans enough independent files even when each file is large or holds only a narrow range of the sort key. When the partition column comes from the file path, the minimum is split across partitions in proportion to their bytes. Meeting it can take the scan above `tablet_pre_split_data_tier_scan_byte_limit`, but no files are added for it once the scan reaches four times that limit, so large files do not multiply the scan time. A positive `tablet_pre_split_data_tier_max_scan_files` takes precedence over this minimum.
+
+### `tablet_pre_split_data_tier_max_scan_files`
+
+- Default: 512
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of files the data tier of Sample-Based Tablet Pre-Split scans once it samples a subset of a load's files (see `tablet_pre_split_data_tier_scan_byte_limit`). Every file in the subset costs one metadata lookup before any data is read, so without a cap a subset of many small files could spend minutes on lookups alone. When the partition column comes from the file path, the cap is split across partitions in proportion to their bytes; every partition still keeps at least one file, so the cap can be exceeded by up to one file per partition. When there are more partitions than the cap, only the heaviest partitions are sampled, one file each. The cap takes precedence over `tablet_pre_split_data_tier_min_scan_files`. Set to `0` or a negative value to remove the cap.
+
 ### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - Default: 0.3
@@ -758,7 +838,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Number of Parquet/ORC footers the Sample-Based Tablet Pre-Split meta tier reads concurrently from a `FILES()` source. Footer reads are independent per file and the sampler sorts the aggregated statistics, so concurrency only cuts the wall time of the pre-split hook (each footer is a remote round-trip; a many-file source otherwise serializes hundreds of round-trips). Set to `1` to disable concurrency.
+- Description: Number of Parquet/ORC footers the Sample-Based Tablet Pre-Split meta tier reads concurrently from a file-backed load source (`FILES()` or Broker Load). Footer reads are independent per file and the sampler sorts the aggregated statistics, so concurrency only cuts the wall time of the pre-split hook (each footer is a remote round-trip; a many-file source otherwise serializes hundreds of round-trips). Set to `1` to disable concurrency.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`
@@ -767,7 +847,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (the lightest ones: fewest input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise fewest sampled rows) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_target_size`
@@ -783,15 +863,24 @@ This topic introduces the following types of FE configurations:
 To disable the feature safely before a downgrade or during a production rollback:
 
 1. Set all four pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, `enable_tablet_pre_split_for_insert_from_table`, and `enable_tablet_pre_split_for_mv_refresh`. New loads will skip pre-split immediately.
-2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
+2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor them with the following query:
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   The rollback is complete once this query returns no rows. A job in any non-final state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`, is still in flight; only `FINISHED` and `ABORTED` are final.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
 
 #### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
 
-The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Two operational caveats apply:
+The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Three operational caveats apply:
 
 - **Broker Load triggering-load asymmetry.** The multi-partition pre-split hook fires from `BrokerLoadJob.createLoadingTask` **after** `task.prepare()` has built the load's sink plan against the catalog as it existed at that moment. For Broker Load, pre-created partitions and the post-reshard tablet layout are therefore only visible to **subsequent** loads on the same table — the triggering Broker Load itself runs against the original layout and uses BE runtime auto-create for any partitions it touches. INSERT-from-FILES (where the hook fires before `StatementPlanner.plan()`) is unaffected and benefits in the same load.
 - **Pre-created partition leak on subsequent INSERT failure.** When pre-create succeeds and the triggering INSERT later fails for unrelated reasons (FILES schema mismatch, BE crash, load timeout, etc.), the empty pre-created partitions remain in the catalog. This matches the semantics of `ALTER TABLE ADD PARTITION`, which also leaves a partition behind on subsequent failure. Operators who care can drop the empty partitions manually with `ALTER TABLE ... DROP PARTITION`; in practice empty partitions are cheap and the next retry of the load will reuse them.
+- **Manually range-partitioned targets.** For a table with user-declared RANGE partitions, pre-split never creates a partition. Each sampled row is mapped onto the existing partition whose range contains it, and a value outside every declared range is dropped from the plan. Only partitions that are still empty and hold a single tablet are split, typically a partition just added with `ALTER TABLE ... ADD PARTITION`; a load whose target partitions all hold data already skips pre-split without sampling the source. `INSERT OVERWRITE`, LIST partitioning, and expression partitioning are not covered for manually partitioned tables.
 
 #### Production deployment guidance
 

@@ -23,6 +23,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
@@ -256,6 +257,22 @@ public class TabletReshardJobMgrTest {
     @BeforeAll
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+
+        // In shared-data mode the singleton TabletReshardJobMgr is started as a leader daemon and
+        // ticks every tablet_reshard_job_scheduler_interval_ms (10ms), running the very code these
+        // cases drive by hand: it drains reshardCandidates, creates jobs into tabletReshardJobs and
+        // calls createTabletReshardJob -- which several cases replace with a counting MockUp that a
+        // class-level MockUp also applies to the singleton. So the daemon thread would race the test
+        // thread and land its effects between a `before` read and the assertion, exactly like the
+        // ColocateChecker race stubbed out in SplitTabletJobColocateTest (#73662). Quiesce it once
+        // here so every tick in this class is an explicit runAfterCatalogReadyForTest() call.
+        TabletReshardJobMgr sharedMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        Assertions.assertTrue(sharedMgr.isRunning(),
+                "the reshard daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing tick");
+        sharedMgr.setStop();
+        LeaderDaemon.awaitQuiesced(List.<LeaderDaemon>of(sharedMgr), 30_000L);
+
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         Config.enable_range_distribution = true;
@@ -607,6 +624,71 @@ public class TabletReshardJobMgrTest {
         }
         Assertions.assertTrue(mergeCalled[0],
                 "drain must route a sub-threshold merge candidate to a merge job");
+    }
+
+    /**
+     * Both the MERGE TABLET statement and the auto-merge scheduler go through createTabletReshardJob,
+     * so the shape whose merge cannot be made correct -- a range-distributed primary-key table whose
+     * ORDER BY differs from the primary key -- has to be refused there, not only in the analyzer that
+     * the statement alone passes through.
+     */
+    @Test
+    public void testMergeRefusedForASeparateSortKeyPrimaryKeyRangeTable() {
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            StarRocksException e = Assertions.assertThrows(StarRocksException.class,
+                    () -> mgr.createTabletReshardJob(reshardDb, reshardTable, new MergeTabletClause()));
+            Assertions.assertTrue(e.getMessage().contains("Tablet merge is not supported"), e.getMessage());
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
+    }
+
+    /**
+     * And the auto-merge scheduler must skip that shape BEFORE the latch signature, for the same reason
+     * the feature gate does: the signature takes the table READ lock and hashes every tablet of every
+     * visible index, and this refusal is permanent -- there is nothing to latch or re-arm, so paying
+     * that walk on every statistics pass would be forever.
+     */
+    @Test
+    public void testUnsupportedMergeShapeSkipsTheLatchSignatureWalk() {
+        int[] signatureWalks = {0};
+        new MockUp<ColocateChecker>() {
+            @Mock
+            public long tableConvergenceSignature(Database db, OlapTable table, long expectedRangesSig) {
+                signatureWalks[0]++;
+                return 1L;
+            }
+        };
+        new MockUp<TabletReshardUtils>() {
+            @Mock
+            public boolean tabletMergeUnsupported(OlapTable table) {
+                return true;
+            }
+        };
+
+        mockLeaderAdmissionOpen();
+        TabletReshardJobMgr mgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        long pairSize = TabletReshardUtils.mergePairThreshold(Config.tablet_reshard_target_size) - 1;
+        boolean savedFlag = Config.tablet_reshard_enable_tablet_merge;
+        try {
+            Config.tablet_reshard_enable_tablet_merge = true;
+            Deencapsulation.invoke(mgr, "triggerTabletReshard", reshardDb, reshardTable,
+                    0L, pairSize, 0L, 0);
+            Assertions.assertEquals(0, signatureWalks[0],
+                    "an unsupported merge shape must skip the read-locked signature walk entirely");
+        } finally {
+            Config.tablet_reshard_enable_tablet_merge = savedFlag;
+        }
     }
 
     /**

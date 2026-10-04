@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <optional>
 #include <thread>
 #include <tuple>
 
@@ -53,6 +55,83 @@ constexpr int64_t kTwoPointFiveBillion = 2500000000;
 constexpr int64_t kThreeBillion = 3000000000;
 constexpr int64_t kFourBillion = 4000000000;
 constexpr int64_t kFiveBillion = 5000000000;
+
+TEST(TestRuntimeProfile, SaturatingSumBounds) {
+    auto strategy = RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM);
+    strategy.__set_saturating_sum(true);
+    constexpr auto max = std::numeric_limits<int64_t>::max();
+    constexpr auto min = std::numeric_limits<int64_t>::min();
+    RuntimeProfile::Counter first(TUnit::UNIT, strategy, max);
+    RuntimeProfile::Counter second(TUnit::UNIT, strategy, 1);
+    std::vector<RuntimeProfile::Counter*> counters{&first, &second};
+    auto [value, low, high] = RuntimeProfile::merge_isomorphic_counters(counters);
+    EXPECT_EQ(max, value);
+    EXPECT_EQ(1, low);
+    EXPECT_EQ(max, high);
+
+    first.set(min);
+    second.set(int64_t{-1});
+    std::tie(value, low, high) = RuntimeProfile::merge_isomorphic_counters(counters);
+    EXPECT_EQ(min, value);
+    EXPECT_EQ(min, low);
+    EXPECT_EQ(-1, high);
+    first.set(max);
+    EXPECT_EQ(max - 1, std::get<0>(RuntimeProfile::merge_isomorphic_counters(counters)));
+    second.set(min);
+    EXPECT_EQ(-1, std::get<0>(RuntimeProfile::merge_isomorphic_counters(counters)));
+}
+
+TEST(TestRuntimeProfile, SaturatingSumRespectsAggregatePhase) {
+    for (const auto type : {TCounterAggregateType::SUM, TCounterAggregateType::SUM_AVG, TCounterAggregateType::AVG_SUM,
+                            TCounterAggregateType::AVG}) {
+        for (const auto policy : {std::optional<bool>{}, std::optional<bool>{false}, std::optional<bool>{true}}) {
+            auto strategy = RuntimeProfile::Counter::create_strategy(type);
+            EXPECT_FALSE(strategy.saturating_sum);
+            if (policy.has_value()) {
+                strategy.__set_saturating_sum(*policy);
+            } else {
+                // C++ Thrift marks fields with defaults as present; model an older sender explicitly.
+                strategy.__isset.saturating_sum = false;
+            }
+            RuntimeProfile::Counter first(TUnit::UNIT, strategy, 10);
+            RuntimeProfile::Counter second(TUnit::UNIT, strategy, 20);
+            std::vector<RuntimeProfile::Counter*> counters{&first, &second};
+            const bool sum = type == TCounterAggregateType::SUM || type == TCounterAggregateType::SUM_AVG;
+            EXPECT_EQ(sum ? 30 : 15, std::get<0>(RuntimeProfile::merge_isomorphic_counters(counters)));
+            if (policy.value_or(false) && sum) {
+                first.set(std::numeric_limits<int64_t>::max());
+                second.set(std::numeric_limits<int64_t>::max());
+                EXPECT_EQ(std::numeric_limits<int64_t>::max(),
+                          std::get<0>(RuntimeProfile::merge_isomorphic_counters(counters)));
+            }
+        }
+    }
+}
+
+TEST(TestRuntimeProfile, SaturatingSumSurvivesProfileCopyWireAndMerge) {
+    auto strategy = RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM);
+    strategy.__set_saturating_sum(true);
+    RuntimeProfile first("profile");
+    first.add_counter("count", TUnit::UNIT, strategy)->set(std::numeric_limits<int64_t>::max());
+    RuntimeProfile copied("profile");
+    copied.copy_all_counters_from(&first);
+    ASSERT_TRUE(copied.get_counter("count")->strategy().saturating_sum);
+    TRuntimeProfileTree wire;
+    copied.to_thrift(&wire);
+    RuntimeProfile received("profile");
+    received.update(wire);
+    ASSERT_TRUE(received.get_counter("count")->strategy().__isset.saturating_sum);
+    ASSERT_TRUE(received.get_counter("count")->strategy().saturating_sum);
+
+    ObjectPool pool;
+    std::vector<RuntimeProfile*> profiles{&first, &received};
+    auto* merged = RuntimeProfile::merge_isomorphic_profiles(&pool, profiles);
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), merged->get_counter("count")->value());
+    ASSERT_TRUE(merged->get_counter("count")->strategy().saturating_sum);
+    profiles = {merged, &copied};
+    auto* next = RuntimeProfile::merge_isomorphic_profiles(&pool, profiles);
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), next->get_counter("count")->value());
+}
 
 TEST(TestRuntimeProfile, testMergeIsomorphicProfiles1) {
     std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();

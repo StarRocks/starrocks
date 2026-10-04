@@ -46,6 +46,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/util/debug_util.h"
+#include "common/util/thrift_util.h"
 #include "exec_primitive/runtime_filter/runtime_filter_registry.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
@@ -124,7 +125,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
 }
 
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
+    VLOG(2) << "ExecNode init:\n" << thrift_plan_debug_string(tnode);
     _runtime_state = state;
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));

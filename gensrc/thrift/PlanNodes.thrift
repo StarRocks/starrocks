@@ -98,7 +98,8 @@ enum TPlanNodeType {
   LOOKUP_NODE = 41,
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
-  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44
+  ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
+  AI_PROJECT_NODE = 45
 }
 
 // phases of an execution node
@@ -515,6 +516,12 @@ struct THdfsScanRange {
     // fluss split info
     42: optional string fluss_split_info
     43: optional THdfsScanRangeExt ext
+
+    // whether to use the Paimon C++ native reader
+    44: optional bool use_paimon_native_reader
+
+    // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
+    45: optional binary paimon_split_info_binary
 }
 
 struct TBinlogScanRange {
@@ -704,6 +711,18 @@ struct TVectorSearchOptions {
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
   // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
   14: optional bool has_vector_range;
+  // When true, a split of this scan must land on a segment boundary. The index is searched once per
+  // segment, so a sub-segment split makes every child repeat the whole search over its own row range.
+  // FE folds the enable_vector_index_split_at_segment_boundary session variable into this flag. It
+  // constrains where an existing split cuts -- it does not select a split strategy, and is orthogonal
+  // to use_prepared_physical_split_scan.
+  15: optional bool split_at_segment_boundary;
+  // The query vector as little-endian float32, which is also the BE's in-memory layout. The FE
+  // fills this instead of `query_vector` (ordinal 4): the supported upgrade order is BE/CN first
+  // and FE second, so a BE is never older than the FE talking to it and never needs the text form.
+  // `query_vector` serves the reverse case -- a new BE against an old FE mid-upgrade -- and must
+  // not be removed nor its ordinal reused.
+  16: optional binary query_vector_f32_le;
 }
 
 enum SampleMethod {
@@ -1598,6 +1617,28 @@ struct TLookUpNode {
   1: optional map<Types.TTupleId, Descriptors.TRowPositionDescriptor> row_pos_descs;
 }
 
+struct TAIEndpointConfig {
+  1: optional string endpoint
+  2: optional string model
+  3: optional string provider
+  4: optional string api_key
+  5: optional i64 timeout_ms
+  6: optional i32 dimensions
+}
+
+struct TAIModelConfiguration {
+  1: optional TAIEndpointConfig chat
+  2: optional TAIEndpointConfig embedding
+  // Missing source is accepted only for legacy SYSTEM configurations.
+  3: optional Types.TAIModelSource source
+}
+
+struct TAIProjectNode {
+  1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
+  2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+  3: optional map<string, TAIModelConfiguration> ai_model_configs
+}
+
 // Extension point for TPlanNode. DO NOT MODIFY: do not add fields here, and do
 // not rename, renumber or remove it. The field numbers inside are allocated
 // separately, so anything added here collides with them, and renaming or
@@ -1693,6 +1734,7 @@ struct TPlanNode {
 
   86: optional TEnforceUniqueRowLocatorNode enforce_unique_row_locator_node
   87: optional TPlanNodeExt ext
+  88: optional TAIProjectNode ai_project_node
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

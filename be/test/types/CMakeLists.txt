@@ -22,6 +22,7 @@ set(TYPES_TEST_FILES
     decimalv3_test.cpp
     datetime_value_test.cpp
     hll_test.cpp
+    geo_type_descriptor_test.cpp
     int128_arithmetic_ops_test.cpp
     json_value_test.cpp
     logical_type_test.cpp
@@ -31,6 +32,8 @@ set(TYPES_TEST_FILES
     timestamp_value_test.cpp
     type_info_test.cpp
     variant_value_test.cpp
+    geo_wkb_test.cpp
+    native_geo_type_test.cpp
 )
 
 set(TYPES_TEST_LINK_LIBS

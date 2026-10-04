@@ -159,7 +159,7 @@ set(STORAGE_FILES
     lake_meta_reader.cpp
     olap_meta_reader.cpp
     seek_tuple.cpp
-    full_sort_key_codec.cpp
+    sort_key_sampler.cpp
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
@@ -204,7 +204,7 @@ set(STORAGE_FILES
     lake/tablet_reshard_helper.cpp
     lake/tablet_splitter.cpp
     lake/tablet_merger.cpp
-    lake/tablet_merger_split_family.cpp
+    lake/tablet_virtual_merge.cpp
     lake/tablet_reshard.cpp
     lake/replication_txn_manager.cpp
     lake/lake_replication_txn_manager.cpp
@@ -222,6 +222,7 @@ set(STORAGE_FILES
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
     lake/tablet_range_helper.cpp
+    lake/multi_node_write_txn_log.cpp
     lake/sst_seek_range.cpp
     lake/transactions.cpp
     lake/metadata_iterator.cpp
@@ -229,7 +230,6 @@ set(STORAGE_FILES
     lake/rowset_update_state.cpp
     lake/segment_pk_iterator.cpp
     lake/meta_file.cpp
-    lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/cloud_native_index_compaction_task.cpp
@@ -271,6 +271,8 @@ set(STORAGE_FILES
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
+    lake/parallel_task_runner.cpp
+    parallel_upsert_context.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
     lake/persistent_index_sstable.cpp

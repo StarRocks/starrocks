@@ -22,6 +22,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -34,6 +35,7 @@ import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.schema.Schema;
+import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -92,12 +94,23 @@ public class PaimonTableTest {
         List<DataField> fields = rowType.getFields();
         List<Column> fullSchema = new ArrayList<>(fields.size());
         ArrayList<String> partitions = Lists.newArrayList("b", "c");
+        Path tablePath = new Path("s3://warehouse/testDB/testTable");
+        TableSchema tableSchema = TableSchema.create(7L, Schema.newBuilder()
+                .column("a", DataTypes.INT())
+                .column("b", DataTypes.INT())
+                .column("c", DataTypes.INT())
+                .partitionKeys(partitions)
+                .build());
         new Expectations() {
             {
                 paimonNativeTable.rowType();
                 result = rowType;
                 paimonNativeTable.partitionKeys();
                 result = partitions;
+                paimonNativeTable.location();
+                result = tablePath;
+                paimonNativeTable.schema();
+                result = tableSchema;
             }
         };
         String dbName = "testDB";
@@ -107,10 +120,46 @@ public class PaimonTableTest {
         TTableDescriptor tTableDescriptor = paimonTable.toThrift(null);
         org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getDbName(), dbName);
         org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableName(), tableName);
+        org.junit.jupiter.api.Assertions.assertEquals(tablePath.toString(),
+                tTableDescriptor.getPaimonTable().getPaimon_table_path());
+        org.junit.jupiter.api.Assertions.assertEquals(tableSchema,
+                TableSchema.fromJson(tTableDescriptor.getPaimonTable().getPaimon_table_schema_json()));
+    }
+
+    @Test
+    public void testToThriftWithoutSchemaJsonWhenSerializationFails(@Mocked FileStoreTable paimonNativeTable) {
+        RowType rowType = RowType.builder().field("a", DataTypes.INT()).build();
+        Path tablePath = new Path("s3://warehouse/testDB/testTable");
+        new Expectations() {
+            {
+                paimonNativeTable.rowType();
+                result = rowType;
+                paimonNativeTable.partitionKeys();
+                result = List.of();
+                paimonNativeTable.location();
+                result = tablePath;
+                paimonNativeTable.schema();
+                result = new RuntimeException("expected schema serialization failure");
+            }
+        };
+
+        PaimonTable paimonTable = new PaimonTable(
+                "testCatalog", "testDB", "testTable", List.of(new Column("a", IntegerType.INT)), paimonNativeTable);
+        TTableDescriptor descriptor = paimonTable.toThrift(null);
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                tablePath.toString(), descriptor.getPaimonTable().getPaimon_table_path());
+        org.junit.jupiter.api.Assertions.assertFalse(descriptor.getPaimonTable().isSetPaimon_table_schema_json());
     }
 
     @Test
     public void testEquals(@Mocked FileStoreTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeTable.uuid();
+                result = "uuid";
+            }
+        };
         String dbName = "testDB";
         String tableName = "testTable";
         PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null, paimonNativeTable);

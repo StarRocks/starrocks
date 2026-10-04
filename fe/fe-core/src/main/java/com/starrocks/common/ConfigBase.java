@@ -262,11 +262,32 @@ public class ConfigBase {
                             + confVal);
                 }
                 break;
+            case "group_provider_http_connect_timeout_ms":
+            case "group_provider_http_read_timeout_ms":
+                // URLConnection reads 0 as "no timeout" - the unbounded read these exist to prevent - and
+                // rejects a negative value with an unchecked exception that would surface on the journal
+                // replay thread. Neither may reach the setter.
+                int timeoutMs = Integer.parseInt(confVal);
+                if (timeoutMs <= 0) {
+                    throw new InvalidConfException("'" + f.getName() + "' must be a positive number of " +
+                            "milliseconds, current value: " + confVal);
+                }
+                break;
             case "db_used_data_quota_update_interval_secs":
                 int intVal = Integer.parseInt(confVal);
                 if (intVal < 30) {
                     throw new InvalidConfException("'db_used_data_quota_update_interval_secs' configuration " +
                             "must be at least 30 seconds, current value: " + confVal);
+                }
+                break;
+            case "label_clean_interval_second":
+                // The value drives Daemon.run()'s Thread.sleep(): 0 spins the label cleaner and a
+                // negative value throws IllegalArgumentException, which escapes the daemon loop and
+                // kills the cleaner thread for good.
+                int labelCleanInterval = Integer.parseInt(confVal);
+                if (labelCleanInterval <= 0) {
+                    throw new InvalidConfException("'label_clean_interval_second' configuration " +
+                            "must be greater than 0, current value: " + confVal);
                 }
                 break;
             case "http_request_allow_private_in_allowlist":

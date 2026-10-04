@@ -16,10 +16,93 @@ description: "Alphabetical t - z"
 - Unit: -
 - Description: Highest cumulative compaction score of tablets in this BE.
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source SST cohorts differed in count, order, or semantic metadata.
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a candidate cohort contained a duplicate physical SST filename.
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a required embedded delete vector could not be resolved after SST projection.
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source-to-target RSSID mapping or ownership was not uniform enough for metadata reuse.
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because a projected SST owner, RSSID offset, or watermark fell outside the reusable live or supported domain.
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source rowset physical layouts differed.
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because shared or mixed source SST ownership prevented safe metadata reuse.
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that selected lazy index rebuild because source ranges or SST metadata did not meet the supported reuse form.
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that reused one complete, identical inherited SST cohort in the merged tablet metadata.
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that omitted source SST metadata so the next operation or user that loads the Primary Key index rebuilds it.
+
+## `tablet_merge_sstable_meta_private_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges that projected and reused a complete cohort of private source SST metadata.
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- Unit: Bytes
+- Description: Cumulative size of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- Unit: Count
+- Description: Cumulative number of unique source SST files omitted from merged index metadata and recorded as orphan files during lazy rebuild fallback.
+
 ## `tablet_metadata_mem_bytes`
 
 - Unit: Bytes
 - Description: Memory used by tablet metadata.
+
+## `tablet_pre_split_data_tier_file_selection`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `mode` — `subset` (the sample scanned a subset of the files, sized by `tablet_pre_split_data_tier_scan_byte_limit`), `under_limit` (the input was within the limit, so every file was scanned), `disabled` (the limit is `0`, so every file was scanned), `all_selected` (the input exceeded the limit, but taking whole files, at least one per partition and at least `tablet_pre_split_data_tier_min_scan_files` in all, still selected every file), `partition_from_file_data` (the input exceeded the limit, but a partition column is read from the file data rather than from the path, or path and literal partition columns are mixed, so every file was scanned: a subset could miss whole partitions), `path_not_expressible` (`INSERT INTO ... SELECT FROM FILES()` only: a selected file's path contains a character FILES cannot take as an exact path — `,`, `*`, `?`, `[`, `{`, `\`, a `:` in the path after the host, or leading or trailing whitespace — so the sample scanned every file through the statement's own `path`).
+- Description: Total data-tier samples of Broker Load and `INSERT INTO ... SELECT FROM FILES()` loads, by how the scanned files were chosen.
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- Unit: -
+- Type: Histogram
+- Description: Share of the input bytes that each data-tier sample of a Broker Load or `INSERT INTO ... SELECT FROM FILES()` load scanned, as a percentage rounded down to an integer, so `100` means every file was scanned.
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- Unit: Count
+- Description: Cumulative count of tablet-exclusion events during merge planning, not a live count of currently blocked tablets: it increases every planning pass that skips an otherwise-eligible tablet, and never decreases except across an FE restart. Watch its rate of increase, not its raw value. A tablet is skipped either because it still holds merge-blocking shared data files left over from a tablet split, or because it has not yet been proven free of them -- which usually means compaction has not caught up yet, but can also mean the tablet is on a BE that predates this check, or has simply not been observed yet. Clearing the shared files a split leaves behind takes a compaction that rewrites them: on a non-primary-key table `ALTER TABLE ... COMPACT` forces that on demand. On a primary-key table the same statement forces base compaction only for a tablet that carries outstanding deletes; a delete-free tablet, which is the usual shape right after a split, is unaffected by it and waits for ordinary compaction to reach those rowsets. Only the Leader FE increments this counter.
 
 ## `tablet_schema_mem_bytes`
 
@@ -47,6 +130,30 @@ description: "Alphabetical t - z"
 
 - Unit: Count
 - Description: Number of currently opened thrift clients.
+
+## `thrift_server_acceptor_stall_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Milliseconds since the FE Thrift accept loop last returned a connection. A wedged acceptor makes this climb, but so does an FE with no Thrift traffic, so read it together with the connection arrival rate rather than alerting on it alone. `0` also covers the case where no acceptor is running at all, before the Thrift server starts and after it stops, so a threshold alert on this metric cannot tell a dead Thrift service from a healthy one.
+
+## `thrift_server_expired_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections that the FE Thrift server closed without serving because they had waited in the pending queue longer than `thrift_server_queue_timeout_ms`. That check is disabled by default, so this counter stays at 0 until an operator arms the timeout. A rising value means the FE was working through a backlog of connections whose callers had almost certainly given up already; read it together with `thrift_server_queue_wait_ms` to see how far behind the queue had fallen.
+
+## `thrift_server_queue_wait_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Quantiles of how long connections waited in the FE Thrift server pending queue before a worker thread picked them up. Sampled for every dequeued connection, including the ones then dropped as expired, so the distribution is not truncated at `thrift_server_queue_timeout_ms`. This is the leading indicator of Thrift saturation: it climbs while the worker pool is still keeping up, well before `thrift_server_rejected_connections_total` starts to move.
+
+## `thrift_server_rejected_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections the FE Thrift server closed immediately because its worker pool was saturated. Every rejection is counted, including those whose log warning was suppressed by rate limiting. A rising value means clients are being turned away; read it with the `thread_pool` metrics for `thrift-server-pool`, where the rate of increase indicates how far worker capacity is short.
 
 ## `thrift_used_clients`
 

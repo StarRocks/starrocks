@@ -130,6 +130,32 @@ void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
 }
 
+void PipelineBuilderContext::bind_dependent_pipeline_between(const BuilderMark& begin, const BuilderMark& end,
+                                                             const Pipeline* dependency, bool apply_events) {
+    DCHECK_LE(begin.num_pipelines, end.num_pipelines);
+    DCHECK_LE(end.num_pipelines, _pipelines.size());
+    DCHECK_LE(begin.num_group_dependent_sources, end.num_group_dependent_sources);
+    DCHECK_LE(end.num_group_dependent_sources, _group_dependent_sources.size());
+
+    // Not optional: see the header. This is what keeps a hash join's builders ahead of its probers
+    // and its prober dop a multiple of the builder dop.
+    for (size_t i = begin.num_group_dependent_sources; i < end.num_group_dependent_sources; ++i) {
+        _group_dependent_sources[i]->add_group_dependent_pipeline(dependency);
+    }
+
+    if (!apply_events || !_fragment_context->runtime_state()->enable_wait_dependent_event()) {
+        return;
+    }
+    for (size_t i = begin.num_pipelines; i < end.num_pipelines; ++i) {
+        Pipeline* pipeline = _pipelines[i].get();
+        // The caller keeps anything that feeds `dependency` out of the range; `dependency` itself is
+        // registered after `end` for the same reason.
+        DCHECK(pipeline != dependency);
+        pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+        pipeline->pipeline_event()->add_dependency(dependency->pipeline_event());
+    }
+}
+
 void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
     bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
     enable_wait_event &= !_current_execution_group->is_colocate_exec_group();

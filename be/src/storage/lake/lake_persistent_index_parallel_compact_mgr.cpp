@@ -31,6 +31,7 @@
 #include "platform/key_cache.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -116,6 +117,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     sstable::ReadOptions read_options;
     read_options.fill_cache = false;
+    // Catch corrupted data blocks as Corruption instead of merging garbage into the
+    // compaction output.
+    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
 
     bool contain_shared_sstables = false;
     // Open each sstable and create iterator

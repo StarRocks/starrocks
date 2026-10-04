@@ -1,0 +1,11 @@
+-- name: test_distinct_over_percentile
+-- count(DISTINCT <PERCENTILE>) crashed the BE: a PERCENTILE has no distinct-count rewrite (unlike
+-- count(distinct bitmap) / count(distinct hll)) and no meaning under DISTINCT, so it reached the BE
+-- as a raw distinct aggregate and down_cast the PercentileColumn to a BinaryColumn it is not. It is
+-- now rejected during analysis.
+select count(distinct percentile_hash(cast(1 as double)));
+-- count(distinct bitmap) / count(distinct hll) stay supported (rewritten to bitmap_union_count / hll cardinality)
+create table t_obj (k int, b bitmap bitmap_union, h hll hll_union) aggregate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t_obj values (1, to_bitmap(10), hll_hash(10)), (1, to_bitmap(20), hll_hash(20)), (2, to_bitmap(10), hll_hash(10));
+select count(distinct b), count(distinct h) from t_obj;
+select count(distinct to_bitmap(v)) from (select 10 v union all select 20 union all select 10) t;

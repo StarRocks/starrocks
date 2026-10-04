@@ -19,10 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TKeyRange;
-import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -74,20 +71,9 @@ public class PartitionKeyRangeColumnIdTest {
     }
 
     private static List<String> rangeColumnNames(String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         List<String> names = Lists.newArrayList();
-        for (ScanNode scanNode : plan.second.getScanNodes()) {
-            for (TScanRangeLocations locations : scanNode.getScanRangeLocations(0)) {
-                TInternalScanRange range = locations.getScan_range().getInternal_scan_range();
-                if (range == null || range.getPartition_column_ranges() == null) {
-                    continue;
-                }
-                for (TKeyRange keyRange : range.getPartition_column_ranges()) {
-                    names.add(keyRange.getColumn_name());
-                }
-            }
+        for (Pair<Long, TKeyRange> range : ScanRangeKeyRanges.collect(connectContext, sql)) {
+            names.add(range.second.getColumn_name());
         }
         Assertions.assertFalse(names.isEmpty(), "the plan must carry partition column ranges at all");
         return names;

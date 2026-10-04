@@ -101,6 +101,12 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
         auto& scalar = curr_type_node.scalar_type;
 
         LogicalType field_type = thrift_to_type(scalar.type);
+        if (field_type == TYPE_GEOGRAPHY || field_type == TYPE_GEOMETRY) {
+            return Status::NotSupported("Native geo column persistence is not supported");
+        }
+        if (field_type == TYPE_FILE) {
+            return Status::NotSupported("Native FILE column persistence is not supported");
+        }
         column_pb->set_type(logical_type_to_string(field_type));
         column_pb->set_length(get_tablet_column_field_length_by_type(field_type, scalar.len));
         column_pb->set_index_length(column_pb->length());
@@ -213,6 +219,14 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     }
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
+    }
+    // single throat for both classic and lake schema conversion. Guarded by
+    // __isset and only set when true so non-compression dict columns stay byte-identical.
+    if (t_column.__isset.zstd_compression_page_size && t_column.zstd_compression_page_size > 0) {
+        column_pb->set_zstd_compression_page_size(t_column.zstd_compression_page_size);
+    }
+    if (t_column.__isset.use_zstd_compression && t_column.use_zstd_compression) {
+        column_pb->set_use_zstd_compression(true);
     }
     // agg state type desc
     if (t_column.__isset.agg_state_desc) {

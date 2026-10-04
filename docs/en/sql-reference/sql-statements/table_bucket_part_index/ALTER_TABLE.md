@@ -480,15 +480,27 @@ Parameter:
 
 - `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 10 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
 
+  For a manual SPLIT without tablet IDs, the target size must be positive. If the FE configuration `tablet_reshard_target_size` is `0`, specify a positive value in `PROPERTIES`; otherwise, the statement fails with `Invalid tablet_reshard_target_size: 0`. The 1.5-times split threshold below applies only to positive target sizes.
+
   - A tablet will be split if both the following conditions are met:
-    - The size of the tablet is **larger** than `tablet_reshard_target_size`. 
+    - The size of the tablet is **at least** 1.5 times `tablet_reshard_target_size` (that is, `ceil(1.5 × tablet_reshard_target_size)`). With the 10 GB default, a tablet is split once it reaches 15 GB. Both automatic splitting and a manual `ALTER TABLE ... SPLIT` use this threshold: automatic splitting measures against the FE configuration `tablet_reshard_target_size`, while a manual SPLIT uses the value specified in `PROPERTIES`, or that FE configuration if none is specified. This also holds when you specify tablet IDs: a specified tablet below the threshold is not split, and if no tablet qualifies, the statement fails with `No tablets need to split in table ...`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
 
-  - A tablet is also split without waiting for `tablet_reshard_target_size` if the materialized index it belongs to has fewer tablets than the number of compute nodes in its warehouse -- capped by `tablet_reshard_max_split_count`, so lowering that configuration lowers the tablet count at which this stops -- and the tablet is worth at least two of the target that rule aims at. That target is the size that would give the index one tablet per such slot, floored at `tablet_reshard_min_split_size`, so with its 2 GB default an index below that floor splits once a tablet reaches 4 GB. This allows a newly created partition to reach cluster-wide write parallelism sooner. Specifying `tablet_reshard_target_size` in `PROPERTIES` disables this and applies exactly the target size you requested. To disable it for the whole cluster, set `tablet_reshard_min_split_size` at or above `tablet_reshard_target_size`.
+  - A tablet is also split before it reaches that threshold if the materialized index it belongs to has fewer tablets than the number of compute nodes in its warehouse -- capped by `tablet_reshard_max_split_count`, so lowering that configuration lowers the tablet count at which this stops -- and the tablet is worth at least two of the target that rule aims at. That target is the size that would give the index one tablet per such slot, floored at `tablet_reshard_min_split_size`, so with its 2 GB default an index below that floor splits once a tablet reaches 4 GB. This allows a newly created partition to reach cluster-wide write parallelism sooner. This rule applies to automatic splitting and to a manual SPLIT that specifies neither tablet IDs nor `tablet_reshard_target_size`. Specifying either one disables it, leaving only the threshold above. To disable it for the whole cluster, set `tablet_reshard_min_split_size` at or above `tablet_reshard_target_size`.
 
-  - A tablet will be merged if both the following conditions are met:
-    - The total size of two adjacent tablets is **smaller** than `tablet_reshard_target_size`.
-    - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+  - MERGE requires the FE configuration `tablet_reshard_enable_tablet_merge` to be `true` (Default: `false`). Otherwise, tablets are never merged automatically, and `ALTER TABLE ... MERGE` is rejected. When it is enabled, tablets are merged as follows:
+    - Automatic merging is triggered when the total size of any two adjacent tablets in a materialized index is **smaller** than 80% of `tablet_reshard_target_size` (that is, `ceil(0.8 × tablet_reshard_target_size)`), measured against the FE configuration `tablet_reshard_target_size`. With the 10 GB default, merging is triggered once two adjacent tablets together are smaller than 8 GB.
+    - Automatic merging and a manual MERGE that does not specify tablet IDs select the tablets to merge in the same way. A manual MERGE uses the value specified in `PROPERTIES`, or that FE configuration if none is specified. Only tablets smaller than `ceil(0.8 × tablet_reshard_target_size)` are merged. Adjacent tablets of this kind are grouped in range order, the total size of each group does not exceed `tablet_reshard_target_size`, and any larger tablet between them ends the group. A merge never reduces a materialized index below its parallelism floor, which is the number of compute nodes in its warehouse, capped by `tablet_reshard_max_split_count` and no less than 2. If no tablet can be merged, the manual statement fails with `No tablets need to merge in table ...`.
+    - A manual MERGE that specifies tablet IDs merges each specified group as is, without checking tablet sizes or the parallelism floor. Each group must consist of at least two contiguous tablets in the same partition and materialized index.
+    - In all cases, the number of tablets that are running tablet SPLIT or MERGE must be less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
+
+:::note
+
+MERGE is **not supported** on a range-distributed Primary Key table whose `ORDER BY` differs from its primary key. Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. Both `ALTER TABLE ... MERGE TABLETS` and the automatic size-based merge are refused with `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`.
+
+SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged.
+
+:::
 
 For detailed examples, see [Split or merge tablets](#split-or-merge-tablets).
 
@@ -509,7 +521,7 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 Note:
 
 1. If you add a value column to an Aggregate table, you need to specify agg_type.
-2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is ambiguous and is rejected, because creating a key column would change the table's aggregation key and rewrite existing data. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `true` to restore the earlier behavior, where such a column became a key column.
 3. You cannot add a column that already exists in the base index to the rollup. (You can recreate a rollup if needed.)
 4. On range-distribution tables in shared-data clusters, adding a key column (which joins the range sort key) is supported for Duplicate Key, Aggregate, and Unique Key tables, from v4.2 onwards. The operation triggers an online rewrite, and the added key column must have a constant `DEFAULT` value. It is not supported for Primary Key tables, or for tables that have a rollup or synchronous materialized view.
 
@@ -541,7 +553,7 @@ Note:
 
 1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword. On an Aggregate table, a column that specifies neither `agg_type` nor `KEY` is ambiguous and is rejected. Set the FE configuration item `allow_implicit_key_column_in_agg_add_column` to `true` to restore the earlier behavior.
 
 3. You cannot add a column that already exists in the base index to the rollup. (You can create another rollup if needed.)
 
@@ -1096,7 +1108,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 

@@ -24,7 +24,6 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonPostProcessable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -201,7 +200,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.nextVersion = this.visibleVersion + 1;
         this.dataVersion = this.visibleVersion;
         this.nextDataVersion = this.nextVersion;
-        this.versionEpoch = this.nextVersionEpoch();
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
@@ -214,7 +212,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         this.nextVersion = this.visibleVersion + 1;
         this.dataVersion = this.visibleVersion;
         this.nextDataVersion = this.nextVersion;
-        this.versionEpoch = this.nextVersionEpoch();
         this.versionTxnType = TransactionType.TXN_NORMAL;
     }
 
@@ -557,10 +554,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     public void setVersionEpoch(long versionEpoch) {
         this.versionEpoch = versionEpoch;
-    }
-
-    public long nextVersionEpoch() {
-        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
     }
 
     public TransactionType getVersionTxnType() {
@@ -941,9 +934,6 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         }
         if (nextDataVersion == 0) {
             nextDataVersion = nextVersion;
-        }
-        if (versionEpoch == 0) {
-            versionEpoch = nextVersionEpoch();
         }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;

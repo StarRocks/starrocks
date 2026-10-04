@@ -241,8 +241,17 @@ statement
     // Group Provider Statement
     | createGroupProviderStatement
     | dropGroupProviderStatement
+    | alterGroupProviderStatement
     | showGroupProvidersStatement
     | showCreateGroupProviderStatement
+
+    // AI Provider Statement
+    | createAIProviderStatement
+    | alterAIProviderStatement
+    | dropAIProviderStatement
+    | showAIProvidersStatement
+    | descAIProviderStatement
+    | setDefaultAIProviderStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -1007,6 +1016,7 @@ alterClause
     | addColumnClause
     | addColumnsClause
     | dropColumnClause
+    | alterTableDictColumnsClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
     | replacePartitionColumnClause
@@ -1171,6 +1181,10 @@ addColumnsClause
 
 dropColumnClause
     : DROP COLUMN identifier (FROM rollupName=identifier)? properties?
+    ;
+
+alterTableDictColumnsClause
+    : (ENABLE | DISABLE) DICTIONARY '(' identifier (',' identifier)* ')'
     ;
 
 dropPartitionColumnClause
@@ -2036,12 +2050,46 @@ dropGroupProviderStatement
     : DROP GROUP PROVIDER (IF EXISTS)? identifier
     ;
 
+alterGroupProviderStatement
+    // The property list is spelled out here instead of reusing propertyList, which requires at least one
+    // property: an empty SET () is a mistake worth a clear message ("no property is specified"), and the
+    // shared rule is used by 30+ statements, so it cannot be relaxed just for this one.
+    : ALTER GROUP PROVIDER identifier SET '(' (property (',' property)*)? ')'
+    ;
+
 showGroupProvidersStatement
     : SHOW GROUP PROVIDERS showPredicateClauses
     ;
 
 showCreateGroupProviderStatement
     : SHOW CREATE GROUP PROVIDER identifier showPredicateClauses
+    ;
+
+// ---------------------------------------- AI Provider Statement ------------------------------------------------------
+
+createAIProviderStatement
+    : CREATE AI PROVIDER (IF NOT EXISTS)? aiProviderName=identifierOrString
+          TYPE providerType=identifierOrString comment? properties
+    ;
+
+alterAIProviderStatement
+    : ALTER AI PROVIDER (IF EXISTS)? identifierOrString SET propertyList
+    ;
+
+dropAIProviderStatement
+    : DROP AI PROVIDER (IF EXISTS)? identifierOrString
+    ;
+
+showAIProvidersStatement
+    : SHOW AI PROVIDERS ((LIKE pattern=string) | (TYPE providerType=identifierOrString))?
+    ;
+
+descAIProviderStatement
+    : (DESC | DESCRIBE) AI PROVIDER identifierOrString
+    ;
+
+setDefaultAIProviderStatement
+    : SET identifierOrString AS DEFAULT AI PROVIDER
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -3356,7 +3404,7 @@ number
     ;
 
 nonReserved
-    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | AI | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT | ASSERT_ROWS | AWARE
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS | BOTH
     | BUILTIN | BASE | BEFORE | BASELINE

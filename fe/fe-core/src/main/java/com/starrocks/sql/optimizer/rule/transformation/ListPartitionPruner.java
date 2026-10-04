@@ -281,7 +281,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
+                        OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -369,7 +369,7 @@ public class ListPartitionPruner implements PartitionPruner {
                     continue;
                 }
                 if (!binaryPredicate.getBinaryType().isEqual()) {
-                    if (!OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) generatedExpr).first) {
+                    if (!OperatorFunctionChecker.onlyContainIncreasingFunctions((CallOperator) generatedExpr).first) {
                         // skip non-monotonic function for not equal predicate
                         continue;
                     }
@@ -466,6 +466,15 @@ public class ListPartitionPruner implements PartitionPruner {
 
             @Override
             public ScalarOperator visitInPredicate(InPredicateOperator operator, Void context) {
+                // The deduced conjunct may only widen the rows it keeps: c1 IN (a, b) implies
+                // f(c1) IN (f(a), f(b)), but c1 NOT IN (a, b) does not imply f(c1) NOT IN (f(a), f(b))
+                // unless f is one-to-one. With f = date_trunc('day', c1), '2024-01-02 13:00' is not in
+                // ('2024-01-02 12:00'), yet its partition value is, and that partition would be pruned
+                // with the row still in it. NOT EQUAL is refused for the same reason in
+                // normalizeNonStrictMonotonic().
+                if (operator.isNotIn()) {
+                    return null;
+                }
                 ScalarOperator result = operator.clone();
                 result.setChild(0, generatedColumn);
                 for (int i = 1; i < operator.getChildren().size(); i++) {
@@ -657,8 +666,9 @@ public class ListPartitionPruner implements PartitionPruner {
             case NE:
                 // SlotRef != Literal
                 matches.addAll(allPartitions);
-                // remove null partitions
-                matches.removeAll(nullPartitions);
+                // remove NULL-only partitions
+                matches.removeIf(id -> nullPartitions.contains(id)
+                        && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
                 // remove partition matches literal
                 if (partitionValueMap.containsKey(literal)) {
                     if (listPartitionInfo == null) {
@@ -775,9 +785,10 @@ public class ListPartitionPruner implements PartitionPruner {
                 return Sets.newHashSet();
             }
 
-            // all partitions but remove null partitions
+            // all partitions but remove NULL-only partitions
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         }
 
         for (int i = 1; i < inPredicate.getChildren().size(); ++i) {
@@ -824,7 +835,9 @@ public class ListPartitionPruner implements PartitionPruner {
         if (isNullPredicate.isNotNull()) {
             // is not null
             matches.addAll(allPartitions);
-            matches.removeAll(nullPartitions);
+            // all partitions but remove NULL-only partitions
+            matches.removeIf(id -> nullPartitions.contains(id)
+                    && (listPartitionInfo == null || listPartitionInfo.isSingleValuePartition(id)));
         } else {
             // is null
             matches.addAll(nullPartitions);

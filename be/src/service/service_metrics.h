@@ -28,6 +28,7 @@ public:
 
     void install(MetricRegistry* registry);
 
+    METRIC_DEFINE_INT_GAUGE(build_info, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 

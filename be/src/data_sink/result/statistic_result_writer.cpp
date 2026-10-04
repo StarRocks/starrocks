@@ -40,6 +40,10 @@ const int STATISTIC_BATCH_V5_VERSION = 9;
 const int STATISTIC_MULTI_COLUMN_VERSION = 12;
 const int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
 const int STATISTIC_PARTITION_VERSION_V2 = 20;
+// 21 is reserved for STATISTIC_EXTERNAL_QUERY_VERSION_V3 in the enterprise build - an external-statistics
+// query whose result also carries how many partitions its aggregate covers. Kept as a comment rather than
+// a constant because an unreferenced one fails the clang build (-Wunused-const-variable under -Werror).
+// Do not reuse 21 for another result shape: the version is what tells the frontend how to read the rows.
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,

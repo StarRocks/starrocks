@@ -24,6 +24,7 @@ set(COLUMN_TEST_FILES
     column_view_test.cpp
     const_column_test.cpp
     decimalv3_column_test.cpp
+    file_column_test.cpp
     global_dict_core_test.cpp
     german_string_test.cpp
     json_column_test.cpp
@@ -66,7 +67,9 @@ set(COLUMN_TEST_FILES
     variant_merger_test.cpp
     variant_builder_test.cpp
     variant_encoder_test.cpp
+    variant_subvalue_test.cpp
     buffer_test.cpp
+    geo_column_test.cpp
 )
 
 if (USE_AVX2)

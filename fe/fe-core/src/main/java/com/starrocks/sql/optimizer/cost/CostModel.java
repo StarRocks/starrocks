@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -40,6 +41,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -193,6 +195,14 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalAIProject(PhysicalAIProjectOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -640,13 +650,17 @@ public class CostModel {
         private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
             if (node.isSplit() && node.getType().isGlobal()
                     && CollectionUtils.isNotEmpty(inputProperties)
-                    && inputProperties.get(0).getDistributionProperty().isShuffle()
                     && context.getGroupExpression() != null) {
-                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
-                HashDistributionDesc desc = spec.getHashDistributionDesc();
+                // Unless an aggregation shuffle produced it, the global stage's input is already distributed on its
+                // keys (a hash-local or range-colocate scan, a join shuffle), so the local stage buys nothing.
+                DistributionSpec inputSpec = inputProperties.get(0).getDistributionProperty().getSpec();
+                boolean inputAlreadyGrouped = inputSpec instanceof RangeDistributionSpec
+                        || (inputSpec instanceof HashDistributionSpec hashSpec
+                                && hashSpec.getHashDistributionDesc().getSourceType()
+                                        != HashDistributionDesc.SourceType.SHUFFLE_AGG);
                 Group group = context.getGroupExpression().getGroup();
                 boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
-                if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                if (existBestPlan && inputAlreadyGrouped) {
                     // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
                     // split aggregate node lose distinct flag, check the group's origin
                     // aggregate

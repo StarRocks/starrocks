@@ -168,6 +168,18 @@ public class StarMgrServer {
         com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+        com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
+        com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL =
+                Config.lake_enable_incremental_shard_replica_journal;
+        // Deliberately not refreshed below: StarMgr builds the reverse index while loadImage() runs at the
+        // end of this method and maintains it from there on, so a later change cannot take effect without a
+        // restart, and applying one at runtime would leave an index that was never seeded.
+        com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX =
+                Config.lake_enable_worker_shard_reverse_index;
 
         grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
                         Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
@@ -184,6 +196,13 @@ public class StarMgrServer {
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
             com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+            com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                    Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
+            com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL =
+                    Config.lake_enable_incremental_shard_replica_journal;
             ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
         });
         // set the following config, in order to provide a customized worker group definition

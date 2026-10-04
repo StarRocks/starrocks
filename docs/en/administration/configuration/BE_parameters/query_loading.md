@@ -40,6 +40,157 @@ This topic introduces the following types of BE configurations:
 
 ## Query
 
+### H3 resource limits
+
+These mutable positive BE settings limit one H3 function row. Exceeding a setting returns an error, not a partial result. See [H3 functions](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) for signatures and the center-fill model.
+
+#### h3_max_cells_per_row
+
+- Default: 100000
+- Is mutable: Yes
+- Limit: cells / pre-deduplication expansion slots.
+
+#### h3_max_grid_disk_k
+
+- Default: 128
+- Is mutable: Yes
+- Limit: grid steps.
+
+#### h3_max_polygon_vertices
+
+- Default: 10000
+- Is mutable: Yes
+- Limit: coordinate positions including ring closure.
+
+#### h3_max_polygon_components
+
+- Default: 256
+- Is mutable: Yes
+- Limit: polygon components including empty components.
+
+#### h3_max_working_bytes
+
+- Default: 67108864
+- Is mutable: Yes
+- Limit: bytes of per-worker preparation and temporary buffers.
+
+#### h3_max_estimated_work_per_row
+
+- Default: 10000000
+- Is mutable: Yes
+- Limit: sum of estimated slots times (component positions + 1).
+
+
+### ai_function_request_timeout_ms
+
+- Default: 600000
+- Type: Int
+- Unit: Milliseconds
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum independent lifetime of one AI task, covering admission, the initial HTTP attempt, all retries and backoff, and completion classification. These stages share one absolute request deadline; the timeout does not restart for each attempt. At each asynchronous boundary, the effective deadline is the earlier of this immutable request deadline and the query's current deadline. Query cancellation and deadline updates remain live for the lifetime of the task. `0` disables the independent request limit, so only the live query lifecycle applies. Reduce the value to fail slow model calls sooner. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_connect_timeout_ms
+
+- Default: 10000
+- Type: Int
+- Unit: Milliseconds
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum time allowed to establish the connection for an AI HTTP attempt. When the independent request deadline is enabled, the transport also bounds connection establishment by the remaining request lifetime without extending that deadline. `0` disables the independent connection limit. If both independent limits are `0`, the transport installs no static connection or request timeout; live query cancellation and deadline checks still apply. Reduce the value to detect unreachable model endpoints sooner, or increase it for networks with slow connection establishment. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_response_bytes
+
+- Default: 8388608
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_worker_thread_num
+
+- Default: 16
+- Type: Int
+- Unit: Threads
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Number of workers that process AI HTTP completions and response classification. Increase it when completion processing is backlogged; decrease it to limit CPU and memory overhead. This does not change the fixed AI completion-queue capacity established at BE startup. Runtime updates take effect live by resizing the worker pool and require no BE restart.
+- Introduced in: -
+
+### ai_function_sub_chunk_size
+
+- Default: 64
+- Type: Int
+- Unit: Rows
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum number of rows grouped into an AI execution sub-chunk. Smaller values provide finer scheduling and cancellation granularity but add scheduling overhead; larger values reduce that overhead but retain more rows per task. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_retries
+
+- Default: 3
+- Type: Int
+- Unit: Attempts
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum shared retry ordinal allowed when the latest failure is a retryable transport or provider failure. The initial HTTP attempt is excluded. Ordinary and throttle retries consume the same retry ordinal; this limit is not added to the throttle limit. Set it to `0` to disable retries after ordinary retryable failures. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_retries_on_throttle
+
+- Default: 5
+- Type: Int
+- Unit: Attempts
+- Valid values: Non-negative integers
+- Is mutable: Yes
+- Description: Maximum shared retry ordinal allowed when the latest failure is provider throttling, such as an HTTP 429 response. The initial HTTP attempt is excluded. Ordinary and throttle retries consume the same retry ordinal, so this is a different ceiling for the current failure class, not an independent retry budget. Set it to `0` to disable retries after throttling. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_on_error
+
+- Default: ignore
+- Type: String
+- Unit: -
+- Valid values: `ignore`, `fail`
+- Is mutable: Yes
+- Description: Controls row-level AI function failures. `ignore` returns NULL for a failed row and continues the query, while `fail` aborts the query. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_rate_limit_qps_chat
+
+- Default: 128
+- Type: Int
+- Unit: Requests per second
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Per-BE request admission rate for each chat/text bucket, keyed by endpoint, credential, and capability. Lower it to comply with provider quotas or reduce outbound load; increase it only when the provider and BE have sufficient capacity. Runtime updates take effect live, wake queued admissions, and require no BE restart.
+- Introduced in: -
+
+### ai_function_rate_limit_qps_embedding
+
+- Default: 128
+- Type: Int (32-bit)
+- Unit: Requests per second
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI provider-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Introduced in: -
+
+### ai_function_max_inflight
+
+- Default: 512
+- Type: Int
+- Unit: Requests
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Process-wide maximum number of AI HTTP attempts that can concurrently hold an in-flight admission permit. Lower it to bound HTTP and response-memory pressure. This is an admission limit, not a per-query quota. Runtime updates take effect live, wake queued admissions, and require no BE restart; the fixed completion-queue capacity established at startup does not change.
+- Introduced in: -
+
 ### agg_hash_map_prefetch_dist
 
 - Default: 16
@@ -106,6 +257,16 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
+
+### enable_default_value_column_zonemap_filter
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
+- Introduced in: -
 
 ### enable_json_flat
 
@@ -404,13 +565,22 @@ This topic introduces the following types of BE configurations:
 - Description: Timeout duration to establish socket connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
 - Introduced in: v3.0.9
 
+### enable_poco_client_for_aws_sdk
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use the Poco HTTP client for the AWS SDK. `true` replaces the AWS SDK's default curl HTTP client with Poco. `false` uses the default curl client.
+- Introduced in: -
+
 ### object_storage_request_timeout_ms
 
-- Default: -1
+- Default: 10000
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Timeout duration to establish HTTP connections with object storage. `-1` indicates to use the default timeout duration of the SDK configurations.
+- Description: How long a request to object storage may stay stalled before the client aborts and retries. This is not a deadline on the request: for the curl client it is the low speed time, the time a transfer may stay below 1 byte/s, and for the Poco client it is the socket send/receive timeout. A transfer that keeps making progress is never cut off, however long it runs. `0` disables the check; a negative value leaves the client on its own default, which on the Poco path is 60 seconds.
 - Introduced in: v3.0.9
 
 ### parquet_late_materialization_enable
@@ -537,6 +707,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
+- Introduced in: -
+
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) or VARIANT type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
 - Introduced in: -
 
 ### enable_lock_free_scan_task_queue
@@ -1162,6 +1341,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
 - Introduced in: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether this BE takes part in the compact encoding of all-NULL columns on the tablet sink RPC, the hop on which a load routes rows to the BE that holds the target tablet. When enabled, a receiving BE advertises support for the encoding in its tablet writer open response, and a sending BE that sees the advertisement sends a row count in place of the payload of any column whose rows are all NULL, rather than a null flag and an offset for every row. This mainly helps wide tables in which most columns hold no data, and reduces both the bytes sent on this hop and the serialization work on either end. The encoding is used only when both ends of the RPC agree on it, so a mixed-version cluster or a downgrade falls back to the original layout automatically. Set this to `false` on either the sending or the receiving BE to turn the encoding off for loads that pass through that node. This item is not dynamically configurable: a receiving BE uses it both to advertise support and to decide whether to apply the encoding a sender declares, and changing it at runtime would leave those two decisions inconsistent.
+- Introduced in: v4.2.0
 
 ### enable_load_diagnose
 

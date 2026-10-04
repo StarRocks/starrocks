@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -85,6 +86,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -105,6 +107,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
@@ -315,6 +318,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -456,6 +460,18 @@ public class ShowExecutor {
             }
 
             MetaUtils.checkDbNullAndReport(db, dbName);
+
+            // The walk below resolves the database out of LocalMetastore *by id*, so it is only meaningful for
+            // an internal one -- StarRocks materialized views never live in an external catalog. An external
+            // database's id is minted by the connector and shares an id space with internal databases
+            // (CatalogMgr.createCatalog draws from CONNECTOR_ID_GENERATOR for resource-mapping catalogs and
+            // from GlobalStateMgr.getNextId for the rest), so walking with it can land on an unrelated
+            // internal database. Skip the walk rather than lock a foreign id to make it safe.
+            // The null test is load-bearing, not defensive: the null-catalog branch above resolves through
+            // LocalMetastore, and isInternalCatalog would throw on null.
+            if (catalogName != null && !CatalogMgr.isInternalCatalog(catalogName)) {
+                return new ShowResultSet(showResultMetaFactory.getMetadata(statement), EMPTY_SET);
+            }
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
             List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
@@ -634,8 +650,20 @@ public class ShowExecutor {
             Map<String, String> tableMap = Maps.newTreeMap();
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
 
+            // SHOW TABLES serves both internal and external catalogs. For an internal database db.getId() is a
+            // real id and the lock is real, so it must stay. For an external catalog it is not: the id is minted
+            // by the connector (a fresh CONNECTOR_ID_GENERATOR value per HiveMetastoreApiConverter.toDatabase,
+            // constant 0 for every JDBC database), so the lock either never contends or falsely serializes
+            // unrelated databases. Either way it protects nothing -- connector cache refresh replaces cache
+            // entries and never takes the FE Locker -- while the critical section below is 1 + N connector calls.
+            // Judged on the catalog name rather than through Table#isMetaLockTarget, because the id at stake
+            // is the one this name just produced: a resource-mapping catalog also resolves through the
+            // connector, so it counts as external here even though its tables do not.
+            boolean needLock = CatalogMgr.isInternalCatalog(catalogName);
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            if (needLock) {
+                locker.lockDatabase(db.getId(), LockType.READ);
+            }
             try {
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .listTableNames(context, catalogName, dbName);
@@ -667,7 +695,9 @@ public class ShowExecutor {
                     tableMap.put(tableName, table.getMysqlType());
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                if (needLock) {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
             }
 
             for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -1127,18 +1157,22 @@ public class ShowExecutor {
         public ShowResultSet visitShowProfilelistStatement(ShowProfilelistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
+            // A user lists the profiles of the queries they ran; listing other users' needs SYSTEM OPERATE,
+            // evaluated at most once for the whole listing (see Authorizer#canReadQueryProfile). The knob is
+            // read once up front so a flip mid-listing cannot produce a half-filtered result.
+            boolean checkAccess = Config.authorization_enable_query_profile_access_check;
+            Supplier<Boolean> hasOperate =
+                    Suppliers.memoize(() -> Authorizer.hasSystemAction(context, PrivilegeType.OPERATE));
             List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
             Collections.reverse(profileElements);
-            Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
-            int count = 0;
-            while (iterator.hasNext()) {
-                ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow(context);
-                rowSet.add(row);
-                count++;
-                if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
+            for (ProfileManager.ProfileElement element : profileElements) {
+                if (statement.getLimit() >= 0 && rowSet.size() >= statement.getLimit()) {
                     break;
                 }
+                if (checkAccess && !Authorizer.canReadQueryProfile(context, element, hasOperate)) {
+                    continue;
+                }
+                rowSet.add(element.toRow(context));
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);
@@ -1752,12 +1786,17 @@ public class ShowExecutor {
 
             List<List<String>> rows;
             try {
-                // Only SchemaChangeProc support where/order by/limit syntax
+                // The grammar accepts where/order by/limit for every alter type and the analyzer
+                // validates them, so a proc dir that cannot apply them drops the user's predicate
+                // without a word. Every dir reachable from here implements fetchResultByFilter.
                 if (procNodeI instanceof SchemaChangeProcDir) {
                     rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
                             statement.getOrderPairs(), statement.getLimitElement()).getRows();
                 } else if (procNodeI instanceof OptimizeProcDir) {
                     rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
+                            statement.getOrderPairs(), statement.getLimitElement()).getRows();
+                } else if (procNodeI instanceof RollupProcDir) {
+                    rows = ((RollupProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
                             statement.getOrderPairs(), statement.getLimitElement()).getRows();
                 } else {
                     rows = procNodeI.fetchResult().getRows();
@@ -3137,6 +3176,65 @@ public class ShowExecutor {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+        }
+
+        @Override
+        public ShowResultSet visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProviderType typeFilter = statement.getTypeFilter().isEmpty()
+                    ? null : com.starrocks.context.ai.AIProviderType.fromString(statement.getTypeFilter());
+            PatternMatcher matcher = null;
+            if (!statement.getPattern().isEmpty()) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.STORAGEVOLUME.getCaseSensibility());
+            }
+            List<com.starrocks.context.ai.AIProvider> providers =
+                    typeFilter == null ? mgr.listProviders() : mgr.listProviders(typeFilter);
+            List<List<String>> rows = Lists.newArrayList();
+            for (com.starrocks.context.ai.AIProvider provider : providers) {
+                if (matcher != null && !matcher.match(provider.getName())) {
+                    continue;
+                }
+                java.util.Map<String, String> masked = provider.getMaskedParams();
+                String defaultId = mgr.getDefaultProviderId(provider.getType());
+                rows.add(Lists.newArrayList(
+                        provider.getName(),
+                        provider.getType().lower(),
+                        provider.getProtocol().lower(),
+                        provider.getId().equals(defaultId) ? "true" : "false",
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_ENDPOINT, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MODEL, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_DIMENSIONS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MAX_DOCUMENTS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_TIMEOUT_MS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_API_KEY, ""),
+                        provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProvider provider = mgr.getProvider(statement.getName());
+            if (provider == null) {
+                throw new SemanticException("Unknown AI provider: " + statement.getName());
+            }
+            String defaultId = mgr.getDefaultProviderId(provider.getType());
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList("Name", provider.getName()));
+            rows.add(Lists.newArrayList("Type", provider.getType().lower()));
+            rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
+            java.util.Map<String, String> masked = provider.getMaskedParams();
+            for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+            }
+            if (!provider.getComment().isEmpty()) {
+                rows.add(Lists.newArrayList("Comment", provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override

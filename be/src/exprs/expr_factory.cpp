@@ -16,12 +16,14 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
 #include "base/format.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/ai/ai_function_call_expr.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
@@ -65,6 +67,24 @@ ExprFactory::ExprCreateHook& non_core_create_post_hook() {
     return hook;
 }
 
+bool has_explicit_ai_marker(const TExprNode& node) {
+    if (node.__isset.ai_model_config_id) {
+        return true;
+    }
+    if (!node.__isset.fn) {
+        return false;
+    }
+    return node.fn.binary_type == TFunctionBinaryType::AI || node.fn.__isset.ai_model_source;
+}
+
+bool contains_explicit_ai_marker(const TExpr& expression) {
+    return std::any_of(expression.nodes.begin(), expression.nodes.end(), has_explicit_ai_marker);
+}
+
+Status invalid_ai_expression() {
+    return Status::InvalidArgument("Invalid AI function expression");
+}
+
 Status try_non_core_create_post_hook(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
     auto hook = non_core_create_post_hook();
     if (hook == nullptr) {
@@ -75,6 +95,13 @@ Status try_non_core_create_post_hook(ObjectPool* pool, const TExprNode& texpr_no
 
 Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    const bool is_function_call = texpr_node.node_type == TExprNodeType::FUNCTION_CALL ||
+                                  texpr_node.node_type == TExprNodeType::COMPUTE_FUNCTION_CALL;
+    const bool is_ai_function =
+            is_function_call && texpr_node.__isset.fn && texpr_node.fn.binary_type == TFunctionBinaryType::AI;
+    if (has_explicit_ai_marker(texpr_node) && !is_ai_function) {
+        return invalid_ai_expression();
+    }
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -137,6 +164,14 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
             }
         } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
             *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
+        } else if (texpr_node.fn.binary_type == TFunctionBinaryType::AI) {
+            auto ai_expr = AIFunctionCallExpr::create(pool, texpr_node);
+            if (!ai_expr.ok()) {
+                return ai_expr.status();
+            }
+            *expr = ai_expr.value();
+        } else if (has_explicit_ai_marker(texpr_node)) {
+            return invalid_ai_expression();
         }
         if (*expr != nullptr) {
             break;
@@ -307,15 +342,22 @@ Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, Expr*
         *root_expr = nullptr;
         return Status::OK();
     }
+    const bool contains_ai = contains_explicit_ai_marker(texpr);
     int node_idx = 0;
     Status status = create_expr_from_thrift_nodes(pool, texpr.nodes, &node_idx, root_expr, state, can_jit);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
     if (!status.ok()) {
-        LOG(ERROR) << "Could not construct expr tree.\n"
-                   << status.message() << "\n"
-                   << apache::thrift::ThriftDebugString(texpr);
+        if (contains_ai) {
+            *root_expr = nullptr;
+            LOG(ERROR) << "Could not construct AI expression tree";
+            status = invalid_ai_expression();
+        } else {
+            LOG(ERROR) << "Could not construct expr tree.\n"
+                       << status.message() << "\n"
+                       << apache::thrift::ThriftDebugString(texpr);
+        }
     }
     return status;
 }
@@ -342,6 +384,9 @@ Status ExprFactory::create_expr_from_thrift_nodes(ObjectPool* pool, const std::v
 
 Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
                                      bool can_jit) {
+    if (contains_explicit_ai_marker(texpr)) {
+        *ctx = nullptr;
+    }
     Expr* root_expr = nullptr;
     RETURN_IF_ERROR(create_expr_tree(pool, texpr, &root_expr, state, can_jit));
     *ctx = root_expr == nullptr ? nullptr : pool->add(new ExprContext(root_expr));

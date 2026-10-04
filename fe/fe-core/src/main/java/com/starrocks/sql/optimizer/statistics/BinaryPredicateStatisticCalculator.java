@@ -400,16 +400,17 @@ public class BinaryPredicateStatisticCalculator {
         Optional<Histogram> hist = enableJoinHistogram ?
                 updateHistWithJoin(leftColumnStatistic, leftColumn.getType(), rightColumnStatistic, rightColumn.getType()) :
                 Optional.empty();
+        double nonNullFactor = isEqualForNull ? 1 :
+                (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction());
         if (hist.isEmpty()) {
             double selectivity = 1.0 /
                     max(1, max(leftColumnStatistic.getDistinctValuesCount(), rightColumnStatistic.getDistinctValuesCount()));
-            rowCount = statistics.getOutputRowCount() * selectivity *
-                    (isEqualForNull ? 1 :
-                            (1 - leftColumnStatistic.getNullsFraction()) * (1 - rightColumnStatistic.getNullsFraction()));
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         } else {
             double selectivity = hist.get().getTotalRows() / (double)
                     (leftColumnStatistic.getHistogram().getTotalRows() * rightColumnStatistic.getHistogram().getTotalRows());
-            rowCount = statistics.getOutputRowCount() * selectivity;
+            // Histograms exclude nulls, so their selectivity is conditional on both operands being non-null.
+            rowCount = statistics.getOutputRowCount() * selectivity * nonNullFactor;
         }
 
         ColumnStatistic.Builder newLeftStatisticBuilder = ColumnStatistic.buildFrom(newEstimateColumnStatistics.build());

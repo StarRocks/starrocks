@@ -24,8 +24,8 @@
 #include "column/vectorized_fwd.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
-#include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
+#include "formats/arrow/arrow_column_converter.h"
 #include "gutil/strings/substitute.h"
 #include "platform/fs_broker.h"
 #include "runtime/runtime_state.h"
@@ -248,8 +248,8 @@ Status ArrowScanner::initialize_src_chunk(ChunkPtr* chunk) {
             _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
             column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
         } else {
-            RETURN_IF_ERROR(new_column(array_ptr->type().get(), slot_desc, &column, _conv_funcs[i].get(),
-                                       &_cast_exprs[i], _pool, _strict_mode));
+            RETURN_IF_ERROR(create_arrow_column(array_ptr->type().get(), slot_desc, &column, _conv_funcs[i].get(),
+                                                &_cast_exprs[i], _pool, _strict_mode));
         }
         column->reserve(_max_chunk_size);
         (*chunk)->append_column(std::move(column), slot_desc->id());
@@ -377,27 +377,6 @@ void ArrowScanner::close() {
     FileScanner::close();
     _curr_file_reader.reset();
     _pool.clear();
-}
-
-Status ArrowScanner::new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc,
-                                MutableColumnPtr* column, ConvertFuncTree* conv_func, Expr** expr, ObjectPool& pool,
-                                bool strict_mode) {
-    auto& type_desc = slot_desc->type();
-    TypeDescriptor raw_type_desc;
-    bool need_cast = false;
-    RETURN_IF_ERROR(build_arrow_column_convert_plan(arrow_type, &type_desc, slot_desc->is_nullable(), &raw_type_desc,
-                                                    conv_func, need_cast, strict_mode));
-    *column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, slot_desc->is_nullable());
-    if (!need_cast) {
-        *expr = pool.add(new ColumnRef(slot_desc));
-    } else {
-        auto slot = pool.add(new ColumnRef(slot_desc));
-        *expr = VectorizedCastExprFactory::from_type(raw_type_desc, slot_desc->type(), slot, &pool);
-        if ((*expr) == nullptr) {
-            return illegal_converting_error(arrow_type->name(), type_desc.debug_string());
-        }
-    }
-    return Status::OK();
 }
 
 bool ArrowScanner::chunk_is_full() {

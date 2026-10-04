@@ -156,6 +156,27 @@ TEST(CrossPublishRowSelectorTest, test_selection_marks_owned_rows_without_moving
     EXPECT_EQ(4, chunk->num_rows()) << "the chunk itself must be untouched";
 }
 
+TEST(CrossPublishRowSelectorTest, test_selection_with_separate_sort_key_uses_primary_key_range) {
+    auto schema_pb = make_pk_schema_pb();
+    schema_pb.add_sort_key_idxes(2); // ORDER BY c2 differs from PK (c0, c1).
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    ASSERT_TRUE(tablet_schema->has_separate_sort_key());
+    TabletMetadataPB metadata;
+    set_range(&metadata);
+
+    ASSIGN_OR_ABORT(auto selector,
+                    CrossPublishRowSelector::create_if_needed(metadata, tablet_schema, make_rowset(true)));
+    ASSERT_NE(nullptr, selector);
+
+    auto chunk = make_pk_chunk(tablet_schema, {{1, 9}, {2, 0}, {3, 5}, {4, 0}});
+    ASSIGN_OR_ABORT(auto selection, selector->select(*chunk));
+    ASSERT_EQ(4, selection.size());
+    EXPECT_EQ(0, selection[0]);
+    EXPECT_EQ(1, selection[1]);
+    EXPECT_EQ(1, selection[2]);
+    EXPECT_EQ(0, selection[3]);
+}
+
 // One selector serves every segment and every chunk of a rowset, so consecutive calls must be
 // independent of each other. They are by construction now -- select() is const and allocates its
 // encode column locally -- and this pins that: a stale buffer would leak the first chunk's keys into

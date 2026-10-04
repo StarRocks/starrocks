@@ -377,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 各参数说明如下：
@@ -427,6 +436,13 @@ enable_table_property_sync=false
 | ddl_job_allow_drop_inconsistent_view              | 是否允许迁移工具删除源集群和目标集群之间不一致的视图。默认值为 `true`，表示将被删除。可以使用此项的默认值。迁移工具将在迁移期间自动同步被删除的视图。 |
 | ddl_job_allow_drop_view_target_only               | 是否允许迁移工具删除在源集群中已删除的视图，以保持源集群和目标集群之间的视图一致性。默认值为 `true`，表示将被删除。可以使用此项的默认值。 |
 | enable_table_property_sync                        | 是否启用表属性的同步。                                       |
+| enable_privilege_sync                             | 是否启用用户、角色及其权限的同步。默认值为 `false`，表示不同步账户元数据。 |
+| ddl_job_allow_drop_user_target_only               | 是否允许迁移工具删除仅存在于目标集群而不存在于源集群的用户。默认值为 `false`，表示不会被删除。 |
+| ddl_job_allow_drop_role_target_only               | 是否允许迁移工具删除仅存在于目标集群而不存在于源集群的角色。默认值为 `false`，表示不会被删除。 |
+| ddl_job_allow_drop_inconsistent_user              | 是否允许迁移工具重建（即删除后重新创建）源集群和目标集群之间定义不一致的用户。默认值为 `true`。仅当该用户的权限在同一轮次中被成功读取时才会重建，以便重建后立即重新授予其权限。 |
+| ddl_job_allow_revoke_grant_target_only            | 是否允许迁移工具回收仅在目标集群中授予而在源集群中未授予的权限。默认值为 `false`，表示不会被回收。 |
+| privilege_sync_exclude_users                      | 迁移工具不修改的用户，多个用户之间以英文逗号（`,`）分隔。用户可以指定为用户名（`jack`），也可以指定为完整的用户标识（`'jack'@'%'`）。`root` 和 `target_cluster_user` 中指定的用户始终被排除。 |
+| privilege_sync_exclude_roles                      | 迁移工具不修改的角色，多个角色之间以英文逗号（`,`）分隔。 |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="从存算一体迁移" default>
@@ -563,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### 用户、角色和权限同步（可选）
+
+默认情况下，迁移工具不同步账户元数据。如果将 `enable_privilege_sync` 设置为 `true`，迁移工具还会将源集群的用户、角色及其权限同步到目标集群。
+
+迁移工具每次获取元数据时，都会读取源集群和目标集群的用户、角色及其权限，进行比对，并执行使目标集群与源集群保持一致所需的 DDL 语句。用户定义通过 `SHOW CREATE USER` 获取，该语句返回的密码为密文，因此迁移过程中不会处理明文密码。
+
+以下对象始终不会被迁移工具修改：
+
+- `root` 以及 `target_cluster_user` 中指定的用户。覆盖目标集群 `root` 的密码会导致目标集群的运维人员无法登录，删除迁移工具连接所使用的账号会中断工具自身的连接。
+- 不可变的内置角色 `root`、`db_admin`、`cluster_admin`、`user_admin` 和 `security_admin`。`public` 是内置角色但可以修改，因此其权限会被同步，而角色本身不会被改动。
+- `privilege_sync_exclude_users` 中指定的用户和 `privilege_sync_exclude_roles` 中指定的角色。
+
+:::note
+
+- 两个集群的 FE 都必须支持 `SHOW CREATE USER`。如果任一集群的 FE 不支持该语句，迁移工具将跳过用户及其权限，仅同步角色和角色权限。
+- 权限同步的进度会以 `Sync privilege progress` 为前缀打印到日志文件 **log/sync.INFO.log** 中，其中列出角色、角色权限、用户和用户权限四个部分各自的状态。
+- 在一次性同步模式（`one_time_run_mode=true`）下，只有权限也同步一致后，迁移工具才会成功退出。如果任一集群不支持 `SHOW CREATE USER`，或者权限在连续三次比对后仍不一致，迁移工具将以失败状态退出。
+
+:::
+
 ## 步骤三：启动迁移工具
 
 配置完成后，启动迁移工具以开始数据迁移过程。
@@ -690,6 +726,7 @@ ORDER BY TABLE_NAME;
 - 内部表及其数据
 - 物化视图的 Schema 及其构建语句（物化视图中的数据不会被同步。如果物化视图的基表未同步到目标集群，物化视图的后台刷新任务将报错。）
 - 逻辑视图
+- 用户、角色及其权限（默认不同步，通过 `enable_privilege_sync` 开启）
 
 对于存算分离集群之间的迁移：
 

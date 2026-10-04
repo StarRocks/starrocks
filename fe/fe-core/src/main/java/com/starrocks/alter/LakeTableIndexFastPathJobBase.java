@@ -47,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,8 +117,38 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     @SerializedName(value = "commitVersionMap")
     protected Map<Long, Long> commitVersionMap = new HashMap<>();
 
+    /**
+     * The schemas this job retires from the catalog at its FINISHED flip: applyCatalogMutation stamps a
+     * NEW schema id onto every affected index meta in place, so the previous id disappears from the
+     * catalog. Journaled with the FINISHED entry and kept resolvable, so a load that was already bound
+     * to one of them can still resolve its schema at publish time instead of failing forever. Released
+     * once no transaction bound to them can still be running.
+     */
+    @SerializedName(value = "historySchema")
+    protected OlapTableHistorySchema historySchema;
+
     /** AgentBatchTask holding all in-flight AlterReplicaTasks. */
     protected transient AgentBatchTask batchTask;
+
+    /**
+     * The index metas whose schema id {@link #applyCatalogMutation} replaces. Empty by default; a
+     * subclass that re-stamps schema ids overrides it with the metas it is about to bump.
+     */
+    protected Collection<Long> retiredIndexMetaIdsAtFlip() {
+        return List.of();
+    }
+
+    @Override
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.ofNullable(historySchema);
+    }
+
+    @Override
+    public boolean isExpire() {
+        boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
+        return expiredByTime && expiredByHistorySchema;
+    }
 
     protected LakeTableIndexFastPathJobBase(JobType type) {
         super(type);
@@ -343,6 +374,15 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                 if (pp != null) {
                     pp.setVisibleVersion(e.getValue(), finishedTimeMs);
                 }
+            }
+            // Snapshot the schemas applyCatalogMutation is about to retire, BEFORE it re-stamps the
+            // index metas and before persistStateChange copies the job for the journal. Rebuilt on
+            // every attempt rather than reused: the threshold must be allocated under the same WRITE
+            // lock as the flip it guards, so a stale one from an earlier attempt cannot leave a newer
+            // bound transaction above it.
+            Collection<Long> retiredIndexMetaIds = retiredIndexMetaIdsAtFlip();
+            if (!retiredIndexMetaIds.isEmpty()) {
+                this.historySchema = buildHistorySchema(table, retiredIndexMetaIds);
             }
             applyCatalogMutation(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -643,6 +683,9 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // image. Without this copy the VisibleVersion bump is silently skipped
         // on recovery — defeating the force-cancel version-chain repair.
         this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
+        // Journaled with the FINISHED entry; a follower/restarted leader must serve the same
+        // retired schemas to publishing loads as the leader that flipped the catalog.
+        this.historySchema = other.historySchema;
 
         // Edit-log entries persist AlterJobV2 state but NOT the OlapTable's
         // state. After a cold start, the table's state must be re-derived

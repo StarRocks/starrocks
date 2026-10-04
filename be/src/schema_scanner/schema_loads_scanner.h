@@ -46,6 +46,10 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
+    // Fetch one page of loads starting at the given job id cursor, replacing the
+    // current page. Also refreshes the cursor for the page after this one.
+    Status _fetch_page(int64_t start_job_id_offset);
+
     // Fill a DATETIME column from a UTC-epoch-ms thrift field, converting to the
     // session zone via from_unixtime() so the materialized wall-clock matches what
     // the user expects in their session. Returns true when the ms field was set
@@ -55,6 +59,10 @@ private:
 
     int _cur_idx = 0;
     TGetLoadsResult _result;
+    // Request built once in start() and reused for every page; only the job id cursor changes.
+    TGetLoadsParams _load_params;
+    // Cursor for the next page: max job id of the current page + 1, or 0 at the end.
+    int64_t _next_job_id_offset = 0;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

@@ -1,0 +1,79 @@
+-- name: test_split_varchar_sort_key @cloud
+
+create database test_split_varchar_sort_key_${uuid0};
+use test_split_varchar_sort_key_${uuid0};
+
+SET enable_range_distribution = true;
+
+-- A sort key that LEADS with a VARCHAR column can never be represented in full by the legacy
+-- short key index (a VARCHAR entry there is truncated to index_length), so splitting this table
+-- always samples the sort key straight out of segment data pages -- sort_key_sampler.h's path B.
+CREATE TABLE t_varchar_sort_key (
+    k VARCHAR(20) NOT NULL,
+    id BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, id)
+PROPERTIES ('replication_num' = '1');
+
+-- Quadratic key mapping: the low HALF of the key-value domain holds ~71% of the rows (dense),
+-- the high half only ~29% (sparse). A naive equal-WIDTH bisection of the key range -- what the
+-- coarse [min_key, max_key] fallback falls back to when nothing gets sampled -- would therefore
+-- land roughly half of all 50,000 rows in a single child of a 4-way split. A row-count-based
+-- sample does not have that problem. That gap is what makes the balance checks below
+-- non-vacuous: they fail if sampling silently stopped running and the split fell back to the
+-- coarse range.
+INSERT INTO t_varchar_sort_key
+SELECT LPAD(CAST(generate_series * generate_series AS STRING), 10, '0'), generate_series, generate_series * 10
+FROM TABLE(generate_series(1, 50000));
+
+-- Baseline row count, before the split.
+SELECT count(*) FROM t_varchar_sort_key;
+
+function: set_first_tablet_id("t_varchar_sort_key")
+ALTER TABLE t_varchar_sort_key SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-4');
+function: wait_reshard_job_finish("t_varchar_sort_key", "SPLIT_TABLET", 1)
+
+-- The load-bearing correctness claim: splitting must not lose or duplicate a single row.
+-- Asserted at the TABLE level, not per-partition: SPLIT TABLET only creates new tablet ranges
+-- inside the same logical partition, so a per-partition count would either trivially pass or say
+-- nothing about it.
+SELECT count(*) FROM t_varchar_sort_key;
+
+-- Structural: the forced split ('tablet_reshard_target_size' = '-4') must have produced exactly
+-- 4 child tablets.
+--
+-- The pre-split tablet is EXCLUDED by id. It keeps appearing in information_schema.be_tablets --
+-- with STATE 'RUNNING', so state cannot filter it -- until vacuum removes the physical tablet,
+-- even though the query path already rejects it ("Invalid tablet id ... may have been dropped").
+-- ${tablet_id} is that parent, captured by set_first_tablet_id above, so excluding it needs no
+-- information the case does not already hold.
+SELECT count(*) FROM information_schema.be_tablets t, information_schema.tables_config c
+WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key'
+  AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}'
+  AND t.TABLET_ID != ${tablet_id};
+
+-- Per-child row counts, read with a real scan (the TABLET(id) hint) rather than the rowset stats
+-- the split computed for itself. Those stats are the split algorithm's OWN row-count estimate for
+-- each child and would look "balanced" even with zero samples -- exactly the self-referential
+-- comparison SortKeySamplingSplitterTest's written_rows_in() helper
+-- (be/test/storage/lake/tablet_splitter_test.cpp) was written to avoid.
+[UC]tid0=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 0;
+[UC]tid1=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 1;
+[UC]tid2=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 2;
+[UC]tid3=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 3;
+
+[UC]c0=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid0});
+[UC]c1=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid1});
+[UC]c2=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid2});
+[UC]c3=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid3});
+
+-- Every child's real row count sums back to the table total (50000).
+SELECT ${c0} + ${c1} + ${c2} + ${c3};
+
+-- No child tablet holds a wildly disproportionate share of the rows. 20000 is 40% of the total --
+-- comfortably above the ~12,500-per-tablet ideal (headroom for ordinary sampling variance), while
+-- a naive equal-width fallback over this data's quadratic skew would put ~50% (~25,000 rows) into
+-- a single child and fail this check.
+SELECT ${c0} <= 20000, ${c1} <= 20000, ${c2} <= 20000, ${c3} <= 20000;
+
+drop database test_split_varchar_sort_key_${uuid0};
