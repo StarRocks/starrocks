@@ -53,10 +53,11 @@ import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.LargeIntLiteral;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.formatter.AST2StringVisitor;
@@ -255,7 +256,8 @@ public class RoutineLoadDesc {
     }
 
     /**
-     * {@code Expr.equals} up to the case of function names, plus the declared ARRAY / MAP types. The parser
+     * {@code Expr.equals} up to the case of function names, plus what {@code Expr.equals} ignores before
+     * analysis: the declared ARRAY / MAP types and the argument names of a named-argument call. The parser
      * keeps function names as the user wrote them (FROM_UNIXTIME), the printer lower-cases them, and
      * {@code FunctionCallExpr.equals} compares them case-sensitively, so without the normalization a tree
      * would never equal its own re-parsed rendering.
@@ -266,7 +268,7 @@ public class RoutineLoadDesc {
             return left == right;
         }
         return withLowerCaseFunctionNames(left).equals(withLowerCaseFunctionNames(right))
-                && sameCollectionTypes(left, right);
+                && sameDeclaredDetails(left, right);
     }
 
     private static Expr withLowerCaseFunctionNames(Expr expr) {
@@ -286,7 +288,8 @@ public class RoutineLoadDesc {
         }
     }
 
-    private static boolean sameCollectionTypes(Expr left, Expr right) {
+    // Only called for trees that Expr.equals already found equal, so the shapes match.
+    private static boolean sameDeclaredDetails(Expr left, Expr right) {
         if (left == null) {
             return true;
         }
@@ -295,12 +298,23 @@ public class RoutineLoadDesc {
         if ((left instanceof ArrayExpr || left instanceof MapExpr) && !Objects.equals(left.getType(), right.getType())) {
             return false;
         }
+        // FunctionCallExpr keeps the names of a named-argument call apart from its children and does not
+        // compare them either; f(a => x, b => y) and f(b => x, a => y) are different calls.
+        if (left instanceof FunctionCallExpr
+                && !argumentNames((FunctionCallExpr) left).equals(argumentNames((FunctionCallExpr) right))) {
+            return false;
+        }
         for (int i = 0; i < left.getChildren().size(); i++) {
-            if (!sameCollectionTypes(left.getChild(i), right.getChild(i))) {
+            if (!sameDeclaredDetails(left.getChild(i), right.getChild(i))) {
                 return false;
             }
         }
         return true;
+    }
+
+    private static List<String> argumentNames(FunctionCallExpr call) {
+        FunctionParams params = call.getParams();
+        return params != null && params.hasNamedArguments() ? params.getExprsNames() : List.of();
     }
 
     private static String describe(Expr expr) {
@@ -381,6 +395,35 @@ public class RoutineLoadDesc {
         }
 
         @Override
+        public String visitLambdaArguments(LambdaArgument node, Void context) {
+            return ParseUtil.backquote(node.getName());
+        }
+
+        @Override
+        public String visitFunctionCall(FunctionCallExpr node, Void context) {
+            FunctionParams params = node.getParams();
+            boolean named = params != null && params.hasNamedArguments();
+            if (node.getDbName() == null && !named) {
+                return super.visitFunctionCall(node, context);
+            }
+            // A qualified call keeps its db prefix (the base visitor drops it) and uses a plain argument list
+            // even when its name matches a builtin with special syntax (time_slice, group_concat, ...). A call
+            // with named arguments keeps the names, which FunctionCallExpr stores apart from its children.
+            String name = node.getDbName() == null ? node.getFunctionName()
+                    : ParseUtil.backquote(node.getDbName()) + "." + ParseUtil.backquote(node.getFunctionName());
+            List<String> names = named ? params.getExprsNames() : List.of();
+            List<String> arguments = new ArrayList<>();
+            for (int i = 0; i < node.getChildren().size(); i++) {
+                String argument = visit(node.getChild(i));
+                if (i < names.size() && !names.get(i).isEmpty()) {
+                    argument = ParseUtil.backquote(names.get(i)) + " => " + argument;
+                }
+                arguments.add(argument);
+            }
+            return name + "(" + String.join(", ", arguments) + ")";
+        }
+
+        @Override
         protected String printWithParentheses(ParseNode node) {
             if (node instanceof FunctionCallExpr || (node instanceof CastExpr && !((CastExpr) node).isImplicit())) {
                 return visit(node);
@@ -431,6 +474,9 @@ public class RoutineLoadDesc {
             // types so nested explicit types survive.
             if (type.isDecimalV2()) {
                 ScalarType decimal = (ScalarType) type;
+                if (decimal.isWildcardDecimal()) {
+                    return "DECIMALV2";
+                }
                 return "DECIMALV2(" + decimal.getScalarPrecision() + "," + decimal.getScalarScale() + ")";
             }
             if (type instanceof ArrayType array) {
@@ -440,10 +486,9 @@ public class RoutineLoadDesc {
                 return "MAP<" + typeToSql(map.getKeyType()) + "," + typeToSql(map.getValueType()) + ">";
             }
             if (type instanceof StructType struct) {
+                // The CAST grammar takes `name type` pairs only; parsed struct fields never carry a comment.
                 return "STRUCT<" + struct.getFields().stream()
-                        .map(field -> ParseUtil.backquote(field.getName()) + " " + typeToSql(field.getType())
-                                + (field.getComment() == null ? "" : " COMMENT "
-                                + visit(new StringLiteral(field.getComment()))))
+                        .map(field -> ParseUtil.backquote(field.getName()) + " " + typeToSql(field.getType()))
                         .collect(Collectors.joining(", ")) + ">";
             }
             return type.toString();

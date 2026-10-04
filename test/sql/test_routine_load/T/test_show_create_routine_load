@@ -59,7 +59,7 @@ PROPERTIES (
 "format"="json")
 FROM KAFKA (
 "kafka_broker_list"="172.26.194.239:9092",
-"kafka_topic"="paren-topic",
+"kafka_topic"="herb-avro",
 "kafka_partitions"="0",
 "kafka_offsets"="OFFSET_BEGINNING"
 );

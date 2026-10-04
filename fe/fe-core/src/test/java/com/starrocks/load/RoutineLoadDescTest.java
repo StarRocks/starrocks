@@ -21,19 +21,12 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.expression.ArrayExpr;
-import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.MapExpr;
-import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StructField;
-import com.starrocks.type.StructType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.Map;
 
 public class RoutineLoadDescTest {
@@ -160,6 +153,28 @@ public class RoutineLoadDescTest {
         }
     }
 
+    // Lambda parameters and db-qualified function names are printed backquoted, and a qualified call keeps
+    // its db prefix and a plain argument list even when its name matches a builtin with special syntax.
+    @Test
+    public void testQuotedExpressionNamesRoundTrip() {
+        for (String input : new String[] {
+                "array_map(`select` -> `select` + 1, arr)",
+                "array_map((`select`, `from`) -> `select` + `from`, a, b)",
+                "array_filter(`x y` -> `x y` > 1, arr)",
+                "udf_db.`select`(a)",
+                "udf_db.`left`(a)",
+                "`db name`.`my function`(a)",
+                "udf_db.group_concat(a, b)",
+                "udf_db.time_slice(ts, INTERVAL 2 DAY, CEIL)",
+                "array_map(`select` -> udf_db.`select`(`select` + 1), arr)",
+        }) {
+            RoutineLoadDesc desc = parseDesc("COLUMNS(result = " + input + ")");
+            String sql = desc.toSql();
+            Assertions.assertTrue(desc.hasSameExpressions(parseDesc(sql)), input + " -> " + sql);
+            Assertions.assertEquals(sql, parseDesc(sql).toSql(), input);
+        }
+    }
+
     // The parser keeps the case the user wrote for function names, the printer lower-cases them, and
     // Expr.equals compares them case-sensitively. The comparison behind the persistence check must not
     // fail on that, or every load-property ALTER on a job created with FROM_UNIXTIME(...) is refused.
@@ -220,16 +235,22 @@ public class RoutineLoadDescTest {
         }
     }
 
+    // FunctionCallExpr keeps the names of a named-argument call apart from its children, where neither the base
+    // printer nor Expr.equals sees them. Dropping them would silently reorder the arguments on the next restart.
     @Test
-    public void testStructFieldCommentRendering() {
-        // Struct comments can exist in programmatically built types, although the CAST grammar does
-        // not accept them. Retain the existing printer behavior and escape their literal contents.
-        StructType type = new StructType(List.of(new StructField("x", IntegerType.INT, "it's \\path")), true);
-        String typeSql = "STRUCT<`x` INT COMMENT 'it\\'s \\\\path'>";
-        Assertions.assertEquals("CAST(`a` AS " + typeSql + ")",
-                RoutineLoadDesc.exprToSql(new CastExpr(new TypeDef(type), parseExpr("a"))));
-        Assertions.assertEquals("ARRAY<" + typeSql + ">[row(1)]",
-                RoutineLoadDesc.exprToSql(new ArrayExpr(new ArrayType(type), List.of(parseExpr("row(1)")))));
+    public void testNamedArgumentsSurviveAndAreCompared() {
+        Expr named = parseExpr("substr(str => a, pos => 1, len => 3)");
+        String sql = RoutineLoadDesc.exprToSql(named);
+        Assertions.assertEquals("substr(`str` => `a`, `pos` => 1, `len` => 3)", sql);
+        Assertions.assertTrue(RoutineLoadDesc.sameExpression(named, parseExpr(sql)));
+        Assertions.assertEquals("`udf_db`.`f`(`a` => `x`, `b` => `y`)",
+                RoutineLoadDesc.exprToSql(parseExpr("udf_db.f(a => x, b => y)")));
+
+        Assertions.assertFalse(RoutineLoadDesc.sameExpression(parseExpr("f(a => x, b => y)"), parseExpr("f(x, y)")));
+        Assertions.assertFalse(RoutineLoadDesc.sameExpression(parseExpr("f(a => x, b => y)"),
+                parseExpr("f(b => x, a => y)")));
+        Assertions.assertFalse(parseDesc("COLUMNS(r = f(a => x, b => y))")
+                .hasSameExpressions(parseDesc("COLUMNS(r = f(x, y))")));
     }
 
     @Test

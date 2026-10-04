@@ -796,6 +796,30 @@ public class RoutineLoadJobEditLogTest {
     }
 
     @Test
+    public void testModifyJobWithQuotedExpressionNamesSurvivesReplayAndImage() throws Exception {
+        long jobId = 10017L;
+        RoutineLoadJob job = createRoutineLoadJob(jobId, "quoted_expr_job", 20023L, 20024L);
+        job.setOrigStmt(new OriginStatementInfo("CREATE ROUTINE LOAD quoted_expr_job ON tbl "
+                + "COLUMNS(raw, result = array_map(`select` -> udf_db.`select`(`select` + 1), raw)) "
+                + "FROM KAFKA (\"kafka_topic\"=\"my_topic\")", 0));
+        job.gsonPostProcess();
+        masterRoutineLoadMgr.addRoutineLoadJob(job, "test_db_quoted_expr");
+        Expr original = job.getColumnDescs().get(1).getExpr();
+        OriginStatementInfo alterStmt = new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR quoted_expr_job COLUMNS TERMINATED BY ';'", 0);
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(alterStmt, job.getSessionVariables());
+
+        job.modifyJob(alter, null, null, alterStmt);
+
+        RoutineLoadJob follower = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(job.getOrigStmt().originStmt, follower.getOrigStmt().originStmt);
+        KafkaRoutineLoadJob restored = GsonUtils.GSON.fromJson(
+                GsonUtils.GSON.toJson(follower, KafkaRoutineLoadJob.class), KafkaRoutineLoadJob.class);
+        Assertions.assertEquals(";", restored.getColumnSeparator().getColumnSeparator());
+        Assertions.assertEquals(original, restored.getColumnDescs().get(1).getExpr());
+    }
+
+    @Test
     public void testModifyJobRejectsDifferentReplaySqlModeBeforeLogging() throws Exception {
         RoutineLoadJob job = createRoutineLoadJob(10015L, "mode_job", 20019L, 20020L);
         job.setOrigStmt(new OriginStatementInfo(String.format(PAREN_CREATE_STMT, "mode_job"), 0));
@@ -921,6 +945,9 @@ public class RoutineLoadJobEditLogTest {
         RoutineLoadDesc alterDesc = CreateRoutineLoadStmt.getLoadDesc(alterStmt, null);
         job.modifyJob(alterDesc, null, null, alterStmt);
 
+        // The regenerated statement only has to carry the load properties: buildOriginStatement looks the
+        // table up by id (no catalog here, hence `unknown`) and writes placeholder PROPERTIES / FROM clauses,
+        // because those are persisted in their own fields. gsonPostProcess re-parses just the load properties.
         String expected = String.format("CREATE ROUTINE LOAD `%s` ON `unknown` "
                 + "COLUMNS(`k`, `ts`, `r` = floor((`ts` + 32400) / 86400) * 86400), "
                 + "WHERE (`a` - (`b` - `c`)) > 0 "

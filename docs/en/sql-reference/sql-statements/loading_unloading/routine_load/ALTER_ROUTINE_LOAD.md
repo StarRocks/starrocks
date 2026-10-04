@@ -46,7 +46,7 @@ FROM data_source
 
    For detailed parameter descriptions, see [CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#load_properties).
 
-   When the ALTER changes `COLUMNS` or `WHERE`, the statement is re-parsed with the `sql_mode` that was saved when the job was created, not the current session's, because that is how followers and FE restarts read it. If an expression means something different under that mode (for example `a || b`, which is `OR` by default and string concatenation under `PIPES_AS_CONCAT`), the ALTER is rejected. Set the session `sql_mode` to the job's, or write the expression unambiguously (`concat(a, b)`). An ALTER that only changes job or data source properties leaves the existing load definition unchanged.
+   When the ALTER changes `COLUMNS` or `WHERE`, the statement is re-parsed with the `sql_mode` that was saved when the job was created, not the current session's, because that is how followers and FE restarts read it. If an expression means something different under that mode (for example `a || b`, which is `OR` by default and string concatenation under `PIPES_AS_CONCAT`), the ALTER is rejected. Set the session `sql_mode` to the job's, or write the expression unambiguously (`concat(a, b)`). An ALTER is also rejected when the job's `COLUMNS` or `WHERE` definition cannot be written back into the persisted statement so that it parses to the same expressions; the error names the expression. An ALTER that only changes job or data source properties leaves the existing load definition unchanged.
 
 - **`job_properties`**
 
