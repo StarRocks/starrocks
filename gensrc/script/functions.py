@@ -1090,6 +1090,8 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_as_wkb"],
     [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_x"],
+    # Historical GEOGRAPHY IDs 120081/120082/120083 are handled in function_call_expr.cpp.
+    # Do not allocate 120082 or 120083 again. 120081 is disambiguated by native argument type.
     [120081, "ST_X", False, False, "DOUBLE", ["GEOMETRY"],
      "GeoFunctions::st_geometry_x"],
     [120090, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],

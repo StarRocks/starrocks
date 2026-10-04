@@ -32,6 +32,8 @@
 #include "column/nullable_column.h"
 #include "common/config_expr_fwd.h"
 #include "exprs/builtin_functions.h"
+#include "exprs/expr_context.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
@@ -1957,6 +1959,135 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsThreeAxisProjectedCrs) {
             GeoFunctions::native_geo_transform_prepare(invalid_source.get(), FunctionContext::FRAGMENT_LOCAL);
     EXPECT_TRUE(source_status.is_not_supported()) << source_status;
     EXPECT_NE(std::string::npos, source_status.message().find("EPSG:4326 and EPSG:3857"));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoHistoricalFunctionIds) {
+    RuntimeState state;
+    auto run = [&](int64_t id, bool planar, LogicalType result_type, int arguments, double expected) {
+        SCOPED_TRACE(id);
+        const auto type = planar ? geometry_type() : geography_type();
+        auto value = planar ? geometry({"POINT (1 2)"}) : geography({"POINT (1 2)"});
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+        node.__set_type(TypeDescriptor(result_type).to_thrift());
+        node.__set_num_children(arguments);
+        TFunction fn;
+        TFunctionName name;
+        name.__set_function_name(arguments == 2 ? "st_distance"
+                                                : (result_type == TYPE_VARCHAR ? "st_geometrytype"
+                                                   : planar                    ? "st_x"
+                                                                               : "st_y"));
+        fn.__set_name(name);
+        fn.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        fn.__set_fid(id);
+        fn.__set_arg_types(std::vector<TTypeDesc>(arguments, type.to_thrift()));
+        fn.__set_ret_type(node.type);
+        fn.__set_has_var_args(false);
+        node.__set_fn(fn);
+        VectorizedFunctionCallExpr expr(node);
+        TExprNode input;
+        input.__set_node_type(TExprNodeType::SLOT_REF);
+        input.__set_type(type.to_thrift());
+        MockExpr first(input, value);
+        MockExpr second(input, value);
+        expr.add_child(&first);
+        if (arguments == 2) expr.add_child(&second);
+        ExprContext context(&expr);
+        auto status = context.prepare(&state);
+        if (status.ok()) status = context.open(&state);
+        if (status.ok()) {
+            auto result = context.evaluate(nullptr);
+            EXPECT_TRUE(result.ok()) << result.status();
+            if (result.ok()) {
+                if (result_type == TYPE_VARCHAR) {
+                    EXPECT_EQ("ST_Point", result.value()->get(0).get_slice().to_string());
+                } else {
+                    EXPECT_DOUBLE_EQ(expected, result.value()->get(0).get_double());
+                }
+            }
+        }
+        context.close(&state);
+        EXPECT_TRUE(status.ok()) << status;
+    };
+    // Plans from both registries must work during BE-before-FE upgrades.
+    for (int64_t id : {120081, 120090}) run(id, false, TYPE_DOUBLE, 1, 2.0);
+    for (int64_t id : {120082, 120170}) run(id, false, TYPE_VARCHAR, 1, 0.0);
+    for (int64_t id : {120083, 120180}) run(id, false, TYPE_DOUBLE, 2, 0.0);
+    run(120081, true, TYPE_DOUBLE, 1, 1.0);
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
+    const auto type = geometry_type();
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+    auto wkt = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("POINT (1 2)"), 1);
+    auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("EPSG:3857"), 1);
+    auto value = GeoFunctions::st_geom_from_text(context.get(), {wkt, crs});
+    ASSERT_TRUE(value.ok()) << value.status();
+    const auto expected = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(value->get()))->descriptor();
+    for (bool nullable : {false, true}) {
+        // A non-nullable destination receives a non-nullable constant payload.
+        ColumnPtr source =
+                nullable ? value.value() : ConstColumn::create(ColumnHelper::get_data_column(value->get())->clone(), 1);
+        auto unfolded = ColumnHelper::move_column(type, nullable, std::move(source), 3);
+        ASSERT_EQ(3, unfolded->size());
+        EXPECT_FALSE(unfolded->is_constant());
+        EXPECT_EQ(nullable, unfolded->is_nullable());
+        auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(unfolded.get()));
+        EXPECT_EQ(expected, geo->descriptor());
+        auto x = GeoFunctions::st_geometry_x(nullptr, {unfolded});
+        ASSERT_TRUE(x.ok()) << x.status();
+        for (size_t i = 0; i < 3; ++i) EXPECT_DOUBLE_EQ(1.0, x.value()->get(i).get_double());
+    }
+    // Match UNION's typed destination and copy path, with NULLs on both sides.
+    auto destination = ColumnHelper::create_column(type, true);
+    EXPECT_TRUE(destination->append_nulls(1));
+    ColumnPtr source = value.value();
+    auto row = ColumnHelper::move_column(type, true, std::move(source), 1);
+    destination->append(*row, 0, 1);
+    auto null_row = ColumnHelper::move_column(type, true, ColumnHelper::create_const_null_column(1), 1);
+    destination->append(*null_row, 0, 1);
+    destination->append(*row, 0, 1);
+    EXPECT_EQ(expected, down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor());
+    auto x = GeoFunctions::st_geometry_x(nullptr, {destination});
+    ASSERT_TRUE(x.ok()) << x.status();
+    ASSERT_EQ(4, x.value()->size());
+    EXPECT_TRUE(x.value()->is_null(0));
+    EXPECT_DOUBLE_EQ(1.0, x.value()->get(1).get_double());
+    EXPECT_TRUE(x.value()->is_null(2));
+    EXPECT_DOUBLE_EQ(1.0, x.value()->get(3).get_double());
+    EXPECT_TRUE(value.value()->is_constant());
+    EXPECT_EQ(1, value.value()->size());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryCrsIntegerSyntax) {
+    const std::pair<const char*, std::optional<int32_t>> cases[] = {
+            {"EPSG:4326", 4326},
+            {"EPSG:004326", 4326},
+            {"EPSG:-4326", -4326},
+            {"EPSG:-0", 0},
+            {"EPSG:2147483647", INT32_MAX},
+            {"EPSG:-2147483648", INT32_MIN},
+            {"OGC:CRS84", 4326},
+            {"EPSG:+4326", std::nullopt},
+            {"EPSG:\xef\xbc\x94\xef\xbc\x93\xef\xbc\x92\xef\xbc\x96", std::nullopt},
+            {"EPSG: 4326", std::nullopt},
+            {"EPSG:4326 ", std::nullopt},
+            {"EPSG:", std::nullopt},
+            {"EPSG:-", std::nullopt},
+            {"EPSG:2147483648", std::nullopt},
+            {"EPSG:-2147483649", std::nullopt},
+            {"custom:local", std::nullopt}};
+    for (const auto& [crs, srid] : cases) {
+        SCOPED_TRACE(crs);
+        const auto type = geometry_type(crs, srid);
+        auto value = geometry({"POINT (1 2)"}, type);
+        const auto* column = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(value.get()));
+        EXPECT_EQ(type.geo_type.value(), column->descriptor().type);
+        auto text = GeoFunctions::st_geometry_as_text(nullptr, {value});
+        ASSERT_TRUE(text.ok()) << text.status();
+        EXPECT_EQ("POINT (1 2)", text.value()->get(0).get_slice().to_string());
+    }
 }
 
 TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {

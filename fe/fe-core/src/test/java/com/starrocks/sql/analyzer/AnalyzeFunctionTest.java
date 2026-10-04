@@ -128,6 +128,33 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testNativeGeoStructAdmission() {
+        for (String geo : List.of("ST_GeogFromText('POINT (1 2)')",
+                "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
+            analyzeFail("select row(" + geo + ")", "does not support native GEO arguments");
+            analyzeFail("select ST_AsText(row(" + geo + ").col1)", "does not support native GEO arguments");
+            analyzeFail("select named_struct('g', " + geo + ")", "does not support native GEO arguments");
+            analyzeFail("select row(named_struct('g', " + geo + "))", "does not support native GEO arguments");
+            analyzeFail("select named_struct('g', row(" + geo + "))", "does not support native GEO arguments");
+            analyzeSuccess("select row(ST_AsText(" + geo + "))");
+        }
+        analyzeSuccess("select row(1, NULL, 'a')");
+        analyzeSuccess("select named_struct('i', 1, 'n', NULL)");
+        // Legacy geometry is VARCHAR and is not affected by native-GEO admission.
+        analyzeSuccess("select row(ST_GeomFromText('POINT (1 2)'))");
+    }
+
+    @Test
+    public void testGeometryOpaqueCrsDescriptor() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1 2)', 'EPSG:+4326')")).getQueryRelation();
+        ScalarType type = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals("EPSG:+4326", type.getGeoDescriptor().crs());
+        Assertions.assertNull(type.getGeoDescriptor().srid());
+        analyzeSuccess("select ST_AsText(ST_GeomFromText('POINT (1 2)', 'EPSG:+4326'))");
+    }
+
+    @Test
     public void testNativeGeoFunctionContract() {
         assertFunctionContract("select ST_GeogFromText('POINT (1 2)')", 120020, PrimitiveType.GEOGRAPHY);
         assertFunctionContract("select ST_GeogFromText('POINT (1 2)', 4326)", 120021,
