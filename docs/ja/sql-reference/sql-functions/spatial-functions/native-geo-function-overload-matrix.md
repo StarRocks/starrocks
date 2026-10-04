@@ -147,11 +147,19 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 ## 直交座標バッファ
 
-ネイティブ XY POINT、LINESTRING、POLYGON と各 MULTI 型に対応します。距離は入力 CRS 単位の有限な符号付き値です。丸い近似、NULL 伝播、多角形 EMPTY 結果を使用し、CRS を保持します。この部分では GEOGRAPHY、コレクション、Z/M、オプション、簡略化関数は利用できません。
+ネイティブ XY POINT、LINESTRING、POLYGON と各 MULTI 型に対応します。距離は入力 CRS 単位の有限な符号付き値です。丸い近似、NULL 伝播、多角形 EMPTY 結果を使用し、CRS を保持します。ST_Buffer は GEOGRAPHY、コレクション、Z/M、オプションをサポートしません。
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## トポロジーを維持する簡略化
+
+直交座標 XY のスカラージオメトリ。型、リング、接触、型付き EMPTY 子要素、CRS を維持します。許容値は入力座標単位です。GEOGRAPHY、Z/M、行をまたぐカバレッジ簡略化はサポートしません。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
 
 ## H3 セル関数
 
