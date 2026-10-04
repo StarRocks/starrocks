@@ -18,12 +18,15 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -261,10 +264,52 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature");
         analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 8)",
                 "No matching function with signature");
-        for (String function : new String[] {"ST_SimplifyPreserveTopology", "ST_CoverageSimplify"}) {
+        for (String function : new String[] {"ST_CoverageSimplify"}) {
             analyzeFail("select " + function + "(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1)",
                     "No matching function with signature");
         }
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyContract() {
+        for (String crs : new String[] {"EPSG:3857", "EPSG:4326"}) {
+            String geometry = "ST_GeomFromText('LINESTRING (0 0,1 0,2 0)', '" + crs + "')";
+            for (String tolerance : new String[] {"0.01", "0", "NULL", "CAST(2 AS DOUBLE)"}) {
+                String sql = "select ST_SimplifyPreserveTopology(" + geometry + ", " + tolerance + ")";
+                assertFunctionContract(sql, 120411, PrimitiveType.GEOMETRY);
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+                ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs), output.getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_SRID(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('MULTIPOLYGON EMPTY', 'EPSG:4326'), 0))");
+        analyzeSuccess("select ST_AsText(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('GEOMETRYCOLLECTION (POINT EMPTY,LINESTRING (0 0,1 0,2 0))', 'EPSG:3857'), t)) " +
+                "from (select CAST(0 AS DOUBLE) t union all select CAST(1 AS DOUBLE)) tolerances");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeogFromText('POINT (0 0)'), 1)",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology('POINT (0 0)', 1)", "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'))",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 2)",
+                "No matching function with signature");
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyRejectsMissingDescriptor() {
+        // Native SQL constructors attach a CRS; exercise the guard with a descriptorless resolved slot.
+        ScalarType geometryType = new ScalarType(PrimitiveType.GEOMETRY);
+        SlotRef geometry = new SlotRef(null, "geometry_without_crs");
+        geometry.setType(geometryType);
+        FloatLiteral tolerance = new FloatLiteral(1.0);
+        FunctionCallExpr call = new FunctionCallExpr(FunctionSet.ST_SIMPLIFY_PRESERVE_TOPOLOGY,
+                List.of(geometry, tolerance));
+
+        SemanticException error = Assertions.assertThrows(SemanticException.class,
+                () -> FunctionAnalyzer.getAnalyzedFunction(getConnectContext(), call,
+                        new Type[] {geometryType, tolerance.getType()}));
+        Assertions.assertEquals("st_simplifypreservetopology requires a GEOMETRY CRS descriptor", error.getDetailMsg());
     }
 
     @Test

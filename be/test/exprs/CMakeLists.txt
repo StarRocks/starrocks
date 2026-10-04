@@ -42,6 +42,7 @@ set(EXPR_TEST_FILES
     geography_functions_test.cpp
     geo_overlay_test.cpp
     geo_buffer_function_test.cpp
+    geo_topology_simplify_function_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp

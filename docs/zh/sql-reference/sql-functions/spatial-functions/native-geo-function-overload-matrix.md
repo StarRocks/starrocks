@@ -147,11 +147,19 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 ## 笛卡尔缓冲区
 
-支持原生 XY POINT、LINESTRING、POLYGON 及其 MULTI 类型。距离为输入 CRS 单位下的有限有符号值；圆角近似、NULL 传播、空结果为多边形 EMPTY。结果保留 CRS。本部分不提供 GEOGRAPHY、集合、Z/M、选项或简化函数。
+支持原生 XY POINT、LINESTRING、POLYGON 及其 MULTI 类型。距离为输入 CRS 单位下的有限有符号值；圆角近似、NULL 传播、空结果为多边形 EMPTY。结果保留 CRS。ST_Buffer 不支持 GEOGRAPHY、集合、Z/M 或选项。
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## 保留拓扑的简化
+
+笛卡尔 XY 标量几何，保留类型、环、接触关系、带类型的 EMPTY 子元素和 CRS。容差使用输入坐标单位。不支持 GEOGRAPHY、Z/M 或跨行覆盖简化。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
 
 ## H3 网格函数
 
