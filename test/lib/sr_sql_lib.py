@@ -2131,9 +2131,21 @@ class StarrocksSQLApiLib(object):
         """
         self._wait_alter_mv_job("CANCELLED", check_count)
 
-    def _resubmit_alter(self, last_alter, job_id, msg, rerun):
-        """Submit `last_alter` again after its job `job_id` was cancelled, see ALTER_RERUN_MSG."""
+    def _resubmit_alter(self, last_alter, job_id, msg, rerun, table_name, deadline):
+        """
+        Submit `last_alter` again after its job `job_id` on `table_name` was cancelled, see
+        ALTER_RERUN_MSG.
+
+        The table has to be NORMAL first. A cancelled schema change releases it before reporting
+        CANCELLED (LakeTableSchemaChangeJob#removeShadowIndex), but a cancelled rollup or sync MV
+        does not: LakeRollupJob#cancelImpl only removes the rollup index and the table is released
+        later by MaterializedViewHandler#onJobDone, the same gap wait_table_state_normal explains
+        for a finished one.
+        """
         stmt, conn, _ = last_alter
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
         log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
         res = self.execute_sql(stmt, conn=conn)
         tools.assert_true(res["status"], "resubmit alter failed: %s" % res.get("msg"))
@@ -2199,7 +2211,7 @@ class StarrocksSQLApiLib(object):
             ):
                 rerun += 1
                 seen = job_id
-                self._resubmit_alter(last_alter, job_id, row[9], rerun)
+                self._resubmit_alter(last_alter, job_id, row[9], rerun, table_name, deadline)
                 continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
@@ -2720,7 +2732,7 @@ class StarrocksSQLApiLib(object):
                 # Wait for the resubmitted job instead.
                 rerun += 1
                 seen = int(job_id)
-                self._resubmit_alter(last_alter, job_id, msg, rerun)
+                self._resubmit_alter(last_alter, job_id, msg, rerun, table_name, deadline)
                 continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
