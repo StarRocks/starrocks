@@ -253,4 +253,36 @@ TEST(ParquetMetaHelperTest, StructSubfieldWithoutFieldIdIsMatchedByName) {
     EXPECT_FALSE(helper._is_valid_type(&col, &type));
 }
 
+// MAP<STRUCT<a>, VARCHAR> in the file, read as MAP<VARCHAR, (pruned)> (e.g. `SELECT map_keys(m)`): the column is kept,
+// so that the reader factory reports the unsupported group key instead of the column being read as NULL.
+TEST(ParquetMetaHelperTest, IncompatibleGroupMapKeyIsKeptForTheReaderToReject) {
+    ParquetField a;
+    a.name = "a";
+    a.type = ColumnType::SCALAR;
+    ParquetField key;
+    key.name = "key";
+    key.type = ColumnType::STRUCT;
+    key.children = {a};
+    ParquetField value;
+    value.name = "value";
+    value.type = ColumnType::SCALAR;
+    ParquetField map;
+    map.name = "m";
+    map.type = ColumnType::MAP;
+    map.children = {key, value};
+
+    const TypeDescriptor varchar = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    const TypeDescriptor unknown(TYPE_UNKNOWN);
+    ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/false);
+    // incompatible key read, value pruned: kept for the reader to reject
+    const TypeDescriptor key_only = TypeDescriptor::create_map_type(varchar, unknown);
+    EXPECT_TRUE(helper._is_valid_type(&map, &key_only));
+    // key pruned, value read: valid as before
+    const TypeDescriptor value_only = TypeDescriptor::create_map_type(unknown, varchar);
+    EXPECT_TRUE(helper._is_valid_type(&map, &value_only));
+    // nothing read
+    const TypeDescriptor none = TypeDescriptor::create_map_type(unknown, unknown);
+    EXPECT_FALSE(helper._is_valid_type(&map, &none));
+}
+
 } // namespace starrocks::parquet

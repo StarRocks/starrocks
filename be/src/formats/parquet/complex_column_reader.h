@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -150,11 +151,26 @@ public:
             }
         }
 
+        // Pick the level source once. Any present child carries the struct's def levels; prefer the one with the
+        // fewest repetition levels: a child without an extra repeated level has exactly one level per struct slot.
+        // A reader without a parquet field has no levels of its own and is only picked as a last resort. Ties keep
+        // the map order.
+        _def_rep_level_child_reader = nullptr;
+        int16_t source_rep_level = std::numeric_limits<int16_t>::max();
         for (const auto& pair : _child_readers) {
-            if (pair.second != nullptr) {
-                _def_rep_level_child_reader = &(pair.second);
-                return Status::OK();
+            if (pair.second == nullptr) {
+                continue;
             }
+            const ParquetField* child_field = pair.second->get_column_parquet_field();
+            int16_t rep_level =
+                    child_field != nullptr ? child_field->max_rep_level() : std::numeric_limits<int16_t>::max();
+            if (_def_rep_level_child_reader == nullptr || rep_level < source_rep_level) {
+                _def_rep_level_child_reader = &(pair.second);
+                source_rep_level = rep_level;
+            }
+        }
+        if (_def_rep_level_child_reader != nullptr) {
+            return Status::OK();
         }
 
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
@@ -172,15 +188,11 @@ public:
     // get_levels functions only called by complex type
     // If parent is a struct type, only def_levels has value.
     // If parent is list or map type, def_levels & rep_levels both have value.
+    // Levels of the level source picked in prepare(), as produced by its last read_range(). read_range() of this
+    // struct reads every present child, so they belong to the last read_range() of this struct.
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        for (const auto& pair : _child_readers) {
-            // Considering not existed subfield, we will not create its ColumnReader
-            // So we should pick up the first existed subfield column reader
-            if (pair.second != nullptr) {
-                pair.second->get_levels(def_levels, rep_levels, num_levels);
-                return;
-            }
-        }
+        DCHECK(_def_rep_level_child_reader != nullptr) << "prepare() must be called before reading";
+        (*_def_rep_level_child_reader)->get_levels(def_levels, rep_levels, num_levels);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override {
@@ -253,7 +265,7 @@ private:
 
     // _children_readers order is the same as TypeDescriptor children order.
     std::map<std::string, ColumnReaderPtr> _child_readers;
-    // First non-nullptr child ColumnReader, used to get def & rep levels
+    // Child ColumnReader whose levels give this struct's def & rep levels, picked in prepare().
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 

@@ -437,7 +437,7 @@ Status VariantProjectionHandler::setup_readers() {
                         fmt::format("invalid source parquet field idx for variant virtual column, idx={}, slot={}",
                                     column.idx_in_parquet, column.slot_id()));
             }
-            if (source_schema_node->type != ColumnType::STRUCT) {
+            if (source_schema_node->type != ColumnType::VARIANT) {
                 return Status::InternalError(
                         fmt::format("invalid source parquet field type for variant virtual column, idx={}, type={}",
                                     column.idx_in_parquet, static_cast<int>(source_schema_node->type)));

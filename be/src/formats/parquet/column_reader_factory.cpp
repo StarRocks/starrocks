@@ -357,72 +357,7 @@ void VariantShreddedReadHints::clear() {
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
-    // We will only set a complex type in ParquetField
-    if ((field->is_complex_type() || col_type.is_complex_type()) && !field->has_same_complex_type(col_type)) {
-        return Status::InternalError(
-                strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
-                                    column_type_to_string(field->type), logical_type_to_string(col_type.type)));
-    }
-    if (field->type == ColumnType::ARRAY) {
-        ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
-                         ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0]));
-        if (child_reader != nullptr) {
-            return std::make_unique<ListColumnReader>(field, std::move(child_reader));
-        } else {
-            return nullptr;
-        }
-    } else if (field->type == ColumnType::MAP) {
-        std::unique_ptr<ColumnReader> key_reader = nullptr;
-        std::unique_ptr<ColumnReader> value_reader = nullptr;
-
-        if (!col_type.children[0].is_unknown_type()) {
-            ASSIGN_OR_RETURN(key_reader,
-                             ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0]));
-        }
-        if (!col_type.children[1].is_unknown_type()) {
-            ASSIGN_OR_RETURN(value_reader,
-                             ColumnReaderFactory::create(opts, &field->children[1], col_type.children[1]));
-        }
-
-        if (key_reader != nullptr || value_reader != nullptr) {
-            return std::make_unique<MapColumnReader>(field, std::move(key_reader), std::move(value_reader));
-        } else {
-            return nullptr;
-        }
-    } else if (field->type == ColumnType::STRUCT) {
-        if (col_type.type == LogicalType::TYPE_VARIANT) {
-            return create_variant_column_reader(opts, field);
-        }
-
-        std::vector<int32_t> subfield_pos(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
-
-        std::map<std::string, ColumnReaderPtr> children_readers;
-        for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
-                // -1 means subfield not existed; we need to emplace nullptr
-                children_readers.emplace(col_type.field_names[i], nullptr);
-                continue;
-            }
-            ASSIGN_OR_RETURN(
-                    ColumnReaderPtr child_reader,
-                    ColumnReaderFactory::create(opts, &field->children[subfield_pos[i]], col_type.children[i]));
-            children_readers.emplace(col_type.field_names[i], std::move(child_reader));
-        }
-
-        // maybe struct subfield ColumnReader is null
-        if (any_reader_not_null(children_readers)) {
-            return std::make_unique<StructColumnReader>(field, std::move(children_readers));
-        } else {
-            return nullptr;
-        }
-    } else {
-        if (col_type.type == TYPE_GEOGRAPHY) {
-            return Status::NotSupported("Native GEOGRAPHY reads require Iceberg field IDs and semantic metadata");
-        }
-        return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
-                                                    &col_type, opts);
-    }
+    return create(opts, field, col_type, nullptr);
 }
 
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
@@ -434,18 +369,21 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                 strings::Substitute("ParquetField '$0' file's type $1 is different from table's type $2", field->name,
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
-    DCHECK(lake_schema_field != nullptr);
-    if (col_type.is_complex_type()) {
+    if (lake_schema_field != nullptr && col_type.is_complex_type()) {
         for (const auto& child : col_type.children) {
             if (child.type == TYPE_GEOGRAPHY) {
                 return Status::NotSupported("Nested GEOGRAPHY is not supported");
             }
         }
     }
+    // The Iceberg schema child at a fixed position (list element, map key / value); nullptr off the Iceberg path.
+    auto lake_child = [lake_schema_field](size_t idx) -> const TIcebergSchemaField* {
+        return lake_schema_field != nullptr ? &lake_schema_field->children[idx] : nullptr;
+    };
+
     if (field->type == ColumnType::ARRAY) {
-        const TIcebergSchemaField* element_schema = &lake_schema_field->children[0];
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
-                         ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0], element_schema));
+                         ColumnReaderFactory::create(opts, &field->children[0], col_type.children[0], lake_child(0)));
         if (child_reader != nullptr) {
             return std::make_unique<ListColumnReader>(field, std::move(child_reader));
         } else {
@@ -455,16 +393,21 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         std::unique_ptr<ColumnReader> key_reader = nullptr;
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
-        const TIcebergSchemaField* key_lake_schema = &lake_schema_field->children[0];
-        const TIcebergSchemaField* value_lake_schema = &lake_schema_field->children[1];
-
         if (!col_type.children[0].is_unknown_type()) {
+            // The schema resolver accepts group keys so that the rest of the file stays readable; reading such a key
+            // needs a table key of the same shape. A pruned key (unknown type) is not read at all.
+            const ParquetField& key_field = field->children[0];
+            if (key_field.is_complex_type() && !key_field.has_same_complex_type(col_type.children[0])) {
+                return Status::NotSupported(strings::Substitute(
+                        "Parquet map column '$0' has a $1 key, which cannot be read as table key type $2", field->name,
+                        column_type_to_string(key_field.type), logical_type_to_string(col_type.children[0].type)));
+            }
             ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0],
-                                                                     key_lake_schema));
+                                                                     lake_child(0)));
         }
         if (!col_type.children[1].is_unknown_type()) {
             ASSIGN_OR_RETURN(value_reader, ColumnReaderFactory::create(opts, &(field->children[1]),
-                                                                       col_type.children[1], value_lake_schema));
+                                                                       col_type.children[1], lake_child(1)));
         }
 
         if (key_reader != nullptr || value_reader != nullptr) {
@@ -472,28 +415,28 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         } else {
             return nullptr;
         }
-    } else if (field->type == ColumnType::STRUCT) {
-        if (col_type.type == LogicalType::TYPE_VARIANT) {
-            return create_variant_column_reader(opts, field);
-        }
+    } else if (field->type == ColumnType::VARIANT && col_type.type == LogicalType::TYPE_VARIANT) {
+        return create_variant_column_reader(opts, field);
+    } else if (field->type == ColumnType::STRUCT && col_type.type == LogicalType::TYPE_VARIANT) {
+        // A struct group that is not variant-shaped (see has_same_complex_type).
+        return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
+    } else if (field->has_struct_layout()) {
+        const bool parquet_has_field_id =
+                lake_schema_field != nullptr && opts.file_meta_data->schema().exist_filed_id();
+        StructSubfieldMapping mapping = resolve_struct_subfields(*field, col_type, opts.case_sensitive,
+                                                                 lake_schema_field, parquet_has_field_id);
 
-        std::vector<int32_t> subfield_pos(col_type.children.size());
-        std::vector<const TIcebergSchemaField*> lake_schema_subfield(col_type.children.size());
-        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field,
-                                          opts.file_meta_data->schema().exist_filed_id(), subfield_pos,
-                                          lake_schema_subfield);
-
-        std::map<std::string, std::unique_ptr<ColumnReader>> children_readers;
+        std::map<std::string, ColumnReaderPtr> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (subfield_pos[i] == -1) {
-                // -1 means subfield not existed; we need to emplace nullptr
+            const ParquetField* parquet_child = mapping.parquet_children[i];
+            if (parquet_child == nullptr) {
+                // subfield not existed in the file; we need to emplace nullptr
                 children_readers.emplace(col_type.field_names[i], nullptr);
                 continue;
             }
-
-            ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
-                             ColumnReaderFactory::create(opts, &field->children[subfield_pos[i]], col_type.children[i],
-                                                         lake_schema_subfield[i]));
+            ASSIGN_OR_RETURN(
+                    ColumnReaderPtr child_reader,
+                    ColumnReaderFactory::create(opts, parquet_child, col_type.children[i], mapping.lake_children[i]));
             children_readers.emplace(col_type.field_names[i], std::move(child_reader));
         }
 
@@ -505,6 +448,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
     } else {
         if (col_type.type == TYPE_GEOGRAPHY) {
+            if (lake_schema_field == nullptr) {
+                return Status::NotSupported("Native GEOGRAPHY reads require Iceberg field IDs and semantic metadata");
+            }
             RETURN_IF_ERROR(validate_native_iceberg_geography(*field, col_type, *lake_schema_field));
         }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
@@ -516,7 +462,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                                                             const ParquetField* variant_field,
                                                                             const VariantShreddedReadHints& hints) {
     DCHECK(opts.row_group_meta != nullptr);
-    DCHECK(variant_field->type == ColumnType::STRUCT);
+    DCHECK(variant_field->type == ColumnType::VARIANT);
     DCHECK(variant_field->children.size() >= 2);
 
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
@@ -588,101 +534,72 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader
     }
 }
 
-void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
-                                                            bool case_sensitive, std::vector<int32_t>& pos) {
-    DCHECK(field.type == ColumnType::STRUCT);
-    // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by its
-    // name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / "" for a
-    // subfield that has none.
-    std::unordered_map<int32_t, size_t> field_id_2_pos;
-    if (!col_type.field_ids.empty()) {
-        for (size_t i = 0; i < field.children.size(); i++) {
-            field_id_2_pos.emplace(field.children[i].field_id, i);
+StructSubfieldMapping ColumnReaderFactory::resolve_struct_subfields(const ParquetField& field,
+                                                                    const TypeDescriptor& col_type, bool case_sensitive,
+                                                                    const TIcebergSchemaField* lake_schema_field,
+                                                                    bool parquet_has_field_id) {
+    DCHECK(field.has_struct_layout());
+    const size_t num_children = col_type.children.size();
+    StructSubfieldMapping mapping;
+    mapping.parquet_children.assign(num_children, nullptr);
+    mapping.lake_children.assign(num_children, nullptr);
+
+    std::unordered_map<int32_t, const ParquetField*> parquet_by_id;
+    std::unordered_map<std::string, const ParquetField*> parquet_by_name;
+    for (const auto& child : field.children) {
+        parquet_by_id.emplace(child.field_id, &child);
+        parquet_by_name.emplace(Utils::format_name(child.name, case_sensitive), &child);
+    }
+    auto find_by_id = [&](int32_t id) -> const ParquetField* {
+        auto it = parquet_by_id.find(id);
+        return it != parquet_by_id.end() ? it->second : nullptr;
+    };
+    auto find_by_name = [&](const std::string& name) -> const ParquetField* {
+        auto it = parquet_by_name.find(Utils::format_name(name, case_sensitive));
+        return it != parquet_by_name.end() ? it->second : nullptr;
+    };
+    // The name the file stores the i-th type child under: its physical name if there is one, else its field name.
+    // The vectors may be shorter than the children (or padded with ""), so a missing entry means "no physical name".
+    auto parquet_name = [&](size_t i) -> const std::string& {
+        if (i < col_type.field_physical_names.size() && !col_type.field_physical_names[i].empty()) {
+            return col_type.field_physical_names[i];
         }
-    }
-    std::unordered_map<std::string, size_t> field_name_2_pos;
-    for (size_t i = 0; i < field.children.size(); i++) {
-        const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
-        field_name_2_pos.emplace(format_field_name, i);
-    }
+        return col_type.field_names[i];
+    };
 
-    for (size_t i = 0; i < col_type.children.size(); i++) {
-        if (!col_type.field_ids.empty() && col_type.field_ids[i] != -1) {
-            auto it = field_id_2_pos.find(col_type.field_ids[i]);
-            pos[i] = it == field_id_2_pos.end() ? -1 : static_cast<int32_t>(it->second);
-            continue;
+    if (lake_schema_field != nullptr) {
+        // For struct type with schema change, a subfield may not exist in the file: when Iceberg adds a new struct
+        // subfield, the original parquet file does not contain it.
+        std::unordered_map<std::string, const TIcebergSchemaField*> lake_by_name;
+        for (const auto& each : lake_schema_field->children) {
+            lake_by_name.emplace(Utils::format_name(each.name, case_sensitive), &each);
         }
-
-        const std::string& subfield_name =
-                !col_type.field_physical_names.empty() && !col_type.field_physical_names[i].empty()
-                        ? col_type.field_physical_names[i]
-                        : col_type.field_names[i];
-        auto it = field_name_2_pos.find(Utils::format_name(subfield_name, case_sensitive));
-        pos[i] = it == field_name_2_pos.end() ? -1 : static_cast<int32_t>(it->second);
-    }
-}
-
-void ColumnReaderFactory::get_subfield_pos_with_pruned_type(
-        const ParquetField& field, const TypeDescriptor& col_type, bool case_sensitive,
-        const TIcebergSchemaField* lake_schema_field, bool parquet_has_field_id, std::vector<int32_t>& pos,
-        std::vector<const TIcebergSchemaField*>& lake_schema_subfield) {
-    // For Struct type with schema change, we need to consider a subfield not existed situation.
-    // When Iceberg adds a new struct subfield, the original parquet file does not contain the newly added subfield.
-    std::unordered_map<std::string, const TIcebergSchemaField*> subfield_name_2_field_schema{};
-    for (const auto& each : lake_schema_field->children) {
-        std::string format_subfield_name = case_sensitive ? each.name : boost::algorithm::to_lower_copy(each.name);
-        subfield_name_2_field_schema.emplace(format_subfield_name, &each);
-    }
-
-    std::unordered_map<int32_t, size_t> field_id_2_pos{};
-    std::unordered_map<std::string, size_t> field_name_2_pos{};
-    for (size_t i = 0; i < field.children.size(); i++) {
-        if (parquet_has_field_id) {
-            field_id_2_pos.emplace(field.children[i].field_id, i);
-        } else {
-            field_name_2_pos.emplace(Utils::format_name(field.children[i].name, case_sensitive), i);
-        }
-    }
-    for (size_t i = 0; i < col_type.children.size(); i++) {
-        const auto schema_subfield_name =
-                case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
-        // An empty physical name is the placeholder of a subfield without one.
-        const auto parquet_subfield_name =
-                !col_type.field_physical_names.empty() && !col_type.field_physical_names[i].empty()
-                        ? Utils::format_name(col_type.field_physical_names[i], case_sensitive)
-                        : schema_subfield_name;
-
-        auto iceberg_it = subfield_name_2_field_schema.find(schema_subfield_name);
-        if (iceberg_it == subfield_name_2_field_schema.end()) {
-            // This situation should not be happened, means table's struct subfield not existed in iceberg schema
-            // Below code is defensive
-            DCHECK(false) << "Struct subfield name: " + schema_subfield_name + " not found in iceberg schema.";
-            pos[i] = -1;
-            lake_schema_subfield[i] = nullptr;
-            continue;
-        }
-
-        if (parquet_has_field_id) {
-            int32_t field_id = iceberg_it->second->field_id;
-            auto parquet_field_it = field_id_2_pos.find(field_id);
-            if (parquet_field_it == field_id_2_pos.end()) {
-                pos[i] = -1;
-                lake_schema_subfield[i] = nullptr;
+        for (size_t i = 0; i < num_children; i++) {
+            auto lake_it = lake_by_name.find(Utils::format_name(col_type.field_names[i], case_sensitive));
+            if (lake_it == lake_by_name.end()) {
+                // The table's struct subfield is not in the Iceberg schema; should not happen, defensive.
+                DCHECK(false) << "Struct subfield name: " << col_type.field_names[i] << " not found in iceberg schema.";
                 continue;
             }
-            pos[i] = parquet_field_it->second;
-            lake_schema_subfield[i] = iceberg_it->second;
-        } else {
-            auto parquet_field_it = field_name_2_pos.find(parquet_subfield_name);
-            if (parquet_field_it == field_name_2_pos.end()) {
-                pos[i] = -1;
-                lake_schema_subfield[i] = nullptr;
-                continue;
+            const ParquetField* parquet_child =
+                    parquet_has_field_id ? find_by_id(lake_it->second->field_id) : find_by_name(parquet_name(i));
+            if (parquet_child != nullptr) {
+                mapping.parquet_children[i] = parquet_child;
+                mapping.lake_children[i] = lake_it->second;
             }
-            pos[i] = parquet_field_it->second;
-            lake_schema_subfield[i] = iceberg_it->second;
+        }
+        return mapping;
+    }
+
+    for (size_t i = 0; i < num_children; i++) {
+        // An id of -1 (or a vector shorter than the children) means the type has no id for this child.
+        if (i < col_type.field_ids.size() && col_type.field_ids[i] != -1) {
+            mapping.parquet_children[i] = find_by_id(col_type.field_ids[i]);
+        } else {
+            mapping.parquet_children[i] = find_by_name(parquet_name(i));
         }
     }
+    return mapping;
 }
 
 } // namespace starrocks::parquet

@@ -60,6 +60,63 @@ inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     return raw_column;
 }
 
+namespace {
+// Rows of the elements column of an array/map node that have a parquet slot, i.e. the elements of rows that are
+// defined, not null and non-empty. Elements under a null or undefined row (or not covered by the offsets) have no
+// slot. The selection is only materialized once such elements are met, so the common case allocates nothing.
+//
+// Invariant of LevelBuilder: the column passed for a context has exactly one row per slot of that context (a level
+// with def >= repeated_ancestor_def_level, the "spaced" values of WriteBatchSpaced). Struct children are aligned
+// with the struct rows; array/map elements are aligned by gathering them with this selection.
+class ElementSelection {
+public:
+    ElementSelection(const uint32_t* offsets, size_t num_rows, size_t num_elements) : _offsets(offsets) {
+        if (offsets[0] != 0 || offsets[num_rows] != num_elements) {
+            _start(0);
+        }
+    }
+
+    // Row `row` is written with its elements.
+    void select(size_t row) {
+        if (_selected) {
+            for (uint32_t i = _offsets[row]; i < _offsets[row + 1]; i++) {
+                _rows.push_back(i);
+            }
+        }
+    }
+
+    // Row `row` is written without its elements (null or undefined).
+    void skip(size_t row) {
+        if (!_selected && _offsets[row + 1] > _offsets[row]) {
+            _start(row);
+        }
+    }
+
+    // Returns `elements` itself if every element has a slot, else the gathered elements with a slot.
+    ColumnPtr apply(const ColumnPtr& elements) const {
+        if (!_selected) {
+            return elements;
+        }
+        auto selected = elements->clone_empty();
+        selected->append_selective(*elements, _rows.data(), 0, static_cast<uint32_t>(_rows.size()));
+        return ColumnPtr(std::move(selected));
+    }
+
+private:
+    // Rows before `row` were all written with their (contiguous) elements.
+    void _start(size_t row) {
+        _selected = true;
+        for (uint32_t i = _offsets[0]; i < _offsets[row]; i++) {
+            _rows.push_back(i);
+        }
+    }
+
+    const uint32_t* _offsets;
+    bool _selected = false;
+    std::vector<uint32_t> _rows;
+};
+} // namespace
+
 LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, std::string timezone,
                            bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
         : _type_desc(std::move(type_desc)),
@@ -472,6 +529,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto offsets = array_col->offsets_column()->immutable_data();
+    ElementSelection selection(offsets.data(), col->size(), elements->size());
 
     size_t num_levels_upper_bound = ctx._num_levels + elements->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
@@ -496,13 +554,10 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
         auto array_size = offsets[offset + 1] - offsets[offset];
         auto array_is_null = (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset]));
 
-        // null in current array_column
+        // null in current array_column, or undefined because of a null ancestor.
+        // Its elements, if any, have no slot in parquet.
         if (array_is_null) {
-            if (array_size > 0) {
-                return Status::DataQualityError(
-                        fmt::format("Array column ({}) has null element at offset {}, but array size is {}",
-                                    type_desc.debug_string(), offset, array_size));
-            }
+            selection.skip(offset);
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -522,6 +577,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
         }
 
         // not null and non-empty array
+        selection.select(offset);
         (*rep_levels)[num_levels] = rep_level;
         num_levels += array_size;
         offset++;
@@ -535,7 +591,8 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
                                     ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
                                     ctx._max_def_level + node->is_optional() + 1);
 
-    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements, write_leaf_callback);
+    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, selection.apply(elements),
+                               write_leaf_callback);
 }
 
 Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
@@ -557,11 +614,9 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
     auto* null_col = get_raw_null_column(col);
     auto* map_col = down_cast<const MapColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& keys = map_col->keys_column();
-    if (UNLIKELY(keys->has_null())) {
-        return Status::NotSupported("Does not support to write map value of null key");
-    }
     const auto& values = map_col->values_column();
     const auto offsets = map_col->offsets_column()->immutable_data();
+    ElementSelection selection(offsets.data(), col->size(), keys->size());
 
     size_t num_levels_upper_bound = ctx._num_levels + keys->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
@@ -582,18 +637,10 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
-        auto map_size = offsets[offset + 1] - offsets[offset];
-        auto map_is_null = (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset]));
-
-        // null in current map_column
-        if (map_is_null) {
-            // The entries of a null map would still be written to the key/value leaves and shift them onto
-            // the following rows.
-            if (map_size > 0) {
-                return Status::DataQualityError(
-                        fmt::format("Map column ({}) has null element at offset {}, but map size is {}",
-                                    type_desc.debug_string(), offset, map_size));
-            }
+        // null in current map_column, or undefined because of a null ancestor.
+        // Its entries, if any, have no slot in parquet.
+        if (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset])) {
+            selection.skip(offset);
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -602,6 +649,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
+        auto map_size = offsets[offset + 1] - offsets[offset];
         if (map_size == 0) {
             (*def_levels)[num_levels] = def_level + node->is_optional();
             (*rep_levels)[num_levels] = rep_level;
@@ -611,6 +659,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
+        selection.select(offset);
         (*rep_levels)[num_levels] = rep_level;
         num_levels += map_size;
         offset++;
@@ -618,14 +667,21 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
 
     DCHECK(col->size() == offset);
 
+    ColumnPtr selected_keys = selection.apply(keys);
+    if (UNLIKELY(selected_keys->has_null())) {
+        return Status::NotSupported("Does not support to write map value of null key");
+    }
+
     def_levels->resize(num_levels);
     rep_levels->resize(num_levels);
     LevelBuilderContext derived_ctx(def_levels->size(), def_levels, rep_levels,
                                     ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
                                     ctx._max_def_level + node->is_optional() + 1);
 
-    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[0], key_node, keys, write_leaf_callback));
-    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[1], value_node, values, write_leaf_callback));
+    RETURN_IF_ERROR(
+            _write_column_chunk(derived_ctx, type_desc.children[0], key_node, selected_keys, write_leaf_callback));
+    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[1], value_node, selection.apply(values),
+                                        write_leaf_callback));
     return Status::OK();
 }
 

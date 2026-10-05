@@ -58,7 +58,7 @@ ParquetField make_shredded_scalar_node(const std::string& name, int value_idx, i
 ParquetField make_variant_field_with_typed_group(const std::vector<ParquetField>& typed_children) {
     ParquetField variant;
     variant.name = "col_variant";
-    variant.type = ColumnType::STRUCT;
+    variant.type = ColumnType::VARIANT;
     variant.children.emplace_back(make_scalar_field("metadata", 0, tparquet::Type::BYTE_ARRAY));
     variant.children.emplace_back(make_scalar_field("value", 1, tparquet::Type::BYTE_ARRAY));
     ParquetField typed_group;
@@ -530,6 +530,123 @@ TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysi
     ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
 }
 
+namespace {
+
+// struct<a, b, c> in the file; child ids 1, 2, 3.
+ParquetField make_resolver_struct_field() {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("B", 1, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("c_phys", 2, tparquet::Type::INT32));
+    for (size_t i = 0; i < field.children.size(); i++) {
+        field.children[i].field_id = static_cast<int32_t>(i + 1);
+    }
+    return field;
+}
+
+TypeDescriptor make_resolver_struct_type(const std::vector<std::string>& names) {
+    TypeDescriptor col_type = TypeDescriptor::from_logical_type(TYPE_STRUCT);
+    for (const auto& name : names) {
+        col_type.children.emplace_back(TypeDescriptor::from_logical_type(TYPE_INT));
+        col_type.field_names.emplace_back(name);
+    }
+    return col_type;
+}
+
+} // namespace
+
+TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsByName) {
+    ParquetField field = make_resolver_struct_field();
+    TypeDescriptor col_type = make_resolver_struct_type({"b", "a", "missing"});
+
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, nullptr, false);
+    ASSERT_EQ(mapping.parquet_children.size(), 3);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[1]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[0]);
+    ASSERT_EQ(mapping.parquet_children[2], nullptr);
+    ASSERT_EQ(mapping.lake_children, (std::vector<const TIcebergSchemaField*>{nullptr, nullptr, nullptr}));
+
+    // case sensitive: "b" does not match "B"
+    mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, true, nullptr, false);
+    ASSERT_EQ(mapping.parquet_children[0], nullptr);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[0]);
+}
+
+TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsByFieldId) {
+    ParquetField field = make_resolver_struct_field();
+    // names deliberately do not match: ids win
+    TypeDescriptor col_type = make_resolver_struct_type({"x", "y", "z"});
+    col_type.field_ids = {3, 1, 7};
+
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, nullptr, false);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[2]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[0]);
+    ASSERT_EQ(mapping.parquet_children[2], nullptr);
+}
+
+TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsPaddedIdFallsBackToName) {
+    ParquetField field = make_resolver_struct_field();
+    TypeDescriptor col_type = make_resolver_struct_type({"x", "a", "b"});
+    // -1: no id for "a"; the vector is shorter than the children: no id for "b"
+    col_type.field_ids = {3, -1};
+
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, nullptr, false);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[2]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[0]);
+    ASSERT_EQ(mapping.parquet_children[2], &field.children[1]);
+}
+
+TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsByPhysicalName) {
+    ParquetField field = make_resolver_struct_field();
+    TypeDescriptor col_type = make_resolver_struct_type({"c", "a", "b", "d"});
+    // "" for "a": no physical name; vector shorter than the children for "b" and "d"
+    col_type.field_physical_names = {"c_phys", ""};
+
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, nullptr, false);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[2]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[0]);
+    ASSERT_EQ(mapping.parquet_children[2], &field.children[1]);
+    ASSERT_EQ(mapping.parquet_children[3], nullptr);
+}
+
+TEST(ColumnReaderFactoryTest, ResolveStructSubfieldsIceberg) {
+    ParquetField field = make_resolver_struct_field();
+    TypeDescriptor col_type = make_resolver_struct_type({"A", "c", "added"});
+    col_type.field_physical_names = {"", "c_phys", ""};
+
+    auto make_lake = [](int32_t id, const std::string& name) {
+        TIcebergSchemaField f;
+        f.__set_field_id(id);
+        f.__set_name(name);
+        return f;
+    };
+    TIcebergSchemaField root;
+    root.__set_field_id(10);
+    root.__set_name("col");
+    // "added" was added to the table after the file was written: id 4 is not in the file
+    root.__set_children(std::vector<TIcebergSchemaField>{make_lake(1, "a"), make_lake(3, "c"), make_lake(4, "added")});
+
+    // file with field ids: match by the Iceberg field id
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, &root, true);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[0]);
+    ASSERT_EQ(mapping.lake_children[0], &root.children[0]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
+    ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
+    ASSERT_EQ(mapping.parquet_children[2], nullptr);
+    ASSERT_EQ(mapping.lake_children[2], nullptr);
+
+    // file without field ids: match by physical name, else table field name
+    mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, false, &root, false);
+    ASSERT_EQ(mapping.parquet_children[0], &field.children[0]);
+    ASSERT_EQ(mapping.lake_children[0], &root.children[0]);
+    ASSERT_EQ(mapping.parquet_children[1], &field.children[2]);
+    ASSERT_EQ(mapping.lake_children[1], &root.children[1]);
+    ASSERT_EQ(mapping.parquet_children[2], nullptr);
+    ASSERT_EQ(mapping.lake_children[2], nullptr);
+}
+
 // field_ids / field_physical_names hold -1 / "" for a subfield without one; such a subfield is matched by its
 // physical name or its name instead.
 TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderFieldIds) {
@@ -548,9 +665,8 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderFieldIds) {
     TypeDescriptor col_type = TypeDescriptor::create_struct_type({"renamed_c", "b"}, {int_type, int_type});
     col_type.field_ids = {3, -1};
 
-    std::vector<int32_t> pos(col_type.children.size());
-    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
-    EXPECT_EQ((std::vector<int32_t>{2, 1}), pos);
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, true, nullptr, false);
+    EXPECT_EQ((std::vector<const ParquetField*>{&field.children[2], &field.children[1]}), mapping.parquet_children);
 }
 
 TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
@@ -565,9 +681,63 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
     TypeDescriptor col_type = TypeDescriptor::create_struct_type({"a", "b", "missing"}, {int_type, int_type, int_type});
     col_type.field_physical_names = {"a_phys", "", ""};
 
-    std::vector<int32_t> pos(col_type.children.size());
-    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
-    EXPECT_EQ((std::vector<int32_t>{0, 1, -1}), pos);
+    auto mapping = ColumnReaderFactory::resolve_struct_subfields(field, col_type, true, nullptr, false);
+    EXPECT_EQ((std::vector<const ParquetField*>{&field.children[0], &field.children[1], nullptr}),
+              mapping.parquet_children);
+}
+
+// A struct group that is not variant-shaped, read by a VARIANT column, fails instead of being read as NULL.
+TEST(ColumnReaderFactoryTest, StructGroupReadAsVariantFails) {
+    ParquetField field;
+    field.name = "v";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("metadata", 0, tparquet::Type::BYTE_ARRAY));
+    field.children.emplace_back(make_scalar_field("typed_value", 1, tparquet::Type::INT64));
+
+    auto opts = make_opts_with_num_cols(2);
+    auto reader_or = ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(TYPE_VARIANT));
+    ASSERT_FALSE(reader_or.ok());
+    EXPECT_TRUE(reader_or.status().is_invalid_argument()) << reader_or.status();
+    EXPECT_EQ("Variant type must have 'metadata' and 'value' fields", reader_or.status().message());
+}
+
+// map<struct<a int, b int>, int> in the file. The schema resolver accepts the group key; whether it can be read is
+// decided by the table key type when the column is read.
+TEST(ColumnReaderFactoryTest, MapWithGroupKey) {
+    ParquetField key;
+    key.name = "key";
+    key.type = ColumnType::STRUCT;
+    key.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    key.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+    ParquetField map;
+    map.name = "m";
+    map.type = ColumnType::MAP;
+    map.children.emplace_back(key);
+    map.children.emplace_back(make_scalar_field("value", 2, tparquet::Type::INT32));
+
+    auto opts = make_opts_with_num_cols(3);
+    const TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+
+    // scalar table key over a group key: rejected when read
+    {
+        auto reader_or = ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(int_type, int_type));
+        ASSERT_FALSE(reader_or.ok());
+        EXPECT_TRUE(reader_or.status().is_not_supported()) << reader_or.status();
+    }
+    // key pruned (only the values are read): fine
+    {
+        auto reader_or =
+                ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, int_type));
+        ASSERT_TRUE(reader_or.ok()) << reader_or.status();
+        ASSERT_NE(nullptr, dynamic_cast<MapColumnReader*>(reader_or.value().get()));
+    }
+    // struct table key of the same shape: fine
+    {
+        TypeDescriptor key_type = TypeDescriptor::create_struct_type({"a", "b"}, {int_type, int_type});
+        auto reader_or = ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(key_type, int_type));
+        ASSERT_TRUE(reader_or.ok()) << reader_or.status();
+        ASSERT_NE(nullptr, dynamic_cast<MapColumnReader*>(reader_or.value().get()));
+    }
 }
 
 // Minimal concrete subclass to allow instantiation of the abstract ColumnReader.

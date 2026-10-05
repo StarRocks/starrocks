@@ -182,7 +182,11 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
         return get_parquet_type_from_list(node, type_desc);
     } else if (logical_type->is_map()) {
         return get_parquet_type_from_map(node, type_desc);
-    } else if (is_variant_type(node)) { // TODO: replace with parquet variant logical type when it is supported
+    } else if (logical_type->is_variant()) {
+        // Same rule as the native resolver (SchemaDescriptor): an annotated group is a variant whatever its shape.
+        *type_desc = TypeDescriptor::create_variant_type();
+        return Status::OK();
+    } else if (is_variant_type(node)) { // unannotated groups: the metadata / value binary shape
         return get_parquet_variant_type(node, type_desc);
     }
 
@@ -408,10 +412,8 @@ static Status get_parquet_type_from_map(const ::parquet::schema::NodePtr& node, 
     }
 
     // 3rd level.
+    // A group key is resolved like any other node, as the native reader does (SchemaDescriptor::map_to_field).
     const auto& key_node = kv_group_node->field(0);
-    if (key_node->is_group()) {
-        return Status::NotSupported(fmt::format("map key {} must be a primitive type", key_node->name()));
-    }
     TypeDescriptor key_type_desc;
     RETURN_IF_ERROR(get_parquet_type(key_node, &key_type_desc));
 
