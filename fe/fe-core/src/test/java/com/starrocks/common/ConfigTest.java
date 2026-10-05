@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class ConfigTest {
     private final Config config = new Config();
@@ -185,6 +186,70 @@ public class ConfigTest {
         ConfigForArray.setConfigField(ConfigForArray.getAllMutableConfigs().get("prop_array_long"), "");
         configs = ConfigForArray.getConfigInfo(null);
         Assertions.assertEquals("[]", configs.get(2).get(2));
+    }
+
+    private static class ConfigForSensitive extends ConfigBase {
+        @ConfField(sensitive = true)
+        public static String prop_secret = "wJalrXUtnFEMI/K7MDENG";
+        @ConfField(sensitive = true)
+        public static String prop_unset_secret = "";
+        @ConfField
+        public static String prop_endpoint = "http://127.0.0.1:9000";
+    }
+
+    @Test
+    public void testSensitiveConfigIsMasked() throws Exception {
+        ConfigForSensitive configForSensitive = new ConfigForSensitive();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
+        configForSensitive.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        // ADMIN SHOW FRONTEND CONFIG
+        Map<String, String> shown = Maps.newHashMap();
+        for (List<String> row : ConfigForSensitive.getConfigInfo(null)) {
+            shown.put(row.get(0), row.get(2));
+        }
+        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, shown.get("prop_secret"));
+        // An unset credential stays empty, so it is still visible that none is configured.
+        Assertions.assertEquals("", shown.get("prop_unset_secret"));
+        Assertions.assertEquals("http://127.0.0.1:9000", shown.get("prop_endpoint"));
+
+        // The /variable page
+        Map<String, String> dumped = ConfigForSensitive.dump();
+        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, dumped.get("prop_secret"));
+        Assertions.assertEquals("", dumped.get("prop_unset_secret"));
+        Assertions.assertEquals("http://127.0.0.1:9000", dumped.get("prop_endpoint"));
+
+        // Only what is reported is masked; the config itself keeps the real value.
+        Assertions.assertEquals("wJalrXUtnFEMI/K7MDENG", ConfigForSensitive.prop_secret);
+    }
+
+    @Test
+    public void testCredentialConfigsAreSensitive() throws Exception {
+        String[] credentials = {
+                "authentication_ldap_simple_ssl_conn_trust_store_pwd",
+                "authentication_ldap_simple_bind_root_pwd",
+                "auth_token",
+                "default_master_key",
+                "aws_s3_access_key",
+                "aws_s3_secret_key",
+                "azure_blob_shared_key",
+                "azure_blob_sas_token",
+                "azure_adls2_shared_key",
+                "azure_adls2_sas_token",
+                "azure_adls2_oauth2_client_secret",
+                "gcp_gcs_service_account_email",
+                "gcp_gcs_service_account_private_key_id",
+                "gcp_gcs_service_account_private_key",
+                "ssl_keystore_password",
+                "ssl_key_password",
+                "ssl_truststore_password",
+                "oauth2_client_secret",
+        };
+        for (String name : credentials) {
+            Assertions.assertTrue(Config.class.getField(name).getAnnotation(ConfigBase.ConfField.class).sensitive(), name);
+        }
+        Assertions.assertFalse(Config.class.getField("aws_s3_endpoint").getAnnotation(ConfigBase.ConfField.class).sensitive());
     }
 
     // =========================================================================
