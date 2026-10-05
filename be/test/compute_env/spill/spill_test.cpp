@@ -1125,6 +1125,110 @@ TEST_F(SpillTest, emission_e4_restore_wakes_source) {
     ASSERT_FALSE(fx.spiller->has_running_io_tasks());
 }
 
+// Keeps submitted IO tasks without running them, so a test decides when a task runs relative to the owner
+// of the spiller closing.
+struct DeferredExecutor {
+    static std::vector<workgroup::ScanTask> tasks;
+    static Status submit(workgroup::ScanTask task) {
+        tasks.emplace_back(std::move(task));
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+    static void run_all() {
+        auto pending = std::move(tasks);
+        tasks.clear();
+        for (auto& task : pending) {
+            do {
+                task.run();
+            } while (!task.is_finished());
+        }
+    }
+};
+std::vector<workgroup::ScanTask> DeferredExecutor::tasks;
+
+// Drops the owner's reference to the spiller when woken, like a driver that closes its operator as soon as
+// the restore completion wakes it.
+class OwnerDroppingObserver final : public pipeline::PipelineObserver {
+public:
+    explicit OwnerDroppingObserver(std::shared_ptr<spill::Spiller>* owner) : _owner(owner) {}
+    void source_trigger() override {
+        _owner->reset();
+        source_count++;
+    }
+    void sink_trigger() override {}
+    void cancel_trigger() override {}
+    void all_trigger() override {}
+    void runtime_filter_timeout_trigger() override {}
+    std::string debug_string() const override { return "OwnerDroppingObserver"; }
+
+    std::atomic_int32_t source_count{0};
+
+private:
+    std::shared_ptr<spill::Spiller>* _owner;
+};
+
+// The owner closes and drops the spiller while a restore task is still queued. The task must not touch the
+// freed spiller when it runs later.
+TEST_F(SpillTest, restore_task_runs_after_owner_dropped_spiller) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    for (size_t i = 0; i < 256; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    ASSERT_OK(caller.trigger_restore<DeferredExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_EQ(DeferredExecutor::tasks.size(), 1);
+
+    std::weak_ptr<spill::Spiller> spiller_ref = fx.spiller;
+    int32_t source_before = fx.source_obs.source_count.load();
+    fx.spiller.reset();
+    ASSERT_TRUE(spiller_ref.expired());
+
+    DeferredExecutor::run_all();
+    // Nobody waits for the abandoned restore, so it wakes nobody.
+    ASSERT_EQ(fx.source_obs.source_count.load(), source_before);
+}
+
+// The owner drops the spiller from inside the restore wakeup. The completion must keep the spiller alive
+// until it finished notifying, and release it at the end of the task.
+TEST_F(SpillTest, restore_completion_keeps_spiller_until_notify_ends) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    for (size_t i = 0; i < 256; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // The notify still holds the observer lock of the spiller when this observer drops the owner's
+    // reference, so a freed spiller would be touched right after it.
+    OwnerDroppingObserver dropping_obs(&fx.spiller);
+    fx.spiller->observable().subscribe_source(&dummy_rt_st, &dropping_obs);
+
+    ASSERT_OK(caller.trigger_restore<DeferredExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_EQ(DeferredExecutor::tasks.size(), 1);
+
+    std::weak_ptr<spill::Spiller> spiller_ref = fx.spiller;
+    int32_t source_before = fx.source_obs.source_count.load();
+    DeferredExecutor::run_all();
+
+    ASSERT_EQ(dropping_obs.source_count.load(), 1);
+    ASSERT_GT(fx.source_obs.source_count.load(), source_before);
+    ASSERT_TRUE(spiller_ref.expired());
+}
+
 // reset_state must refuse while IO is in flight: swapping
 // writer/reader out from under a task that captured the raw pointers is unsafe.
 // Drive the in-flight aggregate through the public accessors so the guard is
