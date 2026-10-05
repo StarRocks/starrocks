@@ -21,9 +21,11 @@
 #include "base/bthreads/util.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "common/config_hdfs_fwd.h"
 #include "fs/fs_registry.h"
 #include "fs/fs_util.h"
 #include "fs_ext/hdfs/fs_hdfs.h"
+#include "fs_ext/hdfs/hdfs_fs_cache.h"
 #include "fs_ext/hdfs/hdfs_util.h"
 #include "runtime/java/java_env.h"
 
@@ -46,10 +48,78 @@ public:
     void TearDown() override { ASSERT_TRUE(fs::remove_all(_root_path).ok()); }
 
     void create_file_and_destroy();
+    void writable_file_survives_cache_eviction(bool explicit_close);
 
 public:
     std::string _root_path;
 };
+
+void HdfsFileSystemTest::writable_file_survives_cache_eviction(bool explicit_close) {
+    const auto old_capacity = config::hdfs_client_max_cache_size;
+    DeferOp restore_capacity([&] { config::hdfs_client_max_cache_size = old_capacity; });
+    config::hdfs_client_max_cache_size = 1;
+
+    // Distinct configurations force eviction even if earlier tests populated the singleton cache.
+    TCloudConfiguration writer_cloud;
+    writer_cloud.__set_cloud_properties({{"starrocks.test.cache.identity", _root_path + "/writer"}});
+    FSOptions writer_options(&writer_cloud);
+    auto fs = new_fs_hdfs(writer_options);
+    const std::string filepath = "file://" + _root_path + "/writer";
+    const std::string seedpath = "file://" + _root_path + "/seed";
+    const std::string payload = "data written across filesystem cache eviction";
+    {
+        auto seed = fs->new_writable_file(seedpath);
+        ASSERT_TRUE(seed.ok()) << seed.status();
+        ASSERT_TRUE((*seed)->append(Slice(payload)).ok());
+        ASSERT_TRUE((*seed)->close().ok());
+    }
+
+    // Keep a guard until the ownership assertion so a regression fails without using a disconnected handle.
+    // Declare it before the writer so assertion failure also closes the writer before releasing the guard.
+    std::shared_ptr<HdfsFsClient> client;
+    ASSERT_TRUE(HdfsFsCache::instance()->get_connection("file:///", client, writer_options).ok());
+    std::weak_ptr<HdfsFsClient> weak_client = client;
+    auto writer = fs->new_writable_file(filepath);
+    ASSERT_TRUE(writer.ok()) << writer.status();
+    ASSERT_TRUE((*writer)->append(Slice(payload)).ok());
+
+    TCloudConfiguration reader_cloud;
+    reader_cloud.__set_cloud_properties({{"starrocks.test.cache.identity", _root_path + "/reader"}});
+    auto reader_fs = new_fs_hdfs(FSOptions(&reader_cloud));
+    auto reader = reader_fs->new_random_access_file(seedpath);
+    ASSERT_TRUE(reader.ok()) << reader.status();
+    auto seed_contents = (*reader)->read_all(); // Force the lazy reader to acquire a different cached client.
+    ASSERT_TRUE(seed_contents.ok()) << seed_contents.status();
+    ASSERT_EQ(payload, *seed_contents);
+
+    // Only the guard and the writer own the evicted client; the reader uses a different client.
+    ASSERT_EQ(2, client.use_count());
+    client.reset();
+    ASSERT_FALSE(weak_client.expired());
+    ASSERT_TRUE((*writer)->append(Slice(payload)).ok());
+    ASSERT_TRUE((*writer)->flush(WritableFile::FlushMode::FLUSH_SYNC).ok());
+    ASSERT_TRUE((*writer)->sync().ok());
+    if (explicit_close) {
+        ASSERT_TRUE((*writer)->close().ok());
+        ASSERT_TRUE((*writer)->close().ok()); // Closing twice must remain harmless after eviction.
+    }
+    (*writer).reset(); // Also exercises implicit close when explicit_close is false.
+    EXPECT_TRUE(weak_client.expired());
+
+    auto result = reader_fs->new_random_access_file(filepath);
+    ASSERT_TRUE(result.ok()) << result.status();
+    auto contents = (*result)->read_all();
+    ASSERT_TRUE(contents.ok()) << contents.status();
+    EXPECT_EQ(payload + payload, *contents);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_close_after_cache_eviction) {
+    writable_file_survives_cache_eviction(true);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_destructor_after_cache_eviction) {
+    writable_file_survives_cache_eviction(false);
+}
 
 void HdfsFileSystemTest::create_file_and_destroy() {
     auto fs = new_fs_hdfs(FSOptions());

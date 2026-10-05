@@ -293,8 +293,12 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HDFSWritableFile : public WritableFile {
 public:
-    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
-            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {
+    HDFSWritableFile(std::shared_ptr<HdfsFsClient> hdfs_client, hdfsFile file, std::string path, size_t offset)
+            : _hdfs_client(std::move(hdfs_client)),
+              _fs(_hdfs_client->hdfs_fs),
+              _file(file),
+              _path(std::move(path)),
+              _offset(offset) {
         FileSystem::on_file_write_open(this);
     }
 
@@ -325,6 +329,8 @@ public:
     const std::string& filename() const override { return _path; }
 
 private:
+    // Keep the filesystem connected through close/destruction even if its cache entry is evicted.
+    std::shared_ptr<HdfsFsClient> _hdfs_client;
     hdfsFS _fs;
     hdfsFile _file;
     std::string _path;
@@ -737,7 +743,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
                     fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
-    return wrap_encrypted(std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0),
+    return wrap_encrypted(std::make_unique<HDFSWritableFile>(std::move(hdfs_client), file, path, 0),
                           opts.encryption_info);
 }
 
