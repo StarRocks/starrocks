@@ -1,5 +1,5 @@
 ---
-sidebar_position: 50
+sidebar_position: 20
 displayed_sidebar: docs
 description: "StarRocks version naming conventions: MAJOR.MINOR.PATCH format, prerelease designations, and how to interpret version numbers."
 ---
