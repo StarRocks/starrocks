@@ -99,7 +99,22 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # alter can just be submitted again.
 ALTER_RERUN_MSG = "please re-run the alter table command"
 ALTER_RERUN_MAX_RETRY = 3
-ALTER_STMT_RE = re.compile(r"^\s*(ALTER\s+TABLE|CREATE\s+INDEX)\b", re.IGNORECASE)
+# Captures the target table, possibly db-qualified and backquoted.
+_ALTER_NAME = r"(?:`[^`]+`|[^\s`.(]+)(?:\.(?:`[^`]+`|[^\s`.(]+))*"
+ALTER_STMT_RE = re.compile(
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>%s)|CREATE\s+INDEX\s+\S+\s+ON\s+(?P<index>%s))" % (_ALTER_NAME, _ALTER_NAME),
+    re.IGNORECASE,
+)
+
+
+def alter_target_table(statement):
+    """Unqualified, unquoted target table of an ALTER TABLE / CREATE INDEX statement, else None."""
+    m = ALTER_STMT_RE.match(statement)
+    if not m:
+        return None
+    parts = re.findall(r"`([^`]+)`|([^\s`.(]+)", m.group("alter") or m.group("index"))
+    quoted, plain = parts[-1]
+    return quoted or plain
 
 
 class Filter(logging.Filter):
@@ -1335,9 +1350,10 @@ class StarrocksSQLApiLib(object):
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
 
-            if ALTER_STMT_RE.match(statement):
+            alter_table = alter_target_table(statement)
+            if alter_table is not None:
                 # Kept so wait_alter_table_finish can submit it again, see ALTER_RERUN_MSG.
-                self._last_alter_stmt = (statement, conn)
+                self._last_alter_stmt = (statement, conn, alter_table)
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
@@ -2651,13 +2667,16 @@ class StarrocksSQLApiLib(object):
                 status == "CANCELLED"
                 and ALTER_RERUN_MSG in str(msg)
                 and last_alter is not None
+                # SHOW ALTER TABLE is scoped to the current database, which is the case's own, but
+                # the newest job there may still come from another table the case altered.
+                and str(table_name) == last_alter[2]
                 and rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
             ):
                 # Spurious cancel from the shared-data watershed check, see ALTER_RERUN_MSG.
                 # Submit the same alter again and wait for the new job instead.
                 rerun += 1
-                stmt, conn = last_alter
+                stmt, conn, _ = last_alter
                 log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
                 seen = int(job_id)
                 rres = self.execute_sql(stmt, conn=conn)
