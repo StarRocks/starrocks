@@ -2973,6 +2973,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 return ""
             time.sleep(1)
 
+    def wait_until_has_queries(self, timeout_sec=60):
+        """
+        wait until a query shows up in current_queries. A query is listed there only after its
+        coordinator exists, so a KILL / DROP TASK issued afterwards reaches it instead of being lost.
+        """
+        for _ in range(timeout_sec):
+            sql = "show proc '/current_queries'"
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "run current_queries error")
+            if len(res["result"]) > 0:
+                return ""
+            time.sleep(1)
+        tools.assert_true(False, "no query showed up in current_queries within %ss" % timeout_sec)
+
     def wait_util_no_queries(self):
         while True:
             sql = "show proc '/current_queries'"
