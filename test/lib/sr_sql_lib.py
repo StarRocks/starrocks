@@ -2616,6 +2616,9 @@ class StarrocksSQLApiLib(object):
         waited on with the default COLUMN is not covered. See wait_table_state_normal.
         """
         seen = getattr(self, "_last_alter_job_id", None)
+        # Taken up front so no return path leaves it for a later wait to resubmit.
+        last_alter = getattr(self, "_last_alter_stmt", None)
+        self._last_alter_stmt = None
         deadline = time.monotonic() + timeout
         status = ""
         msg = ""
@@ -2644,12 +2647,12 @@ class StarrocksSQLApiLib(object):
                 # value callers already depend on.
                 return None
 
-            last_alter = getattr(self, "_last_alter_stmt", None)
             if (
                 status == "CANCELLED"
                 and ALTER_RERUN_MSG in str(msg)
                 and last_alter is not None
                 and rerun < ALTER_RERUN_MAX_RETRY
+                and time.monotonic() < deadline
             ):
                 # Spurious cancel from the shared-data watershed check, see ALTER_RERUN_MSG.
                 # Submit the same alter again and wait for the new job instead.
@@ -2672,8 +2675,6 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_job_id = int(job_id)
-        # Consumed: a later wait must not resubmit an alter that belongs to this one.
-        self._last_alter_stmt = None
         tools.assert_equal("FINISHED", status, "wait alter table finish error, msg: %s" % msg)
 
         if alter_type.upper() == "ROLLUP":
