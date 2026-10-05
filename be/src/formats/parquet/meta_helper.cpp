@@ -82,47 +82,45 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
         if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
             // variant type currently can be mapped to struct type in parquet
             has_valid_child = true;
-        } else if (!type_descriptor->field_ids.empty()) {
-            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
-            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
-            }
-
-            // start to check struct type
-            for (const auto& child_parquet_field : parquet_field->children) {
-                auto it = field_id_2_type.find(child_parquet_field.field_id);
-                if (it == field_id_2_type.end()) {
-                    continue;
-                }
-
-                if (_is_valid_type(&child_parquet_field, it->second)) {
-                    has_valid_child = true;
-                    break;
-                }
-            }
         } else {
+            // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by
+            // its name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / ""
+            // for a subfield that has none.
+            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
             std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type;
-            if (!type_descriptor->field_physical_names.empty()) {
-                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                    field_name_2_type.emplace(
-                            Utils::format_name(type_descriptor->field_physical_names[idx], _case_sensitive),
-                            &type_descriptor->children[idx]);
+            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                const TypeDescriptor* child_type = &type_descriptor->children[idx];
+                if (!type_descriptor->field_ids.empty() && type_descriptor->field_ids[idx] != -1) {
+                    field_id_2_type.emplace(type_descriptor->field_ids[idx], child_type);
+                    continue;
                 }
-            } else {
-                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                    field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
-                                              &type_descriptor->children[idx]);
-                }
+                const std::string& name = !type_descriptor->field_physical_names.empty() &&
+                                                          !type_descriptor->field_physical_names[idx].empty()
+                                                  ? type_descriptor->field_physical_names[idx]
+                                                  : type_descriptor->field_names[idx];
+                field_name_2_type.emplace(Utils::format_name(name, _case_sensitive), child_type);
             }
 
             // start to check struct type
             for (const auto& child_parquet_field : parquet_field->children) {
-                auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
-                if (it == field_name_2_type.end()) {
+                const TypeDescriptor* child_type = nullptr;
+                if (!field_id_2_type.empty()) {
+                    auto it = field_id_2_type.find(child_parquet_field.field_id);
+                    if (it != field_id_2_type.end()) {
+                        child_type = it->second;
+                    }
+                }
+                if (child_type == nullptr && !field_name_2_type.empty()) {
+                    auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
+                    if (it != field_name_2_type.end()) {
+                        child_type = it->second;
+                    }
+                }
+                if (child_type == nullptr) {
                     continue;
                 }
 
-                if (_is_valid_type(&child_parquet_field, it->second)) {
+                if (_is_valid_type(&child_parquet_field, child_type)) {
                     has_valid_child = true;
                     break;
                 }
