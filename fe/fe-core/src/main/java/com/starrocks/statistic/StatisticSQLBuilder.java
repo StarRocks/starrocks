@@ -39,6 +39,11 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
+<<<<<<< HEAD
+=======
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION;
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION_V2;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
@@ -112,6 +117,66 @@ public class StatisticSQLBuilder {
                     + " WHERE rn = 1"
                     + " GROUP BY column_name";
 
+<<<<<<< HEAD
+=======
+    // Same aggregate as V2 with two more numbers about the aggregate itself, so the read path can size
+    // and scale it from the rows rather than from metadata maintained on a separate path:
+    //   - count(distinct partition_name): how many partitions these rows actually cover. The row count
+    //     is the sum over exactly these partitions, so this is the only denominator guaranteed to match
+    //     its numerator. The recorded partition set cannot promise that - it is written by the collection
+    //     job while the rows accumulate across runs, and the two drift apart whenever a run is partial.
+    //   - sum(hll_cardinality(ndv)): each partition's distinct count added up. Next to the merged
+    //     distinct count it says how much the column's values repeat across partitions, which is what
+    //     decides whether the distinct count grows with the table or stays put
+    //     (see connector.statistics.StatisticsUtils#extrapolateNdv).
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V3_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
+                    + " max(update_time),"
+                    + " cast(count(distinct partition_name) as bigint),"
+                    + " cast(sum(hll_cardinality(ndv)) as bigint)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by partition_name, column_name order by update_time desc) as rn"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1"
+                    + " GROUP BY column_name";
+
+    // Same aggregate as V3 with two more points on the curve the merged distinct count traces as partitions
+    // are added: the merged distinct count and the partition count of two nested subsets of the covered
+    // partitions, about a third and about two thirds of them. Together with the distinct count over all of
+    // them, they show whether the column is still picking up new values at the end of what was collected,
+    // which the coverage numbers alone cannot tell (see
+    // connector.statistics.StatisticsUtils#extrapolateNdvFromGrowth).
+    //
+    // The subsets are picked by a hash of the partition name. That keeps them nested, stable from one load
+    // to the next, and computable inside the same aggregate - an order-based split needs a window over
+    // all of a column's rows, which measured 1.7x the cost of this query at 1800 partitions. The subsets'
+    // sizes are only about a third and two thirds, so the query reports them rather than leaving the read
+    // side to assume them.
+    private static final String EXTERNAL_PARTITION_SUBSET = "abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3";
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V4_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V4_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(nullif(max, '') as $type)) as string),"
+                    + " cast(min(cast(nullif(min, '') as $type)) as string),"
+                    + " max(update_time),"
+                    + " cast(count(distinct partition_name) as bigint),"
+                    + " cast(sum(hll_cardinality(ndv)) as bigint),"
+                    + " hll_union_agg(if(" + EXTERNAL_PARTITION_SUBSET + " < 1, ndv, NULL)),"
+                    + " hll_union_agg(if(" + EXTERNAL_PARTITION_SUBSET + " < 2, ndv, NULL)),"
+                    + " cast(sum(if(" + EXTERNAL_PARTITION_SUBSET + " < 1, 1, 0)) as bigint),"
+                    + " cast(sum(if(" + EXTERNAL_PARTITION_SUBSET + " < 2, 1, 0)) as bigint)"
+                    + " FROM (SELECT *, row_number() over ("
+                    + " partition by partition_name, column_name order by update_time desc) as rn"
+                    + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate) dedup_t"
+                    + " WHERE rn = 1"
+                    + " GROUP BY column_name";
+
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     private static final String QUERY_HISTOGRAM_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_HISTOGRAM_VERSION + " as INT), db_id, table_id, column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
@@ -232,8 +297,35 @@ public class StatisticSQLBuilder {
 
     public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
                                                              List<Type> columnTypes) {
+<<<<<<< HEAD
         Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
         String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
+=======
+        return buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes,
+                STATISTIC_EXTERNAL_QUERY_V4_VERSION);
+    }
+
+    /**
+     * @param queryVersion the result shape to ask for: STATISTIC_EXTERNAL_QUERY_V4_VERSION,
+     *                     STATISTIC_EXTERNAL_QUERY_V3_VERSION or STATISTIC_EXTERNAL_QUERY_V2_VERSION. Each
+     *                     needs a backend that can serialize it; the older ones are the rolling-upgrade
+     *                     fallbacks in {@link StatisticExecutor#queryStatisticSync}.
+     */
+    public static String buildQueryExternalFullStatisticsSQL(String tableUUID, List<String> columnNames,
+                                                             List<Type> columnTypes, int queryVersion) {
+        Map<String, List<String>> nameGroups = groupByTypes(columnNames, columnTypes, true);
+        String tableUUIDPredicate = buildTableUUIDInPredicate(tableUUID);
+        String template;
+        if (queryVersion == STATISTIC_EXTERNAL_QUERY_V4_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V4_TEMPLATE;
+        } else if (queryVersion == STATISTIC_EXTERNAL_QUERY_V3_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V3_TEMPLATE;
+        } else if (queryVersion == STATISTIC_EXTERNAL_QUERY_V2_VERSION) {
+            template = QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE;
+        } else {
+            throw new IllegalArgumentException("Unknown external statistics query version " + queryVersion);
+        }
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
 
         List<String> querySQL = new ArrayList<>();
         nameGroups.forEach((type, names) -> {

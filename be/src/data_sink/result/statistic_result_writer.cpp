@@ -40,12 +40,21 @@ const int STATISTIC_BATCH_V5_VERSION = 9;
 const int STATISTIC_MULTI_COLUMN_VERSION = 12;
 const int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
 const int STATISTIC_PARTITION_VERSION_V2 = 20;
+<<<<<<< HEAD
 // 21 is reserved for STATISTIC_EXTERNAL_QUERY_VERSION_V3 in the enterprise build - an external-statistics
 // query whose result also carries how many partitions its aggregate covers. Kept as a comment rather than
 // a constant because an unreferenced one fails the clang build (-Wunused-const-variable under -Werror).
 // Do not reuse 21 for another result shape: the version is what tells the frontend how to read the rows.
 // 22 is reserved the same way for STATISTIC_EXTERNAL_QUERY_VERSION_V4, which also carries the distinct counts
 // of two nested subsets of the covered partitions.
+=======
+// Same per-column aggregate as STATISTIC_EXTERNAL_QUERY_VERSION_V2, plus how many partitions it
+// covers and the per-partition distinct counts added up - see TStatisticData in Data.thrift.
+const int STATISTIC_EXTERNAL_QUERY_VERSION_V3 = 21;
+// V3 plus the merged distinct counts and partition counts of two nested subsets of the covered
+// partitions - see TStatisticData in Data.thrift.
+const int STATISTIC_EXTERNAL_QUERY_VERSION_V4 = 22;
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -169,6 +178,12 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+<<<<<<< HEAD
+=======
+    } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V3 || version == STATISTIC_EXTERNAL_QUERY_VERSION_V4) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v3(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     } else if (version == STATISTIC_MULTI_COLUMN_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_multi_columns_statistics_data(version, result_columns, chunk, result.get()),
                                   "Fill multi columns statistic data failed");
@@ -708,6 +723,73 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+// The v2 aggregate plus two numbers describing its own shape: how many partitions contributed rows, and
+// the per-partition distinct counts added up. Both come out of the same aggregate over the same rows as
+// everything else here, which is the point - the read side can size and scale the result from the rows
+// themselves instead of from metadata maintained on another path that may disagree with them.
+// V4 appends four more from the same aggregate: the merged distinct counts and the partition counts of
+// two nested subsets of those partitions.
+Status StatisticResultWriter::_fill_full_statistic_query_external_v3(int version, const Columns& columns,
+                                                                     const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    const bool with_checkpoints = version == STATISTIC_EXTERNAL_QUERY_VERSION_V4;
+    DCHECK(columns.size() == (with_checkpoints ? 15 : 11));
+
+    auto columnName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto countDistincts = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
+    auto maxColumn = ColumnViewer<TYPE_VARCHAR>(columns[6]);
+    auto minColumn = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto updateTime = ColumnViewer<TYPE_DATETIME>(columns[8]);
+    auto collectedPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[9]);
+    auto perPartitionNdvSums = ColumnViewer<TYPE_BIGINT>(columns[10]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_columnName(columnName.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_countDistinct(countDistincts.value(i));
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(maxColumn.value(i).to_string());
+        data_list[i].__set_min(minColumn.value(i).to_string());
+        data_list[i].__set_updateTime(updateTime.value(i).to_string());
+        data_list[i].__set_collectedPartitionCount(collectedPartitionCounts.value(i));
+        data_list[i].__set_perPartitionNdvSum(perPartitionNdvSums.value(i));
+    }
+    if (with_checkpoints) {
+        auto thirdNdvs = ColumnViewer<TYPE_BIGINT>(columns[11]);
+        auto twoThirdsNdvs = ColumnViewer<TYPE_BIGINT>(columns[12]);
+        auto thirdPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[13]);
+        auto twoThirdsPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[14]);
+        for (int i = 0; i < num_rows; ++i) {
+            data_list[i].__set_thirdNdv(thirdNdvs.value(i));
+            data_list[i].__set_twoThirdsNdv(twoThirdsNdvs.value(i));
+            data_list[i].__set_thirdPartitionCount(thirdPartitionCounts.value(i));
+            data_list[i].__set_twoThirdsPartitionCount(twoThirdsPartitionCounts.value(i));
+        }
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
 Status StatisticResultWriter::_fill_multi_columns_statistics_data(int version, const Columns& columns,
                                                                   const Chunk* chunk, TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);

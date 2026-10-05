@@ -140,6 +140,7 @@ public class StatisticsUtils {
             }
 
             double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
+<<<<<<< HEAD
             long totalRowCount = (long) avgPartitionRowCount * totalPartitionSize;
 
             return new ConnectorTableColumnStats(connectorTableColumnStats.getColumnStatistic(),
@@ -147,4 +148,237 @@ public class StatisticsUtils {
         }
     }
 
+=======
+            // Round once, at the end. Truncating the average first - (long) avg * total - throws away
+            // everything below a whole row per partition before it is multiplied back up, so a column
+            // whose sampled partitions hold less than one row each scales to zero however large the
+            // table is. The result also feeds the distinct-value ceiling below, so a zero row count
+            // takes the distinct count down with it.
+            long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
+
+            ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
+                    totalPartitionSize, totalRowCount);
+            return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
+                    connectorTableColumnStats.getUpdateTime(),
+                    connectorTableColumnStats.getCollectedPartitionCount(),
+                    connectorTableColumnStats.getPerPartitionNdvSum(),
+                    connectorTableColumnStats.getThirdNdv(),
+                    connectorTableColumnStats.getTwoThirdsNdv(),
+                    connectorTableColumnStats.getThirdPartitionCount(),
+                    connectorTableColumnStats.getTwoThirdsPartitionCount());
+        }
+    }
+
+    /**
+     * Replaces the sampled distinct count with an estimate for the whole table.
+     *
+     * <p>Row counts are scaled by the ratio of partitions; the distinct count is not, and left alone it
+     * is simply the number of distinct values in the partitions that happened to be sampled. That is the
+     * single most consequential number the optimizer gets - join cardinality estimates are built on it -
+     * and it is wrong in a fixed direction, so plans are wrong in a fixed direction too.
+     *
+     * <p>How wrong depends on something the samples themselves reveal: whether a column's values repeat
+     * across partitions. Sum the per-partition distinct counts and compare with the merged distinct
+     * count. If they are equal, each partition holds values no other partition has - an order key, a
+     * time-derived id - and the table's distinct count grows with the table. If the merged count equals
+     * one partition's worth, every partition draws from the same small set - a foreign key into a
+     * dimension - and the table has no more distinct values than one partition does. Real columns fall
+     * between, and the occupancy model below interpolates between those two ends instead of picking one.
+     *
+     * <p>The occupancy model assumes every value is equally likely to turn up in a partition, and real
+     * columns rarely are: a few values that every partition holds make the partitions overlap a lot even
+     * while the rest keep bringing new values, and the model reads that overlap as a domain nearly used up.
+     * Where the backend reports how the merged count grew over the collected partitions, the growth curve
+     * is read directly as well, and the larger of the two estimates is taken: the curve can only add what
+     * the collected partitions were still adding at the end.
+     */
+    private static ColumnStatistic scaleNdv(ConnectorTableColumnStats stats, int sampledPartitionSize,
+                                            int totalPartitionSize, long totalRowCount) {
+        ColumnStatistic columnStatistic = stats.getColumnStatistic();
+        double mergedNdv = columnStatistic.getDistinctValuesCount();
+        long perPartitionNdvSum = stats.getPerPartitionNdvSum();
+        if (perPartitionNdvSum <= 0 || mergedNdv <= 0 || totalPartitionSize <= sampledPartitionSize
+                || stats.getCollectedPartitionCount() <= 0) {
+            // Nothing to work with (a backend too old to report the sum, or an empty column), or nothing
+            // to scale to. Leaving the sampled value alone is what happened before this existed.
+            return columnStatistic;
+        }
+
+        double estimated = extrapolateNdv(mergedNdv, perPartitionNdvSum, sampledPartitionSize, totalPartitionSize);
+        estimated = Math.max(estimated, extrapolateNdvFromGrowth(
+                stats.getThirdNdv(), stats.getThirdPartitionCount(),
+                stats.getTwoThirdsNdv(), stats.getTwoThirdsPartitionCount(),
+                mergedNdv, sampledPartitionSize, totalPartitionSize));
+        // Never below what was actually seen, and never above the same growth applied to every partition.
+        // Both are properties of the model, not of the data: they say the estimate is somewhere between
+        // "the remaining partitions add nothing" and "they add as much as the sampled ones did".
+        double linearCeiling = mergedNdv * totalPartitionSize / (double) sampledPartitionSize;
+        estimated = Math.max(mergedNdv, Math.min(estimated, linearCeiling));
+
+        // A column cannot hold more distinct values than it has non-null rows. Unlike the two above,
+        // this is a physical bound, so it applies even below mergedNdv: a sampled distinct count above
+        // the extrapolated non-null row count means the two disagree, and the row count is the one that
+        // cannot be exceeded.
+        // An unset null fraction arrives as NaN, which would silently disable the whole bound; with no
+        // idea how many rows are null, every row is the honest ceiling.
+        double nullsFraction = columnStatistic.getNullsFraction();
+        boolean usableNullsFraction = !Double.isNaN(nullsFraction) && nullsFraction >= 0 && nullsFraction < 1;
+        double nonNullRows = usableNullsFraction ? totalRowCount * (1 - nullsFraction) : totalRowCount;
+        if (nonNullRows > 0) {
+            estimated = Math.min(estimated, nonNullRows);
+        }
+        return ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(estimated).build();
+    }
+
+    /**
+     * Estimates the distinct count over {@code totalPartitions} from what {@code sampledPartitions}
+     * showed.
+     *
+     * <p>Model: every partition holds {@code d = S/P} distinct values drawn from a shared domain of
+     * size {@code D}. The expected number of distinct values across P partitions is then
+     * {@code D * (1 - (1 - d/D)^P)} - the coupon-collector curve. Both ends fall out of it rather than
+     * being special-cased: when the partitions share nothing the curve is still straight and the
+     * estimate grows in proportion; when they all hold the same values it does not grow at all.
+     *
+     * <p>Solved for {@code q = d/D} - the chance that one partition holds a given value - rather than
+     * for D itself. q is in [0, 1] whatever the data says, while D has no upper bound derivable from
+     * U, S, P and N: an earlier version bisected D over [d, S*N], and whenever U came close to S the
+     * root lay outside that range and the search pinned itself to the wrong end.
+     *
+     * <p>What this cannot do: (U, S, P, N) do not identify the answer. A table whose unsampled
+     * partitions repeat the sampled values and one whose every unsampled partition brings new values
+     * produce the same four numbers and differ by a factor of N/P. The estimate is a bounded guess
+     * between those two readings, which is worth having next to the alternative of not extrapolating
+     * at all - it is not a measurement.
+     */
+    @VisibleForTesting
+    static double extrapolateNdv(double mergedNdv, double perPartitionNdvSum, int sampledPartitions,
+                                 int totalPartitions) {
+        if (sampledPartitions <= 0 || totalPartitions <= sampledPartitions) {
+            return mergedNdv;
+        }
+        double d = perPartitionNdvSum / sampledPartitions;
+        if (d <= 0) {
+            return mergedNdv;
+        }
+        double linear = mergedNdv * totalPartitions / (double) sampledPartitions;
+
+        // For exact sets d <= U <= S: a value lives in at least one partition, and in no more than all
+        // of them counted separately. Measured through HLL, both ends are only known to within the
+        // sketch's own error, and a U sitting inside that error of an end is far better explained by
+        // the end itself than by an overlap that happens to hide in the noise. Comparing exactly, as
+        // an earlier version did, made the same disjoint column come out either at full linear growth
+        // or well below it depending on which way the sketch happened to round.
+        if (mergedNdv <= d * (1 + HLL_RELATIVE_ERROR_BAND)) {
+            return mergedNdv;
+        }
+        if (mergedNdv >= perPartitionNdvSum * (1 - HLL_RELATIVE_ERROR_BAND)) {
+            return linear;
+        }
+
+        // U/d = (1 - (1-q)^P) / q, which decreases from P at q -> 0 to 1 at q = 1, so the measured
+        // ratio has exactly one q behind it. 100 halvings of [0, 1] is past the point where a double
+        // tells the endpoints apart.
+        double target = mergedNdv / d;
+        double low = 0;
+        double high = 1;
+        for (int i = 0; i < 100; i++) {
+            double mid = low + (high - low) / 2;
+            if (occupancyRatio(mid, sampledPartitions) > target) {
+                low = mid;
+            } else {
+                high = mid;
+            }
+        }
+
+        // Same curve over every partition. Written as d * ratio rather than (d/q) * (...) so a tiny q
+        // cannot blow the intermediate up to infinity before the multiplication brings it back.
+        return d * occupancyRatio((low + high) / 2, totalPartitions);
+    }
+
+    /**
+     * Estimates the distinct count over {@code totalPartitions} from how the merged distinct count grew
+     * over the {@code sampledPartitions} collected ones, or returns 0 when the growth says nothing.
+     *
+     * <p>Input: the merged distinct count over two nested subsets of the collected partitions - about a
+     * third ({@code thirdPartitions} of them) and about two thirds ({@code twoThirdsPartitions}), picked by
+     * a hash of the partition name (see StatisticSQLBuilder's V4 query) - and over all of them. Because the
+     * subsets are a hash pick, they are a random order over the collected partitions, and the curve is how
+     * the count grows when partitions like these are added; extrapolating it assumes the partitions that
+     * were not collected are like the ones that were, the same assumption the sampling itself rests on.
+     *
+     * <p>Model: the merged count after k partitions is {@code A - B * r^k} - each partition adds a fixed
+     * fraction r of what the previous one added. Three points determine it. r = 1 is a column that keeps
+     * adding the same number of new values (an order key, a stream of new ids next to a fixed set of hot
+     * values) and grows linearly; r near 0 is one that has stopped growing. Unlike the occupancy model
+     * this does not assume anything about how the values are spread over the partitions; it only assumes
+     * the trend in what the last partitions added carries on.
+     *
+     * <p>Growth within the sketch's own error is no evidence of a trend - a column that has stopped
+     * growing shows marginal increments of either sign from HLL noise alone, and a ratio of two of those
+     * extrapolated over many partitions is noise amplified - so that case returns 0 and leaves the estimate
+     * to the occupancy model.
+     */
+    @VisibleForTesting
+    static double extrapolateNdvFromGrowth(double thirdNdv, long thirdPartitions, double twoThirdsNdv,
+                                           long twoThirdsPartitions, double mergedNdv, int sampledPartitions,
+                                           int totalPartitions) {
+        if (thirdNdv <= 0 || twoThirdsNdv <= 0 || thirdPartitions <= 0 || twoThirdsPartitions <= thirdPartitions
+                || sampledPartitions <= twoThirdsPartitions || totalPartitions <= sampledPartitions) {
+            return 0;
+        }
+        double earlierGrowth = twoThirdsNdv - thirdNdv;
+        double laterGrowth = mergedNdv - twoThirdsNdv;
+        if (earlierGrowth <= twoThirdsNdv * HLL_RELATIVE_ERROR_BAND
+                || laterGrowth <= mergedNdv * HLL_RELATIVE_ERROR_BAND) {
+            return 0;
+        }
+
+        int earlierSpan = (int) (twoThirdsPartitions - thirdPartitions);
+        int laterSpan = (int) (sampledPartitions - twoThirdsPartitions);
+        int remaining = totalPartitions - sampledPartitions;
+        double ratio = laterGrowth / earlierGrowth;
+        // At r = 1 the two spans add in proportion to their sizes; growth at least that fast is linear.
+        if (ratio >= laterSpan / (double) earlierSpan) {
+            return mergedNdv + laterGrowth * remaining / laterSpan;
+        }
+
+        // Solve laterGrowth / earlierGrowth = r^a * (1 - r^b) / (1 - r^a) for r, with a, b the two spans,
+        // over L = ln r < 0; the right side rises from 0 as L -> -inf to b/a as L -> 0. Written with
+        // expm1 so an r close to 1 - the slowly bending curves that matter most - keeps its precision.
+        double low = -50;
+        double high = -1e-12;
+        for (int i = 0; i < 100; i++) {
+            double mid = low + (high - low) / 2;
+            if (growthRatio(mid, earlierSpan, laterSpan) > ratio) {
+                high = mid;
+            } else {
+                low = mid;
+            }
+        }
+        double logR = low + (high - low) / 2;
+        // What the remaining partitions add: laterGrowth * r^b * (1 - r^remaining) / (1 - r^b).
+        return mergedNdv + laterGrowth * Math.exp(laterSpan * logR)
+                * Math.expm1(remaining * logR) / Math.expm1(laterSpan * logR);
+    }
+
+    // r^a * (1 - r^b) / (1 - r^a) for r = e^logR: how much the b partitions after the first a add,
+    // relative to what those a added, when every partition adds r times what the one before it did.
+    private static double growthRatio(double logR, int earlierSpan, int laterSpan) {
+        return Math.exp(earlierSpan * logR) * Math.expm1(laterSpan * logR) / Math.expm1(earlierSpan * logR);
+    }
+
+    // (1 - (1-q)^partitions) / q: how many distinct values `partitions` partitions cover, per
+    // partition's worth. log1p/expm1 keep the precision when q is tiny and the exponent large, where
+    // (1-q) would otherwise round to 1.
+    private static double occupancyRatio(double q, int partitions) {
+        if (q <= 0) {
+            return partitions;
+        }
+        if (q >= 1) {
+            return 1;
+        }
+        return -Math.expm1(partitions * Math.log1p(-q)) / q;
+    }
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
 }

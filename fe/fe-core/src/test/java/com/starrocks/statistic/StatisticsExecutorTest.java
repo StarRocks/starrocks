@@ -136,6 +136,12 @@ public class StatisticsExecutorTest extends PlanTestBase {
         collectJob.collectStatisticSync(sql, context, analyzeStatus);
     }
 
+    private static final String GROWTH_SUBSETS =
+            "hll_union_agg(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 1, ndv, NULL)), " +
+            "hll_union_agg(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 2, ndv, NULL)), " +
+            "cast(sum(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 1, 1, 0)) as bigint), " +
+            "cast(sum(if(abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3 < 2, 1, 0)) as bigint)";
+
     @Test
     public void testQueryStatisticSync() throws AnalysisException {
         String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
@@ -149,6 +155,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assertions.assertEquals(
+<<<<<<< HEAD
                         "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  " +
                                 "cast(max(cast(nullif(max, '') as string)) as string), " +
@@ -162,6 +169,25 @@ public class StatisticsExecutorTest extends PlanTestBase {
                                 "cast(max(cast(nullif(max, '') as bigint)) as string), " +
                                 "cast(min(cast(nullif(min, '') as bigint)) as string), " +
                                 "max(update_time) FROM (SELECT *, row_number() " +
+=======
+                        "SELECT cast(22 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as string)) as string), " +
+                                "cast(min(cast(nullif(min, '') as string)) as string), " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint), " + GROWTH_SUBSETS +
+                                " FROM (SELECT *, row_number() " +
+                                "over ( partition by partition_name, column_name order by update_time desc) as rn " +
+                                "FROM external_column_statistics WHERE " + tableUUIDPredicate +
+                                " and column_name in (\"c2\")) dedup_t WHERE rn = 1 GROUP BY column_name UNION ALL " +
+                                "SELECT cast(22 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  " +
+                                "cast(max(cast(nullif(max, '') as bigint)) as string), " +
+                                "cast(min(cast(nullif(min, '') as bigint)) as string), " +
+                                "max(update_time), cast(count(distinct partition_name) as bigint), " +
+                                "cast(sum(hll_cardinality(ndv)) as bigint), " + GROWTH_SUBSETS +
+                                " FROM (SELECT *, row_number() " +
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
                                 "over ( partition by partition_name, column_name order by update_time desc) as rn " +
                                 "FROM external_column_statistics WHERE " + tableUUIDPredicate +
                                 " and column_name in (\"c1\")) dedup_t WHERE rn = 1 GROUP BY column_name", sql);
@@ -176,6 +202,94 @@ public class StatisticsExecutorTest extends PlanTestBase {
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testFallsBackWhenABackendCannotSerializeTheCoverageCounts() {
+        // A backend that predates the result shape fills nothing in and leaves the version unset, which
+        // reaches the frontend as an unreadable result rather than an empty one. Treating that as "no
+        // statistics" would send the optimizer back to connector metadata for every external table until
+        // the last backend is restarted, so the query is re-asked in the shape that backend does know.
+        StatisticExecutor.resetExternalQueryShapeProbe();
+        List<String> askedFor = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                askedFor.add(sql);
+                if (sql.contains("count(distinct partition_name)")) {
+                    throw new StatisticExecutor.UnsupportedStatisticsVersionException(0);
+                }
+                return Lists.newArrayList(new TStatisticData());
+            }
+        };
+
+        try {
+            String tableUUID = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1").getUUID();
+            Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1");
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+            List<TStatisticData> result =
+                    statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+
+            // V4, then V3 (both carry the coverage counts), then the shape every backend knows.
+            Assertions.assertEquals(1, result.size());
+            Assertions.assertEquals(3, askedFor.size());
+            Assertions.assertTrue(askedFor.get(0).contains("murmur_hash3_32(partition_name)"));
+            Assertions.assertTrue(askedFor.get(1).contains("count(distinct partition_name)"));
+            Assertions.assertFalse(askedFor.get(1).contains("murmur_hash3_32(partition_name)"));
+            Assertions.assertFalse(askedFor.get(2).contains("count(distinct partition_name)"));
+
+            // The rejection is remembered, so the next load does not pay for a query it knows will fail.
+            askedFor.clear();
+            statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1"));
+            Assertions.assertEquals(1, askedFor.size());
+            Assertions.assertFalse(askedFor.get(0).contains("count(distinct partition_name)"));
+        } finally {
+            StatisticExecutor.resetExternalQueryShapeProbe();
+        }
+    }
+
+    @Test
+    public void testFallsBackOneShapeAtATime() {
+        // A backend from the release that added the coverage counts but not the growth checkpoints keeps
+        // the coverage-based scaling during the upgrade instead of dropping to the oldest shape.
+        StatisticExecutor.resetExternalQueryShapeProbe();
+        List<String> askedFor = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                askedFor.add(sql);
+                if (sql.contains("murmur_hash3_32(partition_name)")) {
+                    throw new StatisticExecutor.UnsupportedStatisticsVersionException(0);
+                }
+                return Lists.newArrayList(new TStatisticData());
+            }
+        };
+
+        try {
+            Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                    .getTable(connectContext, "hive0", "partitioned_db", "t1");
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+            statisticExecutor.queryStatisticSync(context, table.getUUID(), table, ImmutableList.of("c1"));
+            Assertions.assertEquals(2, askedFor.size());
+            Assertions.assertTrue(askedFor.get(1).contains("count(distinct partition_name)"));
+
+            askedFor.clear();
+            statisticExecutor.queryStatisticSync(context, table.getUUID(), table, ImmutableList.of("c1"));
+            Assertions.assertEquals(1, askedFor.size());
+            Assertions.assertTrue(askedFor.get(0).contains("count(distinct partition_name)"));
+            Assertions.assertFalse(askedFor.get(0).contains("murmur_hash3_32(partition_name)"));
+        } finally {
+            StatisticExecutor.resetExternalQueryShapeProbe();
+        }
+    }
+
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     public static StatementBase parseSql(String originStmt) {
         return SqlParser.parse(originStmt, connectContext.getSessionVariable()).get(0);
     }

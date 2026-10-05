@@ -45,9 +45,14 @@ public class StatsConstants {
     // meanings for one number is not something a later merge can reconcile. Deliberately left out of
     // STATISTIC_SUPPORTED_VERSION: nothing here knows how to read that shape.
     public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
+<<<<<<< HEAD
     // Reserved, not produced here, for the same reason as 21: the enterprise build uses 22 for an
     // external-statistics query that additionally reports the distinct counts of two nested subsets of
     // the partitions it covers. Also left out of STATISTIC_SUPPORTED_VERSION.
+=======
+    // Same as V3, plus the merged distinct counts and partition counts of two nested subsets of the covered
+    // partitions, so the read path can see how the distinct count grows as partitions are added.
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     public static final int STATISTIC_EXTERNAL_QUERY_V4_VERSION = 22;
 
 
@@ -69,6 +74,11 @@ public class StatsConstants {
                     .add(STATISTIC_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_PARTITION_VERSION_V2)
+<<<<<<< HEAD
+=======
+                    .add(STATISTIC_EXTERNAL_QUERY_V3_VERSION)
+                    .add(STATISTIC_EXTERNAL_QUERY_V4_VERSION)
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

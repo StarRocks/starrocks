@@ -16,6 +16,8 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -90,6 +92,24 @@ public class StatisticExecutor {
     private static final Predicate<THdfsScanRange> FORMAT_CHECKER = x -> x.isSetFile_format() &&
             SUPPORTED_FORMAT.contains(x.getFile_format());
 
+<<<<<<< HEAD
+=======
+    // How long a backend that could not serialize the current external-statistics result shape is taken at
+    // its word before the shape is offered again. Long enough that a rolling upgrade does not pay for the
+    // rejected query on every statistics load, short enough that the better shape comes back on its own
+    // once the upgrade finishes - nothing else would ever turn it back on.
+    private static final long EXTERNAL_QUERY_SHAPE_REPROBE_MS = 5 * 60 * 1000L;
+    // The external-statistics result shapes, best first. The last one is what every backend can serialize,
+    // so it is never skipped; each of the others remembers when a backend last rejected it.
+    private static final List<Integer> EXTERNAL_QUERY_SHAPES = ImmutableList.of(
+            StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION,
+            StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION,
+            StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION);
+    private static final Map<Integer, AtomicLong> EXTERNAL_QUERY_SHAPE_UNSUPPORTED_AT = ImmutableMap.of(
+            StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION, new AtomicLong(0),
+            StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION, new AtomicLong(0));
+
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     public List<TStatisticData> queryStatisticSync(ConnectContext context, String tableUUID, Table table,
                                                    List<String> columnNames) {
         if (table == null) {
@@ -101,8 +121,71 @@ public class StatisticExecutor {
         for (String colName : columnNames) {
             columnTypes.add(StatisticUtils.getQueryStatisticsColumnType(table, colName));
         }
+<<<<<<< HEAD
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columnNames, columnTypes);
         return executeStatisticDQL(context, sql);
+=======
+
+        // The richer result shapes need a backend that knows how to serialize them. During a rolling
+        // upgrade the frontend can be ahead of some backend, and asking one of those for a shape it does
+        // not know returns nothing - which would read as "this table has no statistics" and send the
+        // optimizer back to connector metadata for the whole table, for as long as the upgrade takes. So
+        // ask for the best shape, and if a backend says it cannot, ask again for the next one: the extra
+        // numbers sharpen the estimate, they are not what makes one possible.
+        for (int i = 0; ; i++) {
+            int version = EXTERNAL_QUERY_SHAPES.get(i);
+            boolean last = i == EXTERNAL_QUERY_SHAPES.size() - 1;
+            if (!last && !externalQueryShapeWorthTrying(version)) {
+                continue;
+            }
+            String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columnNames,
+                    columnTypes, version);
+            if (last) {
+                return executeStatisticDQL(context, sql);
+            }
+            try {
+                return executeStatisticDQL(context, sql);
+            } catch (UnsupportedStatisticsVersionException e) {
+                if (EXTERNAL_QUERY_SHAPE_UNSUPPORTED_AT.get(version).getAndSet(System.currentTimeMillis()) == 0) {
+                    LOG.warn("A backend cannot serialize external statistics result version {}, falling back to " +
+                            "the previous shape. Expected while backends are still being upgraded; statistics " +
+                            "stay usable, only the estimates built on the newer numbers are skipped.", version, e);
+                }
+            }
+        }
+    }
+
+    @VisibleForTesting
+    static void resetExternalQueryShapeProbe() {
+        EXTERNAL_QUERY_SHAPE_UNSUPPORTED_AT.values().forEach(rejectedAt -> rejectedAt.set(0));
+    }
+
+    // False only for a while after a backend rejected the shape, so the better one is retried on its own
+    // once every backend has been upgraded.
+    private static boolean externalQueryShapeWorthTrying(int version) {
+        AtomicLong unsupportedAt = EXTERNAL_QUERY_SHAPE_UNSUPPORTED_AT.get(version);
+        long rejectedAt = unsupportedAt.get();
+        if (rejectedAt == 0) {
+            return true;
+        }
+        if (System.currentTimeMillis() - rejectedAt < EXTERNAL_QUERY_SHAPE_REPROBE_MS) {
+            return false;
+        }
+        unsupportedAt.compareAndSet(rejectedAt, 0);
+        return true;
+    }
+
+    /**
+     * The backend returned a result whose shape this frontend did not ask for and cannot read - in
+     * practice, a backend older than the query version the statement named, which fills nothing in and
+     * leaves the version unset. Distinguishable from a table that simply has no statistics: that returns
+     * no result batch at all rather than an unreadable one.
+     */
+    static class UnsupportedStatisticsVersionException extends StarRocksPlannerException {
+        UnsupportedStatisticsVersionException(int version) {
+            super("Unknown statistics type " + version, ErrorType.INTERNAL_ERROR);
+        }
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     }
 
     public List<TStatisticData> queryStatisticSync(ConnectContext context, Long dbId, Long tableId,

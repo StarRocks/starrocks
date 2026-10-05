@@ -456,6 +456,56 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testExternalQueryReportsItsOwnCoverage() {
+        // The read path sizes and scales the aggregate from these two, so they have to be part of the
+        // same aggregate over the same rows as everything else - not fetched separately.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT));
+        assertContains(sql, "cast(count(distinct partition_name) as bigint)");
+        assertContains(sql, "cast(sum(hll_cardinality(ndv)) as bigint)");
+        // The version tells the backend which result shape to serialize; it must move with the shape.
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V4_VERSION + " as INT)");
+    }
+
+    @Test
+    public void testExternalQueryReportsTheGrowthSubsets() {
+        // Two nested subsets picked by a hash of the partition name, each with its merged distinct count and
+        // its partition count, inside the same aggregate over the deduplicated rows - no further window.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT));
+        String subset = "abs(cast(murmur_hash3_32(partition_name) as bigint)) % 3";
+        assertContains(sql, "hll_union_agg(if(" + subset + " < 1, ndv, NULL)),"
+                + " hll_union_agg(if(" + subset + " < 2, ndv, NULL)),"
+                + " cast(sum(if(" + subset + " < 1, 1, 0)) as bigint),"
+                + " cast(sum(if(" + subset + " < 2, 1, 0)) as bigint)");
+        assertContains(sql, ") dedup_t WHERE rn = 1 GROUP BY column_name");
+        Assertions.assertEquals(1, StringUtils.countMatches(sql, "over ("), sql);
+    }
+
+    @Test
+    public void testTheCoverageOnlyResultShapeIsStillAvailable() {
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT), StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION);
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION + " as INT)");
+        assertContains(sql, "cast(count(distinct partition_name) as bigint)");
+        Assertions.assertFalse(sql.contains("murmur_hash3_32"), sql);
+    }
+
+    @Test
+    public void testTheOlderResultShapeIsStillAvailable() {
+        // A backend that cannot serialize the coverage counts is asked the old way instead, so a rolling
+        // upgrade costs the sharper estimate for a few minutes rather than the statistics themselves.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT), StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION);
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT)");
+        Assertions.assertFalse(sql.contains("count(distinct partition_name)"), sql);
+        Assertions.assertFalse(sql.contains("hll_cardinality"), sql);
+    }
+
+    @Test
+>>>>>>> 319cf3f814a... [Enhancement] Extrapolate sampled external NDV from its growth over nested partition subsets (#64410)
     public void testExternalTableCollectionStatsType() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(ArrayType.ARRAY_INT, new MapType(IntegerType.INT, StringType.STRING)));
