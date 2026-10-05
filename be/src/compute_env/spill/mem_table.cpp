@@ -204,11 +204,14 @@ void OrderedMemTable::reset() {
     _permutation.shrink_to_fit();
 }
 
+Status OrderedMemTable::check_chunk_before_sort(const Chunk& chunk) {
+    // BinaryColumn holds more than 4GB with 64-bit offsets, and every slice cut from it is a BinaryColumn again, so
+    // there is nothing to upgrade.
+    return chunk.capacity_limit_reached();
+}
+
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
-    // Do not upgrade a mem table over 4GB to LargeBinaryColumn: its slices would be serialized in the 64-bit format,
-    // while the restore side builds BinaryColumn from the spill schema and reads the 32-bit one. BinaryColumn holds
-    // more than 4GB with 64-bit offsets, and every slice cut from it is a BinaryColumn again.
-    RETURN_IF_ERROR(chunk->capacity_limit_reached());
+    RETURN_IF_ERROR(check_chunk_before_sort(*chunk));
     DataSegment segment(_sort_exprs, chunk);
     _permutation.resize(0);
 

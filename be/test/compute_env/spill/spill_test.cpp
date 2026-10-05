@@ -33,12 +33,15 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/container_resource.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_local_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
@@ -683,11 +686,10 @@ TEST_F(SpillTest, order_by_process) {
     }
 }
 
-// OrderedMemTable used to upgrade a mem table over 4GB to LargeBinaryColumn, which was then spilled in the 64-bit serde
-// format and could not be restored into the BinaryColumn of the spill schema. It now keeps BinaryColumn, whose offsets
-// are 64-bit past 4GB. Reaching 4GB needs real data, so this spills input whose BinaryColumn has 64-bit offsets, which
-// is how such data looks, through the ordered spiller, and checks that every row comes back in order as a BinaryColumn
-// with its value.
+// Spill input whose BinaryColumn has 64-bit offsets through the ordered spiller and check that every row comes back in
+// order as a BinaryColumn with its value. OrderedMemTable::append() copies the input into a fresh column, so the mem
+// table itself stays small and 32-bit here; the over-4GB mem table is covered by
+// ordered_mem_table_keeps_binary_over_4g_before_sort.
 TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
     ObjectPool pool;
     TExprBuilder order_by_slots_builder;
@@ -772,6 +774,48 @@ TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
         ASSERT_EQ(static_cast<int32_t>(i), keys[i]);
         ASSERT_EQ("v" + std::to_string(i), values[i]);
     }
+}
+
+// OrderedMemTable::_do_sort() used to call upgrade_if_overflow(), which turned a mem table over 4GB into
+// LargeBinaryColumn; its slices were then spilled in the 64-bit format and could not be restored into the BinaryColumn
+// of the spill schema. The check before sorting must leave such a chunk a BinaryColumn. The column borrows a 1-byte
+// buffer and reports a payload over 4GB; it is never read, so nothing close to 4GB is allocated. With the old upgrade,
+// the check would try to materialize that payload.
+TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    // Copy the limit: gtest asserts bind their arguments by reference, which would odr-use the static member.
+    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    const uint64_t element_size = (capacity_limit / 2) + 1;
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), 2 * element_size);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(element_size);
+    offsets.emplace_back(2 * element_size);
+    auto values = BinaryColumn::create(std::move(resource), std::move(offsets));
+    ASSERT_GT(values->get_immutable_bytes().size(), capacity_limit);
+    const Column* values_ptr = values.get();
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+    Chunk chunk(Columns{std::move(values)}, slot_map);
+    ASSERT_OK(spill::OrderedMemTable::check_chunk_before_sort(chunk));
+    // The chunk keeps the very same BinaryColumn: no upgrade to LargeBinaryColumn.
+    const Column* column = chunk.get_column_raw_ptr_by_index(0);
+    EXPECT_EQ(values_ptr, column);
+    EXPECT_TRUE(column->is_binary());
+    EXPECT_FALSE(column->is_large_binary());
+    EXPECT_FALSE(chunk.has_large_column());
+
+    // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
+    // allocating them.
+    auto value = BinaryColumn::create();
+    value->append(Slice("v"));
+    Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
+    auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
+    EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
 }
 
 TEST_F(SpillTest, partition_process) {
