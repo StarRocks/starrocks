@@ -573,6 +573,98 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
+<<<<<<< HEAD
+=======
+    // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
+    // of another kind, or when this clause needs nothing resolved.
+    private Map<String, String> preResolvedPropClone;
+    private List<Runnable> preResolvedAppliers;
+    private ParseNode preResolvedDefineQueryAst;
+    private String preResolvedDefineSql;
+    private Boolean preResolvedHasNonNativeBaseTable;
+    private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
+
+    /**
+     * Everything ALTER MATERIALIZED VIEW used to resolve while holding the MV's write lock.
+     *
+     * <p>Each of these reaches MetadataMgr, and for a base table or a referenced table in an external
+     * catalog that is a connector call: constraint analysis resolves every table the constraint
+     * names, the ASYNC-without-interval check resolves every base table, and add/drop column
+     * re-analyzes the define query. Resolving here costs nothing extra -- the work happens exactly
+     * once either way -- it just happens before the lock rather than under it.
+     *
+     * <p>Reading the MV unlocked is what visitAlterTableStatement already does for the same
+     * analysis; the checks that guard the mutation (db exists, MV state NORMAL) stay under the lock.
+     */
+    @Override
+    protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        if (alterClause instanceof ModifyTablePropertiesClause) {
+            Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
+            // The clone has to be taken before the analyzers run, because they consume the keys they
+            // handle -- whatever is left over at the end is treated as session variables -- while the
+            // editlog has to carry the properties as written.
+            preResolvedPropClone = Maps.newHashMap(properties);
+            preResolvedAppliers = new ArrayList<>();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                alterUniqueConstraint(properties, mv, preResolvedAppliers);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                alterForeignKeyConstraint(properties, preResolvedPropClone, mv, preResolvedAppliers);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                // Analyzing the condition re-gets the external ref base table (iceberg / delta lake) from its
+                // connector, from several places (partition-expr adjust map, partition selector, the MV's
+                // retention analysis). Only the lookups move here; the analysis itself stays under the lock.
+                // No "still current" check is owed: the lock never covers external tables.
+                preResolvedRefBaseTables = mv.preResolveRefBaseTables();
+            }
+        } else if (alterClause instanceof RefreshSchemeClause) {
+            // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
+            // would change behaviour rather than just its timing: getTableChecked throws when a base
+            // table is gone, so ALTER ... REFRESH MANUAL on an MV with a dropped base table would
+            // start failing where it succeeds today.
+            RefreshSchemeClause refreshSchemeDesc = (RefreshSchemeClause) alterClause;
+            if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc
+                    && ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getIntervalLiteral() == null) {
+                preResolvedHasNonNativeBaseTable = mv.getBaseTableInfos().stream().anyMatch(tableInfo ->
+                        !MvUtils.getTableChecked(tableInfo).isNativeTableOrMaterializedView());
+            }
+        } else if (alterClause instanceof AddMVColumnClause || alterClause instanceof DropMVColumnClause) {
+            // The definition the AST is built from is captured with it, so the visitor can tell under
+            // the lock whether the AST is still current -- see takePreResolvedDefineQueryAst.
+            preResolvedDefineSql = mv.getOriginalViewDefineSql();
+            preResolvedDefineQueryAst = mv.initDefineQueryParseNode();
+        }
+    }
+
+    /**
+     * The define-query AST resolved before the lock, once it is known to still be current.
+     *
+     * <p>ADD/DROP COLUMN rewrites the AST in place and serializes it back into the MV's definition, so
+     * the AST has to correspond to the definition being replaced. resolveBeforeLock runs before the MV
+     * write lock is taken, which means two overlapping statements can both snapshot the definition
+     * before either mutates it:
+     *
+     * <pre>
+     *   T1: snapshot(def0) ──lock──► add x ──► write def0+x ──unlock──►
+     *   T2: snapshot(def0) ─────────────────────────lock──► add y ──► write def0+y   ← x lost
+     * </pre>
+     *
+     * The physical schema would then hold both columns while the definition names only the second, and
+     * refresh and replay would disagree with the schema. The definition is rewritten under the lock, so
+     * comparing it here catches exactly that case; rejecting is the right answer for a manual DDL, and
+     * keeps the critical section free of the connector call that rebuilding the AST would make.
+     */
+    private ParseNode takePreResolvedDefineQueryAst(MaterializedView mv) {
+        if (!Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())) {
+            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                    + "please retry the statement", mv.getName()));
+        }
+        return preResolvedDefineQueryAst;
+    }
+
+>>>>>>> 51d6b70 ([BugFix] Keep Spark load ETL clean-up and ALTER MV retention analysis off FE metadata locks (#79970))
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause modifyTablePropertiesClause,
                                                  ConnectContext context) {
@@ -588,7 +680,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             alterPartitionTTL(properties, materializedView, tableProperty, appliers);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-            alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+            try (MaterializedView.PreResolvedRefBaseTables.Scope ignored =
+                         preResolvedRefBaseTables != null ? preResolvedRefBaseTables.enter() : null) {
+                alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+            }
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
             alterTimeDriftConstraint(properties, materializedView, tableProperty, appliers);
