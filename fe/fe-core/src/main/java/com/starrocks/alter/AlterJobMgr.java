@@ -228,6 +228,18 @@ public class AlterJobMgr {
      * @param isReplay whehter this is called in replay
      */
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
+        AlterMaterializedViewStatusContext context =
+                prepareAlterMaterializedViewStatus(materializedView, status, reason, isReplay);
+        applyAlterMaterializedViewStatus(materializedView, context, isReplay);
+    }
+
+    /**
+     * The part of a status change that resolves state: for ACTIVE it re-analyzes the define query, which
+     * resolves every base table. Split from {@link #applyAlterMaterializedViewStatus} so that the base tables
+     * the activation settled on can be journaled and adopted on replay instead of re-analyzed there.
+     */
+    public AlterMaterializedViewStatusContext prepareAlterMaterializedViewStatus(
+            MaterializedView materializedView, String status, String reason, boolean isReplay) {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
@@ -256,21 +268,17 @@ public class AlterJobMgr {
                 MaterializedViewAnalyzer.checkBaseTables(
                         tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
             }
-            materializedView.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
-            materializedView.fixRelationship();
-            // resume the mv scheduler
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task task = taskManager.getTask(materializedView);
             if (task == null) {
-                throw new SemanticException("Can not find running task for materialized view [%s]", materializedView.getName());
+                throw new SemanticException("Can not find running task for materialized view [%s]",
+                        materializedView.getName());
             }
-            taskManager.resumeTask(task, isReplay);
+            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setInactiveAndReason(reason);
             // clear running & pending task runs since the mv has been inactive
-            final TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-            // suspend the inactive mv's task
             if (currentTask != null) {
                 TaskRunManager taskRunManager = taskManager.getTaskRunManager();
                 if (!taskRunManager.tryTaskRunLock()) {
@@ -282,10 +290,34 @@ public class AlterJobMgr {
                 } finally {
                     taskRunManager.taskRunUnlock();
                 }
+            }
+            return new AlterMaterializedViewStatusContext(status, reason, null, currentTask);
+        }
+        // Any other status is a no-op, as it has always been on this branch.
+        return new AlterMaterializedViewStatusContext(status, reason, null, null);
+    }
+
+    public void applyAlterMaterializedViewStatus(
+            MaterializedView materializedView, AlterMaterializedViewStatusContext context, boolean isReplay) {
+        if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(context.status())) {
+            materializedView.setBaseTableInfos(context.baseTableInfos());
+            materializedView.fixRelationship();
+            // resume the mv scheduler
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.resumeTask(context.task(), isReplay);
+        } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(context.status())) {
+            materializedView.setInactiveAndReason(context.reason());
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            // suspend the inactive mv's task
+            if (context.task() != null) {
                 // suspend the task to avoid scheduling new task runs
-                taskManager.suspendTask(currentTask, isReplay);
+                taskManager.suspendTask(context.task(), isReplay);
             }
         }
+    }
+
+    public record AlterMaterializedViewStatusContext(
+            String status, String reason, List<BaseTableInfo> baseTableInfos, Task task) {
     }
 
     /*
@@ -406,7 +438,24 @@ public class AlterJobMgr {
         // To be compatible with the old version, if the reason is empty, use the default reason
         String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
         try {
-            alterMaterializedViewStatus(mv, log.getStatus(), reason, true);
+            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus())
+                    && log.getBaseTableInfos() != null) {
+                // Adopt the base tables the leader activated with instead of re-analyzing the define query,
+                // which resolves every base table through the connector under this lock. Entries written by
+                // older versions carry none and take the path below.
+                Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+                if (task == null) {
+                    throw new SemanticException("Can not find running task for materialized view [%s]",
+                            mv.getName());
+                }
+                mv.activateOnReplay(Lists.newArrayList(log.getBaseTableInfos()));
+                // resume the mv scheduler
+                GlobalStateMgr.getCurrentState().getTaskManager().resumeTask(task, true);
+                return;
+            }
+            AlterMaterializedViewStatusContext context =
+                    prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
+            applyAlterMaterializedViewStatus(mv, context, true);
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
