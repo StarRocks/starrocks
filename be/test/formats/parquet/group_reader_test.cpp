@@ -536,7 +536,7 @@ static ParquetField make_variant_promotion_variant_field(
         tparquet::Type::type b_typed_physical_type = tparquet::Type::INT32) {
     ParquetField variant;
     variant.name = "data";
-    variant.type = ColumnType::STRUCT;
+    variant.type = ColumnType::VARIANT;
     variant.children.emplace_back(make_variant_promotion_scalar_field("metadata", 0, tparquet::Type::BYTE_ARRAY));
     variant.children.emplace_back(make_variant_promotion_scalar_field("value", 1, tparquet::Type::BYTE_ARRAY));
 
@@ -923,7 +923,7 @@ TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
 TEST_F(GroupReaderTest, VariantColumnReader) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     // Create metadata and value children for variant
     ParquetField metadata_field;
@@ -972,7 +972,7 @@ TEST_F(GroupReaderTest, VariantColumnReader) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithTypedShreddedFields) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1060,7 +1060,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithTypedShreddedFields) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithRootTypedValue) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1205,7 +1205,7 @@ TEST_F(GroupReaderTest, ParquetUtilsHasNonNullBinaryValueBranches) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithScalarTypes) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1339,7 +1339,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithScalarTypes) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithLogicalTypes) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1510,7 +1510,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithLogicalTypes) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithConvertedTypes) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1686,7 +1686,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithConvertedTypes) {
 TEST_F(GroupReaderTest, VariantColumnReaderFallbackOnly) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1799,7 +1799,7 @@ TEST_F(GroupReaderTest, VariantScalarMaterializeModeDropsNullNode) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithArrayShredding) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -1924,7 +1924,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithArrayShredding) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithDecimalTypes) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";
@@ -2016,7 +2016,7 @@ TEST_F(GroupReaderTest, VariantColumnReaderWithDecimalTypes) {
 TEST_F(GroupReaderTest, VariantColumnReaderWithTimeMillis) {
     ParquetField field;
     field.name = "col_variant";
-    field.type = ColumnType::STRUCT;
+    field.type = ColumnType::VARIANT;
 
     ParquetField metadata_field;
     metadata_field.name = "metadata";

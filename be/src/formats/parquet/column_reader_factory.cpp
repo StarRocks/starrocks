@@ -389,11 +389,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         } else {
             return nullptr;
         }
-    } else if (field->type == ColumnType::STRUCT) {
-        if (col_type.type == LogicalType::TYPE_VARIANT) {
-            return create_variant_column_reader(opts, field);
-        }
-
+    } else if (field->type == ColumnType::VARIANT && col_type.type == LogicalType::TYPE_VARIANT) {
+        return create_variant_column_reader(opts, field);
+    } else if (field->has_struct_layout()) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
@@ -472,11 +470,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         } else {
             return nullptr;
         }
-    } else if (field->type == ColumnType::STRUCT) {
-        if (col_type.type == LogicalType::TYPE_VARIANT) {
-            return create_variant_column_reader(opts, field);
-        }
-
+    } else if (field->type == ColumnType::VARIANT && col_type.type == LogicalType::TYPE_VARIANT) {
+        return create_variant_column_reader(opts, field);
+    } else if (field->has_struct_layout()) {
         std::vector<int32_t> subfield_pos(col_type.children.size());
         std::vector<const TIcebergSchemaField*> lake_schema_subfield(col_type.children.size());
         get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, lake_schema_field,
@@ -516,7 +512,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
                                                                             const ParquetField* variant_field,
                                                                             const VariantShreddedReadHints& hints) {
     DCHECK(opts.row_group_meta != nullptr);
-    DCHECK(variant_field->type == ColumnType::STRUCT);
+    DCHECK(variant_field->type == ColumnType::VARIANT);
     DCHECK(variant_field->children.size() >= 2);
 
     VariantNodeFields top_fields = find_variant_node_fields(variant_field);
@@ -590,7 +586,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr raw_reader
 
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                             bool case_sensitive, std::vector<int32_t>& pos) {
-    DCHECK(field.type == ColumnType::STRUCT);
+    DCHECK(field.has_struct_layout());
     // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by its
     // name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / "" for a
     // subfield that has none.

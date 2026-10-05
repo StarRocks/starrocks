@@ -58,7 +58,7 @@ ParquetField make_shredded_scalar_node(const std::string& name, int value_idx, i
 ParquetField make_variant_field_with_typed_group(const std::vector<ParquetField>& typed_children) {
     ParquetField variant;
     variant.name = "col_variant";
-    variant.type = ColumnType::STRUCT;
+    variant.type = ColumnType::VARIANT;
     variant.children.emplace_back(make_scalar_field("metadata", 0, tparquet::Type::BYTE_ARRAY));
     variant.children.emplace_back(make_scalar_field("value", 1, tparquet::Type::BYTE_ARRAY));
     ParquetField typed_group;

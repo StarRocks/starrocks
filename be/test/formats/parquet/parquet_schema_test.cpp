@@ -18,7 +18,9 @@
 #include <utility>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "formats/parquet/schema.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -1027,6 +1029,94 @@ TEST_F(ParquetSchemaTest, DuplicateFieldNames) {
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_FALSE(st.ok()) << st.message();
+}
+
+TEST_F(ParquetSchemaTest, VariantGroup) {
+    auto binary = [](const std::string& name, FieldRepetitionType::type repetition) {
+        return PrimitiveNode::make(name, repetition, Type::type::BYTE_ARRAY);
+    };
+    // Unshredded: v { metadata, value }
+    {
+        std::vector<SchemaElement> t_schemas;
+        t_schemas.emplace_back(GroupNode::make_root(1));
+        t_schemas.emplace_back(GroupNode::make("v", FieldRepetitionType::OPTIONAL, 2));
+        t_schemas.emplace_back(binary("metadata", FieldRepetitionType::REQUIRED));
+        t_schemas.emplace_back(binary("value", FieldRepetitionType::OPTIONAL));
+
+        SchemaDescriptor desc;
+        ASSERT_OK(desc.from_thrift(t_schemas, true));
+        const auto* field = desc.get_stored_column_by_field_idx(0);
+        ASSERT_EQ(ColumnType::VARIANT, field->type);
+        ASSERT_TRUE(field->is_complex_type());
+        ASSERT_TRUE(field->has_struct_layout());
+        ASSERT_EQ(2, field->children.size());
+        ASSERT_TRUE(field->has_same_complex_type(TypeDescriptor::from_logical_type(TYPE_VARIANT)));
+        // Still readable as a plain struct of its binary fields.
+        ASSERT_TRUE(field->has_same_complex_type(TypeDescriptor::from_logical_type(TYPE_STRUCT)));
+    }
+    // Shredded: v { metadata, value, typed_value { a { value, typed_value } } }; the typed_value subtree is kept.
+    {
+        std::vector<SchemaElement> t_schemas;
+        t_schemas.emplace_back(GroupNode::make_root(1));
+        t_schemas.emplace_back(GroupNode::make("v", FieldRepetitionType::OPTIONAL, 3));
+        t_schemas.emplace_back(binary("metadata", FieldRepetitionType::REQUIRED));
+        t_schemas.emplace_back(binary("value", FieldRepetitionType::OPTIONAL));
+        t_schemas.emplace_back(GroupNode::make("typed_value", FieldRepetitionType::OPTIONAL, 1));
+        t_schemas.emplace_back(GroupNode::make("a", FieldRepetitionType::REQUIRED, 2));
+        t_schemas.emplace_back(binary("value", FieldRepetitionType::OPTIONAL));
+        t_schemas.emplace_back(PrimitiveNode::make("typed_value", FieldRepetitionType::OPTIONAL, Type::type::INT64));
+
+        SchemaDescriptor desc;
+        ASSERT_OK(desc.from_thrift(t_schemas, true));
+        const auto* field = desc.get_stored_column_by_field_idx(0);
+        ASSERT_EQ(ColumnType::VARIANT, field->type);
+        ASSERT_EQ(3, field->children.size());
+        const auto& typed_value = field->children[2];
+        ASSERT_EQ("typed_value", typed_value.name);
+        ASSERT_EQ(ColumnType::STRUCT, typed_value.type);
+        ASSERT_EQ(ColumnType::STRUCT, typed_value.children[0].type);
+        ASSERT_EQ(ColumnType::SCALAR, typed_value.children[0].children[1].type);
+    }
+    // list<variant>: the element group is a variant too.
+    {
+        std::vector<SchemaElement> t_schemas;
+        t_schemas.emplace_back(GroupNode::make_root(1));
+        t_schemas.emplace_back(GroupNode::make("l", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+        t_schemas.emplace_back(GroupNode::make("element", FieldRepetitionType::OPTIONAL, 2));
+        t_schemas.emplace_back(binary("metadata", FieldRepetitionType::REQUIRED));
+        t_schemas.emplace_back(binary("value", FieldRepetitionType::OPTIONAL));
+
+        SchemaDescriptor desc;
+        ASSERT_OK(desc.from_thrift(t_schemas, true));
+        const auto* field = desc.get_stored_column_by_field_idx(0);
+        ASSERT_EQ(ColumnType::ARRAY, field->type);
+        ASSERT_EQ(ColumnType::VARIANT, field->children[0].type);
+    }
+    // Not a variant: `value` missing, `metadata` not binary, or `value` is a group.
+    {
+        std::vector<SchemaElement> t_schemas;
+        t_schemas.emplace_back(GroupNode::make_root(3));
+        t_schemas.emplace_back(GroupNode::make("s1", FieldRepetitionType::OPTIONAL, 2));
+        t_schemas.emplace_back(binary("metadata", FieldRepetitionType::REQUIRED));
+        t_schemas.emplace_back(binary("typed_value", FieldRepetitionType::OPTIONAL));
+        t_schemas.emplace_back(GroupNode::make("s2", FieldRepetitionType::OPTIONAL, 2));
+        t_schemas.emplace_back(PrimitiveNode::make("metadata", FieldRepetitionType::REQUIRED, Type::type::INT32));
+        t_schemas.emplace_back(binary("value", FieldRepetitionType::OPTIONAL));
+        t_schemas.emplace_back(GroupNode::make("s3", FieldRepetitionType::OPTIONAL, 2));
+        t_schemas.emplace_back(binary("metadata", FieldRepetitionType::REQUIRED));
+        t_schemas.emplace_back(GroupNode::make("value", FieldRepetitionType::OPTIONAL, 1));
+        t_schemas.emplace_back(binary("x", FieldRepetitionType::OPTIONAL));
+
+        SchemaDescriptor desc;
+        ASSERT_OK(desc.from_thrift(t_schemas, true));
+        for (size_t i = 0; i < 3; i++) {
+            const auto* field = desc.get_stored_column_by_field_idx(i);
+            ASSERT_EQ(ColumnType::STRUCT, field->type) << field->name;
+            // A plain struct no longer matches a VARIANT column.
+            ASSERT_FALSE(field->has_same_complex_type(TypeDescriptor::from_logical_type(TYPE_VARIANT)));
+        }
+    }
 }
 
 // The UT logic is copied from https://github.com/apache/arrow/blob/main/cpp/src/parquet/arrow/arrow_schema_test.cc

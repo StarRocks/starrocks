@@ -127,10 +127,12 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::STRUCT) {
+    } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        has_valid_child = true;
+    } else if (parquet_field->has_struct_layout()) {
         if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
-            // variant type currently can be mapped to struct type in parquet
-            has_valid_child = true;
+            // not reachable: a struct group does not match a VARIANT column (has_same_complex_type)
+            has_valid_child = false;
         } else {
             // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by
             // its name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / ""
@@ -215,11 +217,9 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::STRUCT) {
-        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
-            return true;
-        }
-
+    } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        return true;
+    } else if (parquet_field->has_struct_layout()) {
         // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
         std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema;
         std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;

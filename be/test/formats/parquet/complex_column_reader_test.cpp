@@ -518,7 +518,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {
@@ -601,7 +601,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 8; ++i) {
@@ -690,7 +690,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_rea
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {

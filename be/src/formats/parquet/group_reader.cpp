@@ -690,7 +690,7 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
         if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT) {
+            schema_node->type == ColumnType::VARIANT) {
             // Physical VARIANT columns use _get_variant_shredded_hints; this path
             // is for non-virtual VARIANT columns that appear directly in the SELECT list.
             VariantShreddedReadHints hints =
