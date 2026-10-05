@@ -99,6 +99,10 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # cleaned up and nothing is lost, so the statement can just be submitted again.
 ALTER_RERUN_MSG = "please re-run the alter table command"
 ALTER_RERUN_MAX_RETRY = 3
+# Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
+# ALTER MATERIALIZED VIEW (RollupProcDir).
+SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
+ROLLUP_INDEX_NAME_COL, ROLLUP_STATE_COL, ROLLUP_MSG_COL = 5, 8, 9
 # An identifier, possibly backquoted (and then possibly containing spaces).
 _ALTER_IDENT = r"(?:`[^`]+`|[^\s`.(]+)"
 # A possibly db-qualified name.
@@ -127,14 +131,19 @@ def alter_job_key(statement):
     return column, quoted or plain
 
 
+def is_watershed_cancel(state, msg):
+    """True iff an alter job in `state` with `msg` was cancelled by the watershed check."""
+    return state == "CANCELLED" and ALTER_RERUN_MSG in str(msg)
+
+
 def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name):
     """
-    True iff a job listed by SHOW ALTER was cancelled by the watershed check (ALTER_RERUN_MSG) and
-    belongs to `last_alter`, the statement execute_single_statement remembered. SHOW ALTER is
-    scoped to the current database, which is the case's own, but the newest job there may still
-    come from another table the case altered. `rollup_index_name` is None for a schema change.
+    True iff a job listed by SHOW ALTER was cancelled by the watershed check and belongs to
+    `last_alter`, the statement execute_single_statement remembered. SHOW ALTER is scoped to the
+    current database, which is the case's own, but the newest job there may still come from
+    another table the case altered. `rollup_index_name` is None for a schema change.
     """
-    if status != "CANCELLED" or ALTER_RERUN_MSG not in str(msg) or last_alter is None:
+    if not is_watershed_cancel(status, msg) or last_alter is None:
         return False
     column, name = last_alter[2]
     actual = table_name if column == "TableName" else rollup_index_name
@@ -2131,10 +2140,10 @@ class StarrocksSQLApiLib(object):
         """
         self._wait_alter_mv_job("CANCELLED", check_count)
 
-    def _resubmit_alter(self, last_alter, job_id, msg, rerun, table_name, deadline):
+    def _resubmit_alter(self, stmt, conn, job_id, msg, rerun, table_name, deadline):
         """
-        Submit `last_alter` again after its job `job_id` on `table_name` was cancelled, see
-        ALTER_RERUN_MSG.
+        Submit `stmt` again on `conn` after its job `job_id` on `table_name` was cancelled by the
+        watershed check, see ALTER_RERUN_MSG.
 
         The table has to be NORMAL first. A cancelled schema change releases it before reporting
         CANCELLED (LakeTableSchemaChangeJob#removeShadowIndex), but a cancelled rollup or sync MV
@@ -2142,7 +2151,6 @@ class StarrocksSQLApiLib(object):
         later by MaterializedViewHandler#onJobDone, the same gap wait_table_state_normal explains
         for a finished one.
         """
-        stmt, conn, _ = last_alter
         res = self.execute_sql("SELECT DATABASE()", True)
         tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
         self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
@@ -2213,11 +2221,14 @@ class StarrocksSQLApiLib(object):
                 expect_status == "FINISHED"
                 and rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
-                and should_resubmit_alter(last_alter, status, row[9], table_name, row[5])
+                and should_resubmit_alter(
+                    last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
+                )
             ):
                 rerun += 1
                 seen = job_id
-                self._resubmit_alter(last_alter, job_id, row[9], rerun, table_name, deadline)
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, row[ROLLUP_MSG_COL], rerun, table_name, deadline)
                 continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
@@ -2231,7 +2242,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_mv_job_id = job_id
-        tools.assert_equal(expect_status, status, "wait materialized view job %s, msg: %s" % (job_id, row[9]))
+        tools.assert_equal(expect_status, status, "wait materialized view job %s, msg: %s" % (job_id, row[ROLLUP_MSG_COL]))
 
         # The database has to be asked for: this helper has no other way to know which one the
         # case is in.
@@ -2728,8 +2739,7 @@ class StarrocksSQLApiLib(object):
                 # value callers already depend on.
                 return None
 
-            # RollupIndexName is the sixth column of the rollup proc dir.
-            rollup_index_name = res["result"][0][5] if alter_type.upper() == "ROLLUP" else None
+            rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
             if (
                 rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
@@ -2738,7 +2748,8 @@ class StarrocksSQLApiLib(object):
                 # Wait for the resubmitted job instead.
                 rerun += 1
                 seen = int(job_id)
-                self._resubmit_alter(last_alter, job_id, msg, rerun, table_name, deadline)
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, msg, rerun, table_name, deadline)
                 continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
