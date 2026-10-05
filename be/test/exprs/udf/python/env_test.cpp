@@ -65,6 +65,8 @@ public:
     }
 
     void TearDown() override {
+        PyWorkerManager::set_launch_hook(nullptr);
+
         auto& registry = global_python_env_registry();
         registry._envs = _saved_envs;
 
@@ -222,6 +224,62 @@ TEST_F(PyWorkerManagerEnvTest, terminating_a_worker_reaps_what_it_spawned) {
     EXPECT_TRUE(wait_until_gone(grandchild)) << "a process the worker spawned outlived it";
     // The socket is unlinked once the process is gone, never while it may still be bound.
     EXPECT_FALSE(std::filesystem::exists(worker->_sock_path));
+}
+
+// What an installed launcher saw, recorded by the hooks below. The hook is a plain function
+// pointer, so the cases hand their expectations through this instead of a capture.
+std::optional<PyWorkerManager::LaunchRequest> g_seen_request;
+std::string g_wrapper_path;
+
+// A launcher may run the worker through a wrapper process of its own choosing (a sandbox, a
+// cgroup helper, a tracer); the BE must launch what the hook returns and nothing else.
+TEST_F(PyWorkerManagerEnvTest, launch_hook_decides_how_the_worker_is_launched) {
+    ASSERT_NO_FATAL_FAILURE(create_fake_python_env());
+
+    auto wrapper = _test_dir / "wrapper.sh";
+    {
+        std::ofstream out(wrapper);
+        out << "#!/bin/sh\nexec \"$@\"\n";
+    }
+    std::filesystem::permissions(wrapper, std::filesystem::perms::owner_exec, std::filesystem::perm_options::add);
+    g_wrapper_path = wrapper.string();
+
+    g_seen_request.reset();
+    PyWorkerManager::set_launch_hook(
+            [](const PyWorkerManager::LaunchRequest& req) -> StatusOr<PyWorkerManager::LaunchSpec> {
+                g_seen_request = req;
+                return PyWorkerManager::LaunchSpec{g_wrapper_path,
+                                                   {"wrapper", req.python_path, req.script, req.socket_url},
+                                                   {fmt::format("PYTHONHOME={}", req.python_home)}};
+            });
+
+    std::unique_ptr<LocalPyWorker> worker;
+    ASSERT_OK(PyWorkerManager::getInstance()._fork_py_worker(&worker));
+
+    ASSERT_TRUE(g_seen_request.has_value());
+    EXPECT_EQ(PyWorkerManager::bootstrap(), g_seen_request->script);
+    EXPECT_EQ("grpc+unix://" + worker->_sock_path, g_seen_request->socket_url);
+    EXPECT_EQ(worker->url(), g_seen_request->socket_url);
+    EXPECT_FALSE(g_seen_request->python_path.empty());
+    EXPECT_FALSE(g_seen_request->python_home.empty());
+
+    worker->terminate_and_wait();
+}
+
+// A launcher that cannot establish what it was asked for fails the spawn instead of silently
+// falling back to a plain interpreter.
+TEST_F(PyWorkerManagerEnvTest, launch_hook_error_fails_the_spawn) {
+    ASSERT_NO_FATAL_FAILURE(create_fake_python_env());
+
+    PyWorkerManager::set_launch_hook(
+            [](const PyWorkerManager::LaunchRequest&) -> StatusOr<PyWorkerManager::LaunchSpec> {
+                return Status::InternalError("launcher unavailable");
+            });
+
+    std::unique_ptr<LocalPyWorker> worker;
+    auto st = PyWorkerManager::getInstance()._fork_py_worker(&worker);
+    ASSERT_FALSE(st.ok());
+    EXPECT_NE(std::string::npos, st.to_string().find("launcher unavailable"));
 }
 
 // A RemotePyWorker (external-worker/service_url mode) has no local process lifecycle: it must never

@@ -122,6 +122,29 @@ class PyWorkerManager {
 public:
     using WorkerClientPtr = std::shared_ptr<ArrowFlightWithRW>;
 
+    // How a worker process is launched: the program to exec, its argv, and its whole
+    // environment (an empty envp means an empty environment).
+    struct LaunchSpec {
+        std::string exe;
+        std::vector<std::string> argv;
+        std::vector<std::string> envp;
+    };
+
+    // What a launcher builds a LaunchSpec from. The socket the worker binds is already
+    // chosen and travels in argv, so a launcher may put a wrapper process between the BE
+    // and the worker without breaking the socket handshake.
+    struct LaunchRequest {
+        std::string python_path; // the interpreter to run (its bin/python3)
+        std::string script;      // flight_server.py
+        std::string socket_url;  // grpc+unix:// location the worker binds
+        std::string python_home; // PYTHONHOME for the interpreter
+    };
+
+    // Launches a worker in place of the plain interpreter, for instance inside a sandbox.
+    // Installed at static-init time, before any worker is spawned; null by default.
+    using LaunchHook = StatusOr<LaunchSpec> (*)(const LaunchRequest&);
+    static void set_launch_hook(LaunchHook hook);
+
     static PyWorkerManager& getInstance() {
         static PyWorkerManager instance;
         return instance;
