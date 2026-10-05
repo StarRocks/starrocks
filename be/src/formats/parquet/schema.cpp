@@ -308,14 +308,12 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     // }
     //
 
-    // check map's key must be primitive type
-    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
-    if (is_group(key_schema)) {
-        return Status::InvalidArgument("Map keys must be primitive type.");
-    }
-
-    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, next_pos));
-    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 3, cur_level_info, value_field, next_pos));
+    // A group key (allowed by the format, accepted by Arrow) is resolved like any other node: rejecting it here
+    // would make every column of the file unreadable. Whether the key can be read is decided when the column is
+    // actually read with a table type (ColumnReaderFactory). The value follows the whole key subtree.
+    size_t value_pos = 0;
+    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, &value_pos));
+    RETURN_IF_ERROR(node_to_field(t_schemas, value_pos, cur_level_info, value_field, next_pos));
 
     field->name = group_schema->name;
     // Actually, we don't need to put field_id here

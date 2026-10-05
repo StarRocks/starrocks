@@ -394,6 +394,14 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         std::unique_ptr<ColumnReader> value_reader = nullptr;
 
         if (!col_type.children[0].is_unknown_type()) {
+            // The schema resolver accepts group keys so that the rest of the file stays readable; reading such a key
+            // needs a table key of the same shape. A pruned key (unknown type) is not read at all.
+            const ParquetField& key_field = field->children[0];
+            if (key_field.is_complex_type() && !key_field.has_same_complex_type(col_type.children[0])) {
+                return Status::NotSupported(strings::Substitute(
+                        "Parquet map column '$0' has a $1 key, which cannot be read as table key type $2", field->name,
+                        column_type_to_string(key_field.type), logical_type_to_string(col_type.children[0].type)));
+            }
             ASSIGN_OR_RETURN(key_reader, ColumnReaderFactory::create(opts, &(field->children[0]), col_type.children[0],
                                                                      lake_child(0)));
         }

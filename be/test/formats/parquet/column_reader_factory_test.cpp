@@ -686,6 +686,45 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
               mapping.parquet_children);
 }
 
+// map<struct<a int, b int>, int> in the file. The schema resolver accepts the group key; whether it can be read is
+// decided by the table key type when the column is read.
+TEST(ColumnReaderFactoryTest, MapWithGroupKey) {
+    ParquetField key;
+    key.name = "key";
+    key.type = ColumnType::STRUCT;
+    key.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    key.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+    ParquetField map;
+    map.name = "m";
+    map.type = ColumnType::MAP;
+    map.children.emplace_back(key);
+    map.children.emplace_back(make_scalar_field("value", 2, tparquet::Type::INT32));
+
+    auto opts = make_opts_with_num_cols(3);
+    const TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+
+    // scalar table key over a group key: rejected when read
+    {
+        auto reader_or = ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(int_type, int_type));
+        ASSERT_FALSE(reader_or.ok());
+        EXPECT_TRUE(reader_or.status().is_not_supported()) << reader_or.status();
+    }
+    // key pruned (only the values are read): fine
+    {
+        auto reader_or =
+                ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, int_type));
+        ASSERT_TRUE(reader_or.ok()) << reader_or.status();
+        ASSERT_NE(nullptr, dynamic_cast<MapColumnReader*>(reader_or.value().get()));
+    }
+    // struct table key of the same shape: fine
+    {
+        TypeDescriptor key_type = TypeDescriptor::create_struct_type({"a", "b"}, {int_type, int_type});
+        auto reader_or = ColumnReaderFactory::create(opts, &map, TypeDescriptor::create_map_type(key_type, int_type));
+        ASSERT_TRUE(reader_or.ok()) << reader_or.status();
+        ASSERT_NE(nullptr, dynamic_cast<MapColumnReader*>(reader_or.value().get()));
+    }
+}
+
 // Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
 class TestColumnReader : public ColumnReader {
 public:
