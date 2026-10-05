@@ -104,7 +104,7 @@ _ALTER_IDENT = r"(?:`[^`]+`|[^\s`.(]+)"
 # A possibly db-qualified name.
 _ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
 ALTER_STMT_RE = re.compile(
-    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|CREATE\s+INDEX\s+{i}\s+ON\s+(?P<index>{n})"
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|(?:CREATE|DROP)\s+INDEX\s+{i}\s+ON\s+(?P<index>{n})"
     r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(i=_ALTER_IDENT, n=_ALTER_NAME),
     re.IGNORECASE,
 )
@@ -112,8 +112,8 @@ ALTER_STMT_RE = re.compile(
 
 def alter_job_key(statement):
     """
-    What identifies the alter job an ALTER TABLE / CREATE INDEX / CREATE MATERIALIZED VIEW
-    statement creates, as (column, unqualified unquoted name), else None. SHOW ALTER lists a
+    What identifies the alter job an ALTER TABLE / CREATE INDEX / DROP INDEX / CREATE MATERIALIZED
+    VIEW statement creates, as (column, unqualified unquoted name), else None. SHOW ALTER lists a
     schema change or rollup under its table, and a synchronous MV under its base table with the MV
     as RollupIndexName, so an MV is matched by its own name. An asynchronous MV creates no alter
     job and so never matches anything.
