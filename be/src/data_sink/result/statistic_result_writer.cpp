@@ -44,6 +44,8 @@ const int STATISTIC_PARTITION_VERSION_V2 = 20;
 // query whose result also carries how many partitions its aggregate covers. Kept as a comment rather than
 // a constant because an unreferenced one fails the clang build (-Wunused-const-variable under -Werror).
 // Do not reuse 21 for another result shape: the version is what tells the frontend how to read the rows.
+// 22 is reserved the same way for STATISTIC_EXTERNAL_QUERY_VERSION_V4, which also carries the distinct counts
+// of two nested subsets of the covered partitions.
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,

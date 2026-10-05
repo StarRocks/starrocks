@@ -45,6 +45,10 @@ public class StatsConstants {
     // meanings for one number is not something a later merge can reconcile. Deliberately left out of
     // STATISTIC_SUPPORTED_VERSION: nothing here knows how to read that shape.
     public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
+    // Reserved, not produced here, for the same reason as 21: the enterprise build uses 22 for an
+    // external-statistics query that additionally reports the distinct counts of two nested subsets of
+    // the partitions it covers. Also left out of STATISTIC_SUPPORTED_VERSION.
+    public static final int STATISTIC_EXTERNAL_QUERY_V4_VERSION = 22;
 
 
 
