@@ -26,6 +26,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_expr_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/function_context.h"
 #include "geo/wkb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
