@@ -40,6 +40,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -754,6 +755,46 @@ public class StatementPlanner {
         resultSink.setOutfileInfo(queryStmt.getOutFileClause(), columnOutputNames);
     }
 
+    /**
+     * An EXPLAIN begins no transaction, but it plans the INSERT all the same, and an external OLAP target has to be
+     * synced from its cluster for that: the published table carries no partitions, tablets or backends of its own.
+     * So the target is swapped for a synced private copy here, before the meta lock is taken, exactly as
+     * {@link #beginTransaction} does for an INSERT that runs -- the planner never sees the published object.
+     * Only an internal-catalog target can be one, so nothing else is resolved early; anything not found is left
+     * for the analyzer to report.
+     */
+    private static void syncExternalOlapTargetForExplain(DmlStmt stmt, ConnectContext session) {
+        if (!(stmt instanceof InsertStmt)) {
+            return;
+        }
+        InsertStmt insertStmt = (InsertStmt) stmt;
+        // An OVERWRITE is refused for an external OLAP table by the analyzer anyway, so it is not worth a sync.
+        if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()
+                || insertStmt.getTableRef() == null || insertStmt.isOverwrite()) {
+            return;
+        }
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (!CatalogMgr.isInternalCatalog(tableRef.getCatalogName())) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableRef.getDbName());
+        if (db == null) {
+            return;
+        }
+        if (!(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                tableRef.getTableName()) instanceof ExternalOlapTable)) {
+            return;
+        }
+        // Resolved again the way the INSERT is, so that a temporary table of the same name still shadows it.
+        Table table = MetaUtils.getSessionAwareTable(session, db, TableName.fromTableRef(tableRef));
+        if (table instanceof ExternalOlapTable) {
+            // Written back as beginTransaction does: with the target set, InsertAnalyzer skips the resolution that
+            // would normalize it, and the privilege check needs the database of an unqualified name.
+            insertStmt.setTableRef(tableRef);
+            insertStmt.setTargetTable(MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) table));
+        }
+    }
+
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
@@ -769,6 +810,7 @@ public class StatementPlanner {
         // 4. insert overwrite (first plan, before handleInsertOverwrite)
         // 5. txnId already set (e.g., by InsertOverwriteJobRunner for dynamic overwrite re-plan)
         if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
+            syncExternalOlapTargetForExplain(stmt, session);
             return;
         }
         if (stmt instanceof InsertStmt) {

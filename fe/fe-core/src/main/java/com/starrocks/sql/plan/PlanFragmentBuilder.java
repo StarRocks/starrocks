@@ -2430,7 +2430,7 @@ public class PlanFragmentBuilder {
 
             final ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
             EsScanNode scanNode = new EsScanNode(context.getNextNodeId(), tupleDescriptor, "EsScanNode",
-                    computeResource);
+                    computeResource, node.getMetaSnapshot());
             currentExecGroup.add(scanNode, true);
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());

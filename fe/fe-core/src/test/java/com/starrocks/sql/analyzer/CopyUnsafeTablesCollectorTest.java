@@ -19,24 +19,28 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Only a table the meta lock can actually protect -- one living in an internal database -- may decide how long
- * that lock is held. Tables in an external catalog abstain, and are never in the lock set to begin with.
- * Everything else keeps both properties, including the kinds whose engine is "external".
+ * Only a table the meta lock can actually protect may decide how long that lock is held. Tables in an external
+ * catalog abstain, and are never in the lock set to begin with; so do the internal-database tables whose
+ * published object is never written (Table#isMetaLockTarget). Everything else keeps both properties.
  */
 public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
 
@@ -129,18 +133,58 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
         Assertions.assertTrue(isCopySafe("select * from test.lock_scope_view"));
     }
 
-    /** ENGINE=MYSQL lives in an internal database, so both its lock and its vote must be unchanged. */
+    /**
+     * ENGINE=MYSQL and ENGINE=JDBC from a resource live in an internal database, but nothing writes a published
+     * one, so they are no lock target: neither in the lock set nor a vote for holding the lock over the whole
+     * planning phase -- alone, joined with a native table, or with an external-catalog table.
+     */
     @Test
-    public void testInternalDbExternalEngineTableIsUnchanged() throws Exception {
+    public void testInternalDbExternalEngineTableIsNotALockTarget() throws Exception {
+        for (String tbl : List.of("mysql_ext_tbl", "jdbc_test")) {
+            Assertions.assertFalse(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", tbl).isMetaLockTarget(),
+                    tbl);
+            Assertions.assertTrue(isCopySafe("select * from test." + tbl), tbl);
+            Assertions.assertTrue(isCopySafe("select * from test.t0 join test." + tbl + " on true"), tbl);
+            Assertions.assertTrue(isCopySafe(
+                    "select * from test." + tbl + " join jdbc0.partitioned_db0.tbl0 on true"), tbl);
+
+            Assertions.assertEquals(Set.of(), lockedTableIds("select * from test." + tbl), tbl);
+            Assertions.assertEquals(Set.of(tableId("test", "t0")),
+                    lockedTableIds("select * from test.t0 join test." + tbl + " on true"), tbl);
+        }
+        // Written to, too: the statement is judged like INSERT INTO an external catalog.
+        Assertions.assertTrue(isCopySafe("insert into test.mysql_ext_tbl select v1, 'a' from test.t0"));
+    }
+
+    /**
+     * FILES() and BLACKHOLE() build their table per statement; it is never published in a database, so the lock
+     * never covered it and it must not keep the other tables of the statement under the lock either.
+     */
+    @Test
+    public void testPerStatementTablesAreNotLockTargets() throws Exception {
+        Assertions.assertTrue(isCopySafe("insert into blackhole() select * from test.t0"));
+        Assertions.assertTrue(isCopySafe("insert into files(\"path\" = \"hdfs://127.0.0.1:9000/files/\", "
+                + "\"format\" = \"parquet\", \"compression\" = \"uncompressed\") select * from test.t0"));
+    }
+
+    /**
+     * A lock target with no snapshot to plan against keeps the statement copy-unsafe whatever else it reads. No
+     * table kind is one any more, so ENGINE=MYSQL is forced back to a lock target to stand for a kind nobody has
+     * classified yet -- the rule stays fail-closed.
+     */
+    @Test
+    public void testATableWithNoSnapshotIsStillCopyUnsafe() throws Exception {
+        new MockUp<MysqlTable>() {
+            @Mock
+            public boolean isMetaLockTarget() {
+                return true;
+            }
+        };
         Assertions.assertFalse(isCopySafe("select * from test.mysql_ext_tbl"));
-        Assertions.assertFalse(isCopySafe(
-                "select * from test.t0 join test.mysql_ext_tbl on test.t0.v1 = mysql_ext_tbl.k1"));
-        // Mixing it with an external-catalog table must not rescue it either.
+        Assertions.assertFalse(isCopySafe("insert into test.mysql_ext_tbl select v1, 'a' from test.t0"));
         Assertions.assertFalse(isCopySafe(
                 "select * from test.mysql_ext_tbl join jdbc0.partitioned_db0.tbl0 on true"));
-
-        Assertions.assertEquals(Set.of(tableId("test", "mysql_ext_tbl")),
-                lockedTableIds("select * from test.mysql_ext_tbl"));
     }
 
     @Test
@@ -173,9 +217,12 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
         Assertions.assertTrue(table.isMetaLockTarget());
     }
 
-    /** ENGINE=OLAP pointing at a remote cluster still lives in an internal database. */
+    /**
+     * ENGINE=OLAP pointing at a remote cluster lives in an internal database, but its published object is never
+     * written: an INSERT syncs and plans on a private copy, taken before the lock.
+     */
     @Test
-    public void testExternalOlapTableIsLockable() {
-        Assertions.assertTrue(new ExternalOlapTable().isMetaLockTarget());
+    public void testExternalOlapTableIsNotALockTarget() {
+        Assertions.assertFalse(new ExternalOlapTable().isMetaLockTarget());
     }
 }
