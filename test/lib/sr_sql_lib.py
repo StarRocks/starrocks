@@ -95,26 +95,48 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 
 # A shared-data alter job is cancelled with this message when any transaction id is allocated,
 # anywhere in the cluster, between taking the watershed txn id and adding the shadow index
-# (LakeTableSchemaChangeJob / LakeRollupJob). The job is cleaned up and nothing is lost, so the
-# alter can just be submitted again.
+# (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
+# cleaned up and nothing is lost, so the statement can just be submitted again.
 ALTER_RERUN_MSG = "please re-run the alter table command"
 ALTER_RERUN_MAX_RETRY = 3
-# Captures the target table, possibly db-qualified and backquoted.
+# A possibly db-qualified, possibly backquoted name.
 _ALTER_NAME = r"(?:`[^`]+`|[^\s`.(]+)(?:\.(?:`[^`]+`|[^\s`.(]+))*"
 ALTER_STMT_RE = re.compile(
-    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>%s)|CREATE\s+INDEX\s+\S+\s+ON\s+(?P<index>%s))" % (_ALTER_NAME, _ALTER_NAME),
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|CREATE\s+INDEX\s+\S+\s+ON\s+(?P<index>{n})"
+    r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(n=_ALTER_NAME),
     re.IGNORECASE,
 )
 
 
-def alter_target_table(statement):
-    """Unqualified, unquoted target table of an ALTER TABLE / CREATE INDEX statement, else None."""
+def alter_job_key(statement):
+    """
+    What identifies the alter job an ALTER TABLE / CREATE INDEX / CREATE MATERIALIZED VIEW
+    statement creates, as (column, unqualified unquoted name), else None. SHOW ALTER lists a
+    schema change or rollup under its table, and a synchronous MV under its base table with the MV
+    as RollupIndexName, so an MV is matched by its own name. An asynchronous MV creates no alter
+    job and so never matches anything.
+    """
     m = ALTER_STMT_RE.match(statement)
     if not m:
         return None
-    parts = re.findall(r"`([^`]+)`|([^\s`.(]+)", m.group("alter") or m.group("index"))
+    column = "RollupIndexName" if m.group("mv") else "TableName"
+    parts = re.findall(r"`([^`]+)`|([^\s`.(]+)", m.group("alter") or m.group("index") or m.group("mv"))
     quoted, plain = parts[-1]
-    return quoted or plain
+    return column, quoted or plain
+
+
+def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name):
+    """
+    True iff a job listed by SHOW ALTER was cancelled by the watershed check (ALTER_RERUN_MSG) and
+    belongs to `last_alter`, the statement execute_single_statement remembered. SHOW ALTER is
+    scoped to the current database, which is the case's own, but the newest job there may still
+    come from another table the case altered. `rollup_index_name` is None for a schema change.
+    """
+    if status != "CANCELLED" or ALTER_RERUN_MSG not in str(msg) or last_alter is None:
+        return False
+    column, name = last_alter[2]
+    actual = table_name if column == "TableName" else rollup_index_name
+    return actual is not None and str(actual) == name
 
 
 class Filter(logging.Filter):
@@ -1350,10 +1372,10 @@ class StarrocksSQLApiLib(object):
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
 
-            alter_table = alter_target_table(statement)
-            if alter_table is not None:
-                # Kept so wait_alter_table_finish can submit it again, see ALTER_RERUN_MSG.
-                self._last_alter_stmt = (statement, conn, alter_table)
+            alter_key = alter_job_key(statement)
+            if alter_key is not None:
+                # Kept so the alter wait helpers can submit it again, see ALTER_RERUN_MSG.
+                self._last_alter_stmt = (statement, conn, alter_key)
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
@@ -2107,6 +2129,13 @@ class StarrocksSQLApiLib(object):
         """
         self._wait_alter_mv_job("CANCELLED", check_count)
 
+    def _resubmit_alter(self, last_alter, job_id, msg, rerun):
+        """Submit `last_alter` again after its job `job_id` was cancelled, see ALTER_RERUN_MSG."""
+        stmt, conn, _ = last_alter
+        log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
+        res = self.execute_sql(stmt, conn=conn)
+        tools.assert_true(res["status"], "resubmit alter failed: %s" % res.get("msg"))
+
     def _wait_alter_mv_job(self, expect_status, timeout):
         """
         Block until the alter listed by SHOW ALTER MATERIALIZED VIEW reaches `expect_status` and
@@ -2133,10 +2162,14 @@ class StarrocksSQLApiLib(object):
         42 recorded results across the two callers are None.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
+        # Taken up front so no return path leaves it for a later wait to resubmit.
+        last_alter = getattr(self, "_last_alter_stmt", None)
+        self._last_alter_stmt = None
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
         table_name = None
+        rerun = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True
@@ -2155,6 +2188,18 @@ class StarrocksSQLApiLib(object):
                 # helper's -- a CREATE that never made a job recorded its own failure already.
                 return None
 
+            # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
+            if (
+                expect_status == "FINISHED"
+                and rerun < ALTER_RERUN_MAX_RETRY
+                and time.monotonic() < deadline
+                and should_resubmit_alter(last_alter, status, row[9], table_name, row[5])
+            ):
+                rerun += 1
+                seen = job_id
+                self._resubmit_alter(last_alter, job_id, row[9], rerun)
+                continue
+
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
 
@@ -2166,7 +2211,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_mv_job_id = job_id
-        tools.assert_equal(expect_status, status, "wait materialized view job %s" % job_id)
+        tools.assert_equal(expect_status, status, "wait materialized view job %s, msg: %s" % (job_id, row[9]))
 
         # The database has to be asked for: this helper has no other way to know which one the
         # case is in.
@@ -2663,24 +2708,17 @@ class StarrocksSQLApiLib(object):
                 # value callers already depend on.
                 return None
 
+            # RollupIndexName is the sixth column of the rollup proc dir.
+            rollup_index_name = res["result"][0][5] if alter_type.upper() == "ROLLUP" else None
             if (
-                status == "CANCELLED"
-                and ALTER_RERUN_MSG in str(msg)
-                and last_alter is not None
-                # SHOW ALTER TABLE is scoped to the current database, which is the case's own, but
-                # the newest job there may still come from another table the case altered.
-                and str(table_name) == last_alter[2]
-                and rerun < ALTER_RERUN_MAX_RETRY
+                rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
+                and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
             ):
-                # Spurious cancel from the shared-data watershed check, see ALTER_RERUN_MSG.
-                # Submit the same alter again and wait for the new job instead.
+                # Wait for the resubmitted job instead.
                 rerun += 1
-                stmt, conn, _ = last_alter
-                log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
                 seen = int(job_id)
-                rres = self.execute_sql(stmt, conn=conn)
-                tools.assert_true(rres["status"], "resubmit alter failed: %s" % rres.get("msg"))
+                self._resubmit_alter(last_alter, job_id, msg, rerun)
                 continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
