@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/utility/defer_op.h"
+#include "common/config_object_storage_fwd.h"
 #include "exec/exec_env.h"
 
 namespace starrocks {
@@ -109,5 +111,29 @@ TEST_F(DefaultPathHandlersTest, mem_tracker_does_not_echo_upper_level) {
 
     ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
     ASSERT_TRUE(output.str().find("<script>") == std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials) {
+    std::string old_ak = config::object_storage_access_key_id;
+    std::string old_sk = config::object_storage_secret_access_key;
+    DeferOp restore([&]() {
+        config::object_storage_access_key_id = old_ak;
+        config::object_storage_secret_access_key = old_sk;
+    });
+
+    config::object_storage_access_key_id = "AKIDEXAMPLEACCESSKEY";
+    config::object_storage_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    WebPageHandler::ArgumentMap args;
+    std::stringstream output;
+    config_handler(args, &output);
+    const std::string page = output.str();
+
+    EXPECT_EQ(std::string::npos, page.find("AKIDEXAMPLEACCESSKEY"));
+    EXPECT_EQ(std::string::npos, page.find("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
+    const std::string mask(config::kSensitiveConfigMask);
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_access_key_id=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_secret_access_key=" + mask + "\n"));
+    // Non-credential configs are still printed as is.
+    EXPECT_NE(std::string::npos, page.find("\nobject_storage_endpoint=" + config::object_storage_endpoint + "\n"));
 }
 } // namespace starrocks

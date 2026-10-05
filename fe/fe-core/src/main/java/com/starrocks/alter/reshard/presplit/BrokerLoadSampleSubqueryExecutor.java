@@ -33,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -41,10 +42,11 @@ import java.util.TreeMap;
  * property map and delegates the SQL synthesis, BE invocation, and JSON
  * decode to {@link FilesSampleSubqueryExecutor}.
  *
- * <p>The sub-query reads exactly the file-status snapshot the load's pending
- * task resolved — re-globbing here would race with the load's own
- * enumeration and risk planning quantile cuts from a different file set
- * than the one actually loaded.
+ * <p>The sub-query reads the file-status snapshot the load's pending task
+ * resolved — or, past {@code tablet_pre_split_data_tier_scan_byte_limit}, the
+ * subset of it {@link DataTierFileSubset} chooses — never a fresh listing:
+ * re-globbing here would race with the load's own enumeration and risk planning
+ * quantile cuts from a different file set than the one actually loaded.
  *
  * <p>A {@code COLUMNS FROM PATH} declaration is forwarded to FILES as its own
  * {@code columns_from_path} property, so a path-derived column — typically the
@@ -111,14 +113,23 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         rejectKeyPerturbingFileGroups(context.fileGroups(), sampledKeyColumns(request));
 
         List<String> columnsFromPath = resolveSharedColumnsFromPath(context.fileGroups());
-        ResolvedFiles resolved = collectResolvedFiles(context.fileStatusesPerGroup());
+        // The load projects each partition source by its target column name, so a partition source is read
+        // from the path exactly when that name is one of the COLUMNS FROM PATH columns. A Broker Load cannot
+        // feed one with a literal.
+        List<Column> partitionSources = request.getPartitionSourceColumns();
+        PathPartitionValues pathPartitions = PathPartitionValues.of(columnsFromPath, partitionSources);
+        DataTierFileSubset files = DataTierFileSubset.choose(collectResolvedFiles(context.fileStatusesPerGroup()),
+                pathPartitions, DataTierFileSubset.partitionFromFileData(partitionSources, pathPartitions, Set.of()),
+                /*requireExactFilesPaths=*/ false);
 
         Map<String, String> filesProperties = buildFilesProperties(
-                brokerDesc, String.join(",", resolved.paths()), format, columnsFromPath);
+                brokerDesc, String.join(",", files.paths()), format, columnsFromPath);
         if (FORMAT_CSV.equals(format)) {
             appendCsvProperties(filesProperties, context, request);
         }
-        return new Source(filesProperties, resolved.totalBytes(), context.computeResource());
+        files.report(ERROR_PREFIX);
+        return new Source(filesProperties, files.totalBytes(), context.computeResource(), null, Map.of(), Map.of(),
+                Map.of(), files.scannedBytes(), files.partitionSourceBytes());
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request) throws StarRocksException {
@@ -547,16 +558,13 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
     }
 
     /**
-     * Walks the load's resolved file-status snapshot, dropping directory
-     * entries, summing file byte totals, and returning the per-file paths
-     * for the FILES {@code path} property. A path containing {@code ,} is
-     * rejected because FILES has no escape syntax for its path-list
-     * separator.
+     * Walks the load's resolved file-status snapshot, dropping directory entries and returning the
+     * files. A path containing {@code ,} is rejected because FILES has no escape syntax for its
+     * path-list separator.
      */
-    private static ResolvedFiles collectResolvedFiles(
+    private static List<TBrokerFileStatus> collectResolvedFiles(
             List<List<TBrokerFileStatus>> fileStatusesPerGroup) throws StarRocksException {
-        List<String> paths = new ArrayList<>();
-        long totalBytes = 0L;
+        List<TBrokerFileStatus> files = new ArrayList<>();
         for (List<TBrokerFileStatus> filesInGroup : fileStatusesPerGroup) {
             for (TBrokerFileStatus fileStatus : filesInGroup) {
                 if (fileStatus.isDir) {
@@ -567,14 +575,13 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
                             + "file path contains \",\" which FILES treats as a path-list separator: "
                             + fileStatus.path);
                 }
-                paths.add(fileStatus.path);
-                totalBytes += fileStatus.size;
+                files.add(fileStatus);
             }
         }
-        if (paths.isEmpty()) {
+        if (files.isEmpty()) {
             throw new StarRocksException(ERROR_PREFIX + "no files to sample (all entries were directories or empty)");
         }
-        return new ResolvedFiles(paths, totalBytes);
+        return files;
     }
 
     /**
@@ -596,8 +603,5 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
                     String.join(",", columnsFromPath));
         }
         return filesProperties;
-    }
-
-    private record ResolvedFiles(List<String> paths, long totalBytes) {
     }
 }

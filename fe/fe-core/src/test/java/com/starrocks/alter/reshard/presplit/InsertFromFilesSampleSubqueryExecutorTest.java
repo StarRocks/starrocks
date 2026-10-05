@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DecimalVariant;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
@@ -28,8 +29,11 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -38,6 +42,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
@@ -45,6 +50,197 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResul
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.nullableBigintColumn;
 
 class InsertFromFilesSampleSubqueryExecutorTest {
+
+    private static final long GIB = 1L << 30;
+    private long savedByteLimit;
+    private int savedMinFiles;
+
+    @BeforeEach
+    void setScanLimits() {
+        savedByteLimit = Config.tablet_pre_split_data_tier_scan_byte_limit;
+        savedMinFiles = Config.tablet_pre_split_data_tier_min_scan_files;
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 3 * GIB;
+        Config.tablet_pre_split_data_tier_min_scan_files = 1;
+    }
+
+    @AfterEach
+    void restoreScanLimits() {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = savedByteLimit;
+        Config.tablet_pre_split_data_tier_min_scan_files = savedMinFiles;
+    }
+
+    @Test
+    void aSubsetReplacesOnlyThePathPropertyAndLeavesTheStatementsMapAlone() throws Exception {
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        properties.put("path", "s3://b/d/*");
+        properties.put("format", "parquet");
+        properties.put("aws.s3.region", "us-west-2");
+        TableFunctionTable sourceTable = mockSourceTable(properties, tenFiles("s3://b/d/f"));
+        StringBuilder capturedSql = new StringBuilder();
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(capturedSql).execute(
+                bigintRequest(sourceTable, bigintColumn("sort_key")));
+
+        String sql = capturedSql.toString();
+        Assertions.assertTrue(sql.contains(
+                "\"path\" = \"s3://b/d/f2.parquet,s3://b/d/f5.parquet,s3://b/d/f7.parquet\""), sql);
+        Assertions.assertTrue(sql.contains("\"format\" = \"parquet\""), sql);
+        Assertions.assertTrue(sql.contains("\"aws.s3.region\" = \"us-west-2\""), sql);
+        Assertions.assertTrue(sql.contains("rand(0) < " + AbstractSqlSampleSubqueryExecutor.pickSamplingRate(3 * GIB)
+                + " ORDER BY"), sql);
+        Assertions.assertEquals("s3://b/d/*", properties.get("path"), "the statement's own map is not modified");
+        Assertions.assertEquals(10 * GIB, execution.estimates().totalBytes());
+    }
+
+    @Test
+    void userSpelledPathKeyIsReplacedNotDuplicated() throws Exception {
+        Map<String, String> properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        properties.put("PATH", "s3://b/d/*");
+        properties.put("format", "parquet");
+        StringBuilder capturedSql = new StringBuilder();
+
+        capturingExecutor(capturedSql).execute(bigintRequest(
+                mockSourceTable(properties, tenFiles("s3://b/d/f")), bigintColumn("sort_key")));
+
+        String sql = capturedSql.toString();
+        Assertions.assertTrue(sql.contains("\"PATH\" = \"s3://b/d/f2.parquet,"), sql);
+        Assertions.assertFalse(sql.contains("s3://b/d/*"), sql);
+        Assertions.assertFalse(sql.contains("\"path\" ="), sql);
+    }
+
+    @Test
+    void aSelectedPathFilesCannotReadExactlyKeepsTheStatementsProperties() throws Exception {
+        List<TBrokerFileStatus> files = tenFiles("s3://b/d/f");
+        files.set(5, brokerFileStatus("s3://b/d/f5[x].parquet", GIB));
+        StringBuilder capturedSql = new StringBuilder();
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(capturedSql).execute(bigintRequest(
+                mockSourceTable(Map.of("path", "s3://b/d/*", "format", "parquet"), files), bigintColumn("sort_key")));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/d/*\""), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "rand(0) < " + AbstractSqlSampleSubqueryExecutor.pickSamplingRate(10 * GIB) + " ORDER BY"));
+        Assertions.assertEquals(10 * GIB, execution.estimates().totalBytes());
+    }
+
+    @Test
+    void inputWithinTheScanLimitKeepsTheStatementsPropertiesAndSql() throws Exception {
+        Map<String, String> properties = Map.of("path", "s3://b/d/*", "format", "parquet");
+        StringBuilder sqlWithinLimit = new StringBuilder();
+        StringBuilder sqlWithLimitDisabled = new StringBuilder();
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 20 * GIB;
+
+        capturingExecutor(sqlWithinLimit).execute(bigintRequest(
+                mockSourceTable(properties, tenFiles("s3://b/d/f")), bigintColumn("sort_key")));
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 0L;
+        capturingExecutor(sqlWithLimitDisabled).execute(bigintRequest(
+                mockSourceTable(properties, tenFiles("s3://b/d/f")), bigintColumn("sort_key")));
+
+        Assertions.assertTrue(sqlWithinLimit.toString().contains("\"path\" = \"s3://b/d/*\""));
+        Assertions.assertEquals(sqlWithLimitDisabled.toString(), sqlWithinLimit.toString());
+    }
+
+    @Test
+    void theStatementsWhereClauseStillAppliesToASubset() throws Exception {
+        StringBuilder capturedSql = new StringBuilder();
+
+        capturingExecutor(capturedSql).execute(new SampleRequest(
+                new InsertFromFilesScanContext(mockSourceTable(Map.of("path", "s3://b/d/*", "format", "parquet"),
+                        tenFiles("s3://b/d/f")), Mockito.mock(ComputeResource.class), "UTC", Map.of(), "`k` > 5"),
+                List.of(bigintColumn("k")), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("s3://b/d/f2.parquet,"), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("WHERE (`k` > 5) AND rand(0) <"), capturedSql.toString());
+    }
+
+    @Test
+    void aPartitionColumnReadFromThePathIsStratifiedThroughTheColumnMapping() throws Exception {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 5 * GIB;
+        List<TBrokerFileStatus> files = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            files.add(brokerFileStatus("s3://b/file_dt=2026-09-11/f" + i + ".parquet", GIB));
+        }
+        for (int i = 0; i < 2; i++) {
+            files.add(brokerFileStatus("s3://b/file_dt=2026-09-10/f" + i + ".parquet", GIB));
+        }
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/*/*", "format", "parquet"), files);
+        Mockito.when(sourceTable.getColumnsFromPath()).thenReturn(List.of("file_dt"));
+        Column dt = new Column("dt", DateType.DATE);
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(new StringBuilder()).execute(
+                new SampleRequest(new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class),
+                        "UTC", Map.of("sort_key", "sort_key", "dt", "file_dt"), null),
+                        List.of(bigintColumn("sort_key")), List.of(dt), Long.MAX_VALUE, 0L));
+
+        List<Estimates.PartitionSourceBytes> breakdown = execution.estimates().partitionSourceBytes();
+        Assertions.assertEquals(2, breakdown.size());
+        Assertions.assertEquals(8 * GIB, breakdown.get(0).bytes());
+        Assertions.assertEquals(2 * GIB, breakdown.get(1).bytes());
+    }
+
+    @Test
+    void aPartitionColumnFedByALiteralIsNotStratified() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/d/*", "format", "parquet"),
+                tenFiles("s3://b/dt=2026-09-10/f"));
+        Mockito.when(sourceTable.getColumnsFromPath()).thenReturn(List.of("dt"));
+        Column dt = new Column("dt", DateType.DATE);
+        StringBuilder capturedSql = new StringBuilder();
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(capturedSql).execute(
+                new SampleRequest(new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class),
+                        "UTC", Map.of("sort_key", "sort_key"), null, Map.of("dt", "'2026-09-10'")),
+                        List.of(bigintColumn("sort_key")), List.of(dt), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(execution.estimates().partitionSourceBytes().isEmpty());
+        Assertions.assertTrue(capturedSql.toString().contains("s3://b/dt=2026-09-10/f2.parquet,"),
+                capturedSql.toString());
+    }
+
+    @Test
+    void aPartitionColumnReadFromTheFilesKeepsTheStatementsProperties() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/d/*", "format", "parquet"),
+                tenFiles("s3://b/d/f"));
+        Column dt = new Column("dt", DateType.DATE);
+        StringBuilder capturedSql = new StringBuilder();
+
+        capturingExecutor(capturedSql).execute(new SampleRequest(new InsertFromFilesScanContext(sourceTable,
+                Mockito.mock(ComputeResource.class), "UTC", Map.of("sort_key", "sort_key", "dt", "dt"), null),
+                List.of(bigintColumn("sort_key")), List.of(dt), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/d/*\""), capturedSql.toString());
+    }
+
+    @Test
+    void pathAndLiteralPartitionColumnsTogetherKeepTheStatementsProperties() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/*/*", "format", "parquet"),
+                tenFiles("s3://b/dt=2026-09-10/f"));
+        Mockito.when(sourceTable.getColumnsFromPath()).thenReturn(List.of("dt"));
+        StringBuilder capturedSql = new StringBuilder();
+
+        capturingExecutor(capturedSql).execute(new SampleRequest(new InsertFromFilesScanContext(sourceTable,
+                Mockito.mock(ComputeResource.class), "UTC", Map.of("sort_key", "sort_key", "dt", "dt"), null,
+                Map.of("region", "'us'")),
+                List.of(bigintColumn("sort_key")),
+                List.of(new Column("dt", DateType.DATE), new Column("region", VarcharType.VARCHAR)),
+                Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/*/*\""), capturedSql.toString());
+    }
+
+    private static List<TBrokerFileStatus> tenFiles(String prefix) {
+        List<TBrokerFileStatus> files = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            files.add(brokerFileStatus(prefix + i + ".parquet", GIB));
+        }
+        return files;
+    }
+
+    private static InsertFromFilesSampleSubqueryExecutor capturingExecutor(StringBuilder capturedSql) {
+        return new InsertFromFilesSampleSubqueryExecutor((sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+            capturedSql.append(sql);
+            return List.of();
+        });
+    }
 
     @Test
     void happyPathDecodesProjectedRows() throws Exception {
@@ -223,6 +419,18 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
+    void partitionProjectionKeepsDistinctLiteralValues() {
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql(
+                "FILES(\"path\" = \"s3://bucket/*.parquet\")", /*whereClauseSqlOrNull=*/ null,
+                List.of("CAST('A' AS varchar)"), List.of(), List.of("CAST('a' AS varchar)"),
+                /*samplingRate=*/ 1.0, /*rowLimit=*/ 100, /*seed=*/ 0L);
+
+        Assertions.assertTrue(sql.startsWith(
+                        "SELECT CAST('A' AS varchar), CAST('a' AS varchar) FROM FILES("),
+                "partition and sort-key literals with different values need separate result cells: " + sql);
+    }
+
+    @Test
     void buildSampleSqlScalesRateForLargeInput() {
         TableFunctionTable sourceTable = mockSourceTable(
                 Map.of("path", "s3://bucket/large/*.parquet", "format", "parquet"),
@@ -298,6 +506,42 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Assertions.assertEquals("200", rows.get(0).sortKeyTuple().get(1).getStringValue());
         Assertions.assertEquals("100", rows.get(1).sortKeyTuple().get(0).getStringValue());
         Assertions.assertEquals("300", rows.get(1).sortKeyTuple().get(1).getStringValue());
+    }
+
+    @Test
+    void overlappingPartitionAndKeyRolesProjectOnceAndDecodeEveryTuple() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://bucket/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[20260921, 11, 37]}"));
+                });
+        Column partitionAndSortKey = bigintColumn("dt");
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(partitionAndSortKey, bigintColumn("exp_id")),
+                List.of(new SecondaryIndexSpec(1001L, List.of(bigintColumn("bucket_id")))),
+                List.of(partitionAndSortKey),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                        "SELECT `dt`, `exp_id`, `bucket_id` FROM FILES"),
+                "the overlapping partition column must be projected only once: " + capturedSql);
+        Assertions.assertFalse(capturedSql.toString().contains("`bucket_id`, `dt` FROM FILES"),
+                "the partition projection must reuse the earlier dt result: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals("20260921", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("37",
+                row.secondaryIndexTuples().get(0).values().get(0).getStringValue());
+        Assertions.assertEquals("20260921", row.partitionSourceTuple().get(0).getStringValue(),
+                "partition decoding must reuse the dt cell without changing the logical tuple contract");
     }
 
     @Test
@@ -577,10 +821,98 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*partitionSourceColumns=*/ List.of(dt),
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
+        // dt is also the partition column, so its partition projection reuses the base key's dt result
+        // instead of projecting the literal a third time.
         Assertions.assertTrue(capturedSql.toString().startsWith(
-                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date), `file_key`, "
-                                + "CAST('20260917' AS date) FROM FILES("),
+                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date), `file_key` "
+                                + "FROM FILES("),
                 "the literal stands in for dt in every key: " + capturedSql);
+    }
+
+    @Test
+    void distinctLiteralProjectionsKeepThePartitionValue() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/data/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"A\",11,\"a\"]}"));
+                });
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("file_key", "file_key"), /*wherePredicateSql=*/ null,
+                        Map.of("sort_literal", "'A'", "partition_literal", "'a'")),
+                List.of(new Column("sort_literal", VarcharType.VARCHAR), bigintColumn("file_key")),
+                List.of(new Column("partition_literal", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("A", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("a", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('A' AS"), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('a' AS"), capturedSql.toString());
+    }
+
+    @Test
+    void computedKeysAreProjectedAsTheExpressionCastToTheColumnTypeInEveryRole() throws Exception {
+        // ORDER BY (dt, exp_id) PARTITION BY (dt), rollup (grp_id), with dt = date_trunc('day', ts) and
+        // grp_id = exp_id + 1: every role samples the value the load writes, the partition column
+        // reuses the base key's dt cell, and each cell decodes as its target column type.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", 11, 12]}"));
+                });
+        Column dt = new Column("dt", DateType.DATE);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("exp_id", "exp_id"), /*wherePredicateSql=*/ null, Map.of(),
+                        Map.of("dt", "date_trunc('day', `ts`)", "grp_id", "`exp_id` + 1")),
+                List.of(dt, bigintColumn("exp_id")),
+                List.of(new SecondaryIndexSpec(7L, List.of(bigintColumn("grp_id")))),
+                /*partitionSourceColumns=*/ List.of(dt),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                        "SELECT CAST(date_trunc('day', `ts`) AS date), `exp_id`, CAST(`exp_id` + 1 AS bigint(20)) "
+                                + "FROM FILES("),
+                "each computed key is projected as its expression under the target cast: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals(PrimitiveType.DATE, row.sortKeyTuple().get(0).getType().getPrimitiveType());
+        Assertions.assertEquals("2026-09-17", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("12", row.secondaryIndexTuples().get(0).values().get(0).getStringValue());
+        Assertions.assertEquals("2026-09-17", row.partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void aPartitionColumnComputedFromAPathColumnKeepsTheStatementsProperties() throws Exception {
+        // CAST(file_dt AS DATE) AS dt reads a path column, but the partition value is the computed one,
+        // not the raw path value, so the files cannot be stratified by path and every file is scanned.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/*/*", "format", "parquet"),
+                tenFiles("s3://b/file_dt=2026-09-10/f"));
+        Mockito.when(sourceTable.getColumnsFromPath()).thenReturn(List.of("file_dt"));
+        StringBuilder capturedSql = new StringBuilder();
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(capturedSql).execute(
+                new SampleRequest(new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class),
+                        "UTC", Map.of("sort_key", "sort_key"), null, Map.of(), Map.of("dt", "CAST(`file_dt` AS DATE)")),
+                        List.of(bigintColumn("sort_key")), List.of(new Column("dt", DateType.DATE)),
+                        Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/*/*\""), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("SELECT `sort_key`, CAST(CAST(`file_dt` AS DATE) AS date)"),
+                capturedSql.toString());
+        Assertions.assertTrue(execution.estimates().partitionSourceBytes().isEmpty());
     }
 
     @Test
@@ -597,6 +929,25 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
 
         Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+    }
+
+    @Test
+    void projectedColumnWithNoMappingThrowsAlongsideConstantsAndExpressions() {
+        // The same fail-safe once constants or expressions are present: projections() cannot account
+        // for sort_key, so the sample fails rather than compute a boundary from an unrelated value.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'"),
+                        Map.of("grp_id", "`exp_id` + 1")),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+
+        StarRocksException failure = Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+        Assertions.assertTrue(failure.getMessage().contains("no FILES column, constant, or expression"),
+                failure.getMessage());
     }
 
     private static TableFunctionTable mockSourceTable(

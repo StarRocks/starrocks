@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.SqlUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -45,7 +46,9 @@ import java.util.Set;
  * names. Non-key target columns may be expressions over the source relation and are omitted from
  * the map. A column fed by a literal ({@code '20260917' AS dt}) is recorded separately, as the
  * literal's SQL: the sampler projects the literal itself in place of a source column, for a
- * partition column and for a sort-key column alike.
+ * partition column and for a sort-key column alike. A caller whose sampler can evaluate expressions
+ * may also admit a safe computed projection ({@code date_trunc('day', ts) AS dt}); it is recorded
+ * as the expression's SQL, which the sampler evaluates over the source rows.
  *
  * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
  * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
@@ -90,10 +93,15 @@ final class InsertSelectSourceColumns {
     /**
      * The resolved projection: {@code targetToSource} maps each directly projected target column
      * (lower-cased name) to its source column name; {@code targetToConstantSql} maps each target
-     * column the SELECT feeds with a non-NULL literal to that literal's SQL. The two key sets are
-     * disjoint.
+     * column the SELECT feeds with a non-NULL literal, or with a column-free expression that folds
+     * to one, to that constant's SQL; {@code targetToExpressionSql} maps each target column fed by
+     * an admitted computed expression over source columns to the expression's SQL, with its
+     * plan-time constants already folded. {@code unsupportedProjectionTargets} names outputs supplied
+     * by any other expression (including NULL). Those outputs are distinct from target columns
+     * omitted from the SELECT entirely. The four key sets are disjoint.
      */
-    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql) {
+    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
+                    Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets) {
     }
 
     /**
@@ -118,6 +126,38 @@ final class InsertSelectSourceColumns {
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns,
             SchemaPairing pairing) {
+        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, sourceTable,
+                normalizedSourceName, sourceAlias, pairing, /*computedProjectionContext*/ null);
+        if (resolved == null) {
+            return null;
+        }
+        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
+            return null;
+        }
+        return resolved;
+    }
+
+    /**
+     * {@link #resolve} without its final presence gates: the projection mapping alone, or {@code null}
+     * for a projection SHAPE problem (duplicate output name, by-position arity mismatch, a
+     * foreign-qualified slot, ...).
+     *
+     * <p>Split out so a caller that wants to ATTRIBUTE a presence failure can apply the gates itself
+     * and name the offending column via {@link #firstUnfedColumn}. Folding the two together, as
+     * {@link #resolve} does for callers that do not care, makes an unfed sampled column
+     * indistinguishable from the shape rejections.
+     *
+     * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
+     *                                  evaluate a computed projection: such a projection is admitted
+     *                                  when {@link #foldedComputedProjection} accepts it, with its
+     *                                  plan-time constants folded in this context. {@code null}
+     *                                  admits none, so every computed output stays unsupported.
+     */
+    static Resolved resolveUngated(
+            InsertStmt insertStmt, SelectRelation selectRelation,
+            OlapTable targetTable, Table sourceTable,
+            TableName normalizedSourceName, String sourceAlias,
+            SchemaPairing pairing, ConnectContext computedProjectionContext) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
         List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
@@ -140,6 +180,8 @@ final class InsertSelectSourceColumns {
         boolean isStar = items.size() == 1 && items.get(0).isStar();
         Map<String, String> targetToSource = new HashMap<>();
         Map<String, String> targetToConstantSql = new HashMap<>();
+        Map<String, String> targetToExpressionSql = new HashMap<>();
+        Set<String> unsupportedProjectionTargets = new HashSet<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
             boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
@@ -199,6 +241,7 @@ final class InsertSelectSourceColumns {
                 String outputName = item.getAlias();
                 String sourceName = null;
                 String constantSql = null;
+                String expressionSql = null;
                 if (item.getExpr() instanceof SlotRef slotRef) {
                     if (slotRef.getTblName() != null
                             && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
@@ -220,8 +263,17 @@ final class InsertSelectSourceColumns {
                         return null;
                     }
                     constantSql = constantSqlOf(item.getExpr());
+                    if (constantSql == null && computedProjectionContext != null) {
+                        Expr folded = foldedComputedProjection(item.getExpr(), computedProjectionContext,
+                                normalizedSourceName, sourceAlias);
+                        if (folded != null && folded.containsSubclass(SlotRef.class)) {
+                            expressionSql = SamplingPredicateGate.toSql(folded);
+                        } else if (folded != null) {
+                            constantSql = SamplingPredicateGate.toSql(folded);
+                        }
+                    }
                 }
-                outputs.add(new String[] {outputName, sourceName, constantSql});
+                outputs.add(new String[] {outputName, sourceName, constantSql, expressionSql});
             }
             if (byName) {
                 Set<String> outputNames = new HashSet<>();
@@ -234,6 +286,10 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     } else if (output[2] != null) {
                         targetToConstantSql.put(targetName, output[2]);
+                    } else if (output[3] != null) {
+                        targetToExpressionSql.put(targetName, output[3]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
                 // EXACT: output names must be exactly the target's own columns.
@@ -258,38 +314,71 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     } else if (output[2] != null) {
                         targetToConstantSql.put(targetName, output[2]);
+                    } else if (output[3] != null) {
+                        targetToExpressionSql.put(targetName, output[3]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
             }
         }
 
-        // The executors derive every projection from the two maps at sample time (see projections),
+        // The executors derive every projection from these maps at sample time (see projections),
         // so only the presence gates matter here.
-        Resolved resolved = new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql));
-        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
-            return null;
-        }
-        return resolved;
+        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql),
+                Map.copyOf(targetToExpressionSql), Set.copyOf(unsupportedProjectionTargets));
     }
 
     /**
      * Whether a sort key (the base index's or a rollup's) can be sampled: every column is backed by
-     * a source column or fed by a literal, and at least one is backed by a source column. A literal
-     * column is fine anywhere in the key -- every sampled tuple carries the same value there, and the
-     * cuts come from the columns that vary -- but a key made only of literals is degenerate: every
-     * row has the same key, so no cut can separate them.
+     * a source column or fed by a literal or an admitted computed expression, and at least one is
+     * backed by a source column or computed from one. A literal column is fine anywhere in the key --
+     * every sampled tuple carries the same value there, and the cuts come from the columns that
+     * vary -- but a key made only of literals is degenerate: every row has the same key, so no cut
+     * can separate them.
      */
     static boolean sortKeySampleable(List<Column> sortKey, Resolved resolved) {
-        boolean anySourceBacked = sortKey.isEmpty();
-        for (Column column : sortKey) {
+        if (firstUnfedColumn(sortKey, resolved) != null) {
+            return false;
+        }
+        // Every column is fed; the key is still degenerate if NONE of them varies.
+        return sortKey.isEmpty() || anySourceBacked(sortKey, resolved);
+    }
+
+    private static boolean anySourceBacked(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
             String targetName = column.getName().toLowerCase();
-            if (resolved.targetToSource().containsKey(targetName)) {
-                anySourceBacked = true;
-            } else if (!resolved.targetToConstantSql().containsKey(targetName)) {
-                return false;
+            if (resolved.targetToSource().containsKey(targetName)
+                    || resolved.targetToExpressionSql().containsKey(targetName)) {
+                return true;
             }
         }
-        return anySourceBacked;
+        return false;
+    }
+
+    /**
+     * The first column the sampler cannot project -- neither a direct source column, a supported
+     * literal, nor an admitted computed expression -- or {@code null} when every one is sampleable.
+     * An unsupported expression may still feed that column in the INSERT; see
+     * {@link Resolved#unsupportedProjectionTargets()}.
+     * The single definition of "sampleable" in this class: {@link #sortKeySampleable}
+     * and {@link #partitionColumnsSampleable} are both expressed in terms of it, so a caller that
+     * needs to NAME the offending column for a skip reason cannot drift from the gates that decide.
+     *
+     * <p>A literal-fed column counts as sampleable. It is projected as {@code CAST(<literal> AS <type>)} and
+     * never read from the source, so "no source column behind it" is not a defect there -- declining
+     * such a statement as a missing column is exactly the misattribution this helper exists to avoid.
+     */
+    static Column firstUnfedColumn(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
+            String targetName = column.getName().toLowerCase();
+            if (!resolved.targetToSource().containsKey(targetName)
+                    && !resolved.targetToConstantSql().containsKey(targetName)
+                    && !resolved.targetToExpressionSql().containsKey(targetName)) {
+                return column;
+            }
+        }
+        return null;
     }
 
     /**
@@ -297,14 +386,7 @@ final class InsertSelectSourceColumns {
      * partition column sends every row to the one partition that literal names.
      */
     static boolean partitionColumnsSampleable(List<Column> partitionColumns, Resolved resolved) {
-        for (Column column : partitionColumns) {
-            String targetName = column.getName().toLowerCase();
-            if (!resolved.targetToSource().containsKey(targetName)
-                    && !resolved.targetToConstantSql().containsKey(targetName)) {
-                return false;
-            }
-        }
-        return true;
+        return firstUnfedColumn(partitionColumns, resolved) == null;
     }
 
     /**
@@ -322,6 +404,27 @@ final class InsertSelectSourceColumns {
     }
 
     /**
+     * A computed projection the sampler can evaluate to the value the INSERT writes, with its
+     * plan-time constants folded in the INSERT user's {@code context}, or {@code null} when it has
+     * none. The sampling sub-query runs as ROOT in its own session, so the projection is held to the
+     * rule {@link SamplingPredicateGate} applies to the WHERE clause: after folding, only source
+     * columns, literals, operators, CAST, and {@code SamplingPredicateGate}'s row-level functions
+     * remain. That rejects a UDF, a subquery, a variable, a clock, user or session-time-zone
+     * function over a column, and any per-row non-deterministic call. A column-free projection folds
+     * to a constant as a whole; one folding to NULL is rejected for the same reason
+     * {@link #constantSqlOf} rejects a NULL literal. The caller has already proved every slot names a
+     * source column.
+     */
+    private static Expr foldedComputedProjection(Expr expr, ConnectContext context,
+                                              TableName normalizedSourceName, String sourceAlias) {
+        Expr folded = SamplingPredicateGate.foldProjection(expr, context);
+        if (folded == null || !SamplingPredicateGate.isDeterministicAndSafe(folded, normalizedSourceName, sourceAlias)) {
+            return null;
+        }
+        return folded;
+    }
+
+    /**
      * The SQL each target column (sort key or partition) is projected by in a sampling sub-query: the
      * backing source column's quoted identifier, or -- for a column the SELECT feeds with a literal --
      * that literal cast to the TARGET column type. The cast makes the sampled value the one the load
@@ -333,15 +436,30 @@ final class InsertSelectSourceColumns {
     static List<String> projections(
             List<Column> columns, Map<String, String> targetToSource,
             Map<String, String> targetToConstantSql) {
+        return projections(columns, targetToSource, targetToConstantSql, Map.of());
+    }
+
+    /**
+     * {@link #projections(List, Map, Map)} for a sampler that also evaluates computed projections. A
+     * computed column is projected as its expression cast to the TARGET column type, for the same
+     * reason a literal is: {@code date_trunc('day', ts)} is a DATETIME, and the load writes it into a
+     * DATE column as the DATE the cast yields.
+     */
+    static List<String> projections(
+            List<Column> columns, Map<String, String> targetToSource,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql) {
         List<String> projections = new ArrayList<>(columns.size());
         for (Column column : columns) {
             String targetName = column.getName().toLowerCase();
             String sourceName = targetToSource.get(targetName);
             String constantSql = targetToConstantSql.get(targetName);
+            String expressionSql = targetToExpressionSql.get(targetName);
             if (sourceName != null) {
                 projections.add(SqlUtils.getIdentSql(sourceName));
             } else if (constantSql != null) {
                 projections.add("CAST(" + constantSql + " AS " + column.getType().toSql() + ")");
+            } else if (expressionSql != null) {
+                projections.add("CAST(" + expressionSql + " AS " + column.getType().toSql() + ")");
             } else {
                 return null;
             }
@@ -396,7 +514,8 @@ final class InsertSelectSourceColumns {
      *
      * <p>Function calls themselves stay allowed: the sampler never evaluates a non-key projection,
      * it only projects the mapped source columns, so the expression's own semantics cannot skew the
-     * sampled row set.
+     * sampled row set. A computed key projection the sampler does evaluate must also pass
+     * {@link #foldedComputedProjection}.
      */
     private static boolean referencesOnlySource(
             Expr expr, Map<String, String> sourceColumnMap,

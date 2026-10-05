@@ -84,6 +84,7 @@
 #include "storage_primitive/storage_stats.h"
 #include "storage_primitive/vector_search_option.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -1837,6 +1838,7 @@ protected:
     static constexpr int64_t kIndexId = 100;
     std::shared_ptr<FileSystem> _fs;
     bool _saved_topk_underfill_fallback = false;
+    MemPool _mem_pool;
 
     TabletSchemaPB base_schema_pb() {
         TabletSchemaPB pb;
@@ -2075,8 +2077,8 @@ protected:
 
         // Activate a global dictionary on the tag column (cid 3) when requested, so _rewrite_predicates
         // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps must outlive
-        // the synchronous iterator run below; string literals give the Slices program lifetime.
-        GlobalDictMap tag_global_dict = {{"red", 1}, {"blue", 2}};
+        // the synchronous iterator run below.
+        GlobalDictMap tag_global_dict = PaddedGlobalDictBuilder::build(&_mem_pool, {{"red", 1}, {"blue", 2}});
         ColumnIdToGlobalDictMap tag_dictmaps;
         if (cfg.tag_global_dict) {
             tag_dictmaps.emplace(3, &tag_global_dict);

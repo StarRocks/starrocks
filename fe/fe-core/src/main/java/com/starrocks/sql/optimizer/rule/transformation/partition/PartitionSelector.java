@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -273,9 +274,18 @@ public class PartitionSelector {
 
         LOG.debug("Get partition ids by where expression: {}", scalarOperator.toString());
 
-        // deduce generated column expr to partition slotRef
+        // Deduce a predicate on a generated partition column from one on its source column. The
+        // deduction only widens: c1 < '2024-01-02 00:00:00' deduces c2 <= '2024-01-02' for
+        // c2 = date_trunc('day', c1), which keeps every row the original keeps and some it does not.
+        // That is what a retention condition needs, since the partitions it selects are the ones
+        // kept. A drop condition selects the partitions to drop, and there the extra partitions are
+        // dropped with rows that do not satisfy the condition -- all of 2024-01-02 above. So a drop
+        // condition is only deduced where the deduction is exact (see deduceGenerateColumns); on
+        // anything else the source column is rejected below, and the message names the partition
+        // expression to write instead.
         try {
-            scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory);
+            scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory,
+                    isDropPartitionCondition);
         } catch (Exception e) {
             LOG.debug("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
         }
@@ -315,8 +325,22 @@ public class PartitionSelector {
         return selectedPartitionIds;
     }
 
+    /**
+     * @param exactOnly deduce only where the deduced predicate selects exactly the rows the original
+     *                  does: an equality or IN list through a one-to-one expression. A range is never
+     *                  exact through a many-to-one bucket, and even c2 = 100 - c1 would need the
+     *                  constant to sit on a bucket boundary, so ranges are left alone.
+     */
+    private static boolean isExactDeduction(ScalarOperator predicate, ScalarOperator generatedExpr) {
+        boolean equality = (predicate instanceof BinaryPredicateOperator binary
+                && binary.getBinaryType().isEquivalence())
+                || (predicate instanceof InPredicateOperator in && !in.isNotIn());
+        return equality && OperatorFunctionChecker.isOneToOne(generatedExpr);
+    }
+
     private static ScalarOperator deduceGenerateColumns(ScalarOperator scalarOperator,
-                                              OlapTable olapTable, ColumnRefFactory columnRefFactory) {
+                                              OlapTable olapTable, ColumnRefFactory columnRefFactory,
+                                              boolean exactOnly) {
         Map<String, ColumnRefOperator>  columnNameToColRefMap = Maps.newHashMap();
         List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
 
@@ -385,6 +409,9 @@ public class PartitionSelector {
                     if (pair != null) {
                         ColumnRefOperator generatedColumn = pair.first;
                         ScalarOperator generatedExpr = pair.second;
+                        if (exactOnly && !isExactDeduction(scalarOperator, generatedExpr)) {
+                            return scalarOperator;
+                        }
                         // buildDeducedConjunct keeps the comparison operator, which only maps soundly
                         // through an expression that grows with its column. Equality is exempt -- a = c
                         // implies f(a) = f(c) whichever way f runs -- so the restriction has to wait

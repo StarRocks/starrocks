@@ -472,6 +472,8 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B
@@ -2596,4 +2598,12 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
+// Limits for one H3 function row/worker; all values must be positive.
+CONF_mInt64(h3_max_cells_per_row, "100000");
+CONF_mInt32(h3_max_grid_disk_k, "128");
+CONF_mInt64(h3_max_polygon_vertices, "10000");
+CONF_mInt32(h3_max_polygon_components, "256");
+CONF_mInt64(h3_max_working_bytes, "67108864");
+CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
+
 } // namespace starrocks::config

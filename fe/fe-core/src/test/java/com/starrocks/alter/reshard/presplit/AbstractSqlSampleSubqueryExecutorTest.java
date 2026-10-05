@@ -16,8 +16,10 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Variant;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -195,5 +197,86 @@ class AbstractSqlSampleSubqueryExecutorTest {
         return new SampleRequest(
                 scanContext, sortKeyColumns, secondaryIndexSortKeys, partitionSourceColumns,
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Scanned-bytes-drive-the-rate / Estimates-keep-the-total tests.
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void partitionProjectionReusesAnIdentifierCaseInsensitivelyButAnExpressionOnlyExactly() {
+        // Column names are case-insensitive, so `k` reuses `K`; a string literal is data, so
+        // concat('A', r) must get its own cell rather than read concat('a', r)'s value.
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql("t", null,
+                List.of("`K`", "CAST(concat('a', `r`) AS varchar(8))"),
+                List.of("`k`", "CAST(concat('A', `r`) AS varchar(8))", "CAST(concat('a', `r`) AS varchar(8))"),
+                1.0, 10, 0L);
+
+        Assertions.assertTrue(sql.startsWith("SELECT `K`, CAST(concat('a', `r`) AS varchar(8)), "
+                + "CAST(concat('A', `r`) AS varchar(8)) FROM t WHERE"), sql);
+    }
+
+    @Test
+    void longQuotedIdentifierCanBeReusedWithoutRegexRecursion() {
+        String lower = "`" + "a".repeat(20_000) + "``b`";
+        String upper = "`" + "A".repeat(20_000) + "``B`";
+
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql("t", null,
+                List.of(lower), List.of(upper), 1.0, 10, 0L);
+
+        Assertions.assertTrue(sql.startsWith("SELECT " + lower + " FROM t WHERE"));
+    }
+
+    @Test
+    void samplingRateFollowsTheScannedBytesWhileEstimatesKeepTheWholeInput() throws Exception {
+        long totalBytes = 100L << 30;
+        long scannedBytes = 1L << 30;
+        List<Estimates.PartitionSourceBytes> breakdown = List.of(new Estimates.PartitionSourceBytes(
+                List.of(Variant.of(VarcharType.VARCHAR, "a")), totalBytes));
+        StringBuilder capturedSql = new StringBuilder();
+        AbstractSqlSampleSubqueryExecutor executor = fixedSpecExecutor(
+                new AbstractSqlSampleSubqueryExecutor.SampleSpec("t", null, totalBytes, mock(ComputeResource.class),
+                        List.of("`k`"), List.of(), List.of(bigintColumn("k")), List.of(), 0L, false,
+                        scannedBytes, breakdown),
+                capturedSql);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                PresplitTestSupport.DUMMY_CONTEXT, List.of(bigintColumn("k")), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("rand(0) < "
+                        + AbstractSqlSampleSubqueryExecutor.pickSamplingRate(scannedBytes) + " ORDER BY"),
+                "the rate targets the bytes the sample reads: " + capturedSql);
+        Assertions.assertEquals(totalBytes, execution.estimates().totalBytes(), "tablet sizing sees every file");
+        Assertions.assertEquals(breakdown, execution.estimates().partitionSourceBytes());
+    }
+
+    @Test
+    void existingSpecConstructorsScanTheWholeInput() {
+        AbstractSqlSampleSubqueryExecutor.SampleSpec spec = new AbstractSqlSampleSubqueryExecutor.SampleSpec(
+                "t", null, 42L, mock(ComputeResource.class), List.of("`k`"), List.of(),
+                List.of(bigintColumn("k")), List.of());
+
+        Assertions.assertEquals(42L, spec.scannedInputBytes());
+        Assertions.assertTrue(spec.partitionSourceBytes().isEmpty());
+    }
+
+    @Test
+    void theFilteredInputEstimateCannotBeCombinedWithAFileSubset() {
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new AbstractSqlSampleSubqueryExecutor.SampleSpec(
+                "t", "k > 1", 100L, mock(ComputeResource.class), List.of("`k`"), List.of(),
+                List.of(bigintColumn("k")), List.of(), 10L, true, 50L, List.of()));
+    }
+
+    private static AbstractSqlSampleSubqueryExecutor fixedSpecExecutor(
+            AbstractSqlSampleSubqueryExecutor.SampleSpec spec, StringBuilder capturedSql) {
+        return new AbstractSqlSampleSubqueryExecutor("test ", (sql, computeResource, ignoredTimeout) -> {
+            capturedSql.append(sql);
+            return List.of();
+        }) {
+            @Override
+            protected SampleSpec resolveSampleSpec(SampleRequest request) {
+                return spec;
+            }
+        };
     }
 }

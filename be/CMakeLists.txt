@@ -213,6 +213,7 @@ option(USE_ARM_CRC32 "Build with ARM CRC32 instruction" ON)
 option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
+option(WITH_H3 "Enable native H3 functions" ON)
 
 option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
@@ -371,6 +372,10 @@ if (${USE_STAROS} STREQUAL "ON")
 endif()
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_STARCACHE")
+endif()
+if (WITH_H3)
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_H3")
+    set(H3_LIBRARIES h3)
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -671,6 +676,7 @@ set(STARROCKS_DEPENDENCIES
     clucene-contribs-lib
     rocksdb
     libs2
+    ${H3_LIBRARIES}
     snappy
     ${Boost_LIBRARIES}
     thrift
@@ -957,6 +963,13 @@ set (BENCH_LINK_LIBS
     gtest
     ${WL_END_GROUP}
 )
+
+# arrow_testing is Arrow's test-support library: its gtest_util.cc references GoogleTest, which only
+# TEST_LINK_LIBS and BENCH_LINK_LIBS carry. On the production link it leaves starrocks_be with
+# undefined testing::* symbols. Test targets are unaffected because they link gtest, so only a
+# release build shows it. Removed here, after TEST_LINK_LIBS and BENCH_LINK_LIBS have been built
+# from STARROCKS_LINK_LIBS, so only the production link loses it.
+list(REMOVE_ITEM STARROCKS_LINK_LIBS arrow_testing)
 
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)

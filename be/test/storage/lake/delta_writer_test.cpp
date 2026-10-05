@@ -31,14 +31,18 @@
 #include "column/schema.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/multi_node_write_txn_log.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
@@ -1165,6 +1169,94 @@ TEST_F(LakeDeltaWriterTest, test_concurrent_cancel_and_write) {
     ASSERT_TRUE(cancel_called.load());
 
     delta_writer->close();
+}
+
+// Multi-node write: two compute nodes write one tablet in one transaction, each through its own bundle
+// file. The node with a small share writes it as one bundled slice at end of stream; the node whose share
+// fills memtables flushes mid-load and writes standalone segments. The sender folds the two logs into one,
+// which must save, publish and read back every row.
+TEST_F(LakeDeltaWriterTest, test_multi_node_write_with_a_bundled_and_a_standalone_writer) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    // Without load spill every full memtable is flushed straight into its own standalone segment.
+    auto backup = config::enable_load_spill;
+    config::enable_load_spill = false;
+    DeferOp defer([&]() { config::enable_load_spill = backup; });
+
+    const auto txn_id = next_id();
+    const auto tablet_id = _tablet_metadata->id();
+    auto write_share = [&](BundleWritableFileContext* bundle_context, int64_t max_buffer_size, int chunks) {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .set_bundle_writable_file_context(bundle_context)
+                                                   .set_multi_node_write(true)
+                                                   .set_max_buffer_size(max_buffer_size)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        for (int i = 0; i < chunks; i++) {
+            CHECK_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        }
+        ASSIGN_OR_ABORT(auto txn_log, delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog));
+        delta_writer->close();
+        return TxnLogPB(*txn_log);
+    };
+    // Each node opens its own bundle file. 0 keeps the default memtable size; 1 byte fills it on every write.
+    BundleWritableFileContext small_node_bundle;
+    BundleWritableFileContext large_node_bundle;
+    auto small_share = write_share(&small_node_bundle, 0, 1);
+    auto large_share = write_share(&large_node_bundle, 1, 3);
+
+    ASSERT_EQ(1, small_share.op_write().rowset().segment_metas_size());
+    ASSERT_TRUE(small_share.op_write().rowset().segment_metas(0).has_bundle_file_offset());
+    ASSERT_EQ(3, large_share.op_write().rowset().segment_metas_size());
+    for (const auto& segment_meta : large_share.op_write().rowset().segment_metas()) {
+        ASSERT_FALSE(segment_meta.has_bundle_file_offset());
+    }
+
+    // What TabletSinkSender does with the logs the writing nodes hand back.
+    normalize_txn_log_after_load(&small_share);
+    normalize_txn_log_after_load(&large_share);
+    ASSERT_OK(merge_multi_node_write_txn_log(&small_share, &large_share));
+    // put_txn_log runs before-save, which refused this log as a mix of bundled and standalone segments.
+    ASSERT_OK(_tablet_mgr->put_txn_log(small_share));
+    ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    ASSERT_EQ(4, metadata->rowsets(0).segment_metas_size());
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    int64_t rows = 0;
+    int64_t sum_c0 = 0;
+    int64_t sum_c1 = 0;
+    while (true) {
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            sum_c0 += chunk->get(i)[0].get_int32();
+            sum_c1 += chunk->get(i)[1].get_int32();
+        }
+        rows += chunk->num_rows();
+    }
+    // Four copies of 0..127 in c0, and c1 = 3 * c0.
+    EXPECT_EQ(4 * kChunkSize, rows);
+    EXPECT_EQ(4 * (kChunkSize - 1) * kChunkSize / 2, sum_c0);
+    EXPECT_EQ(3 * sum_c0, sum_c1);
 }
 
 } // namespace starrocks::lake

@@ -2277,6 +2277,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
+        // Multi-node write, resolved the same way as on the create-partition path
+        // (buildCreatePartitionResponse): the width this table's plan recorded, and the nodes alive now.
+        final int writerWidth = txnState.getMultiNodeWriteWidth(olapTable.getId());
+        final List<Long> writerCandidates = writerWidth > 1
+                ? OlapTableSink.resolveWriterCandidates(warehouseManager, computeResource)
+                : Collections.emptyList();
+
         // return all mutable partitions
         for (Long id : updatePartitionIds) {
             Partition partition = olapTable.getPartition(id);
@@ -2300,7 +2307,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     buildPartitions(olapTable, physicalPartition, partitions, tPartition, txnState);
-                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState);
+                    buildTablets(physicalPartition, tablets, olapTable, computeResource, txnState,
+                            writerWidth, writerCandidates);
                 }
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
@@ -2394,18 +2402,36 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
-                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState)
+                                     OlapTable olapTable, ComputeResource computeResource, TransactionState txnState,
+                                     int writerWidth, List<Long> writerCandidates)
             throws StarRocksException {
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : txnState.getPartitionLoadedIndexes(olapTable.getId(), physicalPartition)) {
             if (olapTable.isCloudNativeTable()) {
+                int tabletCount = index.getTablets().size();
                 for (Tablet tablet : index.getTablets()) {
+                    // Every sink instance of the load sends this RPC on its own, and each response
+                    // lists every mutable sub-partition, including ones an earlier call created. Key-hash
+                    // routing needs all instances to see the SAME node list for a tablet, so the first
+                    // answer for a tablet is kept for the rest of the transaction, as the create-partition
+                    // path does. BE keeps the first location it gets for a tablet, so answering a tablet the
+                    // sink already knows from its plan changes nothing there.
+                    TTabletLocation cached = txnState.getTabletIdToTTabletLocation().get(tablet.getId());
+                    if (cached != null) {
+                        tablets.add(cached);
+                        continue;
+                    }
                     try {
                         // use default warehouse nodes
                         ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource,
                                 tablet.getId());
-                        tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
+                        TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
+                                OlapTableSink.buildRuntimePartitionNodeIds(computeNode.getId(), writerCandidates,
+                                        writerWidth, tabletCount, tablet.getId()));
+                        TTabletLocation previous =
+                                txnState.getTabletIdToTTabletLocation().putIfAbsent(tablet.getId(), tabletLocation);
+                        tablets.add(previous != null ? previous : tabletLocation);
                     } catch (Exception exception) {
                         throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
                     }

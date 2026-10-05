@@ -416,6 +416,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         auto context = std::make_unique<CompactionTaskContext>(
                 request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
                 request->skip_write_txnlog(), cb, 0, 0, request->unshare_segments());
+        context->allow_base_compaction = request->allow_base_compaction();
         // Snapshot the parallel-compaction request here, on the bthread. The worker that later plans the
         // subtasks reads these instead of `request`, which it must not touch: `request`/`response` are only
         // guaranteed to outlive the worker while some tablet still has an unfinished context, and once the
@@ -691,7 +692,8 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             return _parallel_mgr->create_parallel_tasks(
                     tablet_id, txn_id, context->version, parallel_config, context->callback,
                     context->force_base_compaction, _threads.get(), acquire_token, release_token, context->is_unshare,
-                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token);
+                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token,
+                    context->allow_base_compaction);
         } catch (const std::exception& e) {
             LOG(WARNING) << "Exception while planning parallel compaction, compacting serially instead. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id << ": " << e.what();

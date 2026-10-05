@@ -71,6 +71,8 @@
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
+#include "runtime/byte_buffer.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_env.h"
 #include "simdjson.h"
 
@@ -510,13 +512,15 @@ TEST_F(StreamLoadActionTest, batch_write_csv) {
     ASSERT_NE(nullptr, ctx);
     ASSERT_TRUE(ctx->status.ok());
     ASSERT_TRUE(ctx->enable_batch_write);
-    ASSERT_NE(nullptr, ctx->buffer);
-    ASSERT_EQ(content.length(), ctx->buffer->limit);
+    ASSERT_EQ(nullptr, ctx->buffer);
 
     evbuffer_add(evb, content.data(), content.size());
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.ok());
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(content.length(), ctx->buffer->limit);
+    ASSERT_EQ(0, ctx->buffer->padding);
     ASSERT_EQ(content.length(), ctx->buffer->pos);
 
     SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb",
@@ -569,14 +573,15 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     ASSERT_NE(nullptr, ctx);
     ASSERT_TRUE(ctx->status.ok());
     ASSERT_TRUE(ctx->enable_batch_write);
-    ASSERT_NE(nullptr, ctx->buffer);
-    ASSERT_EQ(content.length(), ctx->buffer->limit);
-    ASSERT_EQ(simdjson::SIMDJSON_PADDING, ctx->buffer->padding);
+    ASSERT_EQ(nullptr, ctx->buffer);
 
     evbuffer_add(evb, content.data(), content.size());
     ctx->status = Status::OK();
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.ok());
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(content.length(), ctx->buffer->limit);
+    ASSERT_EQ(simdjson::SIMDJSON_PADDING, ctx->buffer->padding);
     ASSERT_EQ(content.length(), ctx->buffer->pos);
 
     SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::cb",
@@ -597,9 +602,48 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     ASSERT_STREQ("Success", doc["Status"].GetString());
 }
 
-TEST_F(StreamLoadActionTest, json_buffer_allocated_on_header) {
+TEST_F(StreamLoadActionTest, batch_write_empty_body) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("BatchWriteMgr::append_data::success");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
     StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
                             _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_LABEL_KEY, "batch_write_empty_body");
+    request._headers.emplace(HTTP_ENABLE_MERGE_COMMIT, "true");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_TRUE(ctx->enable_batch_write);
+    ASSERT_EQ(nullptr, ctx->buffer);
+
+    SyncPoint::GetInstance()->SetCallBack("BatchWriteMgr::append_data::success",
+                                          [](void* arg) { *(Status*)arg = Status::OK(); });
+    action.handle(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(0, ctx->buffer->limit);
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, json_buffer_allocated_on_chunk_data) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    auto load_mem_tracker = std::make_shared<MemTracker>(-1, "json_buffer_allocated_on_chunk_data");
     HttpRequest request(_evhttp_req);
 
     std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
@@ -614,20 +658,129 @@ TEST_F(StreamLoadActionTest, json_buffer_allocated_on_header) {
     ASSERT_TRUE(ctx->status.ok());
     ASSERT_FALSE(ctx->enable_batch_write);
     ASSERT_EQ(TFileFormatType::FORMAT_JSON, ctx->format);
+    ASSERT_EQ(nullptr, ctx->buffer);
+
+    ctx->instance_mem_tracker = load_mem_tracker;
+    auto evb = request.get_evhttp_request()->input_buffer;
+    evbuffer_add(evb, content.data(), content.size());
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
     ASSERT_NE(nullptr, ctx->buffer);
     ASSERT_EQ(content.length(), ctx->buffer->limit);
     ASSERT_EQ(simdjson::SIMDJSON_PADDING, ctx->buffer->padding);
+    ASSERT_EQ(content.length(), ctx->buffer->pos);
+    auto* deleter = std::get_deleter<MemTrackerDeleter>(ctx->buffer);
+    ASSERT_NE(nullptr, deleter);
+    ASSERT_EQ(load_mem_tracker.get(), deleter->tracker);
+}
+
+TEST_F(StreamLoadActionTest, json_buffer_allocate_fail) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+
+    std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ByteBuffer::allocate_with_tracker");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("ByteBuffer::allocate_with_tracker",
+                                          [](void* arg) { *((Status*)arg) = Status::MemoryLimitExceeded("TestFail"); });
+    auto evb = request.get_evhttp_request()->input_buffer;
+    evbuffer_add(evb, content.data(), content.size());
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.is_mem_limit_exceeded());
+    ASSERT_EQ(nullptr, ctx->buffer);
+}
+
+TEST_F(StreamLoadActionTest, json_without_content_length) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+
+    std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_EQ(0, ctx->body_bytes);
+    ASSERT_EQ(nullptr, ctx->buffer);
 
     auto evb = request.get_evhttp_request()->input_buffer;
     evbuffer_add(evb, content.data(), content.size());
     action.on_chunk_data(&request);
     ASSERT_TRUE(ctx->status.ok());
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(StreamLoadContext::kDefaultBufferSize, ctx->buffer->limit);
+    ASSERT_EQ(0, ctx->buffer->padding);
     ASSERT_EQ(content.length(), ctx->buffer->pos);
+}
 
-    action.handle(&request);
+TEST_F(StreamLoadActionTest, json_exceed_max_batch_size) {
+    auto old_max_batch_size_mb = config::streaming_load_max_batch_size_mb;
+    config::streaming_load_max_batch_size_mb = 0;
+    DeferOp defer([&]() { config::streaming_load_max_batch_size_mb = old_max_batch_size_mb; });
+
+    std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+        request.set_handler(&action);
+
+        ASSERT_EQ(-1, action.on_header(&request));
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "exceed the max size"));
+    }
+    {
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+        HttpRequest request(_evhttp_req);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+        request._headers.emplace(HTTP_IGNORE_JSON_SIZE, "true");
+        request.set_handler(&action);
+
+        ASSERT_EQ(0, action.on_header(&request));
+        StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+        ASSERT_NE(nullptr, ctx);
+        ASSERT_TRUE(ctx->status.ok());
+    }
+}
+
+TEST_F(StreamLoadActionTest, unknown_format) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_FORMAT_KEY, "unknown_format");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request.set_handler(&action);
+
+    ASSERT_EQ(-1, action.on_header(&request));
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
-    ASSERT_STREQ("Success", doc["Status"].GetString());
+    ASSERT_STREQ("Fail", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "unknown data format"));
 }
 
 TEST_F(StreamLoadActionTest, enable_batch_write_wrong_argument) {

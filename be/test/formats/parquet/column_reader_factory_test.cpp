@@ -530,6 +530,46 @@ TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByPhysi
     ASSERT_EQ(struct_reader->get_child_column_reader("missing"), nullptr);
 }
 
+// field_ids / field_physical_names hold -1 / "" for a subfield without one; such a subfield is matched by its
+// physical name or its name instead.
+TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderFieldIds) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a", 0, tparquet::Type::INT32));
+    field.children.back().field_id = 1;
+    field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+    field.children.back().field_id = 2;
+    field.children.emplace_back(make_scalar_field("c", 2, tparquet::Type::INT32));
+    field.children.back().field_id = 3;
+
+    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    // renamed_c is matched by its id, b (no id) by its name.
+    TypeDescriptor col_type = TypeDescriptor::create_struct_type({"renamed_c", "b"}, {int_type, int_type});
+    col_type.field_ids = {3, -1};
+
+    std::vector<int32_t> pos(col_type.children.size());
+    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
+    EXPECT_EQ((std::vector<int32_t>{2, 1}), pos);
+}
+
+TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("a_phys", 0, tparquet::Type::INT32));
+    field.children.emplace_back(make_scalar_field("b", 1, tparquet::Type::INT32));
+
+    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    // a is matched by its physical name, b (no physical name) by its name; missing is not in the file.
+    TypeDescriptor col_type = TypeDescriptor::create_struct_type({"a", "b", "missing"}, {int_type, int_type, int_type});
+    col_type.field_physical_names = {"a_phys", "", ""};
+
+    std::vector<int32_t> pos(col_type.children.size());
+    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
+    EXPECT_EQ((std::vector<int32_t>{0, 1, -1}), pos);
+}
+
 // Minimal concrete subclass to allow instantiation of the abstract ColumnReader.
 class TestColumnReader : public ColumnReader {
 public:

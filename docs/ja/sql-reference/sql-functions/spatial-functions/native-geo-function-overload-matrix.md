@@ -53,10 +53,12 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | `ST_Y(GEOMETRY point)` | 120091 | `DOUBLE`、入力 CRS の単位 | 空でない XY `POINT` | `NULL` は伝播します。`EMPTY`、非 `POINT`、未対応ディスクリプタはエラーです。 |
 | `ST_GeometryType(GEOGRAPHY value)` | 120170 | `VARCHAR` ファミリ名 | 対応するすべての XY ファミリ | `NULL` は伝播します。型付き `EMPTY` はファミリ名を保持します。未対応の次元またはディスクリプタはエラーです。 |
 | `ST_GeometryType(GEOMETRY value)` | 120171 | `VARCHAR` ファミリ名 | 対応するすべての XY ファミリ | `NULL` は伝播します。型付き `EMPTY` はファミリ名を保持します。未対応の次元またはディスクリプタはエラーです。 |
-| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`、メートル | 球面 CRS84 契約の XY `POINT`/`POINT` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、ディスクリプタはエラーです。 |
-| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`、入力 CRS の単位 | ディスクリプタが一致する XY `POINT`/`POINT` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、互換性のないディスクリプタはエラーです。 |
+| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`、メートル | 球面 CRS84 契約の XY `POINT`/`POINT`、または `POINT` と `LINESTRING`/`MULTILINESTRING` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、ディスクリプタ、曖昧な対蹠線分はエラーです。 |
+| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`、入力 CRS の単位 | ディスクリプタが一致する XY `POINT`/`POINT`、または `POINT` と `LINESTRING`/`MULTILINESTRING` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、互換性のないディスクリプタはエラーです。 |
+| `ST_DWithin(GEOGRAPHY lhs, GEOGRAPHY rhs, DOUBLE distance)` | 120230 | `BOOLEAN`、`distance` はメートル | XY `POINT` と `LINESTRING`/`MULTILINESTRING`（引数の順序は不問） | しきい値は等しい場合を含みます。`NULL` は伝播し、`EMPTY` は `false` です。しきい値は有限の非負値である必要があります。 |
+| `ST_DWithin(GEOMETRY lhs, GEOMETRY rhs, DOUBLE distance)` | 120231 | `BOOLEAN`、`distance` は入力 CRS の単位 | ディスクリプタが一致する XY `POINT` と `LINESTRING`/`MULTILINESTRING`（引数の順序は不問） | しきい値は等しい場合を含みます。`NULL` は伝播し、`EMPTY` は `false` です。しきい値は有限の非負値である必要があります。 |
 
-[ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md) を参照してください。
+[ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md)、[ST_DWithin](st_dwithin.md) を参照してください。
 
 ## 包含関係の述語
 
@@ -72,6 +74,43 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | `ST_CoveredBy(GEOMETRY point, GEOMETRY polygon)` | 120221 | `ST_Covers` の逆で、境界を含みます。 |
 
 これらのオーバーロードは、XY `POINT` と `POLYGON` または `MULTIPOLYGON` の組み合わせに対応します。`GEOGRAPHY` は球面 CRS84 エッジ、`GEOMETRY` は平面エッジで評価し、後者は一致するディスクリプタを必要とします。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、次元、ディスクリプタ、および `GEOGRAPHY`/`GEOMETRY` の混在呼び出しは拒否されます。[ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md)、[ST_CoveredBy](st_coveredby.md) を参照してください。
+
+## 交差述語
+
+| シグネチャ | 関数 ID | 境界の動作 |
+| --- | ---: | --- |
+| `ST_Intersects(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120240 | 球面上の重なり、包含、境界接触で `true` を返します。 |
+| `ST_Intersects(GEOMETRY lhs, GEOMETRY rhs)` | 120241 | 平面上の重なり、包含、境界接触で `true` を返します。 |
+
+これらのオーバーロードは XY `POLYGON` と `MULTIPOLYGON` をサポートします。`GEOMETRY` 入力には一致するディスクリプタが必要です。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、コレクション、ネイティブ論理型の混在は拒否されます。[ST_Intersects](st_intersects.md) を参照してください。
+
+## 計測とプロパティ
+
+| シグネチャ | 関数 ID | 結果と単位 | Family の動作 |
+| --- | ---: | --- | --- |
+| `ST_Area(GEOGRAPHY value)` | 120250 | `DOUBLE`、平方メートル | ポリゴン面積を再帰的に合計し、穴を減算し、低次元要素は 0。 |
+| `ST_Area(GEOMETRY value)` | 120251 | `DOUBLE`、入力 CRS 単位の二乗 | ポリゴン面積を再帰的に合計し、穴を減算し、低次元要素は 0。 |
+| `ST_Length(GEOGRAPHY value)` | 120260 | `DOUBLE`、メートル | 線の長さを再帰的に合計し、点とポリゴンは 0。 |
+| `ST_Length(GEOMETRY value)` | 120261 | `DOUBLE`、入力 CRS 単位 | 線の長さを再帰的に合計し、点とポリゴンは 0。 |
+| `ST_Perimeter(GEOGRAPHY value)` | 120270 | `DOUBLE`、メートル | ポリゴンの外側および内側リング長を再帰的に合計。 |
+| `ST_Perimeter(GEOMETRY value)` | 120271 | `DOUBLE`、入力 CRS 単位 | ポリゴンの外側および内側リング長を再帰的に合計。 |
+| `ST_Centroid(GEOGRAPHY value)` | 120280 | `GEOGRAPHY POINT`、同じ descriptor | 最も高い非空次元と球面サイズの重みを使用。 |
+| `ST_Centroid(GEOMETRY value)` | 120281 | `GEOMETRY POINT`、同じ descriptor | 最も高い非空次元と平面サイズの重みを使用。 |
+| `ST_IsValid(GEOGRAPHY value)` | 120290 | `BOOLEAN` | MultiPolygon の内部重なりを含む球面妥当性を使用。 |
+| `ST_IsValid(GEOMETRY value)` | 120291 | `BOOLEAN` | 堅牢な平面トポロジ妥当性を使用。 |
+
+すべての overload は 7 種類の XY OGC family を受け付け、必要に応じて `MULTI*` と `GEOMETRYCOLLECTION` を再帰処理します。`NULL` は伝播します。`EMPTY` に対して計測は 0、`ST_Centroid` は `POINT EMPTY`、`ST_IsValid` は `true` を返します。読み取り可能でもトポロジ的に無効な値は `ST_IsValid` だけが `false` を返し、計測と重心は拒否します。不正な WKB、未対応の次元または descriptor はエラーです。
+
+球面ポリゴンのリングは向きに依存せず、小さい領域に正規化されます。1 個のリングで半球を超える領域は表現しません。[ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md)、[ST_IsValid](st_isvalid.md) を参照してください。
+## CRS メタデータと座標変換
+
+| シグネチャ | 関数 ID | 結果 | 動作 |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` または `NULL` | descriptor の数値 EPSG 対応を読み取り、座標は変換しません。 |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`、ターゲット EPSG descriptor | メタデータのみ変更し、WKB と座標は保持します。 |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`、ターゲット EPSG descriptor | Web Mercator の数式で EPSG:4326 と EPSG:3857 の間の XY 座標を再投影します。 |
+
+ターゲット SRID は FE が定数に畳み込める 4326 または 3857 に限ります。入力 CRS は EPSG:4326、EPSG:3857、または OGC:CRS84 です。`ST_Transform` は 7 種類の XY OGC family と collection を処理します。`NULL` は伝播し、`EMPTY` は空のままです。[ST_SRID](st_srid.md)、[ST_SetSRID](st_setsrid.md)、[ST_Transform](st_transform.md) を参照してください。
 
 ## レガシー互換性
 
@@ -92,3 +131,46 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 ローリングアップグレードでは、FE より先に BE をアップグレードしてください。これらの関数は通常の安定した関数 ID ディスパッチを使用し、独立した GEO バージョンゲートは導入しません。新しい FE と古い BE の組み合わせは、サポートされるアップグレード順序ではありません。
 
 この契約は、オーバーロード解決、戻り型、レガシー互換性、関数 ID を確認する FE analyzer テストと、各ネイティブ ID を確認する BE registry テストで検証されます。既存の BE 関数テストは、定数、Nullable、可変入力、`EMPTY`、不正入力、ファミリ、次元、CRS、ディスクリプタの動作を網羅します。
+
+## ポリゴン overlay
+
+互換性のある CRS を持つネイティブ XY ポリゴンとマルチポリゴンを処理します。4326 と 3857 はどちらも直交座標の意味を持ちます。NULL は NULL を返します。`ST_Union`、`ST_Difference`、`ST_SymDifference` は、成分が 1 つの場合は POLYGON、複数の場合は MULTIPOLYGON、空の場合は POLYGON EMPTY を返します。無効なトポロジーはエラーです。精度とリソース制限はリンク先に記載しています。
+
+`ST_Intersection` は共有辺と孤立した接触点も保持します。面積がない場合は線または点のファミリ、複数の次元がある場合は GEOMETRYCOLLECTION を返します。より高い次元の結果に覆われる部分は重複して返しません。交差しない入力は POLYGON EMPTY を返します。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
+| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
+| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
+| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
+## 直交座標バッファ
+
+ネイティブ XY POINT、LINESTRING、POLYGON と各 MULTI 型に対応します。距離は入力 CRS 単位の有限な符号付き値です。丸い近似、NULL 伝播、多角形 EMPTY 結果を使用し、CRS を保持します。ST_Buffer は GEOGRAPHY、コレクション、Z/M、オプションをサポートしません。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## トポロジーを維持する簡略化
+
+直交座標 XY のスカラージオメトリ。型、リング、接触、型付き EMPTY 子要素、CRS を維持します。許容値は入力座標単位です。GEOGRAPHY、Z/M、行をまたぐカバレッジ簡略化はサポートしません。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
+
+## H3 セル関数
+
+ジオメトリ引数にはネイティブ XY CRS84 GEOGRAPHY が必要です。セル ID は符号付き BIGINT です。有効性、NULL/EMPTY、近似フィル、制限については [H3 関数](h3-functions.md) を参照してください。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
