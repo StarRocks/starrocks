@@ -697,10 +697,8 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
                     build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column.slot_desc->col_name());
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
-        } else if (column.t_lake_schema_field == nullptr) {
-            ASSIGN_OR_RETURN(column_reader,
-                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
+            // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));

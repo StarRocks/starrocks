@@ -16,6 +16,7 @@
 
 #include <optional>
 
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/schema.h"
 #include "formats/utils.h"
@@ -130,51 +131,15 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
         has_valid_child = true;
     } else if (parquet_field->has_struct_layout()) {
-        if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
-            // not reachable: a struct group does not match a VARIANT column (has_same_complex_type)
-            has_valid_child = false;
-        } else {
-            // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by
-            // its name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / ""
-            // for a subfield that has none.
-            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
-            std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type;
-            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
-                const TypeDescriptor* child_type = &type_descriptor->children[idx];
-                if (!type_descriptor->field_ids.empty() && type_descriptor->field_ids[idx] != -1) {
-                    field_id_2_type.emplace(type_descriptor->field_ids[idx], child_type);
-                    continue;
-                }
-                const std::string& name = !type_descriptor->field_physical_names.empty() &&
-                                                          !type_descriptor->field_physical_names[idx].empty()
-                                                  ? type_descriptor->field_physical_names[idx]
-                                                  : type_descriptor->field_names[idx];
-                field_name_2_type.emplace(Utils::format_name(name, _case_sensitive), child_type);
-            }
-
-            // start to check struct type
-            for (const auto& child_parquet_field : parquet_field->children) {
-                const TypeDescriptor* child_type = nullptr;
-                if (!field_id_2_type.empty()) {
-                    auto it = field_id_2_type.find(child_parquet_field.field_id);
-                    if (it != field_id_2_type.end()) {
-                        child_type = it->second;
-                    }
-                }
-                if (child_type == nullptr && !field_name_2_type.empty()) {
-                    auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
-                    if (it != field_name_2_type.end()) {
-                        child_type = it->second;
-                    }
-                }
-                if (child_type == nullptr) {
-                    continue;
-                }
-
-                if (_is_valid_type(&child_parquet_field, child_type)) {
-                    has_valid_child = true;
-                    break;
-                }
+        // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.
+        StructSubfieldMapping mapping = ColumnReaderFactory::resolve_struct_subfields(*parquet_field, *type_descriptor,
+                                                                                      _case_sensitive, nullptr, false);
+        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+            const ParquetField* child_parquet_field = mapping.parquet_children[idx];
+            if (child_parquet_field != nullptr &&
+                _is_valid_type(child_parquet_field, &type_descriptor->children[idx])) {
+                has_valid_child = true;
+                break;
             }
         }
     }
@@ -220,31 +185,14 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
     } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
         return true;
     } else if (parquet_field->has_struct_layout()) {
+        // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.
         // LakeMetaHelper is only used when the parquet file has field ids (see _build_meta_helper).
-        std::unordered_map<int32_t, const TIcebergSchemaField*> field_id_2_lake_schema;
-        std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
-        for (const auto& field : field_schema->children) {
-            field_id_2_lake_schema.emplace(field.field_id, &field);
-            for (size_t i = 0; i < type_descriptor->field_names.size(); i++) {
-                if (type_descriptor->field_names[i] == field.name) {
-                    field_id_2_type.emplace(field.field_id, &type_descriptor->children[i]);
-                    break;
-                }
-            }
-        }
-
-        for (const auto& child_parquet_field : parquet_field->children) {
-            auto it = field_id_2_lake_schema.find(child_parquet_field.field_id);
-            if (it == field_id_2_lake_schema.end()) {
-                continue;
-            }
-
-            auto it_td = field_id_2_type.find(child_parquet_field.field_id);
-            if (it_td == field_id_2_type.end()) {
-                continue;
-            }
-
-            if (_is_valid_type(&child_parquet_field, it->second, it_td->second)) {
+        StructSubfieldMapping mapping = ColumnReaderFactory::resolve_struct_subfields(
+                *parquet_field, *type_descriptor, _case_sensitive, field_schema, /*parquet_has_field_id=*/true);
+        for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+            const ParquetField* child_parquet_field = mapping.parquet_children[idx];
+            if (child_parquet_field != nullptr &&
+                _is_valid_type(child_parquet_field, mapping.lake_children[idx], &type_descriptor->children[idx])) {
                 has_valid_child = true;
                 break;
             }
