@@ -4587,6 +4587,78 @@ TEST_F(GroupReaderTest, ReadLazyColumnsFiltersTriggeredColumnsWithChunkFilter) {
     EXPECT_EQ(num_rows, col->size());
 }
 
+class MockCountingColumnReader : public ColumnReader {
+public:
+    MockCountingColumnReader() : ColumnReader(nullptr) {}
+    ~MockCountingColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst_col) override {
+        _read_count++;
+        dst_col->as_mutable_ptr()->append_default(range.span_size());
+        return Status::OK();
+    }
+
+    void set_need_parse_levels(bool need_parse_levels) override {}
+    void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override {}
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+    size_t read_count() const { return _read_count; }
+
+private:
+    size_t _read_count = 0;
+};
+
+// Covers: ColumnMaterializer::read_active_range_round_by_round returns as soon as a
+//         reserved-slot conjunct filters out every row, without reading the regular
+//         active columns with an all-zero filter.
+TEST_F(GroupReaderTest, ReservedSlotConjunctFiltersAllSkipsActiveColumns) {
+    auto* param = _create_group_reader_param();
+    param->read_cols.clear();
+
+    auto* reserved_slot =
+            _pool.add(new SlotDescriptor(260, "_pos", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    auto* active_slot =
+            _pool.add(new SlotDescriptor(261, "a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+    GroupReaderParam::Column ca{};
+    ca.slot_desc = active_slot;
+    param->read_cols.emplace_back(ca);
+    param->scan_ctx->reserved_field_slots = {reserved_slot};
+
+    // _pos = 42 matches none of the rows [1, 2].
+    RuntimeState runtime_state{TQueryGlobals()};
+    std::vector<ExprContext*> conjunct_ctxs;
+    ASSERT_OK(create_bigint_eq_conjunct_ctxs(&_pool, &runtime_state, reserved_slot->id(), 42, &conjunct_ctxs));
+
+    auto reserved_col = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
+    reserved_col->append_datum(Datum(int64_t(1)));
+    reserved_col->append_datum(Datum(int64_t(2)));
+
+    ColumnMaterializer::ColumnReaderMap column_readers;
+    column_readers.emplace(reserved_slot->id(), std::make_unique<MockVariantSourceColumnReader>(reserved_col));
+    auto counting_reader = std::make_unique<MockCountingColumnReader>();
+    auto* active_reader = counting_reader.get();
+    column_readers.emplace(active_slot->id(), std::move(counting_reader));
+
+    ColumnMaterializer materializer(*param, &column_readers);
+    materializer.add_active_column(0);
+    materializer.rebuild_read_order_ctx();
+    for (auto* ctx : conjunct_ctxs) {
+        materializer.add_post_read_conjunct(reserved_slot->id(), ctx);
+    }
+    ASSERT_OK(materializer.init_read_chunk());
+    auto chunk = materializer.create_active_chunk();
+
+    Filter filter(2, 1);
+    ASSIGN_OR_ABORT(size_t hit_count,
+                    materializer.read_active_range_round_by_round(Range<uint64_t>(0, 2), &filter, &chunk, nullptr));
+    EXPECT_EQ(0u, hit_count);
+    EXPECT_EQ(0u, active_reader->read_count());
+}
+
 // Covers: ReadRangePlanner::deduplicate merges duplicate IORanges.
 TEST_F(GroupReaderTest, ReadRangePlannerDeduplicateMergesIdenticalRanges) {
     using IORange = SharedBufferedInputStream::IORange;
