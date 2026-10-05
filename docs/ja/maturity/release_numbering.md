@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 50
+sidebar_position: 20
 description: "StarRocks のバージョン命名規則。MAJOR.MINOR.PATCH 形式、プレリリースの表記、バージョン番号の読み方を説明します。"
 ---
 
