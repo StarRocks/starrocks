@@ -456,6 +456,39 @@ TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub) {
     ASSERT_TRUE(least_loaded.selected_at_connection_limit);
 }
 
+// Least-loaded selection and get_or_create() round-robin keep independent cursors, so an exchange sink's
+// acquire_least_loaded_stub() calls must not perturb the even distribution get_stub() callers rely on.
+TEST_F(BrpcStubCacheTest, acquire_least_loaded_does_not_perturb_round_robin) {
+    config::brpc_max_connections_per_server = 3;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    // Fill the pool; the round-robin cursor now points at stub0 (the last stub returned).
+    auto stub0 = cache.get_stub(address);
+    auto stub1 = cache.get_stub(address);
+    auto stub2 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub0);
+    ASSERT_NE(stub0.get(), stub1.get());
+    ASSERT_NE(stub1.get(), stub2.get());
+    ASSERT_EQ(stub0.get(), cache.get_stub(address).get());
+
+    // Make stub0 and stub1 busy so least-loaded selection picks the idle stub2, which sits at a
+    // different index than the round-robin cursor. A shared cursor would be dragged to stub2 here.
+    auto busy0 = stub0->reserve_rpc();
+    auto busy1 = stub1->reserve_rpc();
+    auto selected_or = cache.acquire_least_loaded_stub(stub0->endpoint());
+    ASSERT_OK(selected_or.status());
+    auto selected = std::move(selected_or).value();
+    ASSERT_EQ(stub2.get(), selected.reservation.stub());
+
+    // Round-robin must resume from where it left off (stub1, then stub2), unaffected by the
+    // least-loaded selection above.
+    ASSERT_EQ(stub1.get(), cache.get_stub(address).get());
+    ASSERT_EQ(stub2.get(), cache.get_stub(address).get());
+}
+
 TEST_F(BrpcStubCacheTest, first_stub_is_not_created_on_contention) {
     BrpcStubCache cache(_timer.get());
     butil::EndPoint endpoint;

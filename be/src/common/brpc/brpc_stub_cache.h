@@ -143,7 +143,12 @@ public:
 
         std::mutex _mutex;
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
+        // Round-robin cursor for get_or_create(). Kept separate from the least-loaded cursor below so that
+        // least-loaded selection (used by exchange sinks) does not perturb the even distribution that
+        // get_or_create()'s callers rely on when brpc_max_connections_per_server > 1.
         int64_t _last_selected_idx = -1;
+        // Rotation cursor for acquire_least_loaded(), used to break ties between equally-idle stubs.
+        int64_t _last_least_loaded_idx = -1;
         std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 
