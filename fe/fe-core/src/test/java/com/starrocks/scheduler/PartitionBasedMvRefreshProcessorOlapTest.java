@@ -2741,6 +2741,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                             "ColumnReuseChecker",
                             "PlanBuilder",
                             "MVRefreshMaterializedView",
+                            "MVRefreshPrefetchPartitionInfos",
+                            "MVRefreshPreResolveExternalTables",
                             "MVRefreshUpdateMeta",
                             "MVRefreshLockRetryTimes",
                             "MVRefreshRetryTimes",
