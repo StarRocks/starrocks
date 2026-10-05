@@ -693,8 +693,10 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
             schema_node->type == ColumnType::STRUCT) {
             // Physical VARIANT columns use _get_variant_shredded_hints; this path
             // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints =
-                    build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column.slot_desc->col_name());
+            // The full variant column is output, so extended access paths of its virtual subfields must not
+            // narrow it.
+            VariantShreddedReadHints hints = build_variant_shredded_hints(&_param.scan_ctx->column_access_paths,
+                                                                          column.slot_desc->col_name(), false);
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
         } else if (column.t_lake_schema_field == nullptr) {
