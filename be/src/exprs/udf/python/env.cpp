@@ -107,6 +107,24 @@ std::string PyWorkerManager::new_socket_path() {
 
 namespace {
 
+// The launcher installed through PyWorkerManager::set_launch_hook, if any.
+PyWorkerManager::LaunchHook& launch_hook() {
+    static PyWorkerManager::LaunchHook hook = nullptr;
+    return hook;
+}
+
+// posix_spawn takes NULL-terminated arrays; these borrow the strings' buffers, so the
+// vector they were built from must outlive the spawn.
+std::vector<const char*> c_string_array(const std::vector<std::string>& strings) {
+    std::vector<const char*> array;
+    array.reserve(strings.size() + 1);
+    for (const auto& s : strings) {
+        array.push_back(s.c_str());
+    }
+    array.push_back(nullptr);
+    return array;
+}
+
 // Ask posix_spawn to put the child in a process group of its own (pgid == child pid), so
 // terminate() can group-kill and reap the whole subtree, not just this one process.
 // Returns whether the attributes were accepted.
@@ -118,6 +136,10 @@ bool spawn_in_own_process_group(posix_spawnattr_t* attrs) {
 }
 
 } // namespace
+
+void PyWorkerManager::set_launch_hook(LaunchHook hook) {
+    launch_hook() = hook;
+}
 
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
@@ -183,13 +205,16 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
     std::string sock_path = new_socket_path();
     std::string sock_url = "grpc+unix://" + sock_path;
 
-    std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
-    const char* args[] = {"python3", script.c_str(), sock_url.c_str(), nullptr};
-    const char* envs[] = {python_home_env.c_str(), nullptr};
+    LaunchSpec spec{python_path, {"python3", script, sock_url}, {fmt::format("PYTHONHOME={}", py_env.home)}};
+    if (auto hook = launch_hook()) {
+        ASSIGN_OR_RETURN(spec, hook(LaunchRequest{python_path, script, sock_url, py_env.home}));
+    }
+    std::vector<const char*> argv = c_string_array(spec.argv);
+    std::vector<const char*> envp = c_string_array(spec.envp);
 
     bool own_pgroup = spawn_in_own_process_group(&attrs);
-    int rc = posix_spawnp(&pid, python_path.c_str(), &actions, &attrs, const_cast<char* const*>(args),
-                          const_cast<char* const*>(envs));
+    int rc = posix_spawnp(&pid, spec.exe.c_str(), &actions, &attrs, const_cast<char* const*>(argv.data()),
+                          const_cast<char* const*>(envp.data()));
     close(pipefd[1]);
 
     if (rc != 0) {
