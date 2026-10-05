@@ -745,6 +745,17 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {bag}),
                             TypeDescriptor::create_array_type(int_array));
     }
+    // ... but an unannotated repeated group named `array` or `<list name>_tuple` stays a struct element, even
+    // when its single child is repeated:
+    // optional group my_list (LIST) { repeated group array { repeated int32 nums; } }
+    // optional group my_list (LIST) { repeated group my_list_tuple { repeated int32 nums; } }
+    for (const std::string name : {"array", "my_list_tuple"}) {
+        auto nums = create_primitive_node("nums", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
+        auto group = create_group_node(name, ::parquet::Repetition::REPEATED, {nums});
+        check_inferred_type(
+                create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {group}),
+                TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type({"nums"}, {int_array})));
+    }
     // A single-field repeated group named `array` is a struct element:
     // optional group my_list (LIST) { repeated group array { required binary str; } }
     {

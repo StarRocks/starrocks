@@ -188,8 +188,8 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         //
         // yields list<item: struct<item: TYPE ?nullable> not null> ?nullable
         //
-        // A single repeated child takes precedence over the name rule: it is a nested list with
-        // two-level encoding, whatever the repeated group is called.
+        // A LIST-annotated repeated group with a single repeated child takes precedence over the
+        // name rule: it is a nested list with two-level encoding, whatever the repeated group is called.
         //
         // required/optional group name=whatever {
         //   repeated group name=array (LIST) {
@@ -198,11 +198,14 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         // }
         //
         // yields list<item: list<item: TYPE not null> not null> ?nullable
+        //
+        // Without the LIST annotation the name rule still applies, so an `array` group with a single
+        // repeated child is a struct element: list<item: struct<item: list<TYPE>>>.
         bool is_single_element = false;
         if (list_node_schema->num_children == 1) {
             ASSIGN_OR_RETURN(const auto* element_schema, _get_schema_element(t_schemas, pos + 2));
-            is_single_element =
-                    is_repeated(element_schema) || !has_struct_list_name(list_node_schema->name, group_schema->name);
+            is_single_element = (is_repeated(element_schema) && is_list(list_node_schema)) ||
+                                !has_struct_list_name(list_node_schema->name, group_schema->name);
         }
         if (is_single_element) {
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));

@@ -334,14 +334,16 @@ static Status get_parquet_type_from_list(const ::parquet::schema::NodePtr& node,
                     fmt::format("list 2nd level group {} must have at least one child", list_group_node->name()));
         }
 
-        // A single repeated child takes precedence over the name rule: it is a nested list with two-level
-        // encoding, whatever the repeated group is called (legacy encoding 3).
+        // A LIST-annotated repeated group with a single repeated child takes precedence over the name rule:
+        // it is a nested list with two-level encoding, whatever the repeated group is called (legacy
+        // encoding 3).
         //
         // Otherwise a single child is the element of a 3-level list, unless the repeated group is named
-        // `array` or `<list name>_tuple` (legacy encoding 4).
+        // `array` or `<list name>_tuple` (legacy encoding 4), even when that child is repeated.
         const bool is_single_element =
-                field_count == 1 && (list_group_node->field(0)->is_repeated() ||
-                                     !has_struct_list_name(list_group_node->name(), group_node->name()));
+                field_count == 1 &&
+                ((list_group_node->field(0)->is_repeated() && list_group_node->logical_type()->is_list()) ||
+                 !has_struct_list_name(list_group_node->name(), group_node->name()));
         if (is_single_element) {
             // 3rd level, typed with its own repetition: a repeated child is a one-level list.
             RETURN_IF_ERROR(get_parquet_type(list_group_node->field(0), &element_type_desc));

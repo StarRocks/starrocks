@@ -1374,7 +1374,7 @@ TEST_F(ParquetSchemaTest, ParquetRepeatedNestedSchema) {
 
 TEST_F(ParquetSchemaTest, ParquetLegacyLists) {
     std::vector<SchemaElement> t_schemas;
-    t_schemas.emplace_back(GroupNode::make_root(3));
+    t_schemas.emplace_back(GroupNode::make_root(4));
     std::vector<ParquetField> expected_fields;
 
     // List<List<Integer>> (nullable outer list, non-null elements)
@@ -1397,7 +1397,13 @@ TEST_F(ParquetSchemaTest, ParquetLegacyLists) {
                                        {PrimitiveNode::make_field("array", false, Type::type::INT32)})}));
     }
 
-    // Same, with the repeated group named after the list with _tuple appended.
+    // Without the LIST annotation the repeated child does not win: the name rule makes the repeated group
+    // a struct element whose field is a one-level list.
+    // optional group my_list_2 (LIST) {
+    //   repeated group my_list_2_tuple {
+    //     repeated int32 item;
+    //   }
+    // }
     {
         t_schemas.emplace_back(
                 GroupNode::make("my_list_2", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
@@ -1406,8 +1412,30 @@ TEST_F(ParquetSchemaTest, ParquetLegacyLists) {
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_2", true, ColumnType::ARRAY,
-                {GroupNode::make_field("item", false, ColumnType::ARRAY,
-                                       {PrimitiveNode::make_field("item", false, Type::type::INT32)})}));
+                {GroupNode::make_field(
+                        "my_list_2_tuple", false, ColumnType::STRUCT,
+                        {GroupNode::make_field("item", false, ColumnType::ARRAY,
+                                               {PrimitiveNode::make_field("item", false, Type::type::INT32)})})}));
+    }
+
+    // Same with an unannotated repeated group named `array`.
+    // optional group my_list_4 (LIST) {
+    //   repeated group array {
+    //     repeated int32 nums;
+    //   }
+    // }
+    {
+        t_schemas.emplace_back(
+                GroupNode::make("my_list_4", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("array", FieldRepetitionType::type::REPEATED, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("nums", FieldRepetitionType::type::REPEATED, Type::type::INT32));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list_4", true, ColumnType::ARRAY,
+                {GroupNode::make_field(
+                        "array", false, ColumnType::STRUCT,
+                        {GroupNode::make_field("nums", false, ColumnType::ARRAY,
+                                               {PrimitiveNode::make_field("nums", false, Type::type::INT32)})})}));
     }
 
     // The _tuple rule needs the list's own name: `my_list_tuple` under `my_list_3` is a regular 3-level list.
