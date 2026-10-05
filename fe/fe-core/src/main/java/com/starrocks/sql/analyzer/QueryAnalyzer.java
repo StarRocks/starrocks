@@ -55,6 +55,8 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -2279,6 +2281,46 @@ public class QueryAnalyzer {
         }
 
         /**
+         * A CTAS writing into an external catalog holds the lock only for the internal tables its SELECT
+         * reads, yet {@code CreateTableAnalyzer} asks the target catalog, with that lock held, whether the
+         * database exists and whether the table already does. Ask here instead; the same rules as
+         * {@link #preResolveExternalWriteTarget} apply.
+         */
+        private void preResolveExternalCreateTarget(CreateTableStmt createTableStmt) {
+            // A temporary table lives in the internal catalog, and its analyzer does not ask tableExists.
+            if (createTableStmt == null || createTableStmt instanceof CreateTemporaryTableStmt
+                    || createTableStmt.getTableRef() == null) {
+                return;
+            }
+            TableName tableName;
+            try {
+                TableRef tableRef = createTableStmt.getTableRef();
+                tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
+                tableName.normalization(session);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (Strings.isNullOrEmpty(tableName.getCatalog()) || Strings.isNullOrEmpty(tableName.getDb())
+                    || CatalogMgr.isInternalCatalog(tableName.getCatalog())
+                    || !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(tableName.getCatalog())) {
+                return;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Database db = metadataMgr.getDb(session, tableName.getCatalog(), tableName.getDb());
+                if (db == null) {
+                    return;
+                }
+                boolean exists = metadataMgr.tableExists(session, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                session.getPreResolvedWriteTargets().putCreateTarget(tableName,
+                        new PreResolvedWriteTargets.CreateTarget(db, exists));
+            } catch (RuntimeException e) {
+                // left to the locked analyzer, which reports it the way it always has
+            }
+        }
+
+        /**
          * Resolve a DML's write target here, without the lock, when it lives in an external catalog.
          *
          * <p>An internal target is left alone: it is the object the lock is taken for, and the locked
@@ -2528,7 +2570,10 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
-            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            // The target table does not exist yet, so it is not resolved as a table; for an external target,
+            // what CreateTableAnalyzer asks its catalog is, see preResolveExternalCreateTarget. The query part
+            // is walked like any other; the INSERT the CTAS carries is not, since its target is that same table.
+            preResolveExternalCreateTarget(statement.getCreateTableStmt());
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
