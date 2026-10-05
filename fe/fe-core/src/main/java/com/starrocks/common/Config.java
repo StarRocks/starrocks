@@ -3475,6 +3475,16 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * Upper bound, in bytes, of the off-heap buffers FE keeps for compressing query profiles and other payloads.
+     * Compressing between off-heap buffers keeps java.util.zip out of JNI critical sections, which otherwise hold
+     * the JVM's GC locker and can make allocations fail with a false OutOfMemoryError. A request that does not fit
+     * within this bound is compressed on-heap as before. Set to 0 to turn off-heap compression off: everything is then
+     * compressed on-heap, in short chunks, and buffers already allocated are dropped as they are returned.
+     */
+    @ConfField(mutable = true)
+    public static long offheap_deflate_buffer_pool_max_bytes = 128L * 1024 * 1024;
+
+    /**
      * Deprecated
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
