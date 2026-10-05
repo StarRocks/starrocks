@@ -1299,6 +1299,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
+                // Journal the base tables the activation settled on, so replay can adopt them instead of
+                // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
+                log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
                         alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
                 // for manual refresh type, do not refresh
