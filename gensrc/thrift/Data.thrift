@@ -99,6 +99,14 @@ struct TGlobalDict {
     4: optional i64 version
 }
 
+// Extension point for TStatisticData. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TStatisticData
+// fields belong on TStatisticData itself, whose remaining numbers are free.
+struct TStatisticDataExt {
+}
+
 // Statistic data for new planner 
 struct TStatisticData {
     1: optional string updateTime
@@ -140,6 +148,7 @@ struct TStatisticData {
     21: optional i64 twoThirdsNdv
     22: optional i64 thirdPartitionCount
     23: optional i64 twoThirdsPartitionCount
+    24: optional TStatisticDataExt ext
 }
 
 // Result data for user variable
