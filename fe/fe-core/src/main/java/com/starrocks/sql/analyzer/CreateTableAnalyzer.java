@@ -91,15 +91,32 @@ public class CreateTableAnalyzer {
         final String tableName = tableNameObject.getTbl();
         FeNameFormat.checkTableName(tableName);
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, tableNameObject.getDb());
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableNameObject.getDb());
+=======
+        // A CTAS into an external catalog had both answers fetched before the meta lock; see
+        // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
+        PreResolvedWriteTargets.CreateTarget preResolved = context.getPreResolvedWriteTargets()
+                .takeCreateTarget(com.starrocks.catalog.TableName.fromTableRef(tableRef));
+        Database dbObj = preResolved != null ? preResolved.db()
+                : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        if (dbObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
+>>>>>>> 2cfaab4 ([BugFix] Move remaining remote I/O out of FE metadata locks found by the dynamic lock test (#79969))
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
+<<<<<<< HEAD
             if (GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .tableExists(context, catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
+=======
+            boolean tableExists = preResolved != null ? preResolved.tableExists()
+                    : GlobalStateMgr.getCurrentState().getMetadataMgr().tableExists(context, catalogName, db, tableName);
+            if (tableExists && !statement.isSetIfNotExists()) {
+>>>>>>> 2cfaab4 ([BugFix] Move remaining remote I/O out of FE metadata locks found by the dynamic lock test (#79969))
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
