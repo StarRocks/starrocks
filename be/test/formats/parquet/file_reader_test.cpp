@@ -2213,7 +2213,13 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
-// Illegal parquet files, not support it anymore
+// Legacy two-level nested list written by Hudi (parquet-avro):
+//   optional group c (LIST) {
+//     repeated group array (LIST) {
+//       repeated int32 array;
+//     }
+//   }
+// The single repeated child makes it a nested list, not a list of struct<array>.
 TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // format:
     // b: varchar
@@ -2232,7 +2238,6 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     Status status = file_reader->init(ctx);
 
-    // Illegal parquet files, will treat illegal column as null
     ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
@@ -2246,8 +2251,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     chunk->check_or_die();
 
-    EXPECT_EQ("['hello', NULL]", chunk->debug_row(0));
-    EXPECT_EQ("[NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
     EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
 }
 

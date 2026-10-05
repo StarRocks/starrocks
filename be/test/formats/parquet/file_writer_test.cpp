@@ -623,6 +623,57 @@ TEST_F(FileWriterTest, TestWriteMap) {
     Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+// A null map whose offsets still cover entries is rejected like a null array: writing its entries
+// would shift the key/value leaves onto the following rows.
+TEST_F(FileWriterTest, TestWriteMapNullWithOffset) {
+    // type_descs
+    std::vector<TypeDescriptor> type_descs;
+    auto type_int_key = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_value = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_map = TypeDescriptor::from_logical_type(TYPE_MAP);
+    type_int_map.children.push_back(type_int_key);
+    type_int_map.children.push_back(type_int_value);
+    type_descs.push_back(type_int_map);
+
+    // NULL (but covering [5 -> 5]), [10 -> 10]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto key_data_col = Int32Column::create();
+        std::vector<int32_t> key_nums{5, 10};
+        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
+        auto key_null_col = UInt8Column::create();
+        std::vector<uint8_t> key_nulls{0, 0};
+        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
+        auto key_col = NullableColumn::create(std::move(key_data_col), std::move(key_null_col));
+
+        auto value_data_col = Int32Column::create();
+        std::vector<int32_t> value_nums{5, 10};
+        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
+        auto value_null_col = UInt8Column::create();
+        std::vector<uint8_t> value_nulls{0, 0};
+        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
+        auto value_col = NullableColumn::create(std::move(value_data_col), std::move(value_null_col));
+
+        auto offsets_col = UInt32Column::create();
+        std::vector<uint32_t> offsets{0, 1, 2};
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
+        auto map_col = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets_col));
+
+        std::vector<uint8_t> _nulls{1, 0};
+        auto null_col = UInt8Column::create();
+        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
+        auto nullable_col = NullableColumn::create(std::move(map_col), std::move(null_col));
+
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_TRUE(st.is_data_quality_error()) << st.to_string();
+}
+
 TEST_F(FileWriterTest, TestWriteNestedArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;

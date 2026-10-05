@@ -546,7 +546,18 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
-        if (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset])) {
+        auto map_size = offsets[offset + 1] - offsets[offset];
+        auto map_is_null = (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset]));
+
+        // null in current map_column
+        if (map_is_null) {
+            // The entries of a null map would still be written to the key/value leaves and shift them onto
+            // the following rows.
+            if (map_size > 0) {
+                return Status::DataQualityError(
+                        fmt::format("Map column ({}) has null element at offset {}, but map size is {}",
+                                    type_desc.debug_string(), offset, map_size));
+            }
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -555,8 +566,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
-        auto array_size = offsets[offset + 1] - offsets[offset];
-        if (array_size == 0) {
+        if (map_size == 0) {
             (*def_levels)[num_levels] = def_level + node->is_optional();
             (*rep_levels)[num_levels] = rep_level;
 
@@ -566,7 +576,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
         }
 
         (*rep_levels)[num_levels] = rep_level;
-        num_levels += array_size;
+        num_levels += map_size;
         offset++;
     }
 
