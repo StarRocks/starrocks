@@ -201,8 +201,8 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         bool is_single_element = false;
         if (list_node_schema->num_children == 1) {
             ASSIGN_OR_RETURN(const auto* element_schema, _get_schema_element(t_schemas, pos + 2));
-            is_single_element = is_repeated(element_schema) ||
-                                !has_struct_list_name(list_node_schema->name, group_schema->name);
+            is_single_element =
+                    is_repeated(element_schema) || !has_struct_list_name(list_node_schema->name, group_schema->name);
         }
         if (is_single_element) {
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));

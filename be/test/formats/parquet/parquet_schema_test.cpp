@@ -1474,9 +1474,10 @@ TEST_F(ParquetSchemaTest, LogicalTypeOnlyListAndMap) {
         t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::REQUIRED, Type::type::INT32));
         t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::OPTIONAL, Type::type::INT32));
 
-        expected_fields.emplace_back(GroupNode::make_field("my_map", true, ColumnType::MAP,
-                                                           {PrimitiveNode::make_field("key", false, Type::type::INT32),
-                                                            PrimitiveNode::make_field("value", true, Type::type::INT32)}));
+        expected_fields.emplace_back(
+                GroupNode::make_field("my_map", true, ColumnType::MAP,
+                                      {PrimitiveNode::make_field("key", false, Type::type::INT32),
+                                       PrimitiveNode::make_field("value", true, Type::type::INT32)}));
     }
 
     SchemaDescriptor desc;
