@@ -44,6 +44,11 @@ namespace starrocks {
 
 static const double FILTER_TEST_FPP[]{0.05, 0.1, 0.15, 0.2, 0.25, 0.3};
 static const uint64_t FILTER_MAX_ELEMNT_NUMS = 1024;
+// The trie keeps at most kNodesPerFlatColumn nodes per column json_flat_column_max allows to extract
+// (and never budgets for fewer than kMinColumnBudget columns): plenty for nested documents whose
+// keys repeat, while bounding documents whose key names are data.
+static constexpr int kMinColumnBudget = 100;
+static constexpr size_t kNodesPerFlatColumn = 64;
 
 double estimate_filter_fpp(uint64_t element_nums) {
     uint32_t bytes[6];
@@ -133,6 +138,8 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _path_root = std::make_shared<JsonFlatPath>();
     // init path by flat JSON
     _derived_on_flat_json(json_datas);
+    _max_nodes = static_cast<size_t>(std::max(_max_column, kMinColumnBudget)) * kNodesPerFlatColumn;
+    _num_nodes = _count_nodes(_path_root.get());
 
     // extract common keys, type
     size_t mark_row = 0;
@@ -247,7 +254,7 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
 
     size_t ignore_max = _total_rows * _min_json_sparsity_factory;
     ignore_max = _total_rows > ignore_max ? _total_rows - ignore_max : 0;
-    size_t check_batch = std::max(ignore_max, (size_t)config::vector_chunk_size);
+    const size_t check_batch = std::max<size_t>(1, config::vector_chunk_size);
     for (size_t i = 0; i < row_count; ++i) {
         if (col->is_null(i)) {
             continue;
@@ -269,9 +276,14 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
 
         // we required the hit-rate of the path >= _min_json_sparsity_factor, so the max number of missed rows is (1 - _min_json_sparsity_factor) * total_rows.
         // if the number of missed rows exceeds (1 - _min_json_sparsity_factor) * total_rows, then the path must not be extracted.
-        if (((mark_row + i) % check_batch) == 0) {
-            size_t hits_min = mark_row + i > ignore_max ? mark_row + i - ignore_max : 0;
-            _clean_sparsity_path("", _path_root.get(), hits_min);
+        // Nothing can be ruled out that way before ignore_max rows, so start checking there.
+        const size_t row = mark_row + i;
+        if (row > ignore_max && (row % check_batch) == 0) {
+            _clean_sparsity_path("", _path_root.get(), row - ignore_max);
+            _num_nodes = _count_nodes(_path_root.get());
+        }
+        if (_num_nodes > _max_nodes && !_path_tree_full) {
+            _shrink_path_tree(row);
         }
     }
 }
@@ -302,6 +314,56 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
     }
 }
 
+size_t JsonPathDeriver::_count_nodes(const JsonFlatPath* node) {
+    size_t n = node->children.size();
+    for (const auto& [_, child] : node->children) {
+        n += _count_nodes(child.get());
+    }
+    return n;
+}
+
+void JsonPathDeriver::_add_remain_key(const std::string_view& key) {
+    if (!_generate_filter) {
+        return;
+    }
+    _remain_keys.insert(key);
+    if (_remain_keys.size() > FILTER_MAX_ELEMNT_NUMS) {
+        _generate_filter = false;
+        _remain_keys.clear();
+    }
+}
+
+// Drops paths seen in a single row so far (other than the current one), like _clean_sparsity_path
+// drops the ones that can no longer reach the sparsity threshold.
+size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current_row) {
+    size_t dropped = 0;
+    for (auto& [_, child] : node->children) {
+        dropped += _drop_singleton_paths(child.get(), current_row);
+    }
+    auto iter = node->children.begin();
+    while (iter != node->children.end()) {
+        const auto* child = iter->second.get();
+        if (child->hits < 2 && child->last_row != current_row) {
+            _add_remain_key(iter->first);
+            node->remain = true;
+            iter = node->children.erase(iter);
+            dropped++;
+        } else {
+            ++iter;
+        }
+    }
+    return dropped;
+}
+
+void JsonPathDeriver::_shrink_path_tree(size_t current_row) {
+    _drop_singleton_paths(_path_root.get(), current_row);
+    _num_nodes = _count_nodes(_path_root.get());
+    if (_num_nodes > _max_nodes) {
+        _path_tree_full = true;
+        VLOG(2) << "flat json path tree full at row " << current_row << ", nodes: " << _num_nodes;
+    }
+}
+
 void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
     vpack::ObjectIterator it(value, true);
 
@@ -311,9 +373,16 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         auto v = current.value;
         auto k = current.key.stringView();
 
-        auto [iter, inserted] = root->children.try_emplace(k);
-        if (inserted) {
-            iter->second = std::make_unique<JsonFlatPath>();
+        auto iter = root->children.find(k);
+        if (iter == root->children.end()) {
+            if (_path_tree_full) {
+                // Never flattened, so it stays in this node's remain.
+                root->remain = true;
+                _add_remain_key(k);
+                continue;
+            }
+            iter = root->children.emplace(k, std::make_unique<JsonFlatPath>()).first;
+            _num_nodes++;
         }
         auto child = iter->second.get();
         child->hits++;
