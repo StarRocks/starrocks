@@ -114,6 +114,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -629,6 +630,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private static final int RELOAD_STATE_ING = 0;
     private static final int RELOAD_STATE_DONE = 1;
     private AtomicInteger reloadState = new AtomicInteger(RELOAD_STATE_NOT);
+    // Bumped by every active/inactive transition, guarded by this. Lets an asynchronous verdict tell
+    // whether the status it was computed for is still the current one, see activateOnReplay.
+    private long statusEpoch = 0;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -709,6 +713,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         LOG.info("set {} to active", name);
         this.active = true;
         this.inactiveReason = null;
+        this.statusEpoch++;
         // reset mv rewrite cache when it is active again
         CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(this);
     }
@@ -722,6 +727,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
+        this.statusEpoch++;
         // reset cached variables
         resetMetadataCache();
         // evict mv rewrite cache when it is inactive
@@ -1190,6 +1196,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+<<<<<<< HEAD
     private void onDropImpl(Database db, boolean replay) {
         MvId mvId = new MvId(db.getId(), getId());
 
@@ -1200,6 +1207,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
 
         // 2. Remove from base tables
+=======
+    private static void removeConnectorRelatedMaterializedView(BaseTableInfo baseTableInfo, MvId mvId) {
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(),
+                        baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build());
+    }
+
+    private void unlinkFromBaseTables(MvId mvId) {
+>>>>>>> cbe8cc8 ([BugFix] Replay MV activation without re-analyzing its definition under the MV lock (#79973))
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
             Optional<Table> baseTableOpt;
@@ -1232,6 +1251,19 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
         }
+    }
+
+    private void onDropImpl(Database db, boolean replay) {
+        MvId mvId = new MvId(db.getId(), getId());
+
+        // remove materialized view metrics from MetricsRepository
+        MaterializedViewMetricsRegistry.getInstance().remove(mvId);
+
+        // 1. Remove from plan cache
+        CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(this);
+
+        // 2. Remove from base tables
+        unlinkFromBaseTables(mvId);
 
         // 3. Remove relevant tasks
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -1363,6 +1395,79 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public void fixRelationship() {
         onReload(false, true, false);
+    }
+
+    private boolean isInCatalog() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        return db != null && db.getTable(id) == this;
+    }
+
+    /**
+     * Replay an ACTIVE transition the leader journaled together with the base-table infos it activated
+     * with. The leader only journals ACTIVE once the activation succeeded, so the persisted state is adopted
+     * as is: no define-query re-analysis, which resolved every base table through the connector while the
+     * replay thread held the MV lock, and made a checkpoint image depend on an external catalog being
+     * reachable.
+     *
+     * <p>What {@link #fixRelationship} derives on top -- the analyzed partition exprs, the constraints and
+     * the base tables' links back to this mv -- still needs the connector, so it runs asynchronously, off
+     * the replay thread and outside the caller's lock, like the post-image reload. The mv turns active once
+     * that succeeds. A negative verdict is applied only if no other status change was replayed meanwhile.
+     *
+     * <p>On the checkpoint thread the mv is set active right away and nothing is derived: the image only
+     * keeps the persisted state, and loading it reloads every mv anyway.
+     *
+     * <p>NOTE: caller need to hold the mv write lock; the returned future does not.
+     */
+    public CompletableFuture<?> activateOnReplay(List<BaseTableInfo> journaledBaseTableInfos) {
+        this.baseTableInfos = journaledBaseTableInfos;
+        if (GlobalStateMgr.isCheckpointThread()) {
+            setActive();
+            return CompletableFuture.completedFuture(null);
+        }
+        final long epoch;
+        synchronized (this) {
+            epoch = statusEpoch;
+        }
+        return CachingMvPlanContextBuilder.submitAsyncTask(buildTaskName("MVReplayActivate"), () -> {
+            InactiveReason reason;
+            try {
+                onReloadImplHeavy();
+                reason = checkIsActiveOnLoadBlocking();
+            } catch (Throwable e) {
+                LOG.warn("rebuild the relationship of replayed activation failed for mv: {}", this, e);
+                reason = InactiveReason.ofInactive("replay active failed: " + e.getMessage());
+            }
+            boolean stale;
+            synchronized (this) {
+                stale = statusEpoch != epoch;
+                if (stale) {
+                    LOG.info("status of mv {} changed while its replayed activation was being rebuilt, "
+                            + "dropping the stale verdict", getName());
+                } else {
+                    setInActiveReason(reason);
+                }
+            }
+            // A DROP replayed meanwhile cleaned up before, or while, this task re-published the constraints,
+            // the base-table links and the rewrite cache. DROP takes the mv out of the catalog before it
+            // cleans up, so checking after every side effect above means one of the two always runs last.
+            if (!isInCatalog()) {
+                LOG.info("mv {} was dropped while its replayed activation was being rebuilt, undoing it",
+                        getName());
+                setInactiveAndReason("dropped while its replayed activation was being rebuilt");
+                unlinkFromBaseTables(getMvId());
+                GlobalStateMgr.getCurrentState().getGlobalConstraintManager().unRegisterConstraint(this);
+                return null;
+            }
+            if (!stale && !reason.isActive) {
+                // The leader journals ACTIVE only once the activation actually succeeded, so failing to
+                // reproduce it here is a real divergence between this FE and the leader.
+                LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
+                        + "relationship, so this FE's metadata has diverged from the leader's: {}",
+                        getName(), reason.reason);
+            }
+            return null;
+        });
     }
 
     /**
