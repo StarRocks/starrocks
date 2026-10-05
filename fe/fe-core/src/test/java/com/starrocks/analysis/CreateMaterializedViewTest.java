@@ -373,8 +373,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 .until(() -> {
                     List<TaskRunStatus> runs = taskManager.getMatchedTaskRunStatus(params);
                     // At least one run must exist (covers the initial periodic-fire wait)
-                    // AND no pending/running runs may remain for this task name (so any
-                    // executeTask() submission made just before this call has drained).
+                    // AND no pending/running runs may remain for this task name. This cannot
+                    // wait for a run just submitted by executeTask(): while the scheduler moves
+                    // it from pending to running it is briefly in neither, so wait on its
+                    // SubmitResult future instead (see executePartitionChange).
                     return !runs.isEmpty()
                             && runs.stream().allMatch(r -> r.getState().isFinishState());
                 });
@@ -398,7 +400,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "refresh async START('%s') EVERY(INTERVAL 3 minute)\n" +
                         "PROPERTIES (\n\"replication_num\" = \"1\"\n)\n" +
                         "as select tb1.k1, k2 s2 from tbl1 tb1;",
-                LocalDateTime.now().plusSeconds(3).format(DateUtils.DATE_TIME_FORMATTER)
+                // Start the periodic refresh well after the test ends. A periodic run firing while
+                // testFullCreateSync is checking a partition change would merge the manual refresh
+                // that the check waits for.
+                LocalDateTime.now().plusDays(1).format(DateUtils.DATE_TIME_FORMATTER)
         );
 
         MaterializedView materializedView = getMaterializedViewChecked(sql);
@@ -469,8 +474,15 @@ public class CreateMaterializedViewTest extends MVTestBase {
     private void executePartitionChange(String sql, String mvTaskName) throws Exception {
         StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
         new StmtExecutor(connectContext, statement).execute();
-        GlobalStateMgr.getCurrentState().getTaskManager().executeTask(mvTaskName);
-        waitingTaskFinish(mvTaskName);
+        SubmitResult result = GlobalStateMgr.getCurrentState().getTaskManager().executeTask(mvTaskName);
+        Assertions.assertEquals(SubmitResult.SubmitStatus.SUBMITTED, result.getStatus());
+        // Wait on this run's own future rather than waitingTaskFinish(): the scheduler polls a run out of the
+        // pending queue before putting it into the running map, so for a moment the run is in neither, and
+        // a poll in that window sees only the earlier, finished runs and returns before this run has synced
+        // the partitions. The run must have executed, not been merged into another run.
+        Constants.TaskRunState state = result.getFuture().get(15, TimeUnit.SECONDS);
+        Assertions.assertTrue(state == Constants.TaskRunState.SUCCESS || state == Constants.TaskRunState.SKIPPED,
+                "unexpected task run state: " + state);
     }
 
     @Test
