@@ -206,11 +206,19 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     // the task lambda below, which never runs on a failed submit; without this copy it would leak from the
     // pool forever.
     MemTablePtr compensation_mem_table = captured_mem_table;
+    DCHECK(!_spiller->weak_from_this().expired());
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
+                 spiller_ref = _spiller->weak_from_this(),
                  trace = TraceInfo(state)](auto& yield_ctx) -> CompletionDecided {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto yield_defer = yield_ctx.defer_finished();
         if (!guard.scoped_begin()) {
+            return CompletionDecided::abandoned();
+        }
+        // The spiller owns this writer. If its owner already closed, nobody waits for this flush.
+        auto spiller = spiller_ref.lock();
+        if (spiller == nullptr) {
+            guard.scoped_end();
             return CompletionDecided::abandoned();
         }
         // Flush completion, RAII: at scope exit the writer is freed (the mem-table returns to the pool,
@@ -218,7 +226,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
         // matters to the OUTPUT_FULL sink sleeper and to the INPUT_EMPTY source-side pump. Cancelled on a
         // yield-resubmit (the task lives on and keeps its in-flight increment), so the completion fires
         // exactly once, when the task truly finishes.
-        auto guarded = _spiller->defer_complete_io(
+        auto guarded = Spiller::defer_complete_io(
+                std::move(spiller),
                 [&]() {
                     // Hold the flush in-flight at a rendezvous so a test thread can
                     // observe the writer-full window before the mem-table is returned.
@@ -317,19 +326,28 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
         // The task holds its reader. The owner of a transient reader, such as a spillable hash join probe, can
         // drop the reader while the task is queued. A guard that also watches the reader would then fail, the
         // task would skip its completion, and has_running_io_tasks() would stay true forever.
-        auto restore_task = [this, self = weak_from_this().lock(), guard, trace = TraceInfo(state),
-                             _stream = _stream](auto& yield_ctx) -> CompletionDecided {
+        // The task does not hold the spiller: IOCompletion holds it only inside the guard window, see there.
+        DCHECK(!_spiller->weak_from_this().expired());
+        auto restore_task = [this, self = weak_from_this().lock(), spiller_ref = _spiller->weak_from_this(), guard,
+                             trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) -> CompletionDecided {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
             auto yield_defer = yield_ctx.defer_finished();
             if (!guard.scoped_begin()) {
                 return CompletionDecided::abandoned();
             }
+            // If the owner of the spiller already closed, nobody waits for this restore.
+            auto spiller = spiller_ref.lock();
+            if (spiller == nullptr) {
+                guard.scoped_end();
+                return CompletionDecided::abandoned();
+            }
             // Restore completion, RAII: do_read has already published the stream data; at scope exit the
             // per-reader counter drops and the source-side sleepers waiting on restore IO are woken. This
             // is common to the main, transient and sort sub-stream readers, so they all go through here.
             // Cancelled on a yield-resubmit, so the completion fires once, when the restore finishes.
-            auto guarded = _spiller->defer_complete_io(
+            auto guarded = Spiller::defer_complete_io(
+                    std::move(spiller),
                     [&]() {
                         FAIL_POINT_TRIGGER_EXECUTE(spill_restore_block, { spill_restore_block_barrier().arrive_A(); });
                         _running_restore_tasks--;
@@ -471,19 +489,27 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
+    DCHECK(!_spiller->weak_from_this().expired());
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions),
+                 spilling_partitions = std::move(spilling_partitions), spiller_ref = _spiller->weak_from_this(),
                  trace = TraceInfo(state)](auto& yield_ctx) -> CompletionDecided {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         auto yield_defer = yield_ctx.defer_finished();
         if (!guard.scoped_begin()) {
             return CompletionDecided::abandoned();
         }
+        // The spiller owns this writer. If its owner already closed, nobody waits for this flush.
+        auto spiller = spiller_ref.lock();
+        if (spiller == nullptr) {
+            guard.scoped_end();
+            return CompletionDecided::abandoned();
+        }
         // Partitioned writer freed (the partitionwise/join flush path), RAII: is_full() reads
         // running_flush_tasks, published by the decrement; both lists are woken, as on the single-writer
         // flush completion above. Cancelled on a yield-resubmit, so the completion fires once, when the
         // flush finishes.
-        auto guarded = _spiller->defer_complete_io(
+        auto guarded = Spiller::defer_complete_io(
+                std::move(spiller),
                 [&]() {
                     FAIL_POINT_TRIGGER_EXECUTE(spill_flush_block, { spill_flush_block_barrier().arrive_A(); });
                     _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
