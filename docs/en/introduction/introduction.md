@@ -3,8 +3,6 @@ displayed_sidebar: docs
 description: "StarRocks is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises."
 ---
 
-import DocCardList from '@theme/DocCardList';
-
 # What is StarRocks?
 
 StarRocks is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises. It is built to power sub-second queries at scale.
@@ -14,8 +12,6 @@ StarRocks has an elegant design. It encompasses a rich set of features including
 StarRocks is ideal for real-time analytics on fresh data. Data can be ingested at a high speed and updated and deleted in real time. StarRocks empowers users to create tables that use various schemas, such as flat, star, and snowflake schemas.
 
 Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box support for all major Business Intelligence (BI) tools, such as Tableau and Power BI. StarRocks does not rely on any external components. It is an integrated data analytics platform that allows for high scalability, high availability, and simplified management and maintenance.
-
-<DocCardList />
 
 ## Scenarios
 
