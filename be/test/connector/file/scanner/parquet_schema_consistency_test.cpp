@@ -45,20 +45,8 @@ namespace starrocks {
 namespace {
 
 // Key: "<path relative to STARROCKS_HOME>#<top-level column>", or "<path>#*" when one side cannot resolve the file.
-const std::map<std::string, std::string> kKnownDifferences = {
-        // Legacy two-level list whose repeated group is itself named "array" or "<name>_tuple": native follows the
-        // parquet-format backward-compatibility rule (and Arrow) and reads the repeated group as a struct element;
-        // inference reads a LIST-annotated repeated group with a repeated child as a nested list.
-        {"be/test/exec/test_data/jni_scanner/test_hudi_mor_ams/"
-         "0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet#c",
-         "legacy list: repeated group named 'array'"},
-        {"be/test/exec/test_data/parquet_data/hudi_mor_two_level_nested_array.parquet#c",
-         "legacy list: repeated group named 'array'"},
-        {"test/sql/test_files/parquet_format/list_legacy_encoding_complex.parquet#field1",
-         "legacy list: repeated group named '<name>_tuple'"},
-        {"test/sql/test_files/parquet_format/list_legacy_encoding_nested.parquet#a",
-         "legacy list: repeated group named 'array'"},
-};
+// Empty: both resolvers agree on every test file. Add an entry only for an intentional difference, with a reason.
+const std::map<std::string, std::string> kKnownDifferences = {};
 
 std::string native_shape(const parquet::ParquetField& field) {
     switch (field.type) {
@@ -103,48 +91,6 @@ std::string inferred_shape(const TypeDescriptor& type) {
     }
 }
 
-// get_parquet_type() only DCHECKs the MAP layout; report a malformed MAP instead of calling it. Walks the schema the
-// way get_parquet_type() does, so that only the nodes it would resolve are checked.
-Status check_inference_preconditions(const ::parquet::schema::NodePtr& node) {
-    if (!node->is_group()) return Status::OK();
-    auto group = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
-    if (node->logical_type()->is_list()) {
-        // get_parquet_type_from_list: a malformed list returns an error itself.
-        if (group->field_count() != 1 || !group->field(0)->is_repeated() || !group->field(0)->is_group()) {
-            return Status::OK();
-        }
-        auto list = std::static_pointer_cast<::parquet::schema::GroupNode>(group->field(0));
-        if (list->field_count() == 1) {
-            // two-level nested list: the repeated group itself; else the 3-level element (the repeated group is
-            // skipped, even when it is annotated)
-            if (list->logical_type()->is_list() && list->field(0)->is_repeated()) {
-                return check_inference_preconditions(list);
-            }
-            return check_inference_preconditions(list->field(0));
-        }
-        for (int i = 0; i < list->field_count(); ++i) {
-            RETURN_IF_ERROR(check_inference_preconditions(list->field(i)));
-        }
-        return Status::OK();
-    }
-    if (node->logical_type()->is_map()) {
-        if (group->field_count() != 1 || !group->field(0)->is_group() ||
-            std::static_pointer_cast<::parquet::schema::GroupNode>(group->field(0))->field_count() != 2) {
-            return Status::InvalidArgument("malformed MAP group " + node->name() + " (inference would DCHECK)");
-        }
-        // get_parquet_type_from_map: key and value directly. The key_value group is not resolved on its own (Arrow
-        // reports a legacy MAP_KEY_VALUE-annotated key_value group as a map too).
-        auto key_value = std::static_pointer_cast<::parquet::schema::GroupNode>(group->field(0));
-        RETURN_IF_ERROR(check_inference_preconditions(key_value->field(0)));
-        return check_inference_preconditions(key_value->field(1));
-    }
-    // variant check and struct inference resolve every child
-    for (int i = 0; i < group->field_count(); ++i) {
-        RETURN_IF_ERROR(check_inference_preconditions(group->field(i)));
-    }
-    return Status::OK();
-}
-
 using Shapes = std::vector<std::pair<std::string, std::string>>; // (column name, shape)
 
 StatusOr<Shapes> resolve_native(const std::string& path) {
@@ -180,7 +126,6 @@ StatusOr<Shapes> resolve_inferred(const std::string& path) {
     Shapes shapes;
     for (int i = 0; i < root->field_count(); ++i) {
         const auto& node = root->field(i);
-        RETURN_IF_ERROR(check_inference_preconditions(node));
         TypeDescriptor type;
         RETURN_IF_ERROR(get_parquet_type(node, &type));
         shapes.emplace_back(node->name(), inferred_shape(type));
