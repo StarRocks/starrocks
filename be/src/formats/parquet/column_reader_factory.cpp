@@ -42,6 +42,27 @@ Status validate_native_iceberg_geography(const ParquetField& field, const TypeDe
         source.edge_algorithm != edge.substr(edge_prefix.size())) {
         return Status::InvalidArgument("Iceberg/plan geo schema mismatch: " + field.name);
     }
+    if (field.physical_type != tparquet::Type::BYTE_ARRAY) {
+        return Status::InvalidArgument("Native Iceberg GEOGRAPHY requires Parquet BYTE_ARRAY: " + field.name);
+    }
+    // Older writers may omit the annotation. When present, it must agree with Iceberg;
+    // WKB payload bytes cannot establish logical kind, CRS or edge semantics.
+    const auto& schema = field.schema_element;
+    if (schema.__isset.logicalType) {
+        const auto& logical = schema.logicalType;
+        if (!logical.__isset.GEOGRAPHY || logical.__isset.GEOMETRY) {
+            return Status::InvalidArgument("Iceberg/Parquet geo logical type mismatch: " + field.name);
+        }
+        const auto& geography = logical.GEOGRAPHY;
+        const std::string_view crs = geography.__isset.crs ? geography.crs : std::string_view("OGC:CRS84");
+        const auto algorithm =
+                geography.__isset.algorithm ? geography.algorithm : tparquet::EdgeInterpolationAlgorithm::SPHERICAL;
+        const auto algorithm_name = tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.find(algorithm);
+        if (crs != source.crs || algorithm_name == tparquet::_EdgeInterpolationAlgorithm_VALUES_TO_NAMES.end() ||
+            algorithm_name->second != source.edge_algorithm) {
+            return Status::InvalidArgument("Iceberg/Parquet geo schema mismatch: " + field.name);
+        }
+    }
     return Status::OK();
 }
 
