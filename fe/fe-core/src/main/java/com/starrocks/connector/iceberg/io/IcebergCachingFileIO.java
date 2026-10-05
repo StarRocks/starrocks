@@ -248,6 +248,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
                                 String.valueOf(Long.MAX_VALUE)));
+                copied.setBoolean(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, true);
                 return copied;
             }
         }
@@ -262,6 +263,10 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
             Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
 
+    // Auth types under which gcs-connector authenticates as the FE's own identity, so the
+    // Configuration carries no per-catalog secret and a shared FileSystem is safe.
+    private static final Set<String> AMBIENT_GCS_AUTH_TYPES = Set.of("COMPUTE_ENGINE", "APPLICATION_DEFAULT");
+
     private static void disableSharedFileSystemCache(Configuration conf, String path) {
         String scheme = new Path(path).toUri().getScheme();
         if (scheme == null) {
@@ -269,9 +274,18 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
             // the flag, so the flag has to be keyed on the default scheme rather than skipped.
             scheme = FileSystem.getDefaultUri(conf).getScheme();
         }
-        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
+        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)
+                && !("gs".equals(scheme) && usesAmbientGcsCredential(conf))) {
             conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
         }
+    }
+
+    // Each uncached GoogleHadoopFileSystem registers a metrics source that gcs-connector never
+    // unregisters, even on close, so isolating every file open grows the FE heap without bound.
+    private static boolean usesAmbientGcsCredential(Configuration conf) {
+        String authType = conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY);
+        return (authType == null || AMBIENT_GCS_AUTH_TYPES.contains(authType))
+                && conf.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY) == null;
     }
 
     private static class CacheEntry {
