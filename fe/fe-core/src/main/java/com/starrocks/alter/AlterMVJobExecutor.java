@@ -586,6 +586,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     private ParseNode preResolvedDefineQueryAst;
     private String preResolvedDefineSql;
     private Boolean preResolvedHasNonNativeBaseTable;
+    private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
 
     /**
      * Everything ALTER MATERIALIZED VIEW used to resolve while holding the MV's write lock.
@@ -614,6 +615,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
                 alterForeignKeyConstraint(properties, preResolvedPropClone, mv, preResolvedAppliers);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                // Analyzing the condition re-gets the external ref base table (iceberg / delta lake) from its
+                // connector, from several places (partition-expr adjust map, partition selector, the MV's
+                // retention analysis). Only the lookups move here; the analysis itself stays under the lock.
+                // No "still current" check is owed: the lock never covers external tables.
+                preResolvedRefBaseTables = mv.preResolveRefBaseTables();
             }
         } else if (alterClause instanceof RefreshSchemeClause) {
             // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
@@ -681,7 +689,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             alterPartitionTTL(properties, materializedView, tableProperty, appliers);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-            alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+            try (MaterializedView.PreResolvedRefBaseTables.Scope ignored =
+                         preResolvedRefBaseTables != null ? preResolvedRefBaseTables.enter() : null) {
+                alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+            }
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
             alterTimeDriftConstraint(properties, materializedView, tableProperty, appliers);
