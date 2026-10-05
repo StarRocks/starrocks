@@ -22,6 +22,7 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -139,18 +140,30 @@ public class IcebergPartitionTraits extends DefaultTraits {
             return Lists.newArrayList(table.getName());
         }
 
-        IcebergTable icebergTable = (IcebergTable) table;
         ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
-        if (pinnedVersionRange != null) {
-            requestContext.setTableVersionRange(pinnedVersionRange);
-        } else {
-            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                    .map(Snapshot::snapshotId);
-            requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
-        }
+        requestContext.setTableVersionRange(readVersionRange());
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+    }
+
+    /** The pinned range, else the snapshot this table object is at: an unpinned read follows the object. */
+    private TvrVersionRange readVersionRange() {
+        if (pinnedVersionRange != null) {
+            return pinnedVersionRange;
+        }
+        Optional<Long> snapshotId = Optional.ofNullable(((IcebergTable) table).getNativeTable().currentSnapshot())
+                .map(Snapshot::snapshotId);
+        return TvrTableSnapshot.of(snapshotId);
+    }
+
+    /**
+     * Two equal Iceberg tables can sit at different snapshots: the refresh re-resolves the live table under its
+     * lock, which may be newer than the one prefetched. Key on the snapshot actually read.
+     */
+    @Override
+    protected Object partitionInfoSnapshot() {
+        return readVersionRange();
     }
 
     @Override

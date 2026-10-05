@@ -2376,6 +2376,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
+                // Only native base tables contribute a bucket number. Resolving an external one would be a
+                // connector round trip, made under the lock the partition-adding caller holds, for nothing.
+                if (!base.isInternalCatalog()) {
+                    continue;
+                }
                 Optional<Table> optTable = MvUtils.getTable(base);
                 if (optTable.isEmpty()) {
                     continue;

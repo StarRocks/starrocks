@@ -16,6 +16,11 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Uninterruptibles;
+>>>>>>> 46f4a77 ([BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#79971))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -27,10 +32,18 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.partitiontraits.PrefetchedPartitionInfos;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+>>>>>>> 46f4a77 ([BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#79971))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -64,6 +77,7 @@ import java.util.concurrent.TimeUnit;
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.catalog.MvRefreshArbiter.tracksPartitionVersions;
 import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getExpiredPartitionsByRetentionCondition;
 
 /**
@@ -506,6 +520,50 @@ public abstract class MVPCTRefreshPartitioner {
             }
         }
         return false;
+    }
+
+    /**
+     * Fetch, before the detection lock is taken, the external partition infos that change detection
+     * ({@link #getMVPartitionsToRefreshWithCheck}) reads under it. The lock covers only the MV, so these
+     * connector round trips bought no protection there; the comparison against the MV's refresh state still
+     * runs under the lock. See {@link PrefetchedPartitionInfos}.
+     *
+     * <p>It covers the snapshot base tables, which the non-ref and non-partitioned checks read, and the ref base
+     * tables as {@link MaterializedView#getRefBaseTablePartitionColumns()} resolves them, which is what the
+     * ref-table check reads. A forced refresh detects nothing and prefetches nothing.
+     *
+     * @return the open scope, to be closed once the lock is released
+     */
+    public PrefetchedPartitionInfos prefetchExternalPartitionInfos(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+        PrefetchedPartitionInfos prefetched = PrefetchedPartitionInfos.open();
+        if (mvRefreshParams.isForce()) {
+            return prefetched;
+        }
+        try (Timer ignored = Tracers.watchScope("MVRefreshPrefetchPartitionInfos")) {
+            List<Table> tables = Lists.newArrayList();
+            snapshotBaseTables.values().forEach(snapshotInfo -> tables.add(snapshotInfo.getBaseTable()));
+            try {
+                tables.addAll(mv.getRefBaseTablePartitionColumns().keySet());
+            } catch (Exception e) {
+                // The ref-table check resolves them again under the lock and reports any failure there.
+                logger.debug("Cannot resolve ref base tables to prefetch their partitions: {}", e.getMessage());
+            }
+            for (Table table : tables) {
+                if (table.isNativeTableOrMaterializedView() || table.isView() || !isPartitionRefreshSupported(table)) {
+                    continue;
+                }
+                prefetched.prefetch(table, pinnedRangeFor(table), tracksPartitionVersions(mv, table));
+            }
+        } catch (RuntimeException e) {
+            prefetched.close();
+            throw e;
+        }
+        return prefetched;
+    }
+
+    /** The snapshot the scan reads: a pinned run must answer base-state questions from it, not from live. */
+    private TvrVersionRange pinnedRangeFor(Table baseTable) {
+        return mvContext.getRefreshRuntimeState().getPinnedTvrMap().get(baseTable.getUUID());
     }
 
     public void dropPartition(Database db, MaterializedView materializedView, String mvPartitionName) {
