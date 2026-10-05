@@ -2348,10 +2348,88 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * The outcome of re-getting one external ref base table ahead of time: the table (empty when it is not
+     * found), or the failure the lookup threw.
+     */
+    private record RefreshedBaseTable(Optional<Table> table, RuntimeException failure) {
+        Optional<Table> get() {
+            if (failure != null) {
+                throw failure;
+            }
+            return table;
+        }
+    }
+
+    /**
+     * External ref base tables re-got ahead of time, consulted by {@link #refreshBaseTable} on this thread only.
+     * Set by {@link PreResolvedRefBaseTables#enter()}.
+     */
+    private static final ThreadLocal<Map<BaseTableInfo, RefreshedBaseTable>> PRE_RESOLVED_REF_BASE_TABLES =
+            new ThreadLocal<>();
+
+    /**
+     * Re-gets every external ref base table that {@link #refreshBaseTable} would re-get, so a caller about
+     * to take a metadata lock can make the connector round trips first and then run the analysis under the
+     * lock inside {@link PreResolvedRefBaseTables#enter()}.
+     *
+     * <p>A failed lookup is kept, not thrown: refreshBaseTable rethrows it where the original lookup would
+     * have thrown, so errors surface at the same point and in the same order as without pre-resolving.
+     */
+    public PreResolvedRefBaseTables preResolveRefBaseTables() {
+        Map<BaseTableInfo, RefreshedBaseTable> resolved = Maps.newHashMap();
+        List<Optional<? extends Map<Table, ?>>> refMaps =
+                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
+        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
+            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
+                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
+                if (!(table instanceof IcebergTable || table instanceof DeltaLakeTable)
+                        || baseTableInfo == null || resolved.containsKey(baseTableInfo)) {
+                    continue;
+                }
+                try {
+                    resolved.put(baseTableInfo, new RefreshedBaseTable(MvUtils.getTable(baseTableInfo), null));
+                } catch (RuntimeException e) {
+                    resolved.put(baseTableInfo, new RefreshedBaseTable(null, e));
+                }
+            }
+        }
+        return new PreResolvedRefBaseTables(resolved);
+    }
+
+    public static final class PreResolvedRefBaseTables {
+        private final Map<BaseTableInfo, RefreshedBaseTable> tables;
+
+        private PreResolvedRefBaseTables(Map<BaseTableInfo, RefreshedBaseTable> tables) {
+            this.tables = tables;
+        }
+
+        /**
+         * Makes refreshBaseTable on the current thread use these tables until the returned scope is closed.
+         */
+        public Scope enter() {
+            Map<BaseTableInfo, RefreshedBaseTable> previous = PRE_RESOLVED_REF_BASE_TABLES.get();
+            PRE_RESOLVED_REF_BASE_TABLES.set(tables);
+            return () -> {
+                if (previous == null) {
+                    PRE_RESOLVED_REF_BASE_TABLES.remove();
+                } else {
+                    PRE_RESOLVED_REF_BASE_TABLES.set(previous);
+                }
+            };
+        }
+
+        public interface Scope extends AutoCloseable {
+            @Override
+            void close();
+        }
+    }
+
+    /**
      * Since the table is cached in the Optional, needs to refresh it again for each query.
      */
     private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
         Map<Table, K> result = Maps.newHashMap();
+        Map<BaseTableInfo, RefreshedBaseTable> preResolved = PRE_RESOLVED_REF_BASE_TABLES.get();
         for (Map.Entry<Table, K> e : cached.entrySet()) {
             Table table = e.getKey();
             if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
@@ -2361,7 +2439,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // the newest table info.
                 // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
                 // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
-                Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
+                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
+                RefreshedBaseTable refreshed = preResolved == null ? null : preResolved.get(baseTableInfo);
+                Optional<Table> refreshedTableOpt = refreshed != null ? refreshed.get() : MvUtils.getTable(baseTableInfo);
                 // when meets a table that has been dropped, no throw exception here so that
                 if (refreshedTableOpt.isEmpty()) {
                     LOG.warn("The table {} is not found in metadata catalog", table.getName());
