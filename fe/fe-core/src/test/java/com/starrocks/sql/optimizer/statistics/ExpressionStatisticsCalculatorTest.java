@@ -31,12 +31,15 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -3633,4 +3636,90 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(53, weekStats.getDistinctValuesCount(), 0.001);
     }
 
+    private static ColumnStatistic subfieldStatistic(Type structType, ColumnStatistic structStatistic,
+                                                     List<String> fieldNames, Type fieldType) {
+        ColumnRefOperator structColumn = new ColumnRefOperator(0, structType, "struct_column", true);
+        Statistics statistics = Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(structColumn, structStatistic)
+                .build();
+        return ExpressionStatisticCalculator.calculate(new SubfieldOperator(structColumn, fieldType, fieldNames),
+                statistics);
+    }
+
+    private static ColumnStatistic structStatistic(double averageRowSize, double collectionSize) {
+        return ColumnStatistic.builder()
+                .setMinValue(Double.NEGATIVE_INFINITY)
+                .setMaxValue(Double.POSITIVE_INFINITY)
+                .setNullsFraction(0.1)
+                .setAverageRowSize(averageRowSize)
+                .setDistinctValuesCount(50)
+                .setCollectionSize(collectionSize)
+                .build();
+    }
+
+    @Test
+    public void testSubfieldSplitsAverageRowSizeByFieldWidth() {
+        // STRUCT<a INT, b VARCHAR>, estimated widths 4 and 16.
+        StructType structType = new StructType(List.of(
+                new StructField("a", IntegerType.INT), new StructField("b", VarcharType.VARCHAR)), true);
+        ColumnStatistic structStatistic = structStatistic(40, ColumnStatistic.DEFAULT_COLLECTION_SIZE);
+
+        ColumnStatistic intField = subfieldStatistic(structType, structStatistic, List.of("a"), IntegerType.INT);
+        ColumnStatistic stringField = subfieldStatistic(structType, structStatistic, List.of("b"), VarcharType.VARCHAR);
+
+        Assertions.assertEquals(8, intField.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(32, stringField.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(0.1, intField.getNullsFraction(), 0.001);
+        Assertions.assertEquals(50, intField.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, intField.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, intField.getMaxValue(), 0.001);
+        Assertions.assertEquals(ColumnStatistic.DEFAULT_COLLECTION_SIZE, intField.getCollectionSize(), 0.001);
+    }
+
+    @Test
+    public void testSubfieldOfNestedStruct() {
+        // STRUCT<a INT, s STRUCT<x BIGINT, y INT>>: s.x has a width of 8 out of 16.
+        StructType structType = new StructType(List.of(
+                new StructField("a", IntegerType.INT),
+                new StructField("s", new StructType(List.of(
+                        new StructField("x", IntegerType.BIGINT), new StructField("y", IntegerType.INT)), true))), true);
+        ColumnStatistic structStatistic = structStatistic(32, ColumnStatistic.DEFAULT_COLLECTION_SIZE);
+
+        ColumnStatistic nestedField = subfieldStatistic(structType, structStatistic, List.of("s", "x"), IntegerType.BIGINT);
+
+        // The share is applied at every level of the path: 12 / 16 * 8 / 12.
+        Assertions.assertEquals(16, nestedField.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(50, nestedField.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testSubfieldOfStructOfArraysInheritsCollectionSize() {
+        // STRUCT<a ARRAY<INT>, b ARRAY<VARCHAR>> holding 10 items per array.
+        Type intArrayType = new ArrayType(IntegerType.INT);
+        Type stringArrayType = new ArrayType(VarcharType.VARCHAR);
+        StructType structType = new StructType(List.of(
+                new StructField("a", intArrayType), new StructField("b", stringArrayType)), true);
+        ColumnStatistic structStatistic = structStatistic(200, 10);
+
+        ColumnStatistic intArrayField = subfieldStatistic(structType, structStatistic, List.of("a"), intArrayType);
+        ColumnStatistic stringArrayField =
+                subfieldStatistic(structType, structStatistic, List.of("b"), stringArrayType);
+
+        // Arrays are weighted by their item types and keep the collection size of the struct.
+        Assertions.assertEquals(40, intArrayField.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(160, stringArrayField.getAverageRowSize(), 0.001);
+        Assertions.assertEquals(10, intArrayField.getCollectionSize(), 0.001);
+        Assertions.assertEquals(10, stringArrayField.getCollectionSize(), 0.001);
+    }
+
+    @Test
+    public void testSubfieldOfStructWithUnknownStatistics() {
+        StructType structType = new StructType(List.of(
+                new StructField("a", IntegerType.INT), new StructField("b", VarcharType.VARCHAR)), true);
+
+        ColumnStatistic field = subfieldStatistic(structType, ColumnStatistic.unknown(), List.of("a"), IntegerType.INT);
+
+        Assertions.assertTrue(field.isUnknown());
+    }
 }
