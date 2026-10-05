@@ -128,7 +128,8 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
+    } else if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        // A VARIANT group, or a struct group the reader factory rejects with an error.
         has_valid_child = true;
     } else if (parquet_field->has_struct_layout()) {
         // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.
@@ -182,7 +183,8 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
                 break;
             }
         }
-    } else if (parquet_field->type == ColumnType::VARIANT && type_descriptor->type == LogicalType::TYPE_VARIANT) {
+    } else if (type_descriptor->type == LogicalType::TYPE_VARIANT) {
+        // A VARIANT group, or a struct group the reader factory rejects with an error.
         return true;
     } else if (parquet_field->has_struct_layout()) {
         // Same matching as the reader (ColumnReaderFactory::create), so a valid column always gets a reader.

@@ -1113,8 +1113,8 @@ TEST_F(ParquetSchemaTest, VariantGroup) {
         for (size_t i = 0; i < 3; i++) {
             const auto* field = desc.get_stored_column_by_field_idx(i);
             ASSERT_EQ(ColumnType::STRUCT, field->type) << field->name;
-            // A plain struct no longer matches a VARIANT column.
-            ASSERT_FALSE(field->has_same_complex_type(TypeDescriptor::from_logical_type(TYPE_VARIANT)));
+            // Still matches a VARIANT column, so that the reader factory reports an error instead of reading NULLs.
+            ASSERT_TRUE(field->has_same_complex_type(TypeDescriptor::from_logical_type(TYPE_VARIANT)));
         }
     }
 }

@@ -686,6 +686,21 @@ TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
               mapping.parquet_children);
 }
 
+// A struct group that is not variant-shaped, read by a VARIANT column, fails instead of being read as NULL.
+TEST(ColumnReaderFactoryTest, StructGroupReadAsVariantFails) {
+    ParquetField field;
+    field.name = "v";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_scalar_field("metadata", 0, tparquet::Type::BYTE_ARRAY));
+    field.children.emplace_back(make_scalar_field("typed_value", 1, tparquet::Type::INT64));
+
+    auto opts = make_opts_with_num_cols(2);
+    auto reader_or = ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(TYPE_VARIANT));
+    ASSERT_FALSE(reader_or.ok());
+    EXPECT_TRUE(reader_or.status().is_invalid_argument()) << reader_or.status();
+    EXPECT_EQ("Variant type must have 'metadata' and 'value' fields", reader_or.status().message());
+}
+
 // map<struct<a int, b int>, int> in the file. The schema resolver accepts the group key; whether it can be read is
 // decided by the table key type when the column is read.
 TEST(ColumnReaderFactoryTest, MapWithGroupKey) {

@@ -417,6 +417,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
         }
     } else if (field->type == ColumnType::VARIANT && col_type.type == LogicalType::TYPE_VARIANT) {
         return create_variant_column_reader(opts, field);
+    } else if (field->type == ColumnType::STRUCT && col_type.type == LogicalType::TYPE_VARIANT) {
+        // A struct group that is not variant-shaped (see has_same_complex_type).
+        return Status::InvalidArgument("Variant type must have 'metadata' and 'value' fields");
     } else if (field->has_struct_layout()) {
         const bool parquet_has_field_id =
                 lake_schema_field != nullptr && opts.file_meta_data->schema().exist_filed_id();

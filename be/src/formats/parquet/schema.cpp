@@ -83,6 +83,10 @@ bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) 
     } else if (type == ColumnType::VARIANT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
         // A variant group can still be read as a plain struct of its binary fields.
         return true;
+    } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_VARIANT) {
+        // A group that is not variant-shaped, read by a VARIANT column: let the reader factory reject it with an error
+        // instead of skipping the column (read as NULL) as a type mismatch.
+        return true;
     } else {
         return false;
     }
