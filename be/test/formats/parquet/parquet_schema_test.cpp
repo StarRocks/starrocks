@@ -1234,17 +1234,17 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
     //     required binary str (UTF8);
     //   };
     // }
-    // Special case: group named ends in _tuple
+    // Special case: group named after the list with _tuple appended
     {
         t_schemas.emplace_back(
                 GroupNode::make("my_list_7", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
-        t_schemas.emplace_back(GroupNode::make("my_list_tuple", FieldRepetitionType::type::REPEATED, 1));
+        t_schemas.emplace_back(GroupNode::make("my_list_7_tuple", FieldRepetitionType::type::REPEATED, 1));
         t_schemas.emplace_back(PrimitiveNode::make("str", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
                                                    ConvertedType::type::UTF8));
 
         expected_fields.emplace_back(GroupNode::make_field(
                 "my_list_7", true, ColumnType::ARRAY,
-                {GroupNode::make_field("my_list_tuple", false, ColumnType::STRUCT,
+                {GroupNode::make_field("my_list_7_tuple", false, ColumnType::STRUCT,
                                        {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY)})}));
     }
 
@@ -1370,6 +1370,149 @@ TEST_F(ParquetSchemaTest, ParquetRepeatedNestedSchema) {
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok()) << st.message();
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+}
+
+TEST_F(ParquetSchemaTest, ParquetLegacyLists) {
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(3));
+    std::vector<ParquetField> expected_fields;
+
+    // List<List<Integer>> (nullable outer list, non-null elements)
+    // optional group my_list (LIST) {
+    //   repeated group array (LIST) {
+    //     repeated int32 array;
+    //   }
+    // }
+    // A single repeated child wins over the `array` name rule: it is a nested two-level list, not a struct.
+    {
+        t_schemas.emplace_back(
+                GroupNode::make("my_list_1", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(
+                GroupNode::make("array", FieldRepetitionType::type::REPEATED, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("array", FieldRepetitionType::type::REPEATED, Type::type::INT32));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list_1", true, ColumnType::ARRAY,
+                {GroupNode::make_field("array", false, ColumnType::ARRAY,
+                                       {PrimitiveNode::make_field("array", false, Type::type::INT32)})}));
+    }
+
+    // Same, with the repeated group named after the list with _tuple appended.
+    {
+        t_schemas.emplace_back(
+                GroupNode::make("my_list_2", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("my_list_2_tuple", FieldRepetitionType::type::REPEATED, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("item", FieldRepetitionType::type::REPEATED, Type::type::INT32));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list_2", true, ColumnType::ARRAY,
+                {GroupNode::make_field("item", false, ColumnType::ARRAY,
+                                       {PrimitiveNode::make_field("item", false, Type::type::INT32)})}));
+    }
+
+    // The _tuple rule needs the list's own name: `my_list_tuple` under `my_list_3` is a regular 3-level list.
+    // optional group my_list_3 (LIST) {
+    //   repeated group my_list_tuple {
+    //     required binary str (UTF8);
+    //   }
+    // }
+    {
+        t_schemas.emplace_back(
+                GroupNode::make("my_list_3", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+        t_schemas.emplace_back(GroupNode::make("my_list_tuple", FieldRepetitionType::type::REPEATED, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("str", FieldRepetitionType::type::REQUIRED, Type::type::BYTE_ARRAY,
+                                                   ConvertedType::type::UTF8));
+
+        expected_fields.emplace_back(
+                GroupNode::make_field("my_list_3", true, ColumnType::ARRAY,
+                                      {PrimitiveNode::make_field("str", false, Type::type::BYTE_ARRAY)}));
+    }
+
+    SchemaDescriptor desc;
+    auto st = desc.from_thrift(t_schemas, true);
+    ASSERT_TRUE(st.ok()) << st.message();
+    check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+}
+
+// Writers are expected to set both converted_type and logicalType, but some only set logicalType.
+TEST_F(ParquetSchemaTest, LogicalTypeOnlyListAndMap) {
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(2));
+    std::vector<ParquetField> expected_fields;
+
+    // optional group my_list (logicalType LIST) {
+    //   repeated group list {
+    //     optional int32 element;
+    //   }
+    // }
+    {
+        auto list_schema = GroupNode::make("my_list", FieldRepetitionType::OPTIONAL, 1);
+        tparquet::LogicalType list_type;
+        list_type.__set_LIST(tparquet::ListType());
+        list_schema.__set_logicalType(list_type);
+        t_schemas.emplace_back(list_schema);
+        t_schemas.emplace_back(GroupNode::make("list", FieldRepetitionType::REPEATED, 1));
+        t_schemas.emplace_back(PrimitiveNode::make("element", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+
+        expected_fields.emplace_back(GroupNode::make_field(
+                "my_list", true, ColumnType::ARRAY, {PrimitiveNode::make_field("element", true, Type::type::INT32)}));
+    }
+
+    // optional group my_map (logicalType MAP) {
+    //   repeated group key_value {
+    //     required int32 key;
+    //     optional int32 value;
+    //   }
+    // }
+    {
+        auto map_schema = GroupNode::make("my_map", FieldRepetitionType::OPTIONAL, 1);
+        tparquet::LogicalType map_type;
+        map_type.__set_MAP(tparquet::MapType());
+        map_schema.__set_logicalType(map_type);
+        t_schemas.emplace_back(map_schema);
+        t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
+        t_schemas.emplace_back(PrimitiveNode::make("key", FieldRepetitionType::REQUIRED, Type::type::INT32));
+        t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+
+        expected_fields.emplace_back(GroupNode::make_field("my_map", true, ColumnType::MAP,
+                                                           {PrimitiveNode::make_field("key", false, Type::type::INT32),
+                                                            PrimitiveNode::make_field("value", true, Type::type::INT32)}));
+    }
+
+    SchemaDescriptor desc;
+    auto st = desc.from_thrift(t_schemas, true);
+    ASSERT_TRUE(st.ok()) << st.message();
+    check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
+}
+
+// The ARRAY wrapping an unannotated repeated group carries the group's field_id, so field-id matching finds it.
+TEST_F(ParquetSchemaTest, RepeatedGroupFieldId) {
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(1));
+
+    // repeated group rg = 7 {
+    //   optional int32 a = 8;
+    // }
+    auto group_schema = GroupNode::make("rg", FieldRepetitionType::REPEATED, 1);
+    group_schema.__set_field_id(7);
+    t_schemas.emplace_back(group_schema);
+    auto leaf_schema = PrimitiveNode::make("a", FieldRepetitionType::OPTIONAL, Type::type::INT32);
+    leaf_schema.__set_field_id(8);
+    t_schemas.emplace_back(leaf_schema);
+
+    SchemaDescriptor desc;
+    auto st = desc.from_thrift(t_schemas, true);
+    ASSERT_TRUE(st.ok()) << st.message();
+
+    const ParquetField* field = desc.get_stored_column_by_field_id(7);
+    ASSERT_NE(nullptr, field);
+    ASSERT_EQ("rg", field->name);
+    ASSERT_EQ(ColumnType::ARRAY, field->type);
+    ASSERT_EQ(7, field->field_id);
+    ASSERT_EQ(1, field->children.size());
+    ASSERT_EQ(ColumnType::STRUCT, field->children[0].type);
+    ASSERT_EQ(1, field->children[0].children.size());
+    ASSERT_EQ(8, field->children[0].children[0].field_id);
 }
 
 TEST_F(ParquetLevelsTest, TestPrimitive) {
@@ -1622,7 +1765,29 @@ TEST_F(ParquetLevelsTest, TestRepeatedGroups) {
         // list.
         expected.emplace_back(make(3, 2, 1)); // list field
         expected.emplace_back(make(3, 2, 3)); // inner bool
+        do_check(t_schemas, expected);
     }
+}
+
+TEST_F(ParquetLevelsTest, TestLegacyNestedList) {
+    // schema: list(list(int32 not null) not null)
+    // optional group my_list (LIST) {
+    //   repeated group array (LIST) {
+    //     repeated int32 array;
+    //   }
+    // }
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(1));
+
+    t_schemas.emplace_back(GroupNode::make("my_list", FieldRepetitionType::OPTIONAL, ConvertedType::type::LIST, 1));
+    t_schemas.emplace_back(GroupNode::make("array", FieldRepetitionType::REPEATED, ConvertedType::type::LIST, 1));
+    t_schemas.emplace_back(PrimitiveNode::make("array", FieldRepetitionType::REPEATED, Type::type::INT32));
+
+    std::vector<LevelInfo> expected;
+    expected.emplace_back(make(2, 1, 0)); // outer list
+    expected.emplace_back(make(3, 2, 2)); // inner list
+    expected.emplace_back(make(3, 2, 3)); // int32
+    do_check(t_schemas, expected);
 }
 
 TEST_F(ParquetLevelsTest, ListErrors) {
