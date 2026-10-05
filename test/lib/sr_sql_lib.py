@@ -99,11 +99,13 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # cleaned up and nothing is lost, so the statement can just be submitted again.
 ALTER_RERUN_MSG = "please re-run the alter table command"
 ALTER_RERUN_MAX_RETRY = 3
-# A possibly db-qualified, possibly backquoted name.
-_ALTER_NAME = r"(?:`[^`]+`|[^\s`.(]+)(?:\.(?:`[^`]+`|[^\s`.(]+))*"
+# An identifier, possibly backquoted (and then possibly containing spaces).
+_ALTER_IDENT = r"(?:`[^`]+`|[^\s`.(]+)"
+# A possibly db-qualified name.
+_ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
 ALTER_STMT_RE = re.compile(
-    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|CREATE\s+INDEX\s+\S+\s+ON\s+(?P<index>{n})"
-    r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(n=_ALTER_NAME),
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|CREATE\s+INDEX\s+{i}\s+ON\s+(?P<index>{n})"
+    r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(i=_ALTER_IDENT, n=_ALTER_NAME),
     re.IGNORECASE,
 )
 
