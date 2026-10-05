@@ -20,6 +20,7 @@
 #include <poll.h>
 #include <spawn.h>
 #include <sys/poll.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -49,7 +50,17 @@ bool LocalPyWorker::expired() {
 
 void LocalPyWorker::terminate() {
     if (_pid != -1) {
-        kill(_pid, SIGKILL);
+        if (_own_pgroup) {
+            // Group-kill: the child leads its own process group (pgid == _pid), so
+            // this reaps its descendants too -- a worker that spawned processes of
+            // its own, or a wrapper whose real worker is a separate pid, would
+            // otherwise be orphaned by kill(_pid).
+            if (kill(-_pid, SIGKILL) != 0 && errno == ESRCH) {
+                kill(_pid, SIGKILL);
+            }
+        } else {
+            kill(_pid, SIGKILL);
+        }
     }
 }
 
@@ -62,23 +73,51 @@ void LocalPyWorker::wait() {
 }
 
 void LocalPyWorker::remove_unix_socket() {
-    unlink(PyWorkerManager::unix_socket_path(_pid).c_str());
+    if (!_sock_path.empty()) {
+        unlink(_sock_path.c_str());
+    }
 }
 
-std::string PyWorkerManager::unix_socket(pid_t pid) {
-    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_{}", config::local_library_dir, pid);
-    return unix_socket;
+std::string PyWorkerManager::socket_dir() {
+    return fmt::format("{}/pyworker", config::local_library_dir);
 }
 
-std::string PyWorkerManager::unix_socket_prefix() {
-    std::string unix_socket = fmt::format("grpc+unix://{}/pyworker_", config::local_library_dir);
-    return unix_socket;
+Status PyWorkerManager::ensure_socket_dir() {
+    std::string dir = socket_dir();
+    if (mkdir(dir.c_str(), 0700) != 0 && errno != EEXIST) {
+        return Status::InternalError(fmt::format("create pyworker socket dir {} error: {}", dir, std::strerror(errno)));
+    }
+    // Tighten permissions to the BE user even if the directory pre-existed with
+    // a looser mode: any local user able to reach the socket can drive the
+    // worker's Flight server, which executes arbitrary UDF code.
+    if (chmod(dir.c_str(), 0700) != 0) {
+        return Status::InternalError(fmt::format("chmod pyworker socket dir {} error: {}", dir, std::strerror(errno)));
+    }
+    return Status::OK();
 }
 
-std::string PyWorkerManager::unix_socket_path(pid_t pid) {
-    std::string unix_socket_path = fmt::format("{}/pyworker_{}", config::local_library_dir, pid);
-    return unix_socket_path;
+std::string PyWorkerManager::new_socket_path() {
+    // A process-local counter keeps names unique among live workers; the random
+    // suffix avoids colliding with a stale socket left behind by a prior BE run.
+    static std::atomic<uint64_t> seq{0};
+    uint64_t n = seq.fetch_add(1, std::memory_order_relaxed);
+    uint32_t r = Random::GetTLSInstance()->Next();
+    return fmt::format("{}/pyworker_{}_{:08x}", socket_dir(), n, r);
 }
+
+namespace {
+
+// Ask posix_spawn to put the child in a process group of its own (pgid == child pid), so
+// terminate() can group-kill and reap the whole subtree, not just this one process.
+// Returns whether the attributes were accepted.
+bool spawn_in_own_process_group(posix_spawnattr_t* attrs) {
+    short flags = 0;
+    posix_spawnattr_getflags(attrs, &flags);
+    return posix_spawnattr_setpgroup(attrs, 0) == 0 &&
+           posix_spawnattr_setflags(attrs, static_cast<short>(flags | POSIX_SPAWN_SETPGROUP)) == 0;
+}
+
+} // namespace
 
 Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_process) {
     ASSIGN_OR_RETURN(auto py_env, global_python_env_registry().getDefault());
@@ -139,13 +178,16 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
     }
 #endif
 
+    RETURN_IF_ERROR(ensure_socket_dir());
     std::string script = PyWorkerManager::bootstrap();
-    std::string unix_socket = PyWorkerManager::unix_socket_prefix();
-    std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
+    std::string sock_path = new_socket_path();
+    std::string sock_url = "grpc+unix://" + sock_path;
 
-    const char* args[] = {"python3", script.c_str(), unix_socket.c_str(), nullptr};
+    std::string python_home_env = fmt::format("PYTHONHOME={}", py_env.home);
+    const char* args[] = {"python3", script.c_str(), sock_url.c_str(), nullptr};
     const char* envs[] = {python_home_env.c_str(), nullptr};
 
+    bool own_pgroup = spawn_in_own_process_group(&attrs);
     int rc = posix_spawnp(&pid, python_path.c_str(), &actions, &attrs, const_cast<char* const*>(args),
                           const_cast<char* const*>(envs));
     close(pipefd[1]);
@@ -154,7 +196,9 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
         return Status::InternalError(fmt::format("posix_spawnp failed: {}", std::strerror(rc)));
     }
 
-    *child_process = std::make_unique<LocalPyWorker>(pid);
+    // The worker owns its socket path from here on, so every failure and cleanup path
+    // below removes it -- even if the worker bound it before failing to start.
+    *child_process = std::make_unique<LocalPyWorker>(pid, sock_path, own_pgroup);
 
     pollfd fds[1];
     fds[0].fd = pipefd[0];
@@ -194,7 +238,7 @@ Status PyWorkerManager::_fork_py_worker(std::unique_ptr<LocalPyWorker>* child_pr
         (*child_process)->terminate_and_wait();
         return Status::InternalError(fmt::format("worker start failed:{}", result.to_string()));
     }
-    (*child_process)->set_url(PyWorkerManager::unix_socket(pid));
+    (*child_process)->set_url(sock_url);
 
     return Status::OK();
 }
