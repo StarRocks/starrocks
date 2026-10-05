@@ -2146,6 +2146,12 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql("SELECT DATABASE()", True)
         tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
         self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+        # wait_table_state_normal returns on NORMAL without looking at the clock, so the deadline
+        # may have passed by now; a job submitted after it would outlive the failed case.
+        tools.assert_true(
+            time.monotonic() < deadline,
+            "timed out before resubmitting alter after job %s was cancelled: %s" % (job_id, msg),
+        )
         log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
         res = self.execute_sql(stmt, conn=conn)
         tools.assert_true(res["status"], "resubmit alter failed: %s" % res.get("msg"))
