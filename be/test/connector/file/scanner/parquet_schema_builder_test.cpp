@@ -640,13 +640,13 @@ TEST_F(ParquetSchemaBuilderTest, MapKeyOnly) {
 }
 
 TEST_F(ParquetSchemaBuilderTest, MapInvalidKeyValue) {
-    auto key = create_primitive_node("key", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32);
-    auto value = create_primitive_node("value", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT32);
-    auto extra = create_primitive_node("extra", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT32);
+    // Arrow nodes keep a parent pointer, so every group gets its own children.
+    auto key = [] { return create_primitive_node("key", ::parquet::Repetition::REQUIRED, ::parquet::Type::INT32); };
+    auto value = [] { return create_primitive_node("value", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT32); };
 
     // key_value is not repeated
     {
-        auto kv = create_group_node("key_value", ::parquet::Repetition::REQUIRED, {key, value});
+        auto kv = create_group_node("key_value", ::parquet::Repetition::REQUIRED, {key(), value()});
         check_rejected(create_map_node("map_1", ::parquet::Repetition::OPTIONAL, {kv}));
     }
     // key_value is not a group
@@ -656,18 +656,19 @@ TEST_F(ParquetSchemaBuilderTest, MapInvalidKeyValue) {
     }
     // key_value has more than 2 children
     {
-        auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key, value, extra});
+        auto extra = create_primitive_node("extra", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT32);
+        auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key(), value(), extra});
         check_rejected(create_map_node("map_3", ::parquet::Repetition::OPTIONAL, {kv}));
     }
     // the MAP group has more than 1 child
     {
-        auto kv1 = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key, value});
-        auto kv2 = create_group_node("key_value2", ::parquet::Repetition::REPEATED, {key, value});
+        auto kv1 = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key(), value()});
+        auto kv2 = create_group_node("key_value2", ::parquet::Repetition::REPEATED, {key(), value()});
         check_rejected(create_map_node("map_4", ::parquet::Repetition::OPTIONAL, {kv1, kv2}));
     }
     // the MAP group is repeated
     {
-        auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key, value});
+        auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key(), value()});
         check_rejected(create_map_node("map_5", ::parquet::Repetition::REPEATED, {kv}));
     }
 }
