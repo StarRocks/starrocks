@@ -73,6 +73,19 @@ std::optional<ExtendedVariantVirtualBinding> find_extended_variant_virtual_bindi
 
 } // namespace
 
+// A map whose group key is read with a table key of another shape: keep the column, so that the reader factory
+// reports the unsupported key instead of the column being dropped (read as NULL), e.g. for a key-only projection
+// whose value is pruned.
+static bool reads_incompatible_map_key(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) {
+    if (parquet_field->type != ColumnType::MAP || parquet_field->children.empty() ||
+        type_descriptor->children.empty()) {
+        return false;
+    }
+    const ParquetField& key = parquet_field->children[0];
+    const TypeDescriptor& key_type = type_descriptor->children[0];
+    return key.is_complex_type() && !key_type.is_unknown_type() && !key.has_same_complex_type(key_type);
+}
+
 void ParquetMetaHelper::prepare_read_columns(const std::vector<FormatColumnInfo>& materialized_columns,
                                              const std::vector<ColumnAccessPathPtr>* column_access_paths,
                                              std::vector<GroupReaderParam::Column>& read_cols,
@@ -121,6 +134,9 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
 
     bool has_valid_child = false;
 
+    if (reads_incompatible_map_key(parquet_field, type_descriptor)) {
+        return true;
+    }
     if (parquet_field->type == ColumnType::ARRAY || parquet_field->type == ColumnType::MAP) {
         for (size_t idx = 0; idx < parquet_field->children.size(); idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &type_descriptor->children[idx])) {
@@ -175,6 +191,9 @@ bool LakeMetaHelper::_is_valid_type(const ParquetField* parquet_field, const TIc
         if (parquet_field->children.size() < required_children || field_schema->children.size() < required_children ||
             type_descriptor->children.size() < required_children) {
             return false;
+        }
+        if (reads_incompatible_map_key(parquet_field, type_descriptor)) {
+            return true;
         }
         for (size_t idx = 0; idx < required_children; idx++) {
             if (_is_valid_type(&parquet_field->children[idx], &field_schema->children[idx],
