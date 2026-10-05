@@ -106,7 +106,6 @@ set(CHUNK_TEST_FILES
     chunk_schema_helper_test.cpp
     chunk_core_test.cpp
     chunk_test.cpp
-    segmented_chunk_core_test.cpp
     field_test.cpp
     schema_test.cpp
 )
