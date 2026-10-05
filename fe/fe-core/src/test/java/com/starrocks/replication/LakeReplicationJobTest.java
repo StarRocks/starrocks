@@ -42,12 +42,10 @@ import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -116,19 +114,21 @@ public class LakeReplicationJobTest {
     }
 
     @AfterEach
-    public void tearDown() {
+    public void tearDown() throws InterruptedException {
         // A committed replication transaction is published asynchronously by PublishVersionDaemon, which sets
-        // the data version of the shared partition. Wait for it to become visible, otherwise it may overwrite
+        // the data version of the shared partition. Wait for the publish to finish, otherwise it may overwrite
         // the versions set by the next test's setUp() and fail the "publish version not finished" check.
+        // Wait on the visible latch instead of polling the status: the status becomes VISIBLE before
+        // updateCatalogAfterVisible() updates the partition, while notifyVisible() is called after it.
         if (job == null || job.getState() != ReplicationJobState.COMMITTED) {
             return;
         }
-        long txnId = job.getTransactionId();
-        Awaitility.await().atMost(60, TimeUnit.SECONDS).until(() -> {
-            TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getTransactionState(db.getId(), txnId);
-            return txnState == null || txnState.getTransactionStatus() == TransactionStatus.VISIBLE;
-        });
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), job.getTransactionId());
+        Assertions.assertNotNull(txnState, "Committed replication transaction " + job.getTransactionId()
+                + " not found");
+        Assertions.assertTrue(txnState.waitTransactionVisible(60, TimeUnit.SECONDS),
+                "Replication transaction " + job.getTransactionId() + " is not visible in time");
     }
 
     @Test
