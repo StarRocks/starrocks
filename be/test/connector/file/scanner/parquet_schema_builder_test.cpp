@@ -580,6 +580,10 @@ void check_same_shape(const starrocks::parquet::ParquetField& field, const TypeD
     case starrocks::parquet::ColumnType::MAP:
         ASSERT_EQ(TYPE_MAP, type_desc.type) << field.debug_string();
         break;
+    case starrocks::parquet::ColumnType::VARIANT:
+        // inference does not describe the variant's binary / shredded children
+        ASSERT_EQ(TYPE_VARIANT, type_desc.type) << field.debug_string();
+        return;
     case starrocks::parquet::ColumnType::STRUCT:
         ASSERT_EQ(TYPE_STRUCT, type_desc.type) << field.debug_string();
         ASSERT_EQ(field.children.size(), type_desc.field_names.size());
@@ -684,7 +688,11 @@ TEST_F(ParquetSchemaBuilderTest, MapGroupKey) {
     auto key = create_group_node("key", ::parquet::Repetition::REQUIRED, {a});
     auto value = create_primitive_node("value", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT32);
     auto kv = create_group_node("key_value", ::parquet::Repetition::REPEATED, {key, value});
-    check_rejected(create_map_node("my_map", ::parquet::Repetition::OPTIONAL, {kv}));
+    // Accepted by both resolvers; whether the key can be read is decided by the table key type at read time.
+    check_inferred_type(
+            create_map_node("my_map", ::parquet::Repetition::OPTIONAL, {kv}),
+            TypeDescriptor::create_map_type(TypeDescriptor::create_struct_type({"a"}, {TypeDescriptor(TYPE_INT)}),
+                                            TypeDescriptor(TYPE_INT)));
 }
 
 TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
@@ -787,6 +795,19 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         auto element = create_primitive_node("element", ::parquet::Repetition::REPEATED, ::parquet::Type::INT32);
         check_rejected(create_list_node("my_list", ::parquet::Repetition::REPEATED, {element}));
     }
+}
+
+// A group annotated with the parquet VARIANT logical type is a variant whatever its shape (same rule as the native
+// SchemaDescriptor).
+TEST_F(ParquetSchemaBuilderTest, VariantLogicalTypeAnnotation) {
+    auto node = ::parquet::schema::GroupNode::Make(
+            "v", ::parquet::Repetition::OPTIONAL,
+            {create_primitive_node("metadata", ::parquet::Repetition::REQUIRED, ::parquet::Type::BYTE_ARRAY),
+             create_primitive_node("typed_value", ::parquet::Repetition::OPTIONAL, ::parquet::Type::INT64)},
+            ::parquet::LogicalType::Variant());
+    TypeDescriptor type_desc;
+    ASSERT_TRUE(get_parquet_type(node, &type_desc).ok());
+    ASSERT_EQ(TYPE_VARIANT, type_desc.type);
 }
 
 } // namespace starrocks
