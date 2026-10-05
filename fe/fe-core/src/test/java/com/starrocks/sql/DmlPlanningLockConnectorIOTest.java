@@ -16,6 +16,7 @@ package com.starrocks.sql;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -72,6 +73,8 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
     private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
     private volatile Thread testThread;
+    // Off by default: the DML tests pin getTable, and a DML target resolve may ask getDb on the way.
+    private boolean probeCreateTarget;
 
     private void record(String key) {
         if (Thread.currentThread() != testThread) {
@@ -89,6 +92,23 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
                                   String tblName) {
                 if (!CatalogMgr.isInternalCatalog(catalogName)) {
                     record("getTable:" + catalogName + "." + tblName);
+                }
+                return invocation.proceed(context, catalogName, dbName, tblName);
+            }
+
+            @Mock
+            public Database getDb(Invocation invocation, ConnectContext context, String catalogName, String dbName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    record("getDb:" + catalogName + "." + dbName);
+                }
+                return invocation.proceed(context, catalogName, dbName);
+            }
+
+            @Mock
+            public boolean tableExists(Invocation invocation, ConnectContext context, String catalogName,
+                                       String dbName, String tblName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    record("tableExists:" + catalogName + "." + tblName);
                 }
                 return invocation.proceed(context, catalogName, dbName, tblName);
             }
