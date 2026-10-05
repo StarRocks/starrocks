@@ -518,7 +518,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {
@@ -601,7 +601,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 8; ++i) {
@@ -690,7 +690,7 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_rea
 
     root_field = ParquetField();
     root_field.name = "data";
-    root_field.type = ColumnType::STRUCT;
+    root_field.type = ColumnType::VARIANT;
     root_field.children = {meta_f, val_f, tv_struct};
 
     for (int i = 0; i <= 3; ++i) {
@@ -1133,6 +1133,69 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
         ColumnPtr col = code;
         EXPECT_FALSE(reader._restore_physical_column(col).ok());
     }
+}
+
+// Reports a single def level `tag` so a test can see which child a StructColumnReader takes its levels from.
+class LevelTagColumnReader final : public ColumnReader {
+public:
+    LevelTagColumnReader(const ParquetField* field, level_t tag) : ColumnReader(field), _tag(tag) {}
+
+    Status prepare() override { return Status::OK(); }
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override { return Status::OK(); }
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        *def_levels = &_tag;
+        *rep_levels = nullptr;
+        *num_levels = 1;
+    }
+    void set_need_parse_levels(bool) override {}
+    void collect_column_io_range(std::vector<SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+private:
+    level_t _tag;
+};
+
+TEST(ParquetComplexColumnReaderTest, StructLevelSourcePrefersChildWithoutExtraRepetition) {
+    // struct { a: list<int>, b: int, c: int, d: <no parquet field> }: `a` is first in map order but carries an extra
+    // repetition level; `b` is the first child with one level per struct slot.
+    ParquetField list_field;
+    list_field.name = "a";
+    list_field.type = ColumnType::ARRAY;
+    list_field.level_info.max_rep_level = 1;
+    ParquetField b_field;
+    b_field.name = "b";
+    b_field.type = ColumnType::SCALAR;
+    ParquetField c_field = b_field;
+    c_field.name = "c";
+    ParquetField struct_field;
+    struct_field.name = "s";
+    struct_field.type = ColumnType::STRUCT;
+
+    std::map<std::string, ColumnReaderPtr> children;
+    children.emplace("a", std::make_unique<LevelTagColumnReader>(&list_field, 1));
+    children.emplace("b", std::make_unique<LevelTagColumnReader>(&b_field, 2));
+    children.emplace("c", std::make_unique<LevelTagColumnReader>(&c_field, 3));
+    children.emplace("d", std::make_unique<LevelTagColumnReader>(nullptr, 4));
+    children.emplace("e", nullptr);
+    StructColumnReader reader(&struct_field, std::move(children));
+    ASSERT_OK(reader.prepare());
+
+    level_t* def_levels = nullptr;
+    level_t* rep_levels = nullptr;
+    size_t num_levels = 0;
+    reader.get_levels(&def_levels, &rep_levels, &num_levels);
+    ASSERT_EQ(1, num_levels);
+    EXPECT_EQ(2, def_levels[0]);
+
+    // Only repeated / field-less children: the repeated one with a parquet field wins over the field-less one.
+    std::map<std::string, ColumnReaderPtr> children2;
+    children2.emplace("a", std::make_unique<LevelTagColumnReader>(nullptr, 4));
+    children2.emplace("b", std::make_unique<LevelTagColumnReader>(&list_field, 1));
+    StructColumnReader reader2(&struct_field, std::move(children2));
+    ASSERT_OK(reader2.prepare());
+    reader2.get_levels(&def_levels, &rep_levels, &num_levels);
+    EXPECT_EQ(1, def_levels[0]);
 }
 
 } // namespace starrocks::parquet

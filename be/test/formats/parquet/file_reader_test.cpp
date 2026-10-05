@@ -2305,7 +2305,13 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
-// Illegal parquet files, not support it anymore
+// Legacy two-level nested list written by Hudi (parquet-avro):
+//   optional group c (LIST) {
+//     repeated group array (LIST) {
+//       repeated int32 array;
+//     }
+//   }
+// The single repeated child makes it a nested list, not a list of struct<array>.
 TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // format:
     // b: varchar
@@ -2324,7 +2330,6 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     Status status = file_reader->init(&ctx->format_scan_context);
 
-    // Illegal parquet files, will treat illegal column as null
     ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
@@ -2338,8 +2343,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     chunk->check_or_die();
 
-    EXPECT_EQ("['hello', NULL]", chunk->debug_row(0));
-    EXPECT_EQ("[NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
     EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
 }
 
@@ -3707,17 +3712,37 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
     EXPECT_EQ(file_reader->row_group_size(), 0);
 }
 
+// c3 is list<map<struct<c3_1 int, c3_2 boolean>, list<struct<c3_3_1 date>>>>. A group map key no longer makes the
+// whole file unreadable: the schema resolves (key subtree, then value subtree) and the other columns read normally.
 TEST_F(FileReaderTest, TestMapKeyIsStruct) {
     const std::string filename = "./be/test/formats/parquet/test_data/map_key_is_struct.parquet";
 
     auto file_reader = _create_file_reader(filename);
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""},
+            {"c1", TYPE_INT_DESC},
+            {""},
     };
     auto ctx = _create_file_random_read_context(filename, slot_descs);
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_FALSE(status.ok());
-    ASSERT_EQ("Map keys must be primitive type.", status.message());
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    const auto& schema = file_reader->get_file_metadata()->schema();
+    const ParquetField* c3 = schema.get_stored_column_by_field_idx(schema.get_field_idx_by_column_name("c3"));
+    ASSERT_EQ(ColumnType::ARRAY, c3->type);
+    const ParquetField& map = c3->children[0];
+    ASSERT_EQ(ColumnType::MAP, map.type);
+    ASSERT_EQ(2, map.children.size());
+    ASSERT_EQ(ColumnType::STRUCT, map.children[0].type);
+    ASSERT_EQ(2, map.children[0].children.size());
+    // the value follows the whole key subtree
+    ASSERT_EQ("value", map.children[1].name);
+    ASSERT_EQ(ColumnType::ARRAY, map.children[1].type);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    chunk->check_or_die();
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[3]", chunk->debug_row(0));
 }
 
 TEST_F(FileReaderTest, TestInFilterStatitics) {
