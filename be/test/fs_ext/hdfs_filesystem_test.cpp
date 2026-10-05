@@ -48,13 +48,18 @@ public:
     void TearDown() override { ASSERT_TRUE(fs::remove_all(_root_path).ok()); }
 
     void create_file_and_destroy();
-    void writable_file_survives_cache_eviction(bool explicit_close);
+    enum class WriterRelease { kClose, kCloseFromBthread, kDestroy };
+    void writable_file_survives_cache_eviction(WriterRelease release);
 
 public:
     std::string _root_path;
 };
 
-void HdfsFileSystemTest::writable_file_survives_cache_eviction(bool explicit_close) {
+void HdfsFileSystemTest::writable_file_survives_cache_eviction(WriterRelease release) {
+    if (release == WriterRelease::kCloseFromBthread && JavaEnv::GetInstance()->jvm_call_pool() == nullptr) {
+        auto st = JavaEnv::GetInstance()->init();
+        ASSERT_TRUE(st.ok()) << st;
+    }
     const auto old_capacity = config::hdfs_client_max_cache_size;
     DeferOp restore_capacity([&] { config::hdfs_client_max_cache_size = old_capacity; });
     config::hdfs_client_max_cache_size = 1;
@@ -99,11 +104,33 @@ void HdfsFileSystemTest::writable_file_survives_cache_eviction(bool explicit_clo
     ASSERT_TRUE((*writer)->append(Slice(payload)).ok());
     ASSERT_TRUE((*writer)->flush(WritableFile::FlushMode::FLUSH_SYNC).ok());
     ASSERT_TRUE((*writer)->sync().ok());
-    if (explicit_close) {
+    switch (release) {
+    case WriterRelease::kClose:
         ASSERT_TRUE((*writer)->close().ok());
+        break;
+    case WriterRelease::kCloseFromBthread: {
+        // close() hops to a pthread and must drop the last client reference there, so hdfsDisconnect()
+        // never runs on the bthread. The client is therefore already gone when close() returns.
+        Status close_status;
+        bool expired_after_close = false;
+        auto bthread_status = bthreads::start_bthread_and_join([&] {
+            close_status = (*writer)->close();
+            expired_after_close = weak_client.expired();
+        });
+        ASSERT_TRUE(bthread_status.ok()) << bthread_status;
+        ASSERT_TRUE(close_status.ok()) << close_status;
+        ASSERT_TRUE(expired_after_close);
+        break;
+    }
+    case WriterRelease::kDestroy:
+        break;
+    }
+    if (release != WriterRelease::kDestroy) {
+        // close() itself releases the evicted client instead of deferring disconnect to destruction.
+        EXPECT_TRUE(weak_client.expired());
         ASSERT_TRUE((*writer)->close().ok()); // Closing twice must remain harmless after eviction.
     }
-    (*writer).reset(); // Also exercises implicit close when explicit_close is false.
+    (*writer).reset(); // For kDestroy this exercises the implicit close in the destructor.
     EXPECT_TRUE(weak_client.expired());
 
     auto result = reader_fs->new_random_access_file(filepath);
@@ -114,11 +141,15 @@ void HdfsFileSystemTest::writable_file_survives_cache_eviction(bool explicit_clo
 }
 
 TEST_F(HdfsFileSystemTest, writable_file_close_after_cache_eviction) {
-    writable_file_survives_cache_eviction(true);
+    writable_file_survives_cache_eviction(WriterRelease::kClose);
+}
+
+TEST_F(HdfsFileSystemTest, writable_file_close_from_bthread_after_cache_eviction) {
+    writable_file_survives_cache_eviction(WriterRelease::kCloseFromBthread);
 }
 
 TEST_F(HdfsFileSystemTest, writable_file_destructor_after_cache_eviction) {
-    writable_file_survives_cache_eviction(false);
+    writable_file_survives_cache_eviction(WriterRelease::kDestroy);
 }
 
 void HdfsFileSystemTest::create_file_and_destroy() {
