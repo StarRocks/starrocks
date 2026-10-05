@@ -14,10 +14,14 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
+=======
+import com.google.common.collect.Maps;
+>>>>>>> 46f4a77 ([BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#79971))
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -291,5 +295,26 @@ public class MvRefreshArbiter {
         }
 
         return false;
+    }
+
+    /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
+    public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
+        return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
+    }
+
+    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
+    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
+            MaterializedView mv, Table table) {
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (table.isNativeTableOrMaterializedView()) {
+            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
+        }
+        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
+        // hand back another table's version map.
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(context::getBaseTableRefreshInfo)
+                .orElseGet(Maps::newHashMap);
     }
 }

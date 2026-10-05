@@ -24,7 +24,13 @@ import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+=======
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
+>>>>>>> 46f4a77 ([BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#79971))
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -73,14 +79,39 @@ public class IcebergPartitionTraits extends DefaultTraits {
             return Lists.newArrayList(table.getName());
         }
 
+<<<<<<< HEAD
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
                 .map(Snapshot::snapshotId);
         ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
         requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
+=======
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+        requestContext.setQueryMVRewrite(isQueryMVRewrite());
+        requestContext.setTableVersionRange(readVersionRange());
+>>>>>>> 46f4a77 ([BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#79971))
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+    }
+
+    /** The pinned range, else the snapshot this table object is at: an unpinned read follows the object. */
+    private TvrVersionRange readVersionRange() {
+        if (pinnedVersionRange != null) {
+            return pinnedVersionRange;
+        }
+        Optional<Long> snapshotId = Optional.ofNullable(((IcebergTable) table).getNativeTable().currentSnapshot())
+                .map(Snapshot::snapshotId);
+        return TvrTableSnapshot.of(snapshotId);
+    }
+
+    /**
+     * Two equal Iceberg tables can sit at different snapshots: the refresh re-resolves the live table under its
+     * lock, which may be newer than the one prefetched. Key on the snapshot actually read.
+     */
+    @Override
+    protected Object partitionInfoSnapshot() {
+        return readVersionRange();
     }
 
     @Override
