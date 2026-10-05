@@ -66,8 +66,7 @@ std::string confluent_frame(int32_t schema_id, avro_value_t* value) {
 // registry address, so an id that is not added here fails the registry fetch at once.
 serdes_t* new_test_serdes(const std::vector<std::pair<int, std::string>>& schemas) {
     char errstr[512];
-    serdes_conf_t* conf =
-            serdes_conf_new(errstr, sizeof(errstr), "schema.registry.url", "http://127.0.0.1:1", nullptr);
+    serdes_conf_t* conf = serdes_conf_new(errstr, sizeof(errstr), "schema.registry.url", "http://127.0.0.1:1", nullptr);
     EXPECT_NE(nullptr, conf) << errstr;
     serdes_t* serdes = serdes_new(conf, errstr, sizeof(errstr));
     EXPECT_NE(nullptr, serdes) << errstr;
