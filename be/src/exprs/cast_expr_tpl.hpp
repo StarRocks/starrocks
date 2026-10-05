@@ -204,8 +204,9 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
                     down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
             const size_t variant_row = column->is_constant() ? 0 : row;
             VariantRowRef row_ref;
+            // row_ref may point into variant_buffer, so the buffer must outlive every use of row_ref.
+            VariantRowValue variant_buffer;
             if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
-                VariantRowValue variant_buffer;
                 const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
                 if (variant == nullptr) {
                     overflow = true;
@@ -289,8 +290,9 @@ static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
 
         const size_t variant_row = column->is_constant() ? 0 : row;
         VariantRowRef row_ref;
+        // row_ref may point into variant_buffer, so the buffer must outlive every use of row_ref.
+        VariantRowValue variant_buffer;
         if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
-            VariantRowValue variant_buffer;
             const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
             if (variant == nullptr) {
                 builder.append_null();

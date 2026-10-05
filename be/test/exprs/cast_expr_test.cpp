@@ -3282,4 +3282,44 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
     ASSERT_TRUE(result->is_null(0));
 }
 
+// A row that exists only in typed shredded columns has no stored row ref: the cast rebuilds it into a
+// local buffer. The value must be read while that buffer is alive. The string is longer than the SSO
+// limit so a dangling read lands on freed heap memory (caught by ASAN).
+static ColumnPtr make_object_typed_only_variant_column(const std::vector<std::string>& values) {
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    for (const auto& v : values) {
+        typed->append_datum(Datum(Slice(v)));
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    auto variant = VariantColumn::create();
+    variant->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_string_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'x');
+    auto variant_col = make_object_typed_only_variant_column({long_value, "short"});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::VARCHAR), variant_col);
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    EXPECT_EQ(R"({"a":")" + long_value + R"("})", result->get(0).get_slice().to_string());
+    EXPECT_EQ(R"({"a":"short"})", result->get(1).get_slice().to_string());
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_json_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'y');
+    auto variant_col = make_object_typed_only_variant_column({long_value});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    const JsonValue* json = result->get(0).get_json();
+    ASSERT_NE(nullptr, json);
+    auto field = json->get_obj("a");
+    ASSERT_TRUE(field.ok());
+    auto str = field->get_string();
+    ASSERT_TRUE(str.ok());
+    EXPECT_EQ(long_value, str->to_string());
+}
+
 } // namespace starrocks
