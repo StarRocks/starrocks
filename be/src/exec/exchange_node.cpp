@@ -138,7 +138,7 @@ Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
     if (_is_merging) {
         RETURN_IF_ERROR(get_next_merging(state, chunk, eos));
-        eval_join_runtime_filters(chunk);
+        RETURN_IF_ERROR(eval_join_runtime_filters(chunk));
         return Status::OK();
     }
 
@@ -149,7 +149,7 @@ Status ExchangeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
             *chunk = nullptr;
             return Status::OK();
         }
-        eval_join_runtime_filters(_input_chunk.get());
+        RETURN_IF_ERROR(eval_join_runtime_filters(_input_chunk.get()));
     } while (_input_chunk->num_rows() <= 0);
 
     _num_rows_returned += _input_chunk->num_rows();

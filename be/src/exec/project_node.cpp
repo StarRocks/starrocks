@@ -166,7 +166,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     *chunk = std::move(result_chunk);
-    eval_join_runtime_filters(chunk);
+    RETURN_IF_ERROR(eval_join_runtime_filters(chunk));
 
     _num_rows_returned += (*chunk)->num_rows();
 

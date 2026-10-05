@@ -126,8 +126,20 @@ void SortedChunksMerger::set_profile(RuntimeProfile* profile) {
     _total_timer = ADD_TIMER(profile, "MergeSortedChunks");
 }
 
+Status SortedChunksMerger::_cursors_status() const {
+    for (const auto& cursor : _cursors) {
+        RETURN_IF_ERROR(cursor->status());
+    }
+    return Status::OK();
+}
+
 Status SortedChunksMerger::get_next(ChunkPtr* chunk, bool* eos) {
     ScopedTimer<MonotonicStopWatch> timer(_total_timer);
+    // A cursor builds its order-by columns by evaluating expressions, which can fail. It is driven
+    // from places that cannot return a Status, so the failure is latched on the cursor; pick it up
+    // before the merged output is used -- on the way in, and again on the way out because a cursor
+    // that fails inside this call is dropped from the heap here and may report eos in the same call.
+    RETURN_IF_ERROR(_cursors_status());
 
     DCHECK(chunk != nullptr);
     if (_min_heap.empty() && !_single_supplier) {
@@ -190,10 +202,15 @@ Status SortedChunksMerger::get_next(ChunkPtr* chunk, bool* eos) {
     (*chunk)->append_selective(*current_chunk, selective_values.data(), 0, selective_values.size());
     (*chunk)->set_num_rows(row_number); // set constant column in chunk with right size.
 
-    return Status::OK();
+    return _cursors_status();
 }
 
 Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
+    // A cursor builds its order-by columns by evaluating expressions, which can fail. It is driven
+    // from places that cannot return a Status, so the failure is latched on the cursor; pick it up
+    // before the merged output is used -- on the way in, and again on the way out because a cursor
+    // that fails inside this call is dropped from the heap here and may report eos in the same call.
+    RETURN_IF_ERROR(_cursors_status());
     ScopedTimer<MonotonicStopWatch> timer(_total_timer);
 
     DCHECK(chunk != nullptr);
@@ -280,7 +297,7 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
         }
     }
 
-    return Status::OK();
+    return _cursors_status();
 }
 
 void SortedChunksMerger::move_cursor_and_adjust_min_heap(std::atomic<bool>* eos) {
@@ -336,7 +353,7 @@ Status CascadeChunkMerger::get_next(ChunkUniquePtr* output, std::atomic<bool>* e
         return Status::OK();
     }
     if (_current_chunk.empty()) {
-        ChunkUniquePtr chunk = _merger->try_get_next();
+        ASSIGN_OR_RETURN(ChunkUniquePtr chunk, _merger->try_get_next());
         if (!chunk) {
             *eos = _merger->is_eos();
             *should_exit = true;

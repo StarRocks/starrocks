@@ -50,7 +50,7 @@ public:
 
     // Try to get next chunk, return a Chunk a available,
     // return a nullptr if data temporarily not avaiable or end of stream
-    std::pair<ChunkUniquePtr, Columns> try_get_next();
+    StatusOr<std::pair<ChunkUniquePtr, Columns>> try_get_next();
 
     // Check if is the end of stream
     bool is_eos();

@@ -65,14 +65,23 @@ public:
 
     [[nodiscard]] ChunkPtr clone_empty_chunk(size_t reserved_row_number) const;
 
+    // Order-by columns are built by evaluating expressions, which can fail. The cursor is driven
+    // from a constructor and from void next(), so the failure is latched here and must be picked up
+    // by the owning merger before its result is used.
+    Status status() const { return _status; }
+
     Status chunk_supplier(Chunk**);
     bool chunk_probe_supplier(Chunk**);
     bool chunk_has_supplier();
 
 private:
     void _reset_with_next_chunk();
+    Status _build_order_by_columns();
+    // Latches a failed order-by build and leaves the cursor in the exhausted state.
+    void _latch_status(const Status& status);
 
 private:
+    Status _status;
     ChunkSupplier _chunk_supplier;
     // Probe for chunks, because _chunk_queue maybe empty when data hasn't come yet.
     // So compute thread should do other works.

@@ -44,7 +44,7 @@ void AnalyticSourceOperator::close(RuntimeState* state) {
 
 StatusOr<ChunkPtr> AnalyticSourceOperator::pull_chunk(RuntimeState* state) {
     auto chunk = _analytor->poll_chunk_buffer();
-    eval_runtime_bloom_filters(chunk.get());
+    RETURN_IF_ERROR(eval_runtime_bloom_filters(chunk.get()));
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters({}, chunk.get()));
     return chunk;
 }

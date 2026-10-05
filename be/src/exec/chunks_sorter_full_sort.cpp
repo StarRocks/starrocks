@@ -114,7 +114,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         RETURN_IF_ERROR(_unsorted_chunk->capacity_limit_reached());
 
         SCOPED_TIMER(_sort_timer);
-        DataSegment segment(_sort_exprs, _unsorted_chunk);
+        DataSegment segment;
+        RETURN_IF_ERROR(segment.init(_sort_exprs, _unsorted_chunk));
         SmallPermutation permutation = create_small_permutation(_staging_unsorted_rows);
         RETURN_IF_ERROR(
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));

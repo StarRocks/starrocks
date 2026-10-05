@@ -134,7 +134,13 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     }
 
     // 3. extract the const value from |r|.
-    ColumnPtr column_ptr = EVALUATE_NULL_IF_ERROR(ctx, r, nullptr);
+    // |r| is a constant expression, so a failure here is data-independent and the same conjunct
+    // will report it again when it is evaluated normally during the scan. Just skip the pushdown.
+    auto column_or = ctx->evaluate(r, nullptr);
+    if (!column_or.ok()) {
+        return false;
+    }
+    const ColumnPtr& column_ptr = column_or.value();
     if (column_ptr == nullptr) {
         return false;
     }

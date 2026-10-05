@@ -36,11 +36,9 @@ struct DataSegment {
 
     DataSegment() : chunk(std::make_shared<Chunk>()) {}
 
-    DataSegment(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk) { init(sort_exprs, cnk); }
-
     int64_t mem_usage() const { return chunk->memory_usage(); }
 
-    void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
+    Status init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());

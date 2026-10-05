@@ -233,17 +233,18 @@ Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chun
     return Status::OK();
 }
 
-void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
+Status Operator::eval_runtime_bloom_filters(Chunk* chunk) {
     if (chunk == nullptr || chunk->is_empty()) {
-        return;
+        return Status::OK();
     }
 
     if (auto* bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(true);
-        bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
+        RETURN_IF_ERROR(bloom_filters->evaluate(chunk, _bloom_filter_eval_context));
     }
 
     ChunkPredicateEvaluator::eval_filter_null_values(chunk, _runtime_access->get_filter_null_value_columns());
+    return Status::OK();
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {
