@@ -6,7 +6,7 @@ description: "Version naming is detailed in the versioning documentation."
 
 # Version Release Guide
 
-Version naming is detailed in the [versioning](../maturity/release_numbering.md) documentation. Read that page first to understand **major**, **minor**, and **patch** versioning.
+Version naming is detailed in the [versioning](/docs/maturity/release_numbering/) documentation. Read that page first to understand **major**, **minor**, and **patch** versioning.
 
 ## Release Plan
 - Release a minor version approximately every four months.
