@@ -1575,6 +1575,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
 - Introduced in: -
 
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- Default: 128L * 1024 * 1024 (134217728)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of the off-heap buffers that the FE keeps for gzip and zlib compression, such as compressing query profiles before they are stored in `ProfileManager`. Compressing between off-heap buffers keeps the JVM from blocking garbage collection during compression, which can otherwise make memory allocations fail with an `OutOfMemoryError` while the heap still has room to reclaim. Each compression in progress uses two 256 KB buffers regardless of the data size, so the default value allows 256 compressions at the same time. When no buffer is available within this limit, the data is compressed on the heap as before. Lowering the value at runtime takes effect as buffers are returned. Set it to `0` to disable off-heap compression: all data is then compressed on the heap in small chunks, and the off-heap buffers already allocated are released.
+- Introduced in: -
+
 ### `profile_info_format`
 
 - Default: default
