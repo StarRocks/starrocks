@@ -4,7 +4,6 @@ description: "StarRocks は MPP データベースとして、サブセカンド
 ---
 
 import DocCardList from '@theme/DocCardList';
-import FeatureList from '/src/components/Features/index.js'
 
 # StarRocks とは？
 
@@ -17,10 +16,6 @@ StarRocks は、新鮮なデータに対するリアルタイム分析に最適�
 MySQL プロトコルおよび標準 SQL と互換性があり、Tableau や Power BI などの主要な BI ツールに対して即座にサポートを提供します。StarRocks は外部コンポーネントに依存せず、高拡張性、高可用性、簡素化された管理と保守を可能にする統合データ分析プラットフォームです。
 
 <DocCardList />
-
-## 人気のトピック
-
-<FeatureList language="Japanese" />
 
 ## Scenarios
 

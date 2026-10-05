@@ -4,7 +4,6 @@ description: "StarRocks is a next-generation, blazing-fast massively parallel pr
 ---
 
 import DocCardList from '@theme/DocCardList';
-import FeatureList from '/src/components/Features/index.js'
 
 # What is StarRocks?
 
@@ -17,10 +16,6 @@ StarRocks is ideal for real-time analytics on fresh data. Data can be ingested a
 Compatible with MySQL protocols and standard SQL, StarRocks has out-of-the-box support for all major Business Intelligence (BI) tools, such as Tableau and Power BI. StarRocks does not rely on any external components. It is an integrated data analytics platform that allows for high scalability, high availability, and simplified management and maintenance.
 
 <DocCardList />
-
-## Popular topics
-
-<FeatureList language="English" layout="v2" />
 
 ## Scenarios
 
