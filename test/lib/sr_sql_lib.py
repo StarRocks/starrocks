@@ -93,6 +93,14 @@ if not os.path.exists(CRASH_DIR):
 LOG_LEVEL = logging.INFO
 QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 
+# A shared-data alter job is cancelled with this message when any transaction id is allocated,
+# anywhere in the cluster, between taking the watershed txn id and adding the shadow index
+# (LakeTableSchemaChangeJob / LakeRollupJob). The job is cleaned up and nothing is lost, so the
+# alter can just be submitted again.
+ALTER_RERUN_MSG = "please re-run the alter table command"
+ALTER_RERUN_MAX_RETRY = 3
+ALTER_STMT_RE = re.compile(r"^\s*(ALTER\s+TABLE|CREATE\s+INDEX)\b", re.IGNORECASE)
+
 
 class Filter(logging.Filter):
     """
@@ -1326,6 +1334,10 @@ class StarrocksSQLApiLib(object):
 
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            if ALTER_STMT_RE.match(statement):
+                # Kept so wait_alter_table_finish can submit it again, see ALTER_RERUN_MSG.
+                self._last_alter_stmt = (statement, conn)
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
@@ -2606,8 +2618,10 @@ class StarrocksSQLApiLib(object):
         seen = getattr(self, "_last_alter_job_id", None)
         deadline = time.monotonic() + timeout
         status = ""
+        msg = ""
         job_id = None
         table_name = None
+        rerun = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2617,6 +2631,8 @@ class StarrocksSQLApiLib(object):
                 return ""
 
             job_id, table_name, status = res["result"][0][0], res["result"][0][1], res["result"][0][off]
+            # Msg is the column right after State for both COLUMN and ROLLUP.
+            msg = res["result"][0][off + 1] if len(res["result"][0]) > off + 1 else ""
             if seen is not None and int(job_id) <= int(seen):
                 # No job of our own: either the alter was applied inline, or it created a job of
                 # a different type than the one being listed (a caller that leaves alter_type at
@@ -2627,6 +2643,23 @@ class StarrocksSQLApiLib(object):
                 # is reserved for the pre-existing "no rows at all" return above, whose recorded
                 # value callers already depend on.
                 return None
+
+            last_alter = getattr(self, "_last_alter_stmt", None)
+            if (
+                status == "CANCELLED"
+                and ALTER_RERUN_MSG in str(msg)
+                and last_alter is not None
+                and rerun < ALTER_RERUN_MAX_RETRY
+            ):
+                # Spurious cancel from the shared-data watershed check, see ALTER_RERUN_MSG.
+                # Submit the same alter again and wait for the new job instead.
+                rerun += 1
+                stmt, conn = last_alter
+                log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
+                seen = int(job_id)
+                rres = self.execute_sql(stmt, conn=conn)
+                tools.assert_true(rres["status"], "resubmit alter failed: %s" % rres.get("msg"))
+                continue
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
@@ -2639,7 +2672,9 @@ class StarrocksSQLApiLib(object):
             time.sleep(0.1)
 
         self._last_alter_job_id = int(job_id)
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        # Consumed: a later wait must not resubmit an alter that belongs to this one.
+        self._last_alter_stmt = None
+        tools.assert_equal("FINISHED", status, "wait alter table finish error, msg: %s" % msg)
 
         if alter_type.upper() == "ROLLUP":
             # The rollup is finished but the table may not be released yet -- see
