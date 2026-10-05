@@ -588,6 +588,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：shared-data 模式下，在实际数据被删除前，清理 BE/CN 上的缓存。
 - 引入版本：v4.0
 
+### `lake_publish_version_timeout_ms`
+
+- 默认值: 60000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离集群中事务 Publish Version RPC 的超时时间。该值同时约束 FE 等待 CN 应答的时长以及 CN 对 publish 任务本身施加的截止时间，二者始终同步变化。当一次 publish 确实需要超过默认值的时间时（例如单个事务需要发布大量 tablet 并因 publish 超时而失败），可调大该值。
+- 引入版本: v3.5.22
+
 ### `lake_batch_publish_max_version_num`
 
 - 默认值: 10
