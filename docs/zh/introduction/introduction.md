@@ -3,8 +3,6 @@ displayed_sidebar: docs
 description: "StarRocks 是极速 MPP 数据库，采用向量化引擎和 CBO 优化器，支持多种数据分析场景。"
 ---
 
-import DocCardList from '@theme/DocCardList';
-
 # 什么是 StarRocks
 
 StarRocks 是**新一代极速全场景 MPP (Massively Parallel Processing) 数据库**。StarRocks 的愿景是能够让用户的**数据分析变得更加简单和敏捷**。用户无需经过复杂的预处理，就可以用 StarRocks 来支持多种数据分析场景的极速分析。
@@ -16,8 +14,6 @@ StarRocks 能很好地支持实时数据分析，并能实现对实时更新数�
 使用 StarRocks，用户可以灵活构建包括大宽表、星型模型、雪花模型在内的各类模型。
 
 StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。StarRocks 还兼容多种主流 BI 产品，包括 Tableau、Power BI、QuickBI、FineBI 和 Smartbi。
-
-<DocCardList />
 
 ## 适用场景
 
