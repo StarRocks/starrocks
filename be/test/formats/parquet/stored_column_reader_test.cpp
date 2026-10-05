@@ -150,6 +150,20 @@ std::vector<std::optional<int32_t>> list_row(size_t i) {
     return row;
 }
 
+// Rep / def levels of row i of the list column (schema of RepeatedUnselectedSegmentInsideLoadedPage).
+void append_list_row_levels(size_t i, std::vector<level_t>* rep_levels, std::vector<level_t>* def_levels) {
+    auto row = list_row(i);
+    if (row.empty()) {
+        rep_levels->push_back(0);
+        def_levels->push_back(i % 4 == 0 ? 0 : 1);
+        return;
+    }
+    for (size_t j = 0; j < row.size(); ++j) {
+        rep_levels->push_back(j == 0 ? 0 : 1);
+        def_levels->push_back(row[j].has_value() ? 3 : 2);
+    }
+}
+
 Values to_values(const Column& column) {
     Values out;
     for (size_t i = 0; i < column.size(); ++i) {
@@ -202,6 +216,9 @@ struct ReadStep {
 };
 const std::vector<ReadStep> kStepsLoadedFirst = {{0, 5, true}, {5, 10, false}, {10, 15, true}, {17, 20, true}};
 const std::vector<ReadStep> kStepsUnselectedFirst = {{0, 5, false}, {5, 10, true}, {10, 12, false}, {12, 20, true}};
+// Several selected / unselected alternations inside the same page, ending with an unselected tail.
+const std::vector<ReadStep> kStepsAlternating = {{0, 3, true},   {3, 6, false},   {6, 7, true},   {7, 11, false},
+                                                 {11, 14, true}, {14, 15, false}, {15, 17, true}, {17, 20, false}};
 
 void build_flat_column(SinglePageColumn* column, bool nullable) {
     auto repetition = nullable ? tparquet::FieldRepetitionType::OPTIONAL : tparquet::FieldRepetitionType::REQUIRED;
@@ -217,7 +234,7 @@ void build_flat_column(SinglePageColumn* column, bool nullable) {
 
 TEST_F(StoredColumnReaderTest, RequiredUnselectedSegmentInsideLoadedPage) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&_tracker);
-    for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst}) {
+    for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst, &kStepsAlternating}) {
         SinglePageColumn column;
         build_flat_column(&column, false);
         const auto* field = column.file_meta.schema().get_stored_column_by_field_idx(0);
@@ -240,7 +257,7 @@ TEST_F(StoredColumnReaderTest, RequiredUnselectedSegmentInsideLoadedPage) {
 TEST_F(StoredColumnReaderTest, OptionalUnselectedSegmentInsideLoadedPage) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&_tracker);
     for (bool need_levels : {false, true}) {
-        for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst}) {
+        for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst, &kStepsAlternating}) {
             SinglePageColumn column;
             build_flat_column(&column, true);
             const auto* field = column.file_meta.schema().get_stored_column_by_field_idx(0);
@@ -250,8 +267,8 @@ TEST_F(StoredColumnReaderTest, OptionalUnselectedSegmentInsideLoadedPage) {
             for (const auto& step : *steps) {
                 auto dst = ColumnHelper::create_column(TYPE_INT_DESC, true);
                 Filter filter(step.end - step.begin, step.selected ? 1 : 0);
-                ASSERT_OK(reader->read_range(Range<uint64_t>(step.begin, step.end), &filter,
-                                             ColumnContentType::VALUE, dst.get()));
+                ASSERT_OK(reader->read_range(Range<uint64_t>(step.begin, step.end), &filter, ColumnContentType::VALUE,
+                                             dst.get()));
                 Values expected;
                 std::vector<level_t> expected_levels;
                 for (size_t i = step.begin; i < step.end; ++i) {
@@ -275,9 +292,11 @@ TEST_F(StoredColumnReaderTest, OptionalUnselectedSegmentInsideLoadedPage) {
 }
 
 // optional group l (LIST) { repeated group list { optional int32 element; } }: max_def 3, max_rep 1.
+// Unselected segments of a repeated column only decode levels (to delimit rows); the values they pass over are
+// skipped lazily by the next selected read in the page. Values and levels of every read must stay aligned.
 TEST_F(StoredColumnReaderTest, RepeatedUnselectedSegmentInsideLoadedPage) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&_tracker);
-    for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst}) {
+    for (const auto* steps : {&kStepsLoadedFirst, &kStepsUnselectedFirst, &kStepsAlternating}) {
         SinglePageColumn column;
         tparquet::SchemaElement list;
         list.__set_name("l");
@@ -291,16 +310,9 @@ TEST_F(StoredColumnReaderTest, RepeatedUnselectedSegmentInsideLoadedPage) {
         column.schema = {root_element(1), list, repeated,
                          int_element("element", tparquet::FieldRepetitionType::OPTIONAL)};
         for (size_t i = 0; i < 20; ++i) {
-            auto row = list_row(i);
-            if (row.empty()) {
-                column.rep_levels.push_back(0);
-                column.def_levels.push_back(i % 4 == 0 ? 0 : 1);
-                continue;
-            }
-            for (size_t j = 0; j < row.size(); ++j) {
-                column.rep_levels.push_back(j == 0 ? 0 : 1);
-                column.def_levels.push_back(row[j].has_value() ? 3 : 2);
-                if (row[j].has_value()) column.values.push_back(*row[j]);
+            append_list_row_levels(i, &column.rep_levels, &column.def_levels);
+            for (const auto& v : list_row(i)) {
+                if (v.has_value()) column.values.push_back(*v);
             }
         }
         column.num_levels = column.def_levels.size();
@@ -320,12 +332,25 @@ TEST_F(StoredColumnReaderTest, RepeatedUnselectedSegmentInsideLoadedPage) {
             ASSERT_OK(reader->read_range(Range<uint64_t>(step.begin, step.end), &filter, ColumnContentType::VALUE,
                                          dst.get()));
             Values expected;
+            std::vector<level_t> expected_rep_levels;
+            std::vector<level_t> expected_def_levels;
             for (size_t i = step.begin; i < step.end; ++i) {
                 for (const auto& v : list_row(i)) {
                     expected.emplace_back(step.selected ? v : std::nullopt);
                 }
+                append_list_row_levels(i, &expected_rep_levels, &expected_def_levels);
             }
             EXPECT_EQ(expected, to_values(*dst)) << "range [" << step.begin << ", " << step.end << ")";
+
+            // The levels of the rows read are exposed for selected and unselected reads alike (the list reader
+            // builds offsets from them).
+            level_t* def_levels = nullptr;
+            level_t* rep_levels = nullptr;
+            size_t num_levels = 0;
+            reader->get_levels(&def_levels, &rep_levels, &num_levels);
+            ASSERT_EQ(expected_def_levels.size(), num_levels) << "range [" << step.begin << ", " << step.end << ")";
+            EXPECT_EQ(expected_rep_levels, std::vector<level_t>(rep_levels, rep_levels + num_levels));
+            EXPECT_EQ(expected_def_levels, std::vector<level_t>(def_levels, def_levels + num_levels));
         }
     }
 }
