@@ -18,6 +18,12 @@ const isVersioningDisabled = !!process.env.DISABLE_VERSIONING || false;
 // (a redirect stub carries no document content). Keep in sync with the same list
 // in the doc-build repo's docusaurus.config.js.
 const MOVED_DOCS = [
+  // The introduction and maturity pages, reorganized so that every product has the same pages.
+  { from: "/docs/introduction/StarRocks_intro/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/what_is_starrocks/", to: "/docs/introduction/" },
+  { from: "/docs/introduction/feature_difference/", to: "/docs/introduction/Architecture/" },
+  { from: "/docs/introduction/maturity/", to: "/docs/maturity/features/" },
+  { from: "/docs/introduction/versioning/", to: "/docs/maturity/release_numbering/" },
   // Former `generated-index` category pages, replaced by real DocCardList
   // nav pages so the URL and breadcrumbs follow the directory structure.
   { from: "/docs/category/aggregate/", to: "/docs/sql-reference/sql-functions/aggregate-functions/" },
@@ -354,7 +360,7 @@ const config = {
             items: [
               {
                 label: "Documentation",
-                to: "/docs/introduction/StarRocks_intro",
+                to: "/docs/introduction/",
               },
             ],
           },
