@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
@@ -26,6 +28,8 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+
+import java.util.Optional;
 
 /**
  * Handler for Iceberg tables.
@@ -41,13 +45,9 @@ public class IcebergTablePartitionHandler implements MVBaseTablePartitionHandler
         // Common validation: unpartitioned check + column name match + type check
         MVBaseTablePartitionHandler.checkPartitionColumnWithBaseTable(slotRef, table);
 
-        // Iceberg-specific: partition evolution and transform validation
+        // Iceberg-specific: transform validation, then partition evolution
         org.apache.iceberg.Table icebergTable = table.getNativeTable();
         PartitionSpec partitionSpec = icebergTable.spec();
-        if (icebergTable.specs().size() > 1) {
-            throw new SemanticException("Do not support create materialized view when " +
-                    "base iceberg table has partition evolution");
-        }
         for (PartitionField partitionField : partitionSpec.fields()) {
             String partitionColumnName = icebergTable.schema().findColumnName(partitionField.sourceId());
             if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
@@ -80,6 +80,14 @@ public class IcebergTablePartitionHandler implements MVBaseTablePartitionHandler
                                 "base iceberg table partition transform is: " + transform.name());
                 }
                 break;
+            }
+        }
+        if (icebergTable.specs().size() > 1) {
+            Optional<String> incompatible = IcebergPartitionUtils.checkPartitionEvolutionCompatible(
+                    icebergTable, ImmutableList.of(slotRef.getColumnName()));
+            if (incompatible.isPresent()) {
+                throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                        table.getName() + " has done partition evolution: " + incompatible.get());
             }
         }
     }
