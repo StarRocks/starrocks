@@ -14,8 +14,10 @@
 
 #include "connector/file/scanner/avro_scanner.h"
 
+#include <arpa/inet.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -38,11 +40,47 @@
 extern "C" {
 #endif
 #include "avro.h"
+#include "libserdes/serdes.h"
 #ifdef __cplusplus
 }
 #endif
 
 namespace starrocks {
+
+namespace {
+
+// Confluent wire format: magic byte 0, 4-byte big-endian schema id, then the avro binary body.
+std::string confluent_frame(int32_t schema_id, avro_value_t* value) {
+    size_t size = 0;
+    EXPECT_EQ(0, avro_value_sizeof(value, &size));
+    std::string out(5 + size, '\0');
+    uint32_t be_id = htonl(static_cast<uint32_t>(schema_id));
+    memcpy(out.data() + 1, &be_id, 4);
+    avro_writer_t writer = avro_writer_memory(out.data() + 5, size);
+    EXPECT_EQ(0, avro_value_write(writer, value));
+    avro_writer_free(writer);
+    return out;
+}
+
+// A serdes handle with the given schemas registered locally under fixed ids. Nothing listens on the
+// registry address, so an id that is not added here fails the registry fetch at once.
+serdes_t* new_test_serdes(const std::vector<std::pair<int, std::string>>& schemas) {
+    char errstr[512];
+    serdes_conf_t* conf =
+            serdes_conf_new(errstr, sizeof(errstr), "schema.registry.url", "http://127.0.0.1:1", nullptr);
+    EXPECT_NE(nullptr, conf) << errstr;
+    serdes_t* serdes = serdes_new(conf, errstr, sizeof(errstr));
+    EXPECT_NE(nullptr, serdes) << errstr;
+    for (const auto& [id, definition] : schemas) {
+        std::string name = "test_schema_" + std::to_string(id);
+        serdes_schema_t* schema = serdes_schema_add(serdes, name.c_str(), id, definition.data(),
+                                                    static_cast<int>(definition.size()), errstr, sizeof(errstr));
+        EXPECT_NE(nullptr, schema) << errstr;
+    }
+    return serdes;
+}
+
+} // namespace
 
 class AvroScannerTest : public ::testing::Test {
 protected:
@@ -2449,6 +2487,258 @@ TEST_F(AvroScannerTest, test_source_metadata_fill) {
         EXPECT_EQ(42, chunk->get(0)[0].get_int64());
         EXPECT_EQ("hello", chunk->get(0)[1].get_slice());
         EXPECT_TRUE(chunk->get(0)[2].is_null());
+    }
+}
+
+// The routine-load path decodes Confluent-framed messages through a per-schema-id decoder cache.
+// These tests feed framed messages through that path (set_test_confluent_messages) with schemas
+// registered locally in libserdes, so no schema registry is needed.
+class AvroScannerConfluentTest : public AvroScannerTest {
+protected:
+    static constexpr const char* kSchemaV1 =
+            R"({"type":"record","name":"r","fields":[{"name":"id","type":"long"},{"name":"name","type":"string"}]})";
+    // V1 plus one optional field.
+    static constexpr const char* kSchemaV2 =
+            R"({"type":"record","name":"r","fields":[{"name":"id","type":"long"},{"name":"name","type":"string"},)"
+            R"({"name":"extra","type":["null","string"],"default":null}]})";
+
+    std::string dummy_data_path() {
+        // open() still creates the sequential file for the range; the messages come from the test hook.
+        std::string path = "./be/test/exec/test_data/avro_scanner/tmp/confluent_messages.dummy";
+        std::ofstream(path).close();
+        return path;
+    }
+
+    std::vector<TBrokerRangeDesc> confluent_ranges(const std::string& jsonpaths) {
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        if (jsonpaths.empty()) {
+            range.__isset.jsonpaths = false;
+        } else {
+            range.__isset.jsonpaths = true;
+            range.jsonpaths = jsonpaths;
+        }
+        range.__set_path(dummy_data_path());
+        ranges.emplace_back(range);
+        return ranges;
+    }
+
+    std::string frame_v1(int32_t schema_id, int64_t id, const char* name) {
+        AvroHelper h;
+        init_avro_value(kSchemaV1, strlen(kSchemaV1), h);
+        avro_value_t f;
+        avro_value_get_by_name(&h.avro_val, "id", &f, nullptr);
+        avro_value_set_long(&f, id);
+        avro_value_get_by_name(&h.avro_val, "name", &f, nullptr);
+        avro_value_set_string(&f, name);
+        std::string msg = confluent_frame(schema_id, &h.avro_val);
+        avro_value_decref(&h.avro_val);
+        avro_value_iface_decref(h.iface);
+        avro_schema_decref(h.schema);
+        return msg;
+    }
+
+    std::string frame_v2(int32_t schema_id, int64_t id, const char* name, const char* extra) {
+        AvroHelper h;
+        init_avro_value(kSchemaV2, strlen(kSchemaV2), h);
+        avro_value_t f;
+        avro_value_get_by_name(&h.avro_val, "id", &f, nullptr);
+        avro_value_set_long(&f, id);
+        avro_value_get_by_name(&h.avro_val, "name", &f, nullptr);
+        avro_value_set_string(&f, name);
+        avro_value_get_by_name(&h.avro_val, "extra", &f, nullptr);
+        avro_value_t branch;
+        if (extra == nullptr) {
+            avro_value_set_branch(&f, 0, &branch);
+            avro_value_set_null(&branch);
+        } else {
+            avro_value_set_branch(&f, 1, &branch);
+            avro_value_set_string(&branch, extra);
+        }
+        std::string msg = confluent_frame(schema_id, &h.avro_val);
+        avro_value_decref(&h.avro_val);
+        avro_value_iface_decref(h.iface);
+        avro_schema_decref(h.schema);
+        return msg;
+    }
+
+    // Runs one scanner over `messages` and returns the first chunk (or the error).
+    StatusOr<ChunkPtr> scan_one_chunk(std::unique_ptr<AvroScanner>& scanner, serdes_t* serdes,
+                                      std::vector<std::string> messages) {
+        scanner->set_test_confluent_messages(serdes, std::move(messages));
+        RETURN_IF_ERROR(scanner->open());
+        return scanner->get_next();
+    }
+};
+
+// (a) Two schema ids through one scanner; the second schema adds a field. Every message decodes with
+// its own schema and the cache holds one entry per id. Without jsonpaths the field-name mapping must
+// also follow the schema id, otherwise the added field of the second schema would be dropped.
+TEST_F(AvroScannerConfluentTest, test_two_schema_ids_one_scanner) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_BIGINT), TypeDescriptor::create_varchar_type(20),
+                                      TypeDescriptor::create_varchar_type(20)};
+    for (const auto& jsonpaths : {std::string(), std::string(R"(["$.id", "$.name", "$.extra"])")}) {
+        SCOPED_TRACE("jsonpaths=" + jsonpaths);
+        std::vector<std::string> messages{frame_v1(101, 1, "a"), frame_v2(102, 2, "b", "x"), frame_v1(101, 3, "c"),
+                                          frame_v2(102, 4, "d", nullptr)};
+        serdes_t* serdes = new_test_serdes({{101, kSchemaV1}, {102, kSchemaV2}});
+        auto scanner = create_avro_scanner(types, confluent_ranges(jsonpaths), {"id", "name", "extra"}, "");
+        auto res = scan_one_chunk(scanner, serdes, std::move(messages));
+        ASSERT_OK(res.status());
+        ChunkPtr chunk = res.value();
+        ASSERT_EQ(3, chunk->num_columns());
+        ASSERT_EQ(4, chunk->num_rows());
+        EXPECT_EQ(1, chunk->get(0)[0].get_int64());
+        EXPECT_EQ("a", chunk->get(0)[1].get_slice());
+        EXPECT_TRUE(chunk->get(0)[2].is_null());
+        EXPECT_EQ(2, chunk->get(1)[0].get_int64());
+        EXPECT_EQ("b", chunk->get(1)[1].get_slice());
+        ASSERT_FALSE(chunk->get(1)[2].is_null());
+        EXPECT_EQ("x", chunk->get(1)[2].get_slice());
+        EXPECT_EQ(3, chunk->get(2)[0].get_int64());
+        EXPECT_EQ("c", chunk->get(2)[1].get_slice());
+        EXPECT_TRUE(chunk->get(2)[2].is_null());
+        EXPECT_EQ(4, chunk->get(3)[0].get_int64());
+        EXPECT_EQ("d", chunk->get(3)[1].get_slice());
+        EXPECT_TRUE(chunk->get(3)[2].is_null());
+        EXPECT_EQ(2, scanner->decode_cache_size_for_test());
+        EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
+    }
+}
+
+// (b) The value is reused across messages of the same schema id: a message with a 3-element array
+// and a non-null union branch followed by one with an empty array and the null branch must decode
+// the second message on its own, then a third message with new values again.
+TEST_F(AvroScannerConfluentTest, test_reused_value_does_not_leak_between_messages) {
+    const std::string schema =
+            R"({"type":"record","name":"r","fields":[{"name":"arr","type":{"type":"array","items":"long"}},)"
+            R"({"name":"u","type":["null","string"]},{"name":"m","type":{"type":"map","values":"long"}}]})";
+    auto frame = [&](const std::vector<int64_t>& arr, const char* u, const std::vector<std::string>& map_keys) {
+        AvroHelper h;
+        init_avro_value(schema.data(), schema.size(), h);
+        avro_value_t f, child, branch;
+        avro_value_get_by_name(&h.avro_val, "arr", &f, nullptr);
+        for (int64_t v : arr) {
+            avro_value_append(&f, &child, nullptr);
+            avro_value_set_long(&child, v);
+        }
+        avro_value_get_by_name(&h.avro_val, "u", &f, nullptr);
+        if (u == nullptr) {
+            avro_value_set_branch(&f, 0, &branch);
+            avro_value_set_null(&branch);
+        } else {
+            avro_value_set_branch(&f, 1, &branch);
+            avro_value_set_string(&branch, u);
+        }
+        avro_value_get_by_name(&h.avro_val, "m", &f, nullptr);
+        int64_t n = 0;
+        for (const auto& k : map_keys) {
+            avro_value_add(&f, k.c_str(), &child, nullptr, nullptr);
+            avro_value_set_long(&child, ++n);
+        }
+        std::string msg = confluent_frame(7, &h.avro_val);
+        avro_value_decref(&h.avro_val);
+        avro_value_iface_decref(h.iface);
+        avro_schema_decref(h.schema);
+        return msg;
+    };
+
+    TypeDescriptor arr_type(TYPE_ARRAY);
+    arr_type.children.emplace_back(TYPE_BIGINT);
+    TypeDescriptor map_type =
+            TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(20), TypeDescriptor(TYPE_BIGINT));
+    std::vector<TypeDescriptor> types{arr_type, TypeDescriptor::create_varchar_type(20), map_type};
+
+    std::vector<std::string> messages{frame({1, 2, 3}, "hello", {"k1", "k2"}), frame({}, nullptr, {}),
+                                      frame({9}, "z", {"k3"})};
+    serdes_t* serdes = new_test_serdes({{7, schema}});
+    auto scanner = create_avro_scanner(types, confluent_ranges(""), {"arr", "u", "m"}, "");
+    auto res = scan_one_chunk(scanner, serdes, std::move(messages));
+    ASSERT_OK(res.status());
+    ChunkPtr chunk = res.value();
+    ASSERT_EQ(3, chunk->num_rows());
+
+    auto arr0 = chunk->get(0)[0].get_array();
+    ASSERT_EQ(3, arr0.size());
+    EXPECT_EQ(1, arr0[0].get_int64());
+    EXPECT_EQ(3, arr0[2].get_int64());
+    EXPECT_EQ("hello", chunk->get(0)[1].get_slice());
+    EXPECT_EQ(2, chunk->get(0)[2].get_map().size());
+
+    EXPECT_EQ(0, chunk->get(1)[0].get_array().size());
+    EXPECT_TRUE(chunk->get(1)[1].is_null());
+    EXPECT_EQ(0, chunk->get(1)[2].get_map().size());
+
+    auto arr2 = chunk->get(2)[0].get_array();
+    ASSERT_EQ(1, arr2.size());
+    EXPECT_EQ(9, arr2[0].get_int64());
+    EXPECT_EQ("z", chunk->get(2)[1].get_slice());
+    EXPECT_EQ(1, chunk->get(2)[2].get_map().size());
+    EXPECT_EQ(1, scanner->decode_cache_size_for_test());
+}
+
+// (c) A schema id the registry does not know fails the message with the same status as before.
+TEST_F(AvroScannerConfluentTest, test_unknown_schema_id) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_BIGINT), TypeDescriptor::create_varchar_type(20)};
+    serdes_t* serdes = new_test_serdes({{101, kSchemaV1}});
+    auto scanner = create_avro_scanner(types, confluent_ranges(""), {"id", "name"}, "");
+    auto res = scan_one_chunk(scanner, serdes, {frame_v1(999, 1, "a")});
+    ASSERT_FALSE(res.ok());
+    EXPECT_TRUE(res.status().is_internal_error());
+    EXPECT_EQ("serdes deserialize avro failed", res.status().message());
+    // The text comes from the failed registry fetch for id 999.
+    EXPECT_FALSE(scanner->last_decode_error_for_test().empty());
+    EXPECT_EQ(0, scanner->decode_cache_size_for_test());
+}
+
+// (d) Bad framing: a message shorter than the 5-byte header, and a wrong magic byte. Both fail with
+// the same status and the same libserdes error text as serdes_deserialize_avro produced.
+TEST_F(AvroScannerConfluentTest, test_bad_framing) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_BIGINT), TypeDescriptor::create_varchar_type(20)};
+    {
+        serdes_t* serdes = new_test_serdes({{101, kSchemaV1}});
+        auto scanner = create_avro_scanner(types, confluent_ranges(""), {"id", "name"}, "");
+        auto res = scan_one_chunk(scanner, serdes, {std::string("\x00\x00\x01", 3)});
+        ASSERT_FALSE(res.ok());
+        EXPECT_TRUE(res.status().is_internal_error());
+        EXPECT_EQ("serdes deserialize avro failed", res.status().message());
+        EXPECT_EQ("Payload is smaller (3) than framing (5)", scanner->last_decode_error_for_test());
+    }
+    {
+        serdes_t* serdes = new_test_serdes({{101, kSchemaV1}});
+        auto scanner = create_avro_scanner(types, confluent_ranges(""), {"id", "name"}, "");
+        std::string msg = frame_v1(101, 1, "a");
+        msg[0] = 1;
+        auto res = scan_one_chunk(scanner, serdes, {msg});
+        ASSERT_FALSE(res.ok());
+        EXPECT_TRUE(res.status().is_internal_error());
+        EXPECT_EQ("serdes deserialize avro failed", res.status().message());
+        EXPECT_EQ("Invalid CP1 magic byte 1, expected 0", scanner->last_decode_error_for_test());
+    }
+    {
+        // A truncated body (valid header, payload cut short) is a decode failure, as before, and the cached
+        // value is still usable for the next message of the same schema id.
+        // The cut lands inside the varint of the first field (a long), so avro-c fails before it reads any
+        // string. If the cut fell inside a string's bytes instead, avro-c 1.12.0 would leak the string buffer
+        // it had just allocated (encoding_binary.c read_string: avro_malloc, then AVRO_READ returns without a
+        // free). That leak is in avro-c and happens the same way through serdes_deserialize_avro.
+        serdes_t* serdes = new_test_serdes({{101, kSchemaV1}});
+        auto scanner = create_avro_scanner(types, confluent_ranges(""), {"id", "name"}, "");
+        const int64_t big_id = int64_t{1} << 40; // zig-zag varint of 6 bytes
+        std::string msg = frame_v1(101, big_id, "abcdefgh");
+        msg.resize(5 + 3); // header + the first 3 bytes of the id varint
+        auto res = scan_one_chunk(scanner, serdes, {msg, frame_v1(101, 7, "after")});
+        ASSERT_FALSE(res.ok());
+        EXPECT_EQ("serdes deserialize avro failed", res.status().message());
+        EXPECT_EQ(0, scanner->last_decode_error_for_test().rfind("Failed to read avro value: ", 0));
+        auto next = scanner->get_next();
+        ASSERT_OK(next.status());
+        ChunkPtr chunk = next.value();
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(7, chunk->get(0)[0].get_int64());
+        EXPECT_EQ("after", chunk->get(0)[1].get_slice());
+        EXPECT_EQ(1, scanner->decode_cache_size_for_test());
     }
 }
 
