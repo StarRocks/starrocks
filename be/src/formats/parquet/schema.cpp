@@ -121,6 +121,12 @@ static bool is_map(const tparquet::SchemaElement* schema) {
     return schema->__isset.logicalType && schema->logicalType.__isset.MAP;
 }
 
+// A group annotated with the parquet VARIANT logical type. The annotation is newer than most variant writers, so the
+// binary shape below is accepted as well.
+static bool is_variant_annotated(const tparquet::SchemaElement* schema) {
+    return schema->__isset.logicalType && schema->logicalType.__isset.VARIANT;
+}
+
 // Parquet variant layout: group { metadata: binary, value: binary [, typed_value] }.
 // The rule is what the variant reader accepts (create_variant_column_reader looks the children up by name and reads
 // `metadata` / `value` as binary), so that no file readable as VARIANT before is rejected now: the binary fields may
@@ -341,7 +347,8 @@ Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::Schem
     field->name = group_schema->name;
     field->is_nullable = is_optional(group_schema);
     field->level_info = cur_level_info;
-    field->type = is_variant_group(*field) ? ColumnType::VARIANT : ColumnType::STRUCT;
+    field->type =
+            is_variant_annotated(group_schema) || is_variant_group(*field) ? ColumnType::VARIANT : ColumnType::STRUCT;
     field->field_id = group_schema->field_id;
     return Status::OK();
 }

@@ -1119,6 +1119,57 @@ TEST_F(ParquetSchemaTest, VariantGroup) {
     }
 }
 
+// A group annotated with the parquet VARIANT logical type is a variant whatever its shape; the binary-shape rule
+// (VariantGroup) still applies to unannotated groups.
+TEST_F(ParquetSchemaTest, VariantLogicalTypeAnnotation) {
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(1));
+    auto group = GroupNode::make("v", FieldRepetitionType::OPTIONAL, 2);
+    tparquet::VariantType variant_type;
+    variant_type.__set_specification_version(1);
+    tparquet::LogicalType logical_type;
+    logical_type.__set_VARIANT(variant_type);
+    group.__set_logicalType(logical_type);
+    t_schemas.emplace_back(group);
+    t_schemas.emplace_back(PrimitiveNode::make("metadata", FieldRepetitionType::REQUIRED, Type::type::BYTE_ARRAY));
+    // no `value`: the shape rule alone would resolve this group as a STRUCT
+    t_schemas.emplace_back(PrimitiveNode::make("typed_value", FieldRepetitionType::OPTIONAL, Type::type::INT64));
+
+    SchemaDescriptor desc;
+    ASSERT_OK(desc.from_thrift(t_schemas, true));
+    const auto* field = desc.get_stored_column_by_field_idx(0);
+    ASSERT_EQ(ColumnType::VARIANT, field->type);
+    ASSERT_EQ(2, field->children.size());
+}
+
+// A group map key is resolved like any other node and the value follows the whole key subtree.
+TEST_F(ParquetSchemaTest, MapWithGroupKey) {
+    std::vector<SchemaElement> t_schemas;
+    t_schemas.emplace_back(GroupNode::make_root(2));
+    t_schemas.emplace_back(GroupNode::make("m", FieldRepetitionType::OPTIONAL, ConvertedType::type::MAP, 1));
+    t_schemas.emplace_back(GroupNode::make("key_value", FieldRepetitionType::REPEATED, 2));
+    t_schemas.emplace_back(GroupNode::make("key", FieldRepetitionType::REQUIRED, 2));
+    t_schemas.emplace_back(PrimitiveNode::make("a", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+    t_schemas.emplace_back(PrimitiveNode::make("b", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+    t_schemas.emplace_back(PrimitiveNode::make("value", FieldRepetitionType::OPTIONAL, Type::type::INT64));
+    t_schemas.emplace_back(PrimitiveNode::make("c", FieldRepetitionType::OPTIONAL, Type::type::INT32));
+
+    SchemaDescriptor desc;
+    ASSERT_OK(desc.from_thrift(t_schemas, true));
+    const auto* map = desc.get_stored_column_by_field_idx(0);
+    ASSERT_EQ(ColumnType::MAP, map->type);
+    ASSERT_EQ(2, map->children.size());
+    ASSERT_EQ(ColumnType::STRUCT, map->children[0].type);
+    ASSERT_EQ(2, map->children[0].children.size());
+    ASSERT_EQ("value", map->children[1].name);
+    ASSERT_EQ(ColumnType::SCALAR, map->children[1].type);
+    ASSERT_EQ(tparquet::Type::INT64, map->children[1].physical_type);
+    // the next top-level column starts after the map
+    const auto* c = desc.get_stored_column_by_field_idx(1);
+    ASSERT_EQ("c", c->name);
+    ASSERT_EQ(ColumnType::SCALAR, c->type);
+}
+
 // The UT logic is copied from https://github.com/apache/arrow/blob/main/cpp/src/parquet/arrow/arrow_schema_test.cc
 
 TEST_F(ParquetSchemaTest, ParquetMaps) {
