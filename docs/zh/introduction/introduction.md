@@ -4,7 +4,6 @@ description: "StarRocks 是极速 MPP 数据库，采用向量化引擎和 CBO �
 ---
 
 import DocCardList from '@theme/DocCardList';
-import FeatureList from '/src/components/Features/index.js'
 
 # 什么是 StarRocks
 
@@ -19,10 +18,6 @@ StarRocks 能很好地支持实时数据分析，并能实现对实时更新数�
 StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，全系统无外部依赖，高可用，易于运维管理。StarRocks 还兼容多种主流 BI 产品，包括 Tableau、Power BI、QuickBI、FineBI 和 Smartbi。
 
 <DocCardList />
-
-## 热门主题
-
-<FeatureList language="Chinese" layout="v2" />
 
 ## 适用场景
 
