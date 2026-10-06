@@ -16,9 +16,11 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace lake {
@@ -593,40 +595,57 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
     EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
-// Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
-// data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
+// The statements of a multi-statement transaction write one log each: bundled when the statement's share
+// of the tablet was one segment at end of stream, standalone when it flushed mid-load. The merged rowset
+// keeps the bundled offsets and gives each standalone segment offset 0, the same bytes as a one-slice bundle.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"seg_a"}, {0}));
-    // Second log does NOT have bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"bundle_a"}, {4096}));
     logs.push_back(make_op_write_log(10012, 11, 7, 140, {"seg_b"}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(2, rs.segment_metas_size());
+    EXPECT_EQ(4096, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ("seg_b", rs.segment_metas(1).filename());
+    EXPECT_EQ(123, rs.segment_metas(1).size());
+    // The rowset now encodes into the legacy all-or-nothing offsets array.
+    RowsetMetadataPB saved = rs;
+    ASSERT_OK(normalize_rowset_before_save(&saved));
+    ASSERT_EQ(2, saved.deprecated_bundle_file_offsets_size());
 }
 
-// Test reverse order: first TxnLog has no offsets, second has offsets.
-// This must also be detected as inconsistent and return error.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
+// Same as above with the standalone statement first.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log does NOT have bundle offsets
     logs.push_back(make_op_write_log(10013, 10, 5, 100, {"seg_a", "seg_b"}));
-    // Second log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"seg_c"}, {0}));
+    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"bundle_c"}, {2048}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(3, rs.segment_metas_size());
+    ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(2).synthetic_bundle_file_offset());
 }
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.

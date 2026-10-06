@@ -1454,6 +1454,74 @@ TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_
     }
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_segment_with_tde_remains_private) {
+    seed_test_encryption_keys();
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    auto source = make_metadata(53049, 2);
+    auto target = make_metadata(53050, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    auto* segment = rowset->add_segment_metas();
+    const auto filename = file_name(49, "dat");
+    segment->set_filename(filename);
+    segment->set_size(11);
+    segment->set_bundle_file_offset(0);
+    segment->set_synthetic_bundle_file_offset(true);
+
+    std::unordered_map<std::string, size_t> segment_sizes;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
+    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), &segment_sizes, nullptr,
+                          nullptr, &source_encryption_metas);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(11, segment_sizes.at(filename));
+    EXPECT_EQ("", source_encryption_metas.at(filename));
+    EXPECT_TRUE((*result)->rowsets(0).segment_metas(0).synthetic_bundle_file_offset());
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_reuses_existing_standalone_file_metadata) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+
+    for (bool target_synthetic : {false, true}) {
+        const int id = target_synthetic ? 53 : 51;
+        const auto filename = file_name(id, "dat");
+        auto source = make_metadata(id, 2);
+        auto target = make_metadata(id + 1, 1);
+        auto* target_rowset = target->add_rowsets();
+        target_rowset->set_id(1);
+        auto* target_segment = target_rowset->add_segment_metas();
+        target_segment->set_filename(filename);
+        target_segment->set_size(23);
+        target_segment->set_encryption_meta("target-encryption-meta");
+        if (target_synthetic) {
+            target_segment->set_bundle_file_offset(0);
+            target_segment->set_synthetic_bundle_file_offset(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+        auto* source_rowset = source->add_rowsets();
+        source_rowset->set_id(1);
+        auto* source_segment = source_rowset->add_segment_metas();
+        source_segment->set_filename(filename);
+        source_segment->set_size(11);
+        source_segment->set_bundle_file_offset(0);
+        source_segment->set_synthetic_bundle_file_offset(true);
+
+        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        ASSERT_OK(result.status());
+        const auto& copied = (*result)->rowsets(0).segment_metas(0);
+        EXPECT_EQ("target-encryption-meta", copied.encryption_meta());
+        // Taking the standalone path is the point: on this branch ExistingFileInfo carries no size, so a
+        // standalone segment reusing an existing target file keeps the source size, and a synthetic-offset
+        // one now does exactly the same. (main reuses the target's size there; that is a separate change.)
+        EXPECT_EQ(11, copied.size());
+        EXPECT_TRUE(copied.synthetic_bundle_file_offset());
+    }
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, new_source_encrypted_bundle_is_rejected_without_target_tde) {
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = false;

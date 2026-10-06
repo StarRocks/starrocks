@@ -24,6 +24,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -312,6 +313,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // A rewritten segment makes this rowset's data private to this tablet, so it must not
         // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
@@ -1242,6 +1244,8 @@ Status MetaFileBuilder::set_final_rowset() {
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+    // The op_writes folded here may come from different statements, some bundled and some standalone.
+    give_standalone_segments_a_bundle_offset(rowset);
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
@@ -1261,6 +1265,7 @@ Status MetaFileBuilder::set_final_rowset() {
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
