@@ -4434,8 +4434,7 @@ TEST_F(TabletUpdatesTest, get_compaction_status_while_compaction_waits_for_apply
     const auto& apply_rowset_details = doc["apply_rowset_details"];
     ASSERT_EQ(inputs.size(), apply_rowset_details.Size()) << json_result;
     for (size_t i = 0; i < inputs.size(); i++) {
-        EXPECT_EQ(inputs[i]->rowset_id().to_string(), apply_rowset_details[i]["rowset_id"].GetString())
-                << json_result;
+        EXPECT_EQ(inputs[i]->rowset_id().to_string(), apply_rowset_details[i]["rowset_id"].GetString()) << json_result;
     }
 
     _tablet->updates()->stop_apply(false);
