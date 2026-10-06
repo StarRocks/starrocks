@@ -628,8 +628,9 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader_with
         tparquet::ColumnChunk chunk;
         chunk.__set_file_path("col" + std::to_string(i));
         chunk.file_offset = 0;
-        chunk.meta_data.__set_type((i == 3) ? tparquet::Type::INT64
-                                            : (i == 6 || i == 8) ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
+        chunk.meta_data.__set_type((i == 3)             ? tparquet::Type::INT64
+                                   : (i == 6 || i == 8) ? tparquet::Type::INT32
+                                                        : tparquet::Type::BYTE_ARRAY);
         chunk.meta_data.data_page_offset = i * 10;
         chunk.meta_data.total_compressed_size = 1;
         rg.columns.emplace_back(std::move(chunk));
@@ -1414,6 +1415,60 @@ TEST(ParquetComplexColumnReaderTest, BuildArrayBindingColumnNestedObjectResidual
     EXPECT_EQ(R"({"l":[1,2],"o":{"k":2,"r":3}})", nullable_variant_json_at(elements, 0));
     EXPECT_EQ(R"({"l":[3]})", nullable_variant_json_at(elements, 1));
     EXPECT_EQ("null", nullable_variant_json_at(elements, 2));
+}
+
+// Scalar-array layout: a null typed element is read from element.value, which must share the typed array offsets.
+TEST(ParquetComplexColumnReaderTest, BuildArrayBindingColumnScalarArrayElementValue) {
+    auto row = parse_variant_json(R"({"s":0})");
+    const std::string metadata_raw(row.get_metadata().raw());
+    const std::vector<Slice> row_metadata(2, Slice(metadata_raw));
+
+    // Element value bytes as ARRAY<VARBINARY>: row 0 = [null, "x"], row 1 = [null].
+    auto make_value_array = [](const std::vector<uint32_t>& offsets_data) {
+        auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        elements->append_nulls(1);
+        const std::string x = scalar_variant_bytes(R"("x")");
+        elements->append_datum(Datum(Slice(x)));
+        elements->append_nulls(1);
+        auto offsets = UInt32Column::create();
+        for (uint32_t o : offsets_data) {
+            offsets->append(o);
+        }
+        return NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                      NullColumn::create(offsets_data.size() - 1, 0));
+    };
+
+    // Typed: row 0 = [1, null], row 1 = [3].
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    node.scalar_array_layout = true;
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(TypeDescriptor::create_array_type(TYPE_BIGINT_DESC));
+    {
+        auto elements = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+        elements->append_datum(Datum(int64_t{1}));
+        elements->append_nulls(1);
+        elements->append_datum(Datum(int64_t{3}));
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(2);
+        offsets->append(3);
+        node.typed_value_column = NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                                         NullColumn::create(2, 0));
+    }
+    node.array_element_value_column = make_value_array({0, 2, 3});
+
+    auto batch = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    const Column* elements = array_elements_of(batch.value().get());
+    ASSERT_EQ(3, elements->size());
+    EXPECT_EQ("1", nullable_variant_json_at(elements, 0));
+    EXPECT_EQ(R"("x")", nullable_variant_json_at(elements, 1));
+    EXPECT_EQ("3", nullable_variant_json_at(elements, 2));
+
+    // Same number of elements but different offsets: element.value would land on other elements.
+    node.array_element_value_column = make_value_array({0, 1, 3});
+    auto misaligned = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_FALSE(misaligned.ok());
+    EXPECT_TRUE(misaligned.status().is_internal_error()) << misaligned.status().to_string();
 }
 
 } // namespace starrocks::parquet

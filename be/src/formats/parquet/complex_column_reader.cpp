@@ -1558,11 +1558,16 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
             const NullColumn* value_row_nulls = nullptr;
             const Column* value_array =
                     _data_column_and_nulls(array_node.array_element_value_column.get(), &value_row_nulls);
-            if (value_array != nullptr && value_array->is_array() &&
-                down_cast<const ArrayColumn*>(value_array)->elements_column()->size() == num_elements) {
-                element_values = _data_column_and_nulls(
-                        down_cast<const ArrayColumn*>(value_array)->elements_column().get(), &element_value_nulls);
+            // element.value and element.typed_value are siblings in the same LIST element, so their arrays must
+            // have the same offsets; otherwise element.value would be read for other elements.
+            if (value_array == nullptr || !value_array->is_array() ||
+                !std::ranges::equal(down_cast<const ArrayColumn*>(value_array)->offsets().get_data(), offsets)) {
+                return Status::InternalError(strings::Substitute(
+                        "variant shredded scalar array element.value is not aligned with typed_value, path=$0",
+                        array_node.full_path));
             }
+            element_values = _data_column_and_nulls(down_cast<const ArrayColumn*>(value_array)->elements_column().get(),
+                                                    &element_value_nulls);
         }
         for (size_t e = 0; e < num_elements; ++e) {
             metadata_column->append(element_metadata[e]);
