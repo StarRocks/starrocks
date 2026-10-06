@@ -24,8 +24,10 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_memory.h"
 #include "platform/key_cache.h"
@@ -40,6 +42,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tablet_schema.h"
+#include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
 #include "storage_primitive/empty_iterator.h"
 #include "storage_primitive/union_iterator.h"
@@ -450,16 +453,49 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     manager->index_cache().release(index_entry);
 }
 
+// Primary keys must be written in sorted order, within a segment and across the segments of a rowset.
+// Zero-pad the number so that the lexicographic order of the keys matches their numeric order.
+static std::string make_pk(size_t k) {
+    std::string digits = std::to_string(k);
+    return "key_" + std::string(digits.size() < 6 ? 6 - digits.size() : 0, '0') + digits;
+}
+
 static std::vector<std::vector<std::string>> make_segment_keys(size_t num_segments, size_t rows_per_segment,
                                                                size_t key_begin) {
     std::vector<std::vector<std::string>> segment_keys(num_segments);
     size_t key = key_begin;
     for (auto& keys : segment_keys) {
         for (size_t i = 0; i < rows_per_segment; i++) {
-            keys.emplace_back("key_" + std::to_string(key++));
+            keys.emplace_back(make_pk(key++));
         }
     }
     return segment_keys;
+}
+
+// Read every row of a VARCHAR primary key tablet created by create_varchar_pk_tablet() as pk -> v1.
+static Status read_varchar_pk_rows(const TabletSharedPtr& tablet, int64_t version,
+                                   std::map<std::string, int16_t>* rows) {
+    Schema schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    if (iter == nullptr) {
+        return Status::InternalError("failed to create tablet iterator");
+    }
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    while (true) {
+        chunk->reset();
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            return Status::OK();
+        }
+        RETURN_IF_ERROR(st);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            auto key = chunk->get_column_by_index(0)->get(i).get_slice().to_string();
+            if (!rows->emplace(key, chunk->get_column_by_index(1)->get(i).get_int16()).second) {
+                return Status::InternalError("duplicate key " + key);
+            }
+        }
+    }
 }
 
 // load_upserts() used to create the encoded primary keys of segments loaded during apply as a
@@ -514,30 +550,88 @@ TEST_F(RowsetUpdateStateTest, apply_multi_segment_varchar_upserts) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(3, _tablet->updates()->max_version());
 
-    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    TabletReader reader(_tablet, Version(0, 3), schema);
-    auto iter = create_tablet_iterator(reader, schema);
-    ASSERT_NE(nullptr, iter);
     std::map<std::string, int16_t> rows;
-    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
-    while (true) {
-        chunk->reset();
-        auto read_st = iter->get_next(chunk.get());
-        if (read_st.is_end_of_file()) {
-            break;
-        }
-        ASSERT_OK(read_st);
-        for (size_t i = 0; i < chunk->num_rows(); i++) {
-            auto key = chunk->get_column_by_index(0)->get(i).get_slice().to_string();
-            ASSERT_TRUE(rows.emplace(key, chunk->get_column_by_index(1)->get(i).get_int16()).second)
-                    << "duplicate key " << key;
-        }
-    }
+    ASSERT_OK(read_varchar_pk_rows(_tablet, 3, &rows));
     ASSERT_EQ(kOverlapBegin + kTotalRows, rows.size());
     for (size_t k = 0; k < kOverlapBegin + kTotalRows; k++) {
-        auto it = rows.find("key_" + std::to_string(k));
-        ASSERT_TRUE(it != rows.end()) << "missing key_" << k;
-        ASSERT_EQ(k < kOverlapBegin ? 1 : 2, it->second) << "key_" << k;
+        auto it = rows.find(make_pk(k));
+        ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
+        ASSERT_EQ(k < kOverlapBegin ? 1 : 2, it->second) << make_pk(k);
+    }
+}
+
+// CompactionState::_load_segments() used to create every segment's encoded primary keys as a
+// LargeBinaryColumn. Load a three-segment rowset the way _apply_compaction_commit does (load() preloads
+// segment 0, load_segments() loads the rest) and check each segment is a BinaryColumn with its keys.
+TEST_F(RowsetUpdateStateTest, compaction_state_load_segments_uses_binary_column) {
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+    auto segment_keys = make_segment_keys(kSegments, kRowsPerSegment, 0);
+    RowsetSharedPtr rowset = create_multi_segment_varchar_rowset(_tablet, segment_keys, 1);
+    ASSERT_EQ(static_cast<int64_t>(kSegments), rowset->num_segments());
+
+    CompactionState state;
+    ASSERT_OK(state.load(rowset.get()));
+    ASSERT_EQ(kSegments, state.pk_cols.size());
+    for (uint32_t i = 0; i < kSegments; i++) {
+        ASSERT_OK(state.load_segments(rowset.get(), i));
+        const auto& pks = state.pk_cols[i];
+        ASSERT_NE(nullptr, pks) << "segment " << i;
+        EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
+        EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
+        ASSERT_EQ(kRowsPerSegment, pks->size()) << "segment " << i;
+        for (size_t j = 0; j < kRowsPerSegment; j++) {
+            ASSERT_EQ(segment_keys[i][j], pks->get(j).get_slice().to_string()) << "segment " << i << " row " << j;
+        }
+        state.release_segment(i);
+        ASSERT_EQ(nullptr, state.pk_cols[i]) << "segment " << i;
+    }
+}
+
+// With light PK compaction publish disabled, compaction apply goes through CompactionState. Compact three
+// multi-segment rowsets with overlapping VARCHAR primary keys and check every key keeps its newest value.
+TEST_F(RowsetUpdateStateTest, compaction_without_light_publish_varchar_pk) {
+    const bool old_light_publish = config::enable_light_pk_compaction_publish;
+    config::enable_light_pk_compaction_publish = false;
+    DeferOp restore_config([&]() { config::enable_light_pk_compaction_publish = old_light_publish; });
+
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+
+    // version 2: keys [0, 300) with v1 = 1
+    // version 3: keys [150, 450) with v1 = 2
+    // version 4: keys [0, 100) with v1 = 3
+    ASSERT_OK(_tablet->rowset_commit(
+            2, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 0), 1), 0));
+    ASSERT_OK(_tablet->rowset_commit(
+            3, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 150), 2), 0));
+    ASSERT_OK(_tablet->rowset_commit(4, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(1, 100, 0), 3),
+                                     0));
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    // read_tablet() waits until version 4 is applied, so compaction sees all three rowsets.
+    ASSERT_EQ(450, read_tablet(_tablet, 4));
+    ASSERT_EQ(3u, _tablet->updates()->num_rowsets());
+
+    // compaction() can return OK after its apply wait times out, so wait for the compaction apply itself;
+    // otherwise the checks below could read the pre-compaction rowsets and never exercise CompactionState.
+    ASSERT_OK(_tablet->updates()->compaction(_compaction_mem_tracker.get()));
+    _tablet->updates()->wait_apply_done();
+    EditVersion applied_version;
+    ASSERT_OK(_tablet->updates()->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(EditVersion(4, 1), applied_version);
+    ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
+    ASSERT_OK(_tablet->verify());
+
+    std::map<std::string, int16_t> rows;
+    ASSERT_OK(read_varchar_pk_rows(_tablet, 4, &rows));
+    ASSERT_EQ(450u, rows.size());
+    for (size_t k = 0; k < 450; k++) {
+        auto it = rows.find(make_pk(k));
+        ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
+        const int16_t expected = k < 100 ? 3 : (k < 150 ? 1 : 2);
+        ASSERT_EQ(expected, it->second) << make_pk(k);
     }
 }
 
