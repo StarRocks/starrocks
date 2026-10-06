@@ -84,11 +84,15 @@ You can also monitor this `update` item via metrics monitor service. For example
 
    ![grafana](../_assets/best_practices/primary_key-1.png)
 
-> More about Monitor and Alert with Prometheus and Grafana: https://docs.starrocks.io/docs/administration/management/monitoring/Monitor_and_Alert/
+:::tip
+
+More about [Monitoring and alerting with Prometheus and Grafana](../administration/management/monitoring/monitoring.md)
+
+:::
 
 If you are sensitive to memory usage and want to reduce memory consumption during the import process of a PK table, you can achieve this through the following configuration:
 
-```
+```sh
 be.conf
 
 l0_max_mem_usage = (some value which smaller than 104857600, default is 104857600)
@@ -117,7 +121,8 @@ Therefore, you need to make trade-offs among these three factors:
 
 If you want to get better data freshness and also better query latency, that means you will introduce high frequency writes, and also want to make sure they can be compacted as soon as possible. 
 Then you will need more compaction resource to handle these writes:
-```
+
+```sh
 // shared-data
 be.conf
 compact_threads = 4
@@ -135,13 +140,18 @@ How do you know whether current compaction resource and setting can handle curre
 1. For shared-data cluster, if compaction cannot keep up with the ingestion rate, it may lead to ingestion slowdown or even write failure errors and ingestion stop.
   a. Ingestion slowdown. 
   You can use `show proc /transactions/{db_name}/running';` to check current running transactions, and if there is any slowdown message like :
-```
-Partition's compaction score is larger than 100.0, delay commit for xxxms. You can try to increase compaction concurrency
-```
+
+   ```sh
+   Partition's compaction score is larger than 100.0, delay commit for xxxms. You can try to increase compaction concurrency
+   ```
   show up in ErrMsg field, that means ingestion slowdown happens. 
   E.g.
+
 ```sql
-mysql> show proc '/transactions/test_pri_load_c/running';
+show proc '/transactions/test_pri_load_c/running';
+```
+
+```plain
 +---------------+----------------------------------------------+------------------+-------------------+--------------------+---------------------+------------+-------------+------------+----------------------------------------------------------------------------------------------------------------------------+--------------------+------------+-----------+--------+
 | TransactionId | Label                                        | Coordinator      | TransactionStatus | LoadJobSourceType  | PrepareTime         | CommitTime | PublishTime | FinishTime | Reason                                                                                                                     | ErrorReplicasCount | ListenerId | TimeoutMs | ErrMsg |
 +---------------+----------------------------------------------+------------------+-------------------+--------------------+---------------------+------------+-------------+------------+----------------------------------------------------------------------------------------------------------------------------+--------------------+------------+-----------+--------+
