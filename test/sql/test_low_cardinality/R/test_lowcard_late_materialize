@@ -94,7 +94,7 @@ select x.k1, x.v1, y.v1 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 5	a5	a5
 -- !result
 -- name: test_lowcard_late_materialize_force_encode @sequential
-CREATE TABLE `lm_force_dict` (
+CREATE TABLE `lm_force_dict_${uuid0}` (
   `k1` bigint NULL,
   `v1` varchar(255) NULL,
   `v3` varchar(255) NULL
@@ -104,16 +104,16 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-INSERT INTO lm_force_dict VALUES
+INSERT INTO lm_force_dict_${uuid0} VALUES
 (1, 'a1', 'c1'), (2, 'a2', 'c2'), (3, 'a3', 'c3'), (4, 'a4', 'c4'), (5, 'a5', 'c5'),
 (6, 'a6', 'c6'), (7, 'a7', 'c7'), (8, 'a8', 'c8'), (9, 'a9', 'c9'), (10, 'a10', 'c10');
 -- result:
 -- !result
-function: wait_global_dict_ready('v1', 'lm_force_dict')
+function: wait_global_dict_ready('v1', 'lm_force_dict_${uuid0}')
 -- result:
 
 -- !result
-function: wait_global_dict_ready('v3', 'lm_force_dict')
+function: wait_global_dict_ready('v3', 'lm_force_dict_${uuid0}')
 -- result:
 
 -- !result
@@ -129,7 +129,7 @@ set enable_global_late_materialization_cost_based = false;
 admin enable failpoint 'segment_iterator_force_global_dict_encode';
 -- result:
 -- !result
-with c as (select k1, v1, v3 from lm_force_dict)
+with c as (select k1, v1, v3 from lm_force_dict_${uuid0})
 select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 -- result:
 1	a1	c1
@@ -141,7 +141,7 @@ select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 admin disable failpoint 'segment_iterator_force_global_dict_encode';
 -- result:
 -- !result
-with c as (select k1, v1, v3 from lm_force_dict)
+with c as (select k1, v1, v3 from lm_force_dict_${uuid0})
 select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 -- result:
 1	a1	c1
@@ -152,4 +152,5 @@ select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 -- !result
 CLEANUP {
     admin disable failpoint 'segment_iterator_force_global_dict_encode';
+    drop table if exists lm_force_dict_${uuid0} force;
 } END CLEANUP
