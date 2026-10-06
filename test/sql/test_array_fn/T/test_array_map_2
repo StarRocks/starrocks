@@ -1,5 +1,9 @@
+<<<<<<< HEAD
 
 -- name: test_array_map_2
+=======
+-- name: test_array_map_2 @mac
+>>>>>>> 6bf0f8f ([UT] Remove the duplicate test_array_map_2 marker from its T file (#80146))
 CREATE TABLE `array_map_test` (
   `id` tinyint(4) NOT NULL COMMENT "",
   `arr_str` array<string> NULL COMMENT "",
