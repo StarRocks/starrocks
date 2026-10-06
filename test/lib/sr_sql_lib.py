@@ -221,6 +221,8 @@ class StarrocksSQLApiLib(object):
         self.db = list()
         self.resource = list()
         self.arrow_sql_lib = ArrowSqlLib()
+        # The alter statement each thread last ran, see _remember_alter.
+        self._last_alter_local = threading.local()
         self.starrocks_sql_lib = MysqlLib()
         self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
@@ -1387,8 +1389,7 @@ class StarrocksSQLApiLib(object):
 
             alter_key = alter_job_key(statement)
             if alter_key is not None:
-                # Kept so the alter wait helpers can submit it again, see ALTER_RERUN_MSG.
-                self._last_alter_stmt = (statement, conn, alter_key)
+                self._remember_alter((statement, conn, alter_key))
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
@@ -2142,6 +2143,23 @@ class StarrocksSQLApiLib(object):
         """
         self._wait_alter_mv_job("CANCELLED", check_count)
 
+    def _remember_alter(self, last_alter):
+        """
+        Keep `last_alter`, (statement, conn, alter_job_key), so the alter wait helpers can submit
+        it again, see ALTER_RERUN_MSG. Per thread: the threads of a concurrency block run their
+        statements and waits on this same object, each on its own connection.
+        """
+        self._last_alter_local.value = last_alter
+
+    def _take_last_alter(self):
+        """
+        Return the alter this thread last remembered, or None, and forget it, so no return path of
+        a wait helper leaves it for a later wait to resubmit.
+        """
+        last_alter = getattr(self._last_alter_local, "value", None)
+        self._last_alter_local.value = None
+        return last_alter
+
     def _resubmit_alter(self, stmt, conn, job_id, msg, rerun, table_name, deadline):
         """
         Submit `stmt` again on `conn` after its job `job_id` on `table_name` was cancelled by the
@@ -2192,9 +2210,7 @@ class StarrocksSQLApiLib(object):
         42 recorded results across the two callers are None.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
-        # Taken up front so no return path leaves it for a later wait to resubmit.
-        last_alter = getattr(self, "_last_alter_stmt", None)
-        self._last_alter_stmt = None
+        last_alter = self._take_last_alter()
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
@@ -2710,9 +2726,7 @@ class StarrocksSQLApiLib(object):
         waited on with the default COLUMN is not covered. See wait_table_state_normal.
         """
         seen = getattr(self, "_last_alter_job_id", None)
-        # Taken up front so no return path leaves it for a later wait to resubmit.
-        last_alter = getattr(self, "_last_alter_stmt", None)
-        self._last_alter_stmt = None
+        last_alter = self._take_last_alter()
         deadline = time.monotonic() + timeout
         status = ""
         msg = ""
