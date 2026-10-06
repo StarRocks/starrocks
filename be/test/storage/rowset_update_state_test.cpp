@@ -18,7 +18,10 @@
 
 #include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
@@ -175,6 +178,75 @@ public:
         RowsetSharedPtr partial_rowset = *writer->build();
 
         return partial_rowset;
+    }
+
+    TabletSharedPtr create_varchar_pk_tablet(int64_t tablet_id, int32_t schema_hash) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.__set_version_hash(0);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        TColumnType ctype;
+        ctype.__set_type(TPrimitiveType::VARCHAR);
+        ctype.__set_len(64);
+        k1.__set_column_type(ctype);
+        request.tablet_schema.columns.emplace_back(k1);
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.emplace_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.emplace_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
+    // Write one segment per element of `segment_keys`, so the rowset has segment_keys.size() segments.
+    RowsetSharedPtr create_multi_segment_varchar_rowset(const TabletSharedPtr& tablet,
+                                                        const std::vector<std::vector<std::string>>& segment_keys,
+                                                        int16_t v1) {
+        RowsetWriterContext writer_context;
+        RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+        writer_context.rowset_id = rowset_id;
+        writer_context.tablet_id = tablet->tablet_id();
+        writer_context.tablet_schema_hash = tablet->schema_hash();
+        writer_context.partition_id = 0;
+        writer_context.rowset_path_prefix = tablet->schema_hash_path();
+        writer_context.rowset_state = COMMITTED;
+        writer_context.tablet_schema = tablet->tablet_schema();
+        writer_context.version.first = 0;
+        writer_context.version.second = 0;
+        writer_context.segments_overlap = NONOVERLAPPING;
+        std::unique_ptr<RowsetWriter> writer;
+        EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
+        auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
+        for (const auto& keys : segment_keys) {
+            auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+            auto col0 = chunk->get_column_raw_ptr_by_index(0);
+            auto col1 = chunk->get_column_raw_ptr_by_index(1);
+            auto col2 = chunk->get_column_raw_ptr_by_index(2);
+            for (const auto& key : keys) {
+                col0->append_datum(Datum(Slice(key)));
+                col1->append_datum(Datum(v1));
+                col2->append_datum(Datum((int32_t)key.size()));
+            }
+            CHECK_OK(writer->flush_chunk(*chunk));
+        }
+        return *writer->build();
     }
 
 protected:
@@ -376,6 +448,97 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     }
 
     manager->index_cache().release(index_entry);
+}
+
+static std::vector<std::vector<std::string>> make_segment_keys(size_t num_segments, size_t rows_per_segment,
+                                                               size_t key_begin) {
+    std::vector<std::vector<std::string>> segment_keys(num_segments);
+    size_t key = key_begin;
+    for (auto& keys : segment_keys) {
+        for (size_t i = 0; i < rows_per_segment; i++) {
+            keys.emplace_back("key_" + std::to_string(key++));
+        }
+    }
+    return segment_keys;
+}
+
+// load_upserts() used to create the encoded primary keys of segments loaded during apply as a
+// LargeBinaryColumn, while _do_load() preloaded segment 0 as a BinaryColumn. BinaryColumn grows its
+// offsets to 64 bits on demand, so every segment must now be a BinaryColumn holding the segment's keys.
+TEST_F(RowsetUpdateStateTest, load_upserts_uses_binary_column_for_every_segment) {
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+    auto segment_keys = make_segment_keys(kSegments, kRowsPerSegment, 0);
+    RowsetSharedPtr rowset = create_multi_segment_varchar_rowset(_tablet, segment_keys, 1);
+    ASSERT_EQ(static_cast<int64_t>(kSegments), rowset->num_segments());
+
+    RowsetUpdateState state;
+    ASSERT_OK(state.load(_tablet.get(), rowset.get()));
+    for (uint32_t i = 0; i < kSegments; i++) {
+        ASSERT_OK(state.load_upserts(i));
+        const auto& pks = state.upserts()[i];
+        ASSERT_NE(nullptr, pks) << "segment " << i;
+        EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
+        EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
+        ASSERT_EQ(kRowsPerSegment, pks->size()) << "segment " << i;
+        for (size_t j = 0; j < kRowsPerSegment; j++) {
+            ASSERT_EQ(segment_keys[i][j], pks->get(j).get_slice().to_string()) << "segment " << i << " row " << j;
+        }
+    }
+}
+
+// Apply two multi-segment rowsets with overlapping VARCHAR primary keys: every segment after the first
+// goes through load_upserts() during apply, and the second rowset must replace the overlapping rows.
+TEST_F(RowsetUpdateStateTest, apply_multi_segment_varchar_upserts) {
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    const size_t kTotalRows = kSegments * kRowsPerSegment;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+
+    // keys [0, 300) with v1 = 1
+    RowsetSharedPtr rowset1 =
+            create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 0), 1);
+    ASSERT_EQ(static_cast<int64_t>(kSegments), rowset1->num_segments());
+    auto st = _tablet->rowset_commit(2, rowset1, 0);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    ASSERT_EQ(static_cast<ssize_t>(kTotalRows), read_tablet(_tablet, 2));
+
+    // keys [150, 450) with v1 = 2: overwrites [150, 300) and adds [300, 450)
+    const size_t kOverlapBegin = kTotalRows / 2;
+    RowsetSharedPtr rowset2 = create_multi_segment_varchar_rowset(
+            _tablet, make_segment_keys(kSegments, kRowsPerSegment, kOverlapBegin), 2);
+    ASSERT_EQ(static_cast<int64_t>(kSegments), rowset2->num_segments());
+    st = _tablet->rowset_commit(3, rowset2, 0);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    TabletReader reader(_tablet, Version(0, 3), schema);
+    auto iter = create_tablet_iterator(reader, schema);
+    ASSERT_NE(nullptr, iter);
+    std::map<std::string, int16_t> rows;
+    auto chunk = ChunkFactory::new_chunk(iter->schema(), 100);
+    while (true) {
+        chunk->reset();
+        auto read_st = iter->get_next(chunk.get());
+        if (read_st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(read_st);
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            auto key = chunk->get_column_by_index(0)->get(i).get_slice().to_string();
+            ASSERT_TRUE(rows.emplace(key, chunk->get_column_by_index(1)->get(i).get_int16()).second)
+                    << "duplicate key " << key;
+        }
+    }
+    ASSERT_EQ(kOverlapBegin + kTotalRows, rows.size());
+    for (size_t k = 0; k < kOverlapBegin + kTotalRows; k++) {
+        auto it = rows.find("key_" + std::to_string(k));
+        ASSERT_TRUE(it != rows.end()) << "missing key_" << k;
+        ASSERT_EQ(k < kOverlapBegin ? 1 : 2, it->second) << "key_" << k;
+    }
 }
 
 } // namespace starrocks
