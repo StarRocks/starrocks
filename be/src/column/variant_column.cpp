@@ -1218,6 +1218,15 @@ void VariantColumn::_append_container_rows_impl(const VariantColumn& src, size_t
     DCHECK_EQ(has_metadata_column(), has_remain_value());
     DCHECK_EQ(src.has_metadata_column(), src.has_remain_value());
 
+    // Fallback columns are created lazily: a destination without one gets an all-null column for its existing
+    // rows when the source has fallback values. Create them before appending anything, so the row count is the
+    // destination's own.
+    for (size_t i = 0; i < src._typed_columns.size(); ++i) {
+        if (src.fallback_column_by_index(i) != nullptr && _fallback_columns[i] == nullptr) {
+            ensure_fallback_column(i);
+        }
+    }
+
     if (has_metadata_column()) {
         DCHECK(has_remain_value());
         if (src.has_metadata_column()) {
@@ -1230,13 +1239,8 @@ void VariantColumn::_append_container_rows_impl(const VariantColumn& src, size_t
         DCHECK(!src.has_metadata_column()) << "destination typed-only must be normalized before base append";
     }
 
-    // Fallback columns are created lazily: before appending, a destination without one gets an all-null column
-    // for its existing rows when the source has fallback values.
     for (size_t i = 0; i < _typed_columns.size(); ++i) {
         const Column* src_fallback = i < src._typed_columns.size() ? src.fallback_column_by_index(i) : nullptr;
-        if (src_fallback != nullptr && _fallback_columns[i] == nullptr) {
-            ensure_fallback_column(i);
-        }
         if (i < src._typed_columns.size()) {
             append_func(_typed_columns[i].get(), *src._typed_columns[i]);
         } else {

@@ -1384,7 +1384,8 @@ PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_invalid_metadata_fal
 // Builds a VariantColumn with typed BIGINT path "a" and its fallback column from JSON objects that either have only
 // key "a" or have no key "a". An integer "a" goes to the typed cell; any other "a" goes to the fallback cell as the
 // variant bytes of that field, decoded with the row metadata; the remain never holds "a".
-static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::string>& rows_json) {
+static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::string>& rows_json,
+                                                        bool allocate_empty_fallback = true) {
     auto metadata = BinaryColumn::create();
     auto remain = BinaryColumn::create();
     auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
@@ -1393,6 +1394,7 @@ static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::s
     CHECK(path_a.ok());
     std::string empty_object;
     VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    bool has_fallback_value = false;
     for (const auto& json : rows_json) {
         VariantRowValue row = create_variant_row_from_json_text(json);
         std::string_view metadata_raw = row.get_metadata().raw();
@@ -1414,12 +1416,14 @@ static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::s
             typed->append_nulls(1);
             std::string_view field_raw = field->get_value().raw();
             fallback->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+            has_fallback_value = true;
         }
     }
     MutableColumns typed_columns;
     typed_columns.emplace_back(std::move(typed));
     MutableColumns fallback_columns;
-    fallback_columns.emplace_back(std::move(fallback));
+    // Without allocate_empty_fallback, a fallback column without values is left unallocated, as the readers do.
+    fallback_columns.emplace_back(allocate_empty_fallback || has_fallback_value ? std::move(fallback) : nullptr);
     auto col = VariantColumn::create();
     col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
                               std::move(fallback_columns), std::move(metadata), std::move(remain));
@@ -1525,6 +1529,36 @@ PARALLEL_TEST(VariantColumnTest, test_fallback_column_appended_into_column_witho
     variant2->check_or_die();
     EXPECT_FALSE(variant2->has_fallback_value(0, 4));
     assert_variant_row_json(variant2, 4, R"({"a":7})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_created_on_append_keeps_rows_aligned) {
+    // Destination without an allocated fallback column: appending a source with fallback values creates it with one
+    // null cell per existing destination row, so the source fallback values stay on their own rows.
+    auto dst = build_bigint_path_with_fallback({R"({"a":5})", R"({"b":6})"}, false);
+    ASSERT_EQ(nullptr, down_cast<const VariantColumn*>(dst.get())->fallback_column_by_index(0));
+    auto src = build_bigint_path_with_fallback(kFallbackRows);
+    dst->append(*src);
+    const auto* variant = down_cast<const VariantColumn*>(dst.get());
+    ASSERT_EQ(6, variant->size());
+    ASSERT_NE(nullptr, variant->fallback_column_by_index(0));
+    ASSERT_EQ(6, variant->fallback_column_by_index(0)->size());
+    variant->check_or_die();
+    assert_variant_row_json(variant, 0, R"({"a":5})");
+    assert_variant_row_json(variant, 1, R"({"b":6})");
+    assert_variant_row_json(variant, 2, R"({"a":1})");
+    assert_variant_row_json(variant, 3, R"({"a":"x"})");
+    assert_variant_row_json(variant, 4, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 5, R"({"b":2})");
+
+    // The same through append_selective.
+    auto dst2 = build_bigint_path_with_fallback({R"({"a":5})"}, false);
+    std::vector<uint32_t> indexes = {1, 3};
+    dst2->append_selective(*src, indexes.data(), 0, 2);
+    const auto* variant2 = down_cast<const VariantColumn*>(dst2.get());
+    ASSERT_EQ(3, variant2->size());
+    ASSERT_EQ(3, variant2->fallback_column_by_index(0)->size());
+    assert_variant_row_json(variant2, 1, R"({"a":"x"})");
+    assert_variant_row_json(variant2, 2, R"({"b":2})");
 }
 
 PARALLEL_TEST(VariantColumnTest, test_fallback_column_serde_roundtrip) {
