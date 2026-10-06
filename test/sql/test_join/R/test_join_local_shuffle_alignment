@@ -175,6 +175,10 @@ select count(*) from fa join [bucket] (select id from fb union select id from fb
 -- result:
 3000
 -- !result
+select count(*) from fa join [bucket] fb b1 on fa.id = b1.id join [bucket] fb b2 on b1.id = b2.id;
+-- result:
+3000
+-- !result
 select count(*) from fa join [broadcast] fb on fa.id = fb.id;
 -- result:
 3000
@@ -185,6 +189,10 @@ select count(*) from fa join [shuffle] fb on fa.id = fb.id;
 -- !result
 set enable_pipeline_level_multi_partitioned_rf = false;
 -- result:
+-- !result
+select count(*) from fa join [bucket] fb b1 on fa.id = b1.id join [bucket] fb b2 on b1.id = b2.id;
+-- result:
+3000
 -- !result
 select count(*) from fa join [bucket] fb on fa.id = fb.id;
 -- result:
