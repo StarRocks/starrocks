@@ -2697,6 +2697,80 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
+    def alter_and_wait(self, sql, alter_type="COLUMN", timeout=600):
+        """
+        Submit `sql`, an alter that may create a job listed by SHOW ALTER TABLE `alter_type`
+        (COLUMN for a schema change, ROLLUP for ADD ROLLUP or a synchronous MV), and block until
+        that job has landed. The explicit form of the statement followed by wait_alter_table_finish:
+        being handed the statement, it needs no statement matching to retry a watershed cancel
+        (ALTER_RERUN_MSG), which it does like wait_alter_table_finish, through _resubmit_alter.
+        Any other outcome than FINISHED fails, and `timeout` bounds the whole call, retries
+        included.
+
+        The job is told apart by JobId: the newest id is read before `sql` is submitted, and since
+        a job is registered within the DDL's own execution (see wait_alter_table_finish), a newer
+        id afterwards is this statement's and no newer id means the alter was applied inline. That
+        holds as long as nothing else alters a table in the database meanwhile, which a case
+        running statements one at a time guarantees; it is not meant for alters issued from
+        several threads of a case at once.
+
+        Returns None, which is what the R file records.
+        """
+        rollup = alter_type.upper() == "ROLLUP"
+        if rollup:
+            state_col, msg_col = ROLLUP_STATE_COL, ROLLUP_MSG_COL
+        else:
+            state_col, msg_col = SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL
+        show_sql = "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type
+        deadline = time.monotonic() + timeout
+
+        res = self.execute_sql(show_sql, True)
+        tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+        watermark = int(res["result"][0][0]) if res["result"] else None
+
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], "alter failed: %s" % res["msg"])
+
+        rerun = 0
+        while True:
+            res = self.execute_sql(show_sql, True)
+            tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+            if not res["result"] or (watermark is not None and int(res["result"][0][0]) <= watermark):
+                # No job of its own: the alter was applied inline.
+                return None
+            row = res["result"][0]
+            job_id, table_name, state, msg = int(row[0]), row[1], row[state_col], row[msg_col]
+
+            if state not in ("FINISHED", "CANCELLED"):
+                tools.assert_true(
+                    time.monotonic() < deadline,
+                    "alter_and_wait timed out after %ss, job %s is %s" % (timeout, job_id, state),
+                )
+                time.sleep(0.1)
+                continue
+
+            # Keep the watermarks of the legacy wait helpers past this job, so one used later in
+            # the case does not take it for its own.
+            self._last_alter_job_id = max(job_id, getattr(self, "_last_alter_job_id", None) or 0)
+            if rollup:
+                self._last_alter_mv_job_id = max(job_id, getattr(self, "_last_alter_mv_job_id", None) or 0)
+
+            if state == "FINISHED":
+                if rollup:
+                    res = self.execute_sql("SELECT DATABASE()", True)
+                    tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+                    # See wait_table_state_normal: a finished rollup releases the table later.
+                    self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+                return None
+
+            tools.assert_true(
+                is_watershed_cancel(state, msg) and rerun < ALTER_RERUN_MAX_RETRY,
+                "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
+            )
+            rerun += 1
+            watermark = job_id
+            self._resubmit_alter(sql, None, job_id, msg, rerun, table_name, deadline)
+
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
         """
         Block until the alter submitted just before this call has landed.
