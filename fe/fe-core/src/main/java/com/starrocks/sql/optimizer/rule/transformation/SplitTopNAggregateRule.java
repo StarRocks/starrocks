@@ -267,9 +267,22 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 .build();
 
         // build join
+        //
+        // The join is what puts the two halves of the split back together, so it has to match a group
+        // to itself for every group the aggregate produced -- including the one whose key is NULL.
+        // Plain equality does not: NULL = NULL is NULL, the row finds no partner in the inner join,
+        // and the whole NULL group disappears from the answer. With `limit 1` over a table whose
+        // smallest group key is NULL that meant a query returning no rows at all, under the default
+        // configuration and with nothing in the output to suggest a row had been dropped.
+        //
+        // A null-safe comparison matches NULL to NULL and leaves every other key alone. Only nullable
+        // keys need it, and the common case of a non-nullable grouping key keeps the plain equality
+        // it had, so the join strategies that only accept `=` stay reachable wherever they were
+        // reachable before.
         List<ScalarOperator> eqPredicate = Lists.newArrayList();
         for (ColumnRefOperator groupingKey : agg.getGroupingKeys()) {
-            eqPredicate.add(new BinaryPredicateOperator(BinaryType.EQ, groupingKey, refToNew.get(groupingKey)));
+            BinaryType eq = groupingKey.isNullable() ? BinaryType.EQ_FOR_NULL : BinaryType.EQ;
+            eqPredicate.add(new BinaryPredicateOperator(eq, groupingKey, refToNew.get(groupingKey)));
         }
 
         LogicalJoinOperator join = LogicalJoinOperator.builder()
