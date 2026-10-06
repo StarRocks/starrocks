@@ -128,7 +128,7 @@ update_compaction_num_threads_per_disk = 1
 update_compaction_per_tablet_min_interval_seconds = 120
 ```
 
-You can increase `compact_threads` and `update_compaction_num_threads_per_disk`, or decease `update_compaction_per_tablet_min_interval_seconds` to introduce more compaction resource to handle high frequency writes.
+You can increase `compact_threads` and `update_compaction_num_threads_per_disk`, or decrease `update_compaction_per_tablet_min_interval_seconds` to introduce more compaction resource to handle high frequency writes.
 
 How do you know whether current compaction resource and setting can handle current high frequency writes? You can observe it in the following ways:
 
