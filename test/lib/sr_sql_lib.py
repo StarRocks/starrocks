@@ -2716,11 +2716,18 @@ class StarrocksSQLApiLib(object):
 
         Returns None, which is what the R file records.
         """
+        # State and Msg of each layout. OPTIMIZE is a valid SHOW ALTER type too, with its own
+        # layout, but its jobs never hit the watershed cancel; refuse it rather than misread it.
+        layouts = {
+            "COLUMN": (SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL),
+            "ROLLUP": (ROLLUP_STATE_COL, ROLLUP_MSG_COL),
+        }
+        tools.assert_true(
+            alter_type.upper() in layouts,
+            "alter_and_wait supports alter_type COLUMN or ROLLUP, got %s" % alter_type,
+        )
+        state_col, msg_col = layouts[alter_type.upper()]
         rollup = alter_type.upper() == "ROLLUP"
-        if rollup:
-            state_col, msg_col = ROLLUP_STATE_COL, ROLLUP_MSG_COL
-        else:
-            state_col, msg_col = SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL
         show_sql = "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type
         deadline = time.monotonic() + timeout
 
