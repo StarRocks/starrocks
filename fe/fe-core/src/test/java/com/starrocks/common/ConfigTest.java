@@ -25,6 +25,11 @@ import org.junit.jupiter.api.Test;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Locale;
+import java.util.Map;
+>>>>>>> 4a171ce ([BugFix] Mask credential FE configs in ADMIN SHOW FRONTEND CONFIG and /variable (#80097))
 
 public class ConfigTest {
     private final Config config = new Config();
@@ -178,4 +183,354 @@ public class ConfigTest {
         configs = ConfigForArray.getConfigInfo(null);
         Assertions.assertEquals("[]", configs.get(2).get(2));
     }
+<<<<<<< HEAD
+=======
+
+    private static class ConfigForArrayDump extends ConfigBase {
+        @ConfField
+        public static short[] dump_array_short = new short[] {1, 2};
+        @ConfField
+        public static int[] dump_array_int = new int[] {3, 4};
+        @ConfField
+        public static long[] dump_array_long = new long[] {5L, 6L};
+        @ConfField
+        public static double[] dump_array_double = new double[] {1.5, 2.5};
+        @ConfField
+        public static boolean[] dump_array_boolean = new boolean[] {true, false};
+        @ConfField
+        public static String[] dump_array_string = new String[] {"a", "b"};
+        @ConfField(sensitive = true)
+        public static String[] dump_array_secret = new String[] {"s1", "s2"};
+    }
+
+    @Test
+    public void testDumpArrayConfig() throws Exception {
+        ConfigForArrayDump configForArrayDump = new ConfigForArrayDump();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
+        configForArrayDump.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        Map<String, String> dumped = ConfigForArrayDump.dump();
+        Assertions.assertEquals("[1, 2]", dumped.get("dump_array_short"));
+        Assertions.assertEquals("[3, 4]", dumped.get("dump_array_int"));
+        Assertions.assertEquals("[5, 6]", dumped.get("dump_array_long"));
+        Assertions.assertEquals("[1.5, 2.5]", dumped.get("dump_array_double"));
+        Assertions.assertEquals("[true, false]", dumped.get("dump_array_boolean"));
+        Assertions.assertEquals("[a, b]", dumped.get("dump_array_string"));
+        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, dumped.get("dump_array_secret"));
+    }
+
+    private static class ConfigForSensitive extends ConfigBase {
+        @ConfField(sensitive = true)
+        public static String prop_secret = "wJalrXUtnFEMI/K7MDENG";
+        @ConfField(sensitive = true)
+        public static String prop_unset_secret = "";
+        @ConfField
+        public static String prop_endpoint = "http://127.0.0.1:9000";
+    }
+
+    @Test
+    public void testSensitiveConfigIsMasked() throws Exception {
+        ConfigForSensitive configForSensitive = new ConfigForSensitive();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
+        configForSensitive.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        // ADMIN SHOW FRONTEND CONFIG
+        Map<String, String> shown = Maps.newHashMap();
+        for (List<String> row : ConfigForSensitive.getConfigInfo(null)) {
+            shown.put(row.get(0), row.get(2));
+        }
+        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, shown.get("prop_secret"));
+        // An unset credential stays empty, so it is still visible that none is configured.
+        Assertions.assertEquals("", shown.get("prop_unset_secret"));
+        Assertions.assertEquals("http://127.0.0.1:9000", shown.get("prop_endpoint"));
+
+        // The /variable page
+        Map<String, String> dumped = ConfigForSensitive.dump();
+        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, dumped.get("prop_secret"));
+        Assertions.assertEquals("", dumped.get("prop_unset_secret"));
+        Assertions.assertEquals("http://127.0.0.1:9000", dumped.get("prop_endpoint"));
+
+        // Only what is reported is masked; the config itself keeps the real value.
+        Assertions.assertEquals("wJalrXUtnFEMI/K7MDENG", ConfigForSensitive.prop_secret);
+    }
+
+    @Test
+    public void testCredentialConfigsAreSensitive() throws Exception {
+        String[] credentials = {
+                "authentication_ldap_simple_ssl_conn_trust_store_pwd",
+                "authentication_ldap_simple_bind_root_pwd",
+                "auth_token",
+                "default_master_key",
+                "aws_s3_access_key",
+                "aws_s3_secret_key",
+                "azure_blob_shared_key",
+                "azure_blob_sas_token",
+                "azure_adls2_shared_key",
+                "azure_adls2_sas_token",
+                "azure_adls2_oauth2_client_secret",
+                "gcp_gcs_service_account_email",
+                "gcp_gcs_service_account_private_key_id",
+                "gcp_gcs_service_account_private_key",
+                "ssl_keystore_password",
+                "ssl_key_password",
+                "ssl_truststore_password",
+                "oauth2_client_secret",
+        };
+        for (String name : credentials) {
+            Assertions.assertTrue(Config.class.getField(name).getAnnotation(ConfigBase.ConfField.class).sensitive(), name);
+        }
+        Assertions.assertFalse(Config.class.getField("aws_s3_endpoint").getAnnotation(ConfigBase.ConfField.class).sensitive());
+    }
+
+    // =========================================================================
+    // HTTP Request Security Configuration Tests
+    // =========================================================================
+
+    @Test
+    void testHttpRequestAllowPrivateInAllowlist() throws Exception {
+        // Valid values: "true", "false" (case insensitive)
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "true", false, "");
+        Assertions.assertTrue(Config.http_request_allow_private_in_allowlist);
+
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "false", false, "");
+        Assertions.assertFalse(Config.http_request_allow_private_in_allowlist);
+
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "TRUE", false, "");
+        Assertions.assertTrue(Config.http_request_allow_private_in_allowlist);
+
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "FALSE", false, "");
+        Assertions.assertFalse(Config.http_request_allow_private_in_allowlist);
+
+        // Mixed case
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "True", false, "");
+        Assertions.assertTrue(Config.http_request_allow_private_in_allowlist);
+
+        Config.setMutableConfig("http_request_allow_private_in_allowlist", "False", false, "");
+        Assertions.assertFalse(Config.http_request_allow_private_in_allowlist);
+
+        // Invalid value: should throw exception
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "invalid", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "yes", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_allow_private_in_allowlist", "0", false, ""));
+    }
+
+    @Test
+    void testHttpRequestSslVerificationRequired() throws Exception {
+        // Valid values: "true", "false" (case insensitive)
+        Config.setMutableConfig("http_request_ssl_verification_required", "true", false, "");
+        Assertions.assertTrue(Config.http_request_ssl_verification_required);
+
+        Config.setMutableConfig("http_request_ssl_verification_required", "false", false, "");
+        Assertions.assertFalse(Config.http_request_ssl_verification_required);
+
+        Config.setMutableConfig("http_request_ssl_verification_required", "True", false, "");
+        Assertions.assertTrue(Config.http_request_ssl_verification_required);
+
+        Config.setMutableConfig("http_request_ssl_verification_required", "FALSE", false, "");
+        Assertions.assertFalse(Config.http_request_ssl_verification_required);
+
+        // Invalid value: should throw exception
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "yes", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "no", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "0", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ssl_verification_required", "", false, ""));
+    }
+
+    @Test
+    void testHttpRequestSecurityLevel() throws Exception {
+        // Valid values: 1, 2, 3, 4
+        for (int i = 1; i <= 4; i++) {
+            Config.setMutableConfig("http_request_security_level", String.valueOf(i), false, "");
+            Assertions.assertEquals(i, Config.http_request_security_level);
+        }
+
+        // Invalid values: 0, 5, negative, large numbers
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_security_level", "0", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_security_level", "5", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_security_level", "-1", false, ""));
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_security_level", "100", false, ""));
+        // Non-integer should throw
+        Assertions.assertThrows(Exception.class, () ->
+                Config.setMutableConfig("http_request_security_level", "abc", false, ""));
+    }
+
+    @Test
+    void testHttpRequestIpAllowlist() throws Exception {
+        // Valid: single IPv4
+        Config.setMutableConfig("http_request_ip_allowlist", "192.168.1.1", false, "");
+        Assertions.assertEquals("192.168.1.1", Config.http_request_ip_allowlist);
+
+        // Valid: multiple IPv4 addresses
+        Config.setMutableConfig("http_request_ip_allowlist", "10.0.0.1, 172.16.0.1", false, "");
+        Assertions.assertEquals("10.0.0.1, 172.16.0.1", Config.http_request_ip_allowlist);
+
+        // Valid: empty string (clears the list)
+        Config.setMutableConfig("http_request_ip_allowlist", "", false, "");
+        Assertions.assertEquals("", Config.http_request_ip_allowlist);
+
+        // Valid: boundary octets (0 and 255)
+        Config.setMutableConfig("http_request_ip_allowlist", "0.0.0.0", false, "");
+        Assertions.assertEquals("0.0.0.0", Config.http_request_ip_allowlist);
+        Config.setMutableConfig("http_request_ip_allowlist", "255.255.255.255", false, "");
+        Assertions.assertEquals("255.255.255.255", Config.http_request_ip_allowlist);
+
+        // Valid: three IPs
+        Config.setMutableConfig("http_request_ip_allowlist", "1.2.3.4, 5.6.7.8, 9.10.11.12", false, "");
+        Assertions.assertEquals("1.2.3.4, 5.6.7.8, 9.10.11.12", Config.http_request_ip_allowlist);
+
+        // Invalid: not an IP address
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "not-an-ip", false, ""));
+
+        // Invalid: empty value between commas
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "192.168.1.1,,10.0.0.1", false, ""));
+
+        // Invalid: hostname instead of IP
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "example.com", false, ""));
+
+        // Invalid: octet > 255
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "256.1.1.1", false, ""));
+
+        // Invalid: too many octets
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "1.2.3.4.5", false, ""));
+
+        // Invalid: too few octets
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "1.2.3", false, ""));
+
+        // Invalid: IPv6 address (only IPv4 supported in allowlist)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_ip_allowlist", "::1", false, ""));
+    }
+
+    @Test
+    void testHttpRequestHostAllowlistRegexp() throws Exception {
+        // Valid: single regex pattern
+        Config.setMutableConfig("http_request_host_allowlist_regexp", ".*\\.example\\.com", false, "");
+        Assertions.assertEquals(".*\\.example\\.com", Config.http_request_host_allowlist_regexp);
+
+        // Valid: multiple regex patterns
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "api\\..*,cdn\\..*", false, "");
+        Assertions.assertEquals("api\\..*,cdn\\..*", Config.http_request_host_allowlist_regexp);
+
+        // Valid: empty string (clears the list)
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "", false, "");
+        Assertions.assertEquals("", Config.http_request_host_allowlist_regexp);
+
+        // Valid: pattern with anchors
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "^api\\.example\\.com$", false, "");
+        Assertions.assertEquals("^api\\.example\\.com$", Config.http_request_host_allowlist_regexp);
+
+        // Valid: pattern with character classes
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "[a-z]+\\.example\\.com", false, "");
+        Assertions.assertEquals("[a-z]+\\.example\\.com", Config.http_request_host_allowlist_regexp);
+
+        // Valid: comma-separated with empty patterns (empty patterns are skipped)
+        Config.setMutableConfig("http_request_host_allowlist_regexp", "api\\..*,,cdn\\..*", false, "");
+        Assertions.assertEquals("api\\..*,,cdn\\..*", Config.http_request_host_allowlist_regexp);
+
+        // Invalid: malformed regex (unclosed bracket)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "[invalid", false, ""));
+
+        // Invalid: malformed regex (unclosed parenthesis)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "(unclosed", false, ""));
+
+        // Invalid: malformed regex (dangling quantifier)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "*invalid", false, ""));
+
+        // Invalid: malformed regex (unbalanced braces)
+        Assertions.assertThrows(DdlException.class, () ->
+                Config.setMutableConfig("http_request_host_allowlist_regexp", "a{2", false, ""));
+    }
+
+    @Test
+    public void testDefaultMvRefreshMode() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        try {
+            for (String valid : List.of("pct", "PCT", "Pct", "incremental", "INCREMENTAL")) {
+                Config.setMutableConfig("default_mv_refresh_mode", valid, false, "");
+                Assertions.assertEquals(valid, Config.default_mv_refresh_mode);
+                // Every accepted value must survive the parse that MaterializedView#getRefreshMode
+                // performs on it for any MV without an explicit refresh_mode property.
+                Assertions.assertNotNull(MaterializedView.RefreshMode.valueOf(valid.toUpperCase(Locale.ROOT)));
+            }
+
+            // AUTO parses as an enum constant but is not selectable, matching the refresh_mode property.
+            for (String invalid : List.of("auto", "AUTO", "incrementall", "hybrid", "", " ")) {
+                Config.setMutableConfig("default_mv_refresh_mode", "pct", false, "");
+                Assertions.assertThrows(DdlException.class, () ->
+                        Config.setMutableConfig("default_mv_refresh_mode", invalid, false, ""));
+                // A half-applied set would be as bad as no validation at all.
+                Assertions.assertEquals("pct", Config.default_mv_refresh_mode);
+            }
+        } finally {
+            Config.default_mv_refresh_mode = original;
+        }
+    }
+
+    @Test
+    public void testDefaultMvRefreshModeSurvivesTurkishLocale() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        Locale originalLocale = Locale.getDefault();
+        try {
+            // Turkish uppercases 'i' to 'İ', so a locale-sensitive toUpperCase() would turn the
+            // accepted "incremental" into a name no enum constant has.
+            Locale.setDefault(new Locale("tr", "TR"));
+            Config.setMutableConfig("default_mv_refresh_mode", "incremental", false, "");
+
+            MaterializedView mv = new MaterializedView();
+            mv.setTableProperty(new TableProperty(Maps.newHashMap()).buildMVRefreshMode());
+            Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getRefreshMode());
+
+            Assertions.assertEquals("incremental",
+                    PropertyAnalyzer.analyzeRefreshMode(Maps.newHashMap(
+                            ImmutableMap.of(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "incremental"))));
+        } finally {
+            Locale.setDefault(originalLocale);
+            Config.default_mv_refresh_mode = original;
+        }
+    }
+
+    @Test
+    public void testDefaultMvRefreshModeRejectedAtStartup() throws Exception {
+        String original = Config.default_mv_refresh_mode;
+        Path confFile = Files.createTempFile("fe_bad_refresh_mode", ".conf");
+        try {
+            Files.writeString(confFile, "default_mv_refresh_mode = incrementall\n");
+            // ADMIN SET is not the only way in: a value persisted into fe.conf would otherwise
+            // be re-applied on every restart, so the startup path must reject it as well.
+            Assertions.assertThrows(InvalidConfException.class,
+                    () -> new Config().init(confFile.toFile().getAbsolutePath()));
+        } finally {
+            Config.default_mv_refresh_mode = original;
+            Files.deleteIfExists(confFile);
+        }
+    }
+>>>>>>> 4a171ce ([BugFix] Mask credential FE configs in ADMIN SHOW FRONTEND CONFIG and /variable (#80097))
 }
