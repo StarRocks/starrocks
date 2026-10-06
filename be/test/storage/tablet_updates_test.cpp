@@ -25,6 +25,7 @@
 #include "common/config_storage_fwd.h"
 #include "data_workflows/consistency/engine_checksum_task.h"
 #include "fs/fs_factory.h"
+#include "rapidjson/document.h"
 #include "runtime/runtime_state.h"
 #include "script/script.h"
 #include "storage/chunk_helper.h"
@@ -4382,6 +4383,66 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
 
 TEST_F(TabletUpdatesTest, test_get_compaction_status) {
     test_horizontal_compaction(false, true);
+}
+
+// While a compaction is committed but not yet applied, the latest version holds only the output rowset and
+// the apply version still holds the inputs. get_compaction_status() used to fill apply_rowset_details from the
+// latest version's rowsets, indexing past its end and crashing the BE on /api/compaction/show.
+TEST_F(TabletUpdatesTest, get_compaction_status_while_compaction_waits_for_apply) {
+    const int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    std::vector<RowsetSharedPtr> inputs;
+    for (int64_t version = 2; version <= 4; version++) {
+        inputs.emplace_back(create_rowset(_tablet, keys));
+        ASSERT_TRUE(_tablet->rowset_commit(version, inputs.back()).ok());
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+
+    // Stop apply so that the compaction commits its output rowset and then waits for that version to be applied.
+    _tablet->updates()->stop_apply(true);
+    std::thread th([&]() { ASSERT_FALSE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+    DeferOp resume_apply([&]() {
+        _tablet->updates()->stop_apply(false);
+        _tablet->updates()->check_for_apply();
+        if (th.joinable()) {
+            th.join();
+        }
+    });
+    RowsetSharedPtr output_rs;
+    for (int retry = 0; output_rs == nullptr && retry < 10; retry++) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        output_rs = _tablet->updates()->get_rowset(inputs.back()->rowset_meta()->get_rowset_seg_id() + 1);
+    }
+    ASSERT_TRUE(output_rs != nullptr);
+
+    std::string json_result;
+    _tablet->updates()->get_compaction_status(&json_result);
+    rapidjson::Document doc;
+    doc.Parse(json_result.c_str());
+    ASSERT_FALSE(doc.HasParseError()) << json_result;
+    EXPECT_STREQ("4_1", doc["last_version"].GetString()) << json_result;
+
+    const auto& rowset_details = doc["rowset_details"];
+    ASSERT_EQ(1u, rowset_details.Size()) << json_result;
+    EXPECT_EQ(output_rs->rowset_id().to_string(), rowset_details[0]["rowset_id"].GetString()) << json_result;
+
+    const auto& apply_rowset_details = doc["apply_rowset_details"];
+    ASSERT_EQ(inputs.size(), apply_rowset_details.Size()) << json_result;
+    for (size_t i = 0; i < inputs.size(); i++) {
+        EXPECT_EQ(inputs[i]->rowset_id().to_string(), apply_rowset_details[i]["rowset_id"].GetString())
+                << json_result;
+    }
+
+    _tablet->updates()->stop_apply(false);
+    _tablet->updates()->check_for_apply();
+    th.join();
+    EXPECT_EQ(N, read_tablet(_tablet, 4));
+    ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
 }
 
 TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
