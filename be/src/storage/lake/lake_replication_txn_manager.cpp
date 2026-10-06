@@ -881,21 +881,12 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
             const auto& segment_name = segment_meta.filename();
             const auto uuid = extract_uuid_from(segment_name);
             existed_filename_uuids.emplace(
-<<<<<<< HEAD
-                    uuid, ExistingFileInfo{segment_name,
-                                           segment_meta.has_bundle_file_offset() ? "" : segment_meta.encryption_meta(),
-                                           segment_meta.shared()});
-            if (segment_meta.has_bundle_file_offset()) {
-                auto& slice_metas = bundle_slice_encryption_metas[uuid];
-=======
                     uuid,
                     ExistingFileInfo{segment_name,
                                      is_physical_bundle_segment(segment_meta) ? "" : segment_meta.encryption_meta(),
-                                     segment_meta.shared(),
-                                     is_physical_bundle_segment(segment_meta) ? std::nullopt : segment_size});
+                                     segment_meta.shared()});
             if (is_physical_bundle_segment(segment_meta)) {
-                auto& slice_infos = bundle_slice_infos[uuid];
->>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
+                auto& slice_metas = bundle_slice_encryption_metas[uuid];
                 auto [it, inserted] =
                         slice_metas.emplace(segment_meta.bundle_file_offset(), segment_meta.encryption_meta());
                 if (!inserted && it->second != segment_meta.encryption_meta()) {
@@ -1068,19 +1059,11 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             } else {
                 // segment file already exists, use the existing encryption metadata from target tablet
                 auto uuid = extract_uuid_from(src_segment_filename);
-<<<<<<< HEAD
-                if (src_seg_meta.has_bundle_file_offset()) {
+                if (is_physical_bundle_segment(src_seg_meta)) {
                     auto uuid_it = bundle_slice_encryption_metas.find(uuid);
                     if (uuid_it == bundle_slice_encryption_metas.end()) {
                         return Status::Corruption(fmt::format(
                                 "No existing target bundle slice encryption metadata found for UUID {}", uuid));
-=======
-                if (is_physical_bundle_segment(src_seg_meta)) {
-                    auto uuid_it = bundle_slice_infos.find(uuid);
-                    if (uuid_it == bundle_slice_infos.end()) {
-                        return Status::Corruption(
-                                fmt::format("No existing target bundle slice metadata found for UUID {}", uuid));
->>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
                     }
                     auto offset_it = uuid_it->second.find(src_seg_meta.bundle_file_offset());
                     if (offset_it == uuid_it->second.end()) {
@@ -1090,7 +1073,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                     }
                     new_seg_meta->set_encryption_meta(offset_it->second);
                 } else {
-                    if (bundle_slice_infos.contains(uuid)) {
+                    if (bundle_slice_encryption_metas.contains(uuid)) {
                         return Status::Corruption(fmt::format(
                                 "Existing target physical bundle conflicts with source standalone segment UUID {}",
                                 uuid));

@@ -28,24 +28,24 @@
 
 #include <ctime>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
-#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config_ingest_fwd.h"
+#include "common/config.h"
 #include "fs/bundle_file.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
-#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
+#include "util/defer_op.h"
 
 namespace starrocks::lake {
 
@@ -148,7 +148,7 @@ protected:
         int64_t sum_c0 = 0;
         int64_t sum_c1 = 0;
         while (true) {
-            auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+            auto chunk = ChunkHelper::new_chunk(*_schema, 128);
             auto st = reader->get_next(chunk.get());
             if (st.is_end_of_file()) {
                 break;

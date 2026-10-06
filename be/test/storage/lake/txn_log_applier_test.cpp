@@ -15,21 +15,12 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
 #include "runtime/exec_env.h"
-=======
-#include <set>
-#include <string>
-#include <vector>
-
-#include "base/testutil/assert.h"
-#include "exec/exec_env.h"
 #include "storage/lake/lake_proto_normalizer.h"
-#include "storage/lake/meta_file.h"
->>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace lake {
@@ -604,18 +595,11 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
     EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
-<<<<<<< HEAD
-// Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
-// data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
-=======
 // The statements of a multi-statement transaction write one log each: bundled when the statement's share
 // of the tablet was one segment at end of stream, standalone when it flushed mid-load. The merged rowset
 // keeps the bundled offsets and gives each standalone segment offset 0, the same bytes as a one-slice bundle.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10012);
->>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -640,16 +624,9 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     ASSERT_EQ(2, saved.deprecated_bundle_file_offsets_size());
 }
 
-<<<<<<< HEAD
-// Test reverse order: first TxnLog has no offsets, second has offsets.
-// This must also be detected as inconsistent and return error.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
-    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
-=======
 // Same as above with the standalone statement first.
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10013);
->>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
