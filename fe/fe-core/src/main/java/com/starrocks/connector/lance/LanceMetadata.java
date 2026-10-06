@@ -16,6 +16,9 @@ package com.starrocks.connector.lance;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
@@ -24,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
@@ -33,62 +37,65 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class LanceMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final CloudConfiguration cloudConfiguration;
-    private final Map<String, String> properties;
+    private final String warehouse;
+    private final String rootDatabase;
+    private final String storageOptions;
+    private final LanceDirectoryCatalog directory;
+    private final Map<String, Long> tableIds = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<String, List<Table>> tables = new ConcurrentHashMap<>();
 
     public LanceMetadata(String catalogName, Map<String, String> properties) {
-        this.catalogName = catalogName;
-        this.properties = properties;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
-        bootstrapMetadata();
+        this(catalogName, properties, new LanceDirectoryCatalog());
     }
 
-    private void bootstrapMetadata() {
-        // Bootstraps basic database and table definitions from the catalog configuration properties.
-        // This ensures SHOW DATABASES / SHOW TABLES can discover configured tables in production.
-        // e.g. properties can contain:
-        // "database" -> "default"
-        // "table.vectors.uri" -> "s3://bucket/vectors"
-        // "table.vectors.schema" -> "id:int64,embedding:fixed_size_list<float32, 128>"
-        String dbName = properties.getOrDefault("database", "default");
-        Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
-        addDatabase(db);
-
-        for (Map.Entry<String, String> entry : properties.entrySet()) {
-            String key = entry.getKey();
-            if (key.startsWith("table.") && key.endsWith(".uri")) {
-                String tblName = key.substring(6, key.length() - 4);
-                String uri = entry.getValue();
-                String schemaStr = properties.get("table." + tblName + ".schema");
-                ArrayList<Column> columns = new ArrayList<>();
-                if (schemaStr != null) {
-                    for (String field : LanceApiConverter.splitTopLevel(schemaStr, ',')) {
-                        int colonIdx = field.indexOf(':');
-                        if (colonIdx > 0) {
-                            String name = field.substring(0, colonIdx).trim();
-                            String typeStr = field.substring(colonIdx + 1).trim();
-                            // Configured schemas do not declare nullability. Keep null-sensitive optimizer
-                            // rewrites valid even when the underlying dataset contains nulls.
-                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr), true));
-                        }
-                    }
-                }
-                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
-                        tblName, columns, uri, catalogName, dbName);
-                addTable(dbName, table);
-            }
+    LanceMetadata(String catalogName, Map<String, String> properties, LanceDirectoryCatalog directory) {
+        this.catalogName = catalogName;
+        String type = properties.getOrDefault("lance.catalog.type", "directory");
+        if (!"directory".equalsIgnoreCase(type)) {
+            throw new StarRocksConnectorException("Only lance.catalog.type=directory is supported; REST is not yet supported");
         }
+        if (properties.containsKey("database") || properties.keySet().stream().anyMatch(key -> key.startsWith("table."))) {
+            throw new StarRocksConnectorException("Use lance.catalog.warehouse and lance.namespace.root_database; "
+                    + "table URIs and schemas are discovered from Lance datasets");
+        }
+        warehouse = properties.getOrDefault("lance.catalog.warehouse", "").trim();
+        if (warehouse.isEmpty()) {
+            throw new StarRocksConnectorException("lance.catalog.warehouse is required");
+        }
+        try {
+            URI uri = URI.create(warehouse);
+            if (uri.getRawQuery() != null || uri.getRawFragment() != null || uri.getRawAuthority() == null
+                    && uri.getScheme() != null && !"file".equals(uri.getScheme())) {
+                throw new IllegalArgumentException();
+            }
+            if (uri.getScheme() == null && !warehouse.startsWith("/")) {
+                throw new IllegalArgumentException();
+            }
+        } catch (IllegalArgumentException e) {
+            throw new StarRocksConnectorException("Invalid Lance warehouse URI; use an absolute path or storage URI "
+                    + "without query parameters or fragments");
+        }
+        rootDatabase = properties.getOrDefault("lance.namespace.root_database", "default").trim();
+        if (rootDatabase.isEmpty()) {
+            throw new StarRocksConnectorException("lance.namespace.root_database must not be empty");
+        }
+        this.directory = directory;
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.storageOptions = new Gson().toJson(LanceStorageOptions.from(warehouse, cloudConfiguration));
+        addDatabase(new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), rootDatabase));
     }
 
     @Override
@@ -108,11 +115,16 @@ public class LanceMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
-        List<Table> tableList = tables.get(dbName);
-        if (tableList == null) {
+        if (!databases.containsKey(dbName)) {
             return ImmutableList.of();
         }
-        return tableList.stream().map(Table::getName).collect(ImmutableList.toImmutableList());
+        List<String> names = new ArrayList<>();
+        if (rootDatabase.equals(dbName)) {
+            JsonParser.parseString(directory.listTables(warehouse, storageOptions)).getAsJsonArray()
+                    .forEach(name -> names.add(name.getAsString()));
+        }
+        tables.getOrDefault(dbName, List.of()).forEach(table -> names.add(table.getName()));
+        return names.stream().distinct().sorted().collect(Collectors.toList());
     }
 
     @Override
@@ -122,14 +134,25 @@ public class LanceMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        List<Table> tableList = tables.get(dbName);
-        if (tableList == null) {
+        Table registered = tables.getOrDefault(dbName, List.of()).stream()
+                .filter(table -> table.getName().equalsIgnoreCase(tblName)).findFirst().orElse(null);
+        if (registered != null || !rootDatabase.equals(dbName)) {
+            return registered;
+        }
+        List<String> matches = listTableNames(context, dbName).stream()
+                .filter(name -> name.equalsIgnoreCase(tblName)).collect(Collectors.toList());
+        if (matches.isEmpty()) {
             return null;
         }
-        return tableList.stream()
-                .filter(t -> t.getName().equalsIgnoreCase(tblName))
-                .findFirst()
-                .orElse(null);
+        if (matches.size() != 1) {
+            throw new StarRocksConnectorException("Ambiguous Lance table name: " + tblName);
+        }
+        String name = matches.get(0);
+        JsonObject description = JsonParser.parseString(directory.describeTable(warehouse, storageOptions, name))
+                .getAsJsonObject();
+        List<Column> columns = LanceApiConverter.fromSchema(description.getAsJsonObject("schema"));
+        long id = tableIds.computeIfAbsent(name, ignored -> CONNECTOR_ID_GENERATOR.getNextId().asLong());
+        return new LanceTable(id, name, columns, description.get("location").getAsString(), catalogName, dbName);
     }
 
     @Override
@@ -146,7 +169,7 @@ public class LanceMetadata implements ConnectorMetadata {
                 .build();
     }
 
-    // Helpers for unit tests to register metadata manually in Phase 1 (local catalogs)
+    // In-memory registrations used by planner test fixtures; production metadata comes from the directory.
     public void addDatabase(Database db) {
         databases.put(db.getFullName(), db);
     }

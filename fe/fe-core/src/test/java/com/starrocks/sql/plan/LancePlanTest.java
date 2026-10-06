@@ -45,9 +45,8 @@ public class LancePlanTest extends PlanTestBase {
         String catalogName = "lance_catalog";
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "lance");
-        properties.put("database", "bootstrap_db");
-        properties.put("table.nullable_rows.uri", "s3://bucket/nullable_rows");
-        properties.put("table.nullable_rows.schema", "id:int64,label:string");
+        properties.put("lance.namespace.root_database", "bootstrap_db");
+        properties.put("lance.catalog.warehouse", "s3://bucket/");
         properties.put("aws.s3.access_key", "test-access");
         properties.put("aws.s3.secret_key", "test-secret");
         properties.put("aws.s3.session_token", "test-session");
@@ -61,6 +60,9 @@ public class LancePlanTest extends PlanTestBase {
 
         // 3. Setup a mock Lance metadata with db & tables
         LanceMetadata metadata = new LanceMetadata(catalogName, properties);
+        metadata.addTable("bootstrap_db", new LanceTable(20003, "nullable_rows", List.of(
+                new Column("id", com.starrocks.type.IntegerType.BIGINT, true),
+                new Column("label", com.starrocks.type.VarcharType.VARCHAR, true)), "s3://bucket/nullable_rows", catalogName));
         Database db = new Database(10001, "db1");
         metadata.addDatabase(db);
 
@@ -76,7 +78,7 @@ public class LancePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testConfiguredNullableColumnsRetainNullPredicates() throws Exception {
+    public void testDatasetNullableColumnsRetainNullPredicates() throws Exception {
         String table = "lance_catalog.bootstrap_db.nullable_rows";
         String isNull = getFragmentPlan("SELECT id FROM " + table + " WHERE label IS NULL");
         assertContains(isNull, "LanceScanNode", "label IS NULL");
