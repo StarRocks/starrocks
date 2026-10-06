@@ -69,8 +69,6 @@ public:
     size_t byte_size(size_t from, size_t size) const override;
     void reserve(size_t n) override;
     void resize(size_t n) override;
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-    StatusOr<MutableColumnPtr> downgrade() override;
     bool has_large_column() const override;
     void assign(size_t n, size_t idx) override;
     void append_datum(const Datum& datum) override;

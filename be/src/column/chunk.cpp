@@ -28,32 +28,6 @@ Chunk::Chunk() {
     _slot_id_to_index.reserve(4);
 }
 
-Status Chunk::upgrade_if_overflow() {
-    for (auto& column : _columns) {
-        auto mutable_column = column->as_mutable_ptr();
-        auto ret = mutable_column->upgrade_if_overflow();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return Status::OK();
-}
-
-Status Chunk::downgrade() {
-    for (auto& column : _columns) {
-        auto mutable_column = column->as_mutable_ptr();
-        auto ret = mutable_column->downgrade();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return Status::OK();
-}
-
 bool Chunk::has_large_column() const {
     for (const auto& column : _columns) {
         if (column != nullptr && column->has_large_column()) {
@@ -627,30 +601,6 @@ void Chunk::_append_column_checked(size_t idx, ColumnPtr&& ptr) {
 
 MutableChunk::MutableChunk() {
     _slot_id_to_index.reserve(4);
-}
-
-Status MutableChunk::upgrade_if_overflow() {
-    for (auto& column : _columns) {
-        auto ret = column->upgrade_if_overflow();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return Status::OK();
-}
-
-Status MutableChunk::downgrade() {
-    for (auto& column : _columns) {
-        auto ret = column->downgrade();
-        if (!ret.ok()) {
-            return ret.status();
-        } else if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return Status::OK();
 }
 
 bool MutableChunk::has_large_column() const {

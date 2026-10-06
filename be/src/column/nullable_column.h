@@ -155,10 +155,6 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
     bool append_strings(const Slice* data, size_t size) override;

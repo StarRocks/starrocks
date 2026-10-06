@@ -191,10 +191,6 @@ public:
         return _offsets->capacity_limit_reached();
     }
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; }
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
     bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;

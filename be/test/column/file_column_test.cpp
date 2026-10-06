@@ -435,18 +435,10 @@ TEST(FileColumnTest, test_put_mysql_row_buffer) {
     }
 }
 
-TEST(FileColumnTest, test_upgrade_downgrade_and_limits) {
+TEST(FileColumnTest, test_large_column_and_limits) {
     auto column = create_test_column();
 
     ASSERT_FALSE(column->has_large_column());
-    auto upgraded = column->upgrade_if_overflow();
-    ASSERT_TRUE(upgraded.ok());
-    ASSERT_EQ(nullptr, upgraded.value());
-
-    auto downgraded = column->downgrade();
-    ASSERT_TRUE(downgraded.ok());
-    ASSERT_EQ(nullptr, downgraded.value());
-
     ASSERT_TRUE(column->capacity_limit_reached().ok());
     ASSERT_EQ(3, column->size());
     ASSERT_EQ(kRow0, column->debug_item(0));

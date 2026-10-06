@@ -267,10 +267,6 @@ public:
 
     void check_or_die() const override;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
     bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }

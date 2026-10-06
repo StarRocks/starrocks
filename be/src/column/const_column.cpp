@@ -93,23 +93,4 @@ void ConstColumn::check_or_die() const {
     _data->check_or_die();
 }
 
-StatusOr<MutableColumnPtr> ConstColumn::upgrade_if_overflow() {
-    if (_size > Column::MAX_CAPACITY_LIMIT) {
-        return Status::InternalError("Size of ConstColumn exceed the limit");
-    }
-    auto ret = upgrade_helper_func(_data->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _data = std::move(ret.value());
-    }
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> ConstColumn::downgrade() {
-    auto ret = downgrade_helper_func(_data->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _data = std::move(ret.value());
-    }
-    return ret;
-}
-
 } // namespace starrocks

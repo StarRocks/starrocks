@@ -249,11 +249,6 @@ size_t GeoColumn::container_memory_usage() const {
     return _data->memory_usage() + _descriptor.type.crs.capacity() + 1 + sizeof(_cache);
 }
 
-StatusOr<MutableColumnPtr> GeoColumn::upgrade_if_overflow() {
-    RETURN_IF_ERROR(capacity_limit_reached());
-    return MutableColumnPtr{};
-}
-
 GeoColumn::ImmContainer GeoColumn::immutable_data() const {
     unsupported("generic scalar access");
 }
