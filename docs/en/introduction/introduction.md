@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: None
+description: "StarRocks is a next-generation, blazing-fast massively parallel processing (MPP) database designed to make real-time analytics easy for enterprises."
 ---
 
 # What is StarRocks?
