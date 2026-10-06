@@ -17,15 +17,17 @@
 
 The `data` column is a shredded variant whose `commit` object is only partially shredded: `commit.collection`
 lives in typed_value and the other fields of `commit` live in the residual `data.typed_value.commit.value`.
+`note` is a shredded field with only a `value` column (no typed_value), so it lives in that column alone.
 
     data: struct<metadata, value, typed_value: struct<
         kind:   struct<value, typed_value: string>,
-        commit: struct<value, typed_value: struct<collection: struct<value, typed_value: string>>>>>
+        commit: struct<value, typed_value: struct<collection: struct<value, typed_value: string>>>,
+        note:   struct<value>>>
 
 Rows (as JSON):
     0: {"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"}
     1: {"commit":{"collection":"like"},"kind":"commit"}
-    2: {"extra":1,"kind":"identity"}
+    2: {"extra":1,"kind":"identity","note":"n1"}
     3: NULL
     4: {"commit":{"rev":"r1"}}
 
@@ -38,7 +40,7 @@ import struct
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-KEYS = sorted(["collection", "commit", "extra", "kind", "record", "rev", "text"])
+KEYS = sorted(["collection", "commit", "extra", "kind", "note", "record", "rev", "text"])
 KEY_ID = {k: i for i, k in enumerate(KEYS)}
 
 
@@ -86,7 +88,7 @@ METADATA = encode_metadata()
 ROWS = [
     (None, "commit", {"record": {"text": "hello"}}, "post", True),
     (None, "commit", None, "like", True),
-    ({"extra": 1}, "identity", None, None, False),
+    ({"extra": 1}, "identity", None, None, False),  # also carries note = "n1"
     None,
     # The only payload of the row is the residual of `commit`.
     (None, None, {"rev": "r1"}, None, True),
@@ -98,7 +100,8 @@ def build_data_column():
     commit_type = pa.struct(
         [("value", pa.binary()), ("typed_value", pa.struct([("collection", leaf_type(pa.string()))]))]
     )
-    typed_type = pa.struct([("kind", leaf_type(pa.string())), ("commit", commit_type)])
+    note_type = pa.struct([("value", pa.binary())])
+    typed_type = pa.struct([("kind", leaf_type(pa.string())), ("commit", commit_type), ("note", note_type)])
     data_type = pa.struct(
         [pa.field("metadata", pa.binary(), nullable=False), ("value", pa.binary()), ("typed_value", typed_type)]
     )
@@ -120,7 +123,11 @@ def build_data_column():
             {
                 "metadata": METADATA,
                 "value": encode_value(top_residual) if top_residual is not None else None,
-                "typed_value": {"kind": {"value": None, "typed_value": kind}, "commit": commit},
+                "typed_value": {
+                    "kind": {"value": None, "typed_value": kind},
+                    "commit": commit,
+                    "note": {"value": encode_value("n1") if kind == "identity" else None},
+                },
             }
         )
     return pa.array(values, type=data_type)

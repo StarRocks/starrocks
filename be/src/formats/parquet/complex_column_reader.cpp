@@ -1429,25 +1429,24 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
 
 // Auto-discover binding paths from the shredded_fields tree when no explicit shredded_paths are
 // provided.  Stops at ARRAY boundaries (does not recurse into array element children) and at SCALAR
-// leaves.  Struct-like NONE nodes are recursed, unless some row of the batch carries a residual
-// `value` for them (a partially shredded object): its non-shredded fields live only there, so the
-// whole object is emitted as one binding and rebuilt from the residual plus its children.
+// leaves.  A NONE node whose `value` is non-null in some row of the batch is emitted and rebuilt
+// from that value plus its children: it is either a fallback-only field, whose data lives only in
+// its own `value`, or a partially shredded object, whose non-shredded fields live only there.
+// Other struct-like NONE nodes are recursed.
 static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes, size_t num_rows,
                                           std::vector<VariantPath>* paths) {
     for (const auto& node : nodes) {
         if (node.kind != ShreddedFieldNode::Kind::NONE) {
             // SCALAR leaf or ARRAY boundary — emit and stop recursing.
             paths->push_back(node.parsed_full_path);
+        } else if (ParquetUtils::has_non_null_binary_value(node.value_column.get(), num_rows)) {
+            // Fallback-only field or partially shredded object — emit it with its value and stop recursing.
+            paths->push_back(node.parsed_full_path);
         } else if (!node.children.empty()) {
-            if (ParquetUtils::has_non_null_binary_value(node.value_column.get(), num_rows)) {
-                // Partially shredded object — emit it with its residual and stop recursing.
-                paths->push_back(node.parsed_full_path);
-            } else {
-                // Struct-like grouping node — recurse into children.
-                collect_all_top_binding_paths(node.children, num_rows, paths);
-            }
+            // Struct-like grouping node — recurse into children.
+            collect_all_top_binding_paths(node.children, num_rows, paths);
         }
-        // NONE node with no children: pure remain-binary; no typed binding needed.
+        // NONE node with no children and no value in this batch: nothing to bind.
     }
 }
 

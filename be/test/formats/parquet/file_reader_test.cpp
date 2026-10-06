@@ -5102,7 +5102,8 @@ TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual) {
     ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
               variant_row_json(variant_col, 0));
     ASSERT_EQ(R"({"commit":{"collection":"like"},"kind":"commit"})", variant_row_json(variant_col, 1));
-    ASSERT_EQ(R"({"extra":1,"kind":"identity"})", variant_row_json(variant_col, 2));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
     ASSERT_TRUE(nullable->is_null(3));
     // A row whose only payload is the residual of `commit` is not null.
     ASSERT_FALSE(nullable->is_null(4));
@@ -5184,7 +5185,8 @@ TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_
     const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
     ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
               variant_row_json(variant_col, 0));
-    ASSERT_EQ(R"({"extra":1,"kind":"identity"})", variant_row_json(variant_col, 2));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
 }
 
 } // namespace starrocks::parquet
