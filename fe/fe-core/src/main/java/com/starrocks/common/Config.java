@@ -2158,7 +2158,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "ldap ssl trust store file path, supports perm and jks formats")
     public static String authentication_ldap_simple_ssl_conn_trust_store_path = "";
 
-    @ConfField(mutable = true, comment = "LDAP SSL trust store file password; " +
+    @ConfField(mutable = true, sensitive = true, comment = "LDAP SSL trust store file password; " +
             "no password is required for files in PEM format.")
     public static String authentication_ldap_simple_ssl_conn_trust_store_pwd = "";
 
@@ -2183,7 +2183,7 @@ public class Config extends ConfigBase {
     /**
      * the root DN password to search users for authentication_ldap_simple
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, sensitive = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
@@ -2207,7 +2207,7 @@ public class Config extends ConfigBase {
     /**
      * Cluster token used for internal authentication.
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String auth_token = "";
 
     /**
@@ -3014,7 +3014,7 @@ public class Config extends ConfigBase {
      * set this to enable Transparent Data Encryption(TDE)
      * once set, should not be changed, or the data depending on this key cannot be read anymore
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String default_master_key = "";
 
     /**
@@ -3094,9 +3094,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean aws_s3_use_instance_profile = false;
 
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_access_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_secret_key = "";
 
     @ConfField
@@ -3113,9 +3113,9 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_sas_token = "";
 
     // azure adls2
@@ -3123,9 +3123,9 @@ public class Config extends ConfigBase {
     public static String azure_adls2_endpoint = "";
     @ConfField
     public static String azure_adls2_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_sas_token = "";
     @ConfField
     public static boolean azure_adls2_oauth2_use_managed_identity = false;
@@ -3133,7 +3133,7 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_tenant_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_id = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_oauth2_client_secret = "";
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
@@ -3145,11 +3145,11 @@ public class Config extends ConfigBase {
     public static String gcp_gcs_path = "";
     @ConfField
     public static String gcp_gcs_use_compute_engine_service_account = "true";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_email = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key_id = "";
     @ConfField
     public static String gcp_gcs_impersonation_service_account = "";
@@ -3525,13 +3525,13 @@ public class Config extends ConfigBase {
     /**
      * the password of keystore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_keystore_password = "";
 
     /**
      * the password of private key
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_key_password = "";
 
     /**
@@ -3543,7 +3543,7 @@ public class Config extends ConfigBase {
     /**
      * the password of truststore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
 
     /**
@@ -4130,7 +4130,7 @@ public class Config extends ConfigBase {
     /**
      * The secret used to authorize StarRocks client with the authorization server.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String oauth2_client_secret = "";
 
     /**

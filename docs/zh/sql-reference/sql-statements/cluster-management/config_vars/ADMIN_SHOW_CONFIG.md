@@ -37,6 +37,8 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 5. Comment     配置项说明
 ```
 
+对于密码、密钥、token 等凭证类配置项，`Value` 不显示实际取值：已设置时显示为 `******`，未设置时为空。打码只影响展示，FE 仍使用实际取值。
+
 ## 示例
 
 1. 查看当前 FE 节点的配置。
