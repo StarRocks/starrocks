@@ -120,10 +120,14 @@ select count(*) from fa left semi join [bucket] fb on fa.id = fb.id;
 select count(*) from fa left anti join [bucket] fb on fa.id = fb.id;
 select count(*) from (select id from fa union select id from fa) z join [bucket] fb on z.id = fb.id;
 select count(*) from fa join [bucket] (select id from fb union select id from fb) z on fa.id = z.id;
+-- the upper join's probe side has been shuffled by the lower join, so it is shuffled again with the hash it
+-- inherited from the scan, which has to be the one the upper join's sender used
+select count(*) from fa join [bucket] fb b1 on fa.id = b1.id join [bucket] fb b2 on b1.id = b2.id;
 -- the same joins written as broadcast and shuffle joins, which never took the bucket shuffle path
 select count(*) from fa join [broadcast] fb on fa.id = fb.id;
 select count(*) from fa join [shuffle] fb on fa.id = fb.id;
 set enable_pipeline_level_multi_partitioned_rf = false;
+select count(*) from fa join [bucket] fb b1 on fa.id = b1.id join [bucket] fb b2 on b1.id = b2.id;
 select count(*) from fa join [bucket] fb on fa.id = fb.id;
 select count(*) from (select id from fa union select id from fa) z join [bucket] fb on z.id = fb.id;
 set pipeline_dop = 0;
