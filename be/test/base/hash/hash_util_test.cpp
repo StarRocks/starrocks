@@ -43,10 +43,13 @@ struct HashCombineTag {
 
 namespace {
 
-bool sse42_available() {
-#ifdef __SSE4_2__
+bool hardware_crc_available() {
+#if defined(__SSE4_2__)
     base::CPU cpu;
     return cpu.has_sse42();
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+    // Compile-time gate; daemon.cpp verifies the host CPU at startup.
+    return true;
 #else
     return false;
 #endif
@@ -165,7 +168,7 @@ TEST(HashUtilTest, Hash32Selection) {
 
     const uint32_t hash_value = HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::fnv_hash(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -178,7 +181,7 @@ TEST(HashUtilTest, Hash64Selection) {
 
     const uint64_t hash_value = HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(hash_value, HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed));
     } else {
         EXPECT_EQ(hash_value, HashUtil::hash64_fallback(data.data(), static_cast<int32_t>(data.size()), seed));
@@ -193,7 +196,7 @@ TEST(HashUtilTest, CrcHashSelection) {
     const uint32_t crc32_value = HashUtil::crc_hash(data.data(), static_cast<int32_t>(data.size()), seed32);
     const uint64_t crc64_value = HashUtil::crc_hash64(data.data(), static_cast<int32_t>(data.size()), seed64);
 
-    if (sse42_available()) {
+    if (hardware_crc_available()) {
         EXPECT_EQ(crc32_value, HashUtil::hash(data.data(), static_cast<int32_t>(data.size()), seed32));
         EXPECT_EQ(crc64_value, HashUtil::hash64(data.data(), static_cast<int32_t>(data.size()), seed64));
     } else {
