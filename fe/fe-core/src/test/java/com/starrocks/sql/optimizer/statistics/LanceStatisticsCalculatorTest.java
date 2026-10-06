@@ -147,8 +147,9 @@ public class LanceStatisticsCalculatorTest {
 
         private Fixture(boolean physical, long limit) {
             catalog = new LanceMetadata("lance_stats", Map.of(
-                    "table.rows.uri", "file:///tmp/rows.lance", "table.rows.schema", "id:int32"));
-            table = (LanceTable) catalog.getTable(null, "default", "rows");
+                    "lance.catalog.warehouse", "file:///tmp"));
+            table = new LanceTable(1, "rows", List.of(new Column("id", com.starrocks.type.IntegerType.INT, true)),
+                    "file:///tmp/rows.lance", "lance_stats");
             Column column = table.getColumn("id");
             ref = factory.create("id", column.getType(), true);
             LogicalLanceScanOperator logical = new LogicalLanceScanOperator(table,

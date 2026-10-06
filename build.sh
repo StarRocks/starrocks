@@ -686,6 +686,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -Dmaven.clean.skip=true -T ${PARALLEL}
     cd ${STARROCKS_HOME}/java-extensions
     ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T ${PARALLEL}
+    if [ "${WITH_CONNECTOR_LANCE}" = "ON" ] && [ ${BUILD_FE} -eq 1 ]; then
+        ${MVN_CMD} $addon_mvn_opts -f lance-metadata/pom.xml clean package -DskipTests
+    fi
     cd ${STARROCKS_HOME}
 fi
 
@@ -716,6 +719,12 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/fe/lib/
+        if [ "${WITH_CONNECTOR_LANCE}" = "ON" ]; then
+            install -d "${STARROCKS_OUTPUT}/fe/lib/lance-metadata-lib"
+            cp -p ${STARROCKS_HOME}/java-extensions/lance-metadata/target/lib/*.jar \
+                  ${STARROCKS_HOME}/java-extensions/lance-metadata/target/starrocks-lance-metadata.jar \
+                  "${STARROCKS_OUTPUT}/fe/lib/lance-metadata-lib/"
+        fi
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/plugin/hive-udf/target/hive-udf-*.jar ${STARROCKS_OUTPUT}/fe/hive-udf/

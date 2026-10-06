@@ -14,18 +14,14 @@
 
 package com.starrocks.connector.lance;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.List;
 
 import static com.starrocks.type.BooleanType.BOOLEAN;
@@ -92,97 +88,61 @@ public class LanceMetadataTest {
     }
 
     @Test
-    public void testMetadataDiscoveryBootstrap() {
-        java.util.Map<String, String> properties = new java.util.HashMap<>();
-        properties.put("database", "vectors_db");
-        properties.put("table.users.uri", "s3://bucket/users");
-        properties.put("table.users.schema",
-                "UserID:int64,event_time:timestamp[us, tz=UTC],embedding:fixed_size_list<float32, 128>,"
-                        + "lance_embedding:fixed_size_list:float:128");
-        properties.put("table.events.uri", "s3://bucket/events");
-        properties.put("table.events.schema", "event_time:timestamp[us]");
-
-        LanceMetadata metadata = new LanceMetadata("lance_catalog", properties);
-        Assertions.assertTrue(metadata.listDbNames(null).contains("vectors_db"));
-        Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("users"));
-        Assertions.assertTrue(metadata.listTableNames(null, "vectors_db").contains("events"));
-
-        Table discovered = metadata.getTable(null, "vectors_db", "users");
-        Assertions.assertNotNull(discovered);
-        Assertions.assertTrue(discovered.isLanceTable());
-        LanceTable lanceDiscovered = (LanceTable) discovered;
-        Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
-        Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
-        Assertions.assertEquals("vectors_db", lanceDiscovered.getCatalogDBName());
-        Assertions.assertEquals("vectors_db", lanceDiscovered.toThrift(List.of()).getDbName());
-        Assertions.assertTrue(lanceDiscovered.isSupported());
-        Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
-
-        Table events = metadata.getTable(null, "vectors_db", "events");
-        Assertions.assertNotNull(events);
-        Assertions.assertNotEquals(lanceDiscovered.getId(), events.getId());
-        Assertions.assertEquals("s3://bucket/events", events.getTableLocation());
-
-        com.starrocks.catalog.Column userIdCol = lanceDiscovered.getColumn("UserID");
-        Assertions.assertNotNull(userIdCol);
-        Assertions.assertEquals(BIGINT, userIdCol.getType());
-
-        Column eventTimeCol = lanceDiscovered.getColumn("event_time");
-        Assertions.assertNotNull(eventTimeCol);
-        Assertions.assertEquals(DATETIME, eventTimeCol.getType());
-
-        Assertions.assertEquals(4, lanceDiscovered.getColumns().size());
-        Assertions.assertTrue(lanceDiscovered.getColumns().stream().allMatch(Column::isAllowNull));
-        Column embeddingCol = lanceDiscovered.getColumn("embedding");
-        Assertions.assertNotNull(embeddingCol);
-        Assertions.assertTrue(embeddingCol.getType().isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) embeddingCol.getType()).getItemType());
-
-        Column lanceEmbeddingCol = lanceDiscovered.getColumn("lance_embedding");
-        Assertions.assertNotNull(lanceEmbeddingCol);
-        Assertions.assertTrue(lanceEmbeddingCol.getType().isArrayType());
-        Assertions.assertEquals(FLOAT, ((ArrayType) lanceEmbeddingCol.getType()).getItemType());
+    public void testDirectoryDiscoveryAndSchema() {
+        LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+        org.mockito.Mockito.when(directory.listTables("s3://bucket/warehouse", "{}"))
+                .thenReturn("[\"users\",\"events\"]");
+        org.mockito.Mockito.when(directory.describeTable("s3://bucket/warehouse", "{}", "users"))
+                .thenReturn("{\"location\":\"s3://bucket/warehouse/users.lance\",\"schema\":" + SCHEMA + "}");
+        LanceMetadata metadata = new LanceMetadata("lance_catalog", java.util.Map.of(
+                "lance.catalog.warehouse", "s3://bucket/warehouse",
+                "lance.namespace.root_database", "datasets"), directory);
+        Assertions.assertEquals(List.of("datasets"), metadata.listDbNames(null));
+        Assertions.assertEquals(List.of("events", "users"), metadata.listTableNames(null, "datasets"));
+        Assertions.assertTrue(metadata.listTableNames(null, "missing").isEmpty());
+        Assertions.assertNull(metadata.getTable(null, "missing", "users"));
+        Assertions.assertNull(metadata.getTable(null, "datasets", "missing"));
+        LanceTable users = (LanceTable) metadata.getTable(null, "datasets", "USERS");
+        Assertions.assertEquals("lance_catalog", users.getCatalogName());
+        Assertions.assertEquals("datasets", users.getCatalogDBName());
+        Assertions.assertEquals("datasets", users.toThrift(List.of()).getDbName());
+        Assertions.assertEquals("s3://bucket/warehouse/users.lance", users.getUri());
+        Assertions.assertEquals(BIGINT, users.getColumn("ID").getType());
+        Assertions.assertFalse(users.getColumn("ID").isAllowNull());
+        Assertions.assertTrue(users.getColumn("label").isAllowNull());
+        Assertions.assertTrue(users.isSupported());
+        Assertions.assertEquals(users.getId(), metadata.getTable(null, "datasets", "users").getId());
+        // Re-read dataset metadata, rather than keeping a stale configured schema.
+        org.mockito.Mockito.verify(directory, org.mockito.Mockito.times(2))
+                .describeTable("s3://bucket/warehouse", "{}", "users");
     }
+
+    private static final String SCHEMA = """
+            {"fields":[
+              {"name":"ID","nullable":false,"type":{"name":"int","bitWidth":64,"isSigned":true},"children":[]},
+              {"name":"label","nullable":true,"type":{"name":"utf8"},"children":[]}
+            ]}
+            """;
 
     @Test
-    public void testMetadataDiscovery() {
-        LanceMetadata metadata = new LanceMetadata("lance_catalog", new HashMap<>());
-        Assertions.assertEquals(Table.TableType.LANCE, metadata.getTableType());
-
-        Database db = new Database(10001, "db1");
-        metadata.addDatabase(db);
-
-        List<Column> columns = ImmutableList.of(
-                new Column("id", INT),
-                new Column("embedding", LanceApiConverter.parseType("fixed_size_list<float32, 128>"))
-        );
-        LanceTable table = new LanceTable(20001, "vectors_table", columns, "s3://bucket/vectors");
-        metadata.addTable("db1", table);
-
-        // Assert discovery API
-        Assertions.assertTrue(metadata.listDbNames(null).contains("db1"));
-        Assertions.assertTrue(metadata.listTableNames(null, "db1").contains("vectors_table"));
-        Assertions.assertEquals(db, metadata.getDb(null, "db1"));
-
-        Table discovered = metadata.getTable(null, "db1", "vectors_table");
-        Assertions.assertNotNull(discovered);
-        Assertions.assertTrue(discovered.isLanceTable());
-        LanceTable lanceDiscovered = (LanceTable) discovered;
-        Assertions.assertEquals("s3://bucket/vectors", lanceDiscovered.getUri());
-        Assertions.assertEquals(2, lanceDiscovered.getColumns().size());
-        Column embeddingCol = lanceDiscovered.getColumn("embedding");
-        Assertions.assertNotNull(embeddingCol);
-        Assertions.assertTrue(embeddingCol.getType().isArrayType());
+    public void testRejectInvalidConfiguration() {
+        for (java.util.Map<String, String> properties : List.of(
+                java.util.Map.<String, String>of(),
+                java.util.Map.of("lance.catalog.type", "rest", "lance.catalog.warehouse", "s3://bucket/root"),
+                java.util.Map.of("lance.catalog.warehouse", "relative/path"),
+                java.util.Map.of("lance.catalog.warehouse", "s3://bucket/root?sig=secret"),
+                java.util.Map.of("lance.catalog.warehouse", "/tmp/data", "lance.namespace.root_database", " "),
+                java.util.Map.of("lance.catalog.warehouse", "/tmp/data", "table.rows.schema", "id:int32"))) {
+            Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,
+                    () -> new LanceMetadata("lance", properties));
+        }
     }
+
     @Test
     public void testCatalogIdentityAndAzureSasConfiguration() {
         LanceMetadata metadata = new LanceMetadata("azure_lance", java.util.Map.of(
-                "table.rows.uri", "abfss://data@account.dfs.core.windows.net/rows.lance",
-                "table.rows.schema", "id:int64",
-                "azure.adls2.storage_account", "account",
-                "azure.adls2.sas_token", "sig=test-sas"));
-        Assertions.assertEquals("azure_lance", metadata.getTable(null, "default", "rows").getCatalogName());
-        Assertions.assertTrue(metadata.getTable(null, "default", "rows").isSupported());
+                "lance.catalog.warehouse", "abfss://data@account.dfs.core.windows.net/warehouse",
+                "azure.adls2.storage_account", "account", "azure.adls2.sas_token", "sig=test-sas"));
         com.starrocks.thrift.TCloudConfiguration thrift = new com.starrocks.thrift.TCloudConfiguration();
         metadata.getCloudConfiguration().toThrift(thrift);
         Assertions.assertEquals(com.starrocks.thrift.TCloudType.AZURE, thrift.getCloud_type());
@@ -190,4 +150,35 @@ public class LanceMetadataTest {
                 thrift.getCloud_properties().get("fs.azure.sas.fixed.token.account.dfs.core.windows.net"));
     }
 
+    @Test
+    public void testStorageErrorsAreNotMissingTables() {
+        LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+        org.mockito.Mockito.when(directory.listTables("/tmp/warehouse", "{}"))
+                .thenThrow(new com.starrocks.connector.exception.StarRocksConnectorException("Storage access denied"));
+        LanceMetadata metadata = new LanceMetadata("lance", java.util.Map.of("lance.catalog.warehouse", "/tmp/warehouse"),
+                directory);
+        Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,
+                () -> metadata.getTable(null, "default", "rows"));
+    }
+
+    @Test
+    public void testCompleteSchemaConversion() {
+        String schema = """
+                {"fields":[
+                  {"name":"vector","nullable":true,"type":{"name":"fixedsizelist","listSize":3},"children":[
+                    {"name":"item","nullable":true,"type":{"name":"floatingpoint","precision":"SINGLE"}}]},
+                  {"name":"price","nullable":true,"type":{"name":"decimal","bitWidth":128,"precision":20,"scale":2}},
+                  {"name":"u64","nullable":true,"type":{"name":"int","bitWidth":64,"isSigned":false}},
+                  {"name":"ts","nullable":true,"type":{"name":"timestamp","unit":"MICROSECOND","timezone":"UTC"}}
+                ]}
+                """;
+        List<Column> columns = LanceApiConverter.fromSchema(com.google.gson.JsonParser.parseString(schema).getAsJsonObject());
+        Assertions.assertEquals(FLOAT, ((ArrayType) columns.get(0).getType()).getItemType());
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(20, 2), columns.get(1).getType());
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(20, 0), columns.get(2).getType());
+        Assertions.assertEquals(DATETIME, columns.get(3).getType());
+        Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,
+                () -> LanceApiConverter.fromSchema(com.google.gson.JsonParser.parseString(
+                        schema.replace("fixedsizelist", "union")).getAsJsonObject()));
+    }
 }

@@ -14,6 +14,10 @@
 
 package com.starrocks.connector.lance;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.starrocks.catalog.Column;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -36,6 +40,84 @@ import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceApiConverter {
+
+    /** Convert the schema read by Lance; never silently substitute a type or discard a field. */
+    static List<Column> fromSchema(JsonObject schema) {
+        if (schema == null || !schema.has("fields")) {
+            throw new StarRocksConnectorException("Lance dataset has no schema");
+        }
+        List<Column> columns = new ArrayList<>();
+        for (JsonElement value : schema.getAsJsonArray("fields")) {
+            JsonObject field = value.getAsJsonObject();
+            columns.add(new Column(field.get("name").getAsString(), fromFieldType(field),
+                    field.get("nullable").getAsBoolean()));
+        }
+        if (columns.isEmpty()) {
+            throw new StarRocksConnectorException("Lance dataset has an empty schema");
+        }
+        return columns;
+    }
+
+    private static Type fromFieldType(JsonObject field) {
+        JsonObject type = field.getAsJsonObject("type");
+        String name = type.get("name").getAsString();
+        switch (name) {
+            case "list":
+            case "largelist":
+            case "fixedsizelist":
+                if (field.getAsJsonArray("children").size() != 1) {
+                    throw new StarRocksConnectorException("Invalid Lance list field");
+                }
+                return new ArrayType(fromFieldType(field.getAsJsonArray("children").get(0).getAsJsonObject()));
+            case "struct":
+                ArrayList<StructField> fields = new ArrayList<>();
+                for (JsonElement value : field.getAsJsonArray("children")) {
+                    JsonObject child = value.getAsJsonObject();
+                    fields.add(new StructField(child.get("name").getAsString(), fromFieldType(child)));
+                }
+                return new StructType(fields);
+            case "int":
+                int bits = type.get("bitWidth").getAsInt();
+                if (List.of(8, 16, 32, 64).contains(bits)) {
+                    return parseType((type.get("isSigned").getAsBoolean() ? "int" : "uint") + bits);
+                }
+                break;
+            case "floatingpoint":
+                switch (type.get("precision").getAsString()) {
+                    case "HALF":
+                    case "SINGLE":
+                        return FLOAT;
+                    case "DOUBLE":
+                        return DOUBLE;
+                    default:
+                        break;
+                }
+                break;
+            case "decimal":
+                int precision = type.get("precision").getAsInt();
+                int scale = type.get("scale").getAsInt();
+                if (type.get("bitWidth").getAsInt() == 128 && precision > 0 && precision <= 38
+                        && scale >= 0 && scale <= precision) {
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
+                }
+                break;
+            case "timestamp":
+                return DATETIME;
+            case "date":
+                return "DAY".equals(type.get("unit").getAsString()) ? DATE : DATETIME;
+            case "bool":
+                return BOOLEAN;
+            case "utf8":
+            case "largeutf8":
+                return VARCHAR;
+            case "binary":
+            case "largebinary":
+                return VARBINARY;
+            default:
+                break;
+        }
+        throw new StarRocksConnectorException("Unsupported Lance field type: " + name);
+    }
 
     /**
      * Maps safe string representations of Apache Arrow / Lance data types to StarRocks Types recursively.

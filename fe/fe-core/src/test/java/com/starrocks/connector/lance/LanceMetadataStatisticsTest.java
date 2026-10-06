@@ -75,8 +75,10 @@ public class LanceMetadataStatisticsTest {
 
     private static class Fixture {
         private final LanceMetadata metadata = new LanceMetadata("lance_stats", Map.of(
-                "table.rows.uri", "file:///tmp/rows.lance", "table.rows.schema", "id:int32,value:string"));
-        private final LanceTable table = (LanceTable) metadata.getTable(null, "default", "rows");
+                "lance.catalog.warehouse", "file:///tmp"));
+        private final LanceTable table = new LanceTable(1, "rows", List.of(
+                new Column("id", com.starrocks.type.IntegerType.INT, true),
+                new Column("value", com.starrocks.type.VarcharType.VARCHAR, true)), "file:///tmp/rows.lance", "lance_stats");
         private final Column column = table.getColumn("id");
         private final ColumnRefFactory factory = new ColumnRefFactory();
         private final ColumnRefOperator ref = factory.create("id", column.getType(), true);
