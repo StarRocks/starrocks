@@ -370,6 +370,16 @@ public:
     static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
                                              const VariantRowRef& full_row, Column* dst);
 
+    // Builds the ARRAY<VARIANT> batch column of a structured array node (TopBinding::Kind::ARRAY) from the node's
+    // read columns. `row_metadata` holds the variant metadata of each row.
+    static StatusOr<ColumnPtr> build_array_binding_column(const ShreddedFieldNode& node,
+                                                          const std::vector<Slice>& row_metadata);
+
+    // Appends row `row` of an ARRAY binding: the array to `dst`, or, when the row's value is not an array, the
+    // node's `value` bytes to `fallback_dst`.
+    static void append_array_binding_row(size_t row, const TopBinding& binding, const Column& batch_array_column,
+                                         Column* dst, Column* fallback_dst);
+
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // parsed_shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
     // If empty, no typed_columns optimization is applied (overlay reconstruction still works).

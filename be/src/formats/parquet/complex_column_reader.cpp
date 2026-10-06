@@ -1702,6 +1702,17 @@ static void append_top_array_binding_value(size_t row, const TopBinding& binding
     fallback_dst->append_nulls(1);
 }
 
+StatusOr<ColumnPtr> VariantColumnReader::build_array_binding_column(const ShreddedFieldNode& node,
+                                                                    const std::vector<Slice>& row_metadata) {
+    return build_array_variant_column(node, row_metadata, 0);
+}
+
+void VariantColumnReader::append_array_binding_row(size_t row, const TopBinding& binding,
+                                                   const Column& batch_array_column, Column* dst,
+                                                   Column* fallback_dst) {
+    append_top_array_binding_value(row, binding, batch_array_column, dst, fallback_dst);
+}
+
 static StatusOr<VariantPath> make_relative_variant_path(const VariantPath& full_path, size_t prefix_segments);
 
 StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_binding_from_node(
