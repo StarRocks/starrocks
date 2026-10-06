@@ -69,6 +69,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
@@ -1433,93 +1434,6 @@ public class DatabaseTransactionMgrTest {
         public void replayOnPrepared(TransactionState txnState) {
         }
     }
-<<<<<<< HEAD
-=======
-
-    private EditLog replaceDatabaseTransactionMgrEditLog(DatabaseTransactionMgr dbTransactionMgr, EditLog editLog) {
-        EditLog originalEditLog = Deencapsulation.getField(dbTransactionMgr, "editLog");
-        Deencapsulation.setField(dbTransactionMgr, "editLog", editLog);
-        return originalEditLog;
-    }
-
-    private void assertEditLogWriteFailed(RuntimeException exception) {
-        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed")
-                || exception.getCause() != null && exception.getCause().getMessage().contains("EditLog write failed"));
-    }
-
-    private void assertPublishTimeoutOrNull(Throwable throwable) {
-        if (throwable == null) {
-            return;
-        }
-        Assertions.assertTrue(throwable instanceof StarRocksException);
-        Assertions.assertTrue(throwable.getMessage().contains("publish timeout"));
-    }
-
-    private void createSimpleOlapTable(Database db, long tableId, String tableName, long partitionId, String partitionName,
-                                       long indexId, String indexName, long tabletId, long version,
-                                       long replicaId1, long replicaId2, long replicaId3) {
-        Replica replica1 = new Replica(replicaId1, GlobalStateMgrTestUtil.testBackendId1, version, 0, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1, 0);
-        Replica replica2 = new Replica(replicaId2, GlobalStateMgrTestUtil.testBackendId2, version, 0, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1, 0);
-        Replica replica3 = new Replica(replicaId3, GlobalStateMgrTestUtil.testBackendId3, version, 0, 0L, 0L,
-                Replica.ReplicaState.NORMAL, -1, 0);
-
-        LocalTablet tablet = new LocalTablet(tabletId);
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(db.getId(), tableId, partitionId + 100, indexId, TStorageMedium.HDD);
-        index.addTablet(tablet, tabletMeta);
-        tablet.addReplica(replica1);
-        tablet.addReplica(replica2);
-        tablet.addReplica(replica3);
-
-        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
-        Partition partition = new Partition(partitionId, partitionId + 100, partitionName, index, distributionInfo);
-        partition.getDefaultPhysicalPartition().updateVisibleVersion(version);
-        partition.getDefaultPhysicalPartition().setNextVersion(version + 1);
-
-        List<Column> columns = new ArrayList<>();
-        Column key1 = new Column("k1", IntegerType.INT);
-        key1.setIsKey(true);
-        columns.add(key1);
-        Column key2 = new Column("k2", IntegerType.INT);
-        key2.setIsKey(true);
-        columns.add(key2);
-        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
-
-        PartitionInfo partitionInfo = new SinglePartitionInfo();
-        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
-        partitionInfo.setReplicationNum(partitionId, (short) 3);
-        OlapTable table = new OlapTable(tableId, tableName, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
-        table.addPartition(partition);
-        table.setIndexMeta(indexId, indexName, columns, 0, GlobalStateMgrTestUtil.testSchemaHash1 + 1, (short) 1,
-                TStorageType.COLUMN, KeysType.AGG_KEYS);
-        table.setBaseIndexMetaId(indexId);
-        table.setReplicationNum((short) 3);
-        db.registerTableUnlocked(table);
-    }
-
-    @Test
-    public void testIsPreviousTransactionsFinishedExcludeTxnIds() throws Exception {
-        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
-        // Use a dedicated table id so the setUp fixture's transactions do not interfere.
-        long uniqueTableId = 987654L;
-        long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
-                Lists.newArrayList(uniqueTableId), "exclude_txn_ids_label", transactionSource,
-                TransactionState.LoadJobSourceType.LAKE_COMPACTION, Config.stream_load_default_timeout_second);
-        long watermark = masterTransMgr.getTransactionIDGenerator().peekNextTransactionId();
-
-        try {
-            // A running transaction with id <= watermark blocks by default...
-            Assertions.assertFalse(masterTransMgr.isPreviousTransactionsFinished(watermark,
-                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId)));
-            // ...but is skipped when its id is excluded.
-            Assertions.assertTrue(masterTransMgr.isPreviousTransactionsFinished(watermark,
-                    GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(uniqueTableId), Sets.newHashSet(txnId)));
-        } finally {
-            masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, "cleanup");
-        }
-    }
 
     @Test
     public void testReplayFinalTransactionStateTwiceEnqueuesOnce() throws AnalysisException {
@@ -1550,14 +1464,14 @@ public class DatabaseTransactionMgrTest {
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
 
-        TransactionState replayedAgain = new TransactionState(fakeEditLog.getTransaction(txnId1));
+        TransactionState replayedAgain = deserializeAgain(fakeEditLog.getTransaction(txnId1));
         assertEquals(TransactionStatus.VISIBLE, replayedAgain.getTransactionStatus());
         slaveTransMgr.replayUpsertTransactionState(replayedAgain);
         assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
         Assertions.assertSame(replayedAgain, slaveDbTransMgr.getTransactionState(txnId1));
 
         // the batch path records the final state through the same containers
-        TransactionState replayedInBatch = new TransactionState(fakeEditLog.getTransaction(txnId1));
+        TransactionState replayedInBatch = deserializeAgain(fakeEditLog.getTransaction(txnId1));
         slaveTransMgr.replayUpsertTransactionStateBatch(
                 new TransactionStateBatch(Lists.newArrayList(replayedInBatch)));
         assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
@@ -1570,5 +1484,10 @@ public class DatabaseTransactionMgrTest {
         assertNull(slaveDbTransMgr.getTransactionState(txnId1));
         assertNull(slaveDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
     }
->>>>>>> c8cdd09 ([BugFix] Enqueue a finished transaction only once in finalStatusTransactionStateDeque (#79988))
+
+    // main carries a TransactionState copy constructor that this branch does not have. A replayed edit
+    // log entry is a freshly deserialized object, so rebuild it the way the journal does: through gson.
+    private static TransactionState deserializeAgain(TransactionState txnState) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(txnState), TransactionState.class);
+    }
 }
