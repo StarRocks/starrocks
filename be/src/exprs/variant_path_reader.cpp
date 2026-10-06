@@ -120,7 +120,9 @@ void VariantPathReader::prepare(const VariantColumn* col, const VariantPath* pat
 }
 
 bool VariantPathReader::is_typed_exact() const {
-    return _match_index >= 0 && _suffix.segments.empty();
+    // Callers of the exact match read the typed column in bulk, which only holds the values that fit its type.
+    // A path with fallback values goes through read_row(), which also reads the fallback column.
+    return _match_index >= 0 && _suffix.segments.empty() && !_col->has_any_fallback_value(_match_index);
 }
 
 LogicalType VariantPathReader::typed_type() const {
@@ -210,6 +212,21 @@ VariantReadResult VariantPathReader::_read_typed_row(size_t row) {
     size_t typed_row = typed_col->is_constant() ? 0 : row;
     const TypeDescriptor& type_desc = _col->shredded_types()[_match_index];
     const VariantPath* suffix = _suffix.segments.empty() ? nullptr : &_suffix;
+    if (typed_col->is_null(typed_row) && _col->has_fallback_value(_match_index, row)) {
+        // The value at this path does not fit the typed column: it is kept as variant bytes in the fallback column.
+        auto fallback = _col->fallback_value(_match_index, row);
+        if (!fallback.ok()) {
+            return VariantReadResult{.state = VariantReadState::kMissing};
+        }
+        if (suffix == nullptr) {
+            return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(fallback).value()};
+        }
+        auto field = VariantPath::seek_view(fallback.value().as_ref(), *suffix, 0);
+        if (!field.ok() || field.value().is_null()) {
+            return VariantReadResult{.state = VariantReadState::kMissing};
+        }
+        return VariantReadResult{.state = VariantReadState::kValue, .value = field.value().to_owned()};
+    }
     return drill_down_column(typed_col, typed_row, type_desc, suffix);
 }
 

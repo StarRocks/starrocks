@@ -293,7 +293,7 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
         }
 
         const size_t variant_row = variant_column->is_constant() ? 0 : row;
-        // Fast path: if any typed column is non-null for this row, the top-level type
+        // Fast path: if any typed column (or its fallback) is non-null for this row, the top-level type
         // is OBJECT (typed paths are always object-field paths, §1.3).
         // If all typed columns are null (all fields tombstoned), fall through to remain,
         // which may hold a scalar (e.g. a scalar row appended into a shredded column).
@@ -301,7 +301,8 @@ StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, c
             bool any_non_null = false;
             for (size_t i = 0; i < variant_data_column->shredded_paths().size(); ++i) {
                 const Column* typed_col = variant_data_column->typed_column_by_index(i);
-                if (typed_col != nullptr && !typed_col->is_null(variant_row)) {
+                if ((typed_col != nullptr && !typed_col->is_null(variant_row)) ||
+                    variant_data_column->has_fallback_value(i, variant_row)) {
                     any_non_null = true;
                     break;
                 }

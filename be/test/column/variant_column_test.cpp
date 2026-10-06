@@ -23,11 +23,14 @@
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/serde/column_array_serde.h"
 #include "column/variant_encoder.h"
+#include "column/variant_path_parser.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
@@ -1372,6 +1375,172 @@ PARALLEL_TEST(VariantColumnTest, test_equals_and_compare_at_invalid_metadata_fal
     ASSERT_EQ(0, lhs->equals(0, *rhs, 0, false));
     ASSERT_LT(lhs->compare_at(0, 0, *rhs, -1), 0);
     ASSERT_GT(rhs->compare_at(0, 0, *lhs, -1), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Fallback columns: values of a typed path that do not fit the typed column type
+// ---------------------------------------------------------------------------
+
+// Builds a VariantColumn with typed BIGINT path "a" and its fallback column from JSON objects that either have only
+// key "a" or have no key "a". An integer "a" goes to the typed cell; any other "a" goes to the fallback cell as the
+// variant bytes of that field, decoded with the row metadata; the remain never holds "a".
+static MutableColumnPtr build_bigint_path_with_fallback(const std::vector<std::string>& rows_json) {
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto fallback = VariantColumn::create_fallback_column();
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    CHECK(path_a.ok());
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    for (const auto& json : rows_json) {
+        VariantRowValue row = create_variant_row_from_json_text(json);
+        std::string_view metadata_raw = row.get_metadata().raw();
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        auto field = VariantPath::seek_view(row.as_ref(), path_a.value());
+        if (!field.ok() || field->is_null()) {
+            std::string_view value_raw = row.get_value().raw();
+            remain->append(Slice(value_raw.data(), value_raw.size()));
+            typed->append_nulls(1);
+            fallback->append_nulls(1);
+            continue;
+        }
+        remain->append(Slice(empty_object));
+        auto as_int = field->get_value().get_int8();
+        if (as_int.ok()) {
+            typed->append_datum(Datum(static_cast<int64_t>(as_int.value())));
+            fallback->append_nulls(1);
+        } else {
+            typed->append_nulls(1);
+            std::string_view field_raw = field->get_value().raw();
+            fallback->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+        }
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    MutableColumns fallback_columns;
+    fallback_columns.emplace_back(std::move(fallback));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
+                              std::move(fallback_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+static const std::vector<std::string> kFallbackRows = {R"({"a":1})", R"({"a":"x"})", R"({"a":{"k":1}})", R"({"b":2})"};
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_rebuilds_rows) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+    const auto* variant = down_cast<const VariantColumn*>(col.get());
+    ASSERT_EQ(4, variant->size());
+    EXPECT_EQ(TYPE_BIGINT, variant->shredded_types()[0].type);
+    EXPECT_TRUE(variant->has_any_fallback_value(0));
+    EXPECT_FALSE(variant->has_fallback_value(0, 0));
+    EXPECT_TRUE(variant->has_fallback_value(0, 1));
+    EXPECT_TRUE(variant->has_fallback_value(0, 2));
+    EXPECT_FALSE(variant->has_fallback_value(0, 3));
+
+    // A row with a fallback value is not just its base payload.
+    VariantRowRef ref;
+    EXPECT_FALSE(variant->try_get_row_ref(1, &ref));
+
+    assert_variant_row_json(variant, 0, R"({"a":1})");
+    assert_variant_row_json(variant, 1, R"({"a":"x"})");
+    // The nested object is decoded with the row metadata.
+    assert_variant_row_json(variant, 2, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 3, R"({"b":2})");
+
+    auto fallback = variant->fallback_value(0, 2);
+    ASSERT_TRUE(fallback.ok()) << fallback.status().to_string();
+    EXPECT_EQ(R"({"k":1})", fallback->to_json().value());
+    EXPECT_FALSE(variant->fallback_value(0, 0).ok());
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_without_values_is_absent) {
+    auto col = build_bigint_path_with_fallback({R"({"a":1})", R"({"b":2})"});
+    const auto* variant = down_cast<const VariantColumn*>(col.get());
+    EXPECT_FALSE(variant->has_any_fallback_value(0));
+    VariantRowRef ref;
+    EXPECT_TRUE(variant->try_get_row_ref(1, &ref));
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_follows_row_operations) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+
+    // clone
+    auto cloned = col->clone();
+    for (size_t i = 0; i < kFallbackRows.size(); ++i) {
+        assert_variant_row_json(down_cast<const VariantColumn*>(cloned.get()), i,
+                                down_cast<const VariantColumn*>(col.get())->debug_item(i));
+    }
+
+    // filter: keep rows 1 and 3
+    auto filtered = col->clone();
+    Filter filter = {0, 1, 0, 1};
+    filtered->filter(filter);
+    ASSERT_EQ(2, filtered->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(filtered.get()), 0, R"({"a":"x"})");
+    assert_variant_row_json(down_cast<const VariantColumn*>(filtered.get()), 1, R"({"b":2})");
+
+    // append_selective into an empty column
+    auto selected = VariantColumn::create();
+    std::vector<uint32_t> indexes = {2, 0};
+    selected->append_selective(*col, indexes.data(), 0, 2);
+    ASSERT_EQ(2, selected->size());
+    assert_variant_row_json(selected.get(), 0, R"({"a":{"k":1}})");
+    assert_variant_row_json(selected.get(), 1, R"({"a":1})");
+
+    // remove_first_n_values
+    auto removed = col->clone();
+    removed->remove_first_n_values(2);
+    ASSERT_EQ(2, removed->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(removed.get()), 0, R"({"a":{"k":1}})");
+
+    // resize
+    auto resized = col->clone();
+    resized->resize(2);
+    ASSERT_EQ(2, resized->size());
+    assert_variant_row_json(down_cast<const VariantColumn*>(resized.get()), 1, R"({"a":"x"})");
+    resized->check_or_die();
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_appended_into_column_without_fallback) {
+    // Destination has the same typed path but no fallback values yet.
+    auto dst = build_bigint_path_with_fallback({R"({"a":5})"});
+    ASSERT_FALSE(down_cast<const VariantColumn*>(dst.get())->has_any_fallback_value(0));
+    auto src = build_bigint_path_with_fallback(kFallbackRows);
+    dst->append(*src);
+    const auto* variant = down_cast<const VariantColumn*>(dst.get());
+    ASSERT_EQ(5, variant->size());
+    variant->check_or_die();
+    assert_variant_row_json(variant, 0, R"({"a":5})");
+    assert_variant_row_json(variant, 2, R"({"a":"x"})");
+    assert_variant_row_json(variant, 3, R"({"a":{"k":1}})");
+    assert_variant_row_json(variant, 4, R"({"b":2})");
+
+    // Destination with fallback values, source without: source rows get null fallback cells.
+    auto dst2 = build_bigint_path_with_fallback(kFallbackRows);
+    dst2->append(*build_bigint_path_with_fallback({R"({"a":7})"}));
+    const auto* variant2 = down_cast<const VariantColumn*>(dst2.get());
+    ASSERT_EQ(5, variant2->size());
+    variant2->check_or_die();
+    EXPECT_FALSE(variant2->has_fallback_value(0, 4));
+    assert_variant_row_json(variant2, 4, R"({"a":7})");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_fallback_column_serde_roundtrip) {
+    auto col = build_bigint_path_with_fallback(kFallbackRows);
+    std::vector<uint8_t> buffer(serde::ColumnArraySerde::max_serialized_size(*col));
+    auto end = serde::ColumnArraySerde::serialize(*col, buffer.data());
+    ASSERT_TRUE(end.ok()) << end.status().to_string();
+
+    auto restored = VariantColumn::create();
+    auto read_end = serde::ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), restored.get());
+    ASSERT_TRUE(read_end.ok()) << read_end.status().to_string();
+    ASSERT_EQ(kFallbackRows.size(), restored->size());
+    EXPECT_EQ(TYPE_BIGINT, restored->shredded_types()[0].type);
+    EXPECT_TRUE(restored->has_any_fallback_value(0));
+    assert_variant_row_json(restored.get(), 1, R"({"a":"x"})");
+    assert_variant_row_json(restored.get(), 2, R"({"a":{"k":1}})");
 }
 
 } // namespace starrocks

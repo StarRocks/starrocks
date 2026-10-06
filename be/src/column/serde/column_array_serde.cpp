@@ -535,6 +535,14 @@ private:
             size += serde::ColumnArraySerde::max_serialized_size(*column.remain_value_column(), 0);
         }
 
+        // fallback_columns: one has_fallback flag per typed path, then the nullable binary column
+        for (size_t i = 0; i < column.typed_columns().size(); ++i) {
+            size += sizeof(uint8_t); // has_fallback
+            if (const Column* fallback = column.fallback_column_by_index(i); fallback != nullptr) {
+                size += serde::ColumnArraySerde::max_serialized_size(*fallback, 0);
+            }
+        }
+
         return size;
     }
 
@@ -615,6 +623,20 @@ private:
                 return buff;
             }
             buff = result.value();
+        }
+
+        // fallback_columns
+        for (size_t i = 0; i < column.typed_columns().size(); ++i) {
+            const Column* fallback = column.fallback_column_by_index(i);
+            buff = write_little_endian_8(fallback != nullptr ? 1 : 0, buff);
+            if (fallback != nullptr) {
+                auto result = serde::ColumnArraySerde::serialize(*fallback, buff, false, 0);
+                if (!result.ok()) {
+                    LOG(WARNING) << "Failed to serialize fallback column: " << result.status();
+                    return buff;
+                }
+                buff = result.value();
+            }
         }
 
         return buff;
@@ -729,8 +751,23 @@ private:
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, remain_col.get(), false, 0));
         }
 
-        column->set_shredded_columns(std::move(paths), std::move(types), std::move(typed_cols), std::move(metadata_col),
-                                     std::move(remain_col));
+        // fallback_columns
+        MutableColumns fallback_cols;
+        fallback_cols.reserve(num_paths);
+        for (uint32_t i = 0; i < num_paths; ++i) {
+            uint8_t has_fallback = 0;
+            ASSIGN_OR_RETURN(buff, read_little_endian_8(buff, end, &has_fallback));
+            if (has_fallback == 0) {
+                fallback_cols.emplace_back(nullptr);
+                continue;
+            }
+            MutableColumnPtr fallback = VariantColumn::create_fallback_column();
+            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, fallback.get(), false, 0));
+            fallback_cols.emplace_back(std::move(fallback));
+        }
+
+        column->set_shredded_columns(std::move(paths), std::move(types), std::move(typed_cols),
+                                     std::move(fallback_cols), std::move(metadata_col), std::move(remain_col));
 
         return buff;
     }

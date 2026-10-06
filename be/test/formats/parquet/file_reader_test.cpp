@@ -4810,6 +4810,17 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     ASSERT_NE(-1, variant_col->find_shredded_path("numbers"));
     ASSERT_NE(-1, variant_col->find_shredded_path("groups"));
 
+    // "score" mixes INT32 typed values and string fallback values in this batch: the path keeps its INT type and
+    // the strings are carried in its fallback column.
+    const int score_idx = variant_col->find_shredded_path("score");
+    EXPECT_EQ(TYPE_INT, variant_col->shredded_types()[score_idx].type);
+    EXPECT_TRUE(variant_col->has_any_fallback_value(score_idx));
+    EXPECT_FALSE(variant_col->has_fallback_value(score_idx, 0));
+    EXPECT_TRUE(variant_col->has_fallback_value(score_idx, 1));
+    auto score_fallback = variant_col->fallback_value(score_idx, 1);
+    ASSERT_TRUE(score_fallback.ok()) << score_fallback.status().to_string();
+    EXPECT_EQ(R"("S81")", score_fallback->to_json().value());
+
     VariantRowValue row0;
     ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
     auto row0_json = row0.to_json();

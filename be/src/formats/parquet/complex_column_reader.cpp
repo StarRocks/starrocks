@@ -1507,14 +1507,9 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
     }
 }
 
-// NOTE – type demotion design tradeoff:
-// When a SCALAR binding has both typed and fallback values in the same batch (mixed case),
-// the output column type is demoted from the scalar type to VARIANT. This means the output
-// column type for a given path can vary across row groups within the same scan. Downstream
-// aggregation or projection that relies on a stable column type may see type mismatches.
-// The correct long-term fix is to "promise" a stable output type at scan planning time and
-// handle the fallback encoding within the typed column append, rather than changing the
-// column type per batch. Left as a known limitation for now.
+// A SCALAR binding keeps its typed column type in every batch. Rows whose value is in the field's `value`
+// column instead of `typed_value` (a value that does not fit the shredded type) are carried in the
+// VariantColumn fallback column of that path, so the output type of a path is stable across batches.
 static std::vector<TopBinding> select_materialized_bindings(const std::vector<TopBinding>& input, size_t num_rows) {
     std::vector<TopBinding> output;
     output.reserve(input.size());
@@ -1528,12 +1523,11 @@ static std::vector<TopBinding> select_materialized_bindings(const std::vector<To
             if (mode == VariantScalarMaterializeMode::KEEP_SCALAR) {
                 // Fully-typed path: keep scalar materialization.
                 output.push_back(binding);
-            } else if (mode == VariantScalarMaterializeMode::DEMOTE_VARIANT) {
-                // Mixed or fallback-only path: demote to VARIANT (see NOTE above).
-                TopBinding variant_binding = binding;
-                variant_binding.kind = TopBinding::Kind::VARIANT;
-                variant_binding.type = variant_type_desc();
-                output.push_back(std::move(variant_binding));
+            } else if (mode == VariantScalarMaterializeMode::KEEP_SCALAR_WITH_FALLBACK) {
+                // Mixed or fallback-only path: keep the scalar type, fallback values go to a fallback column.
+                TopBinding fallback_binding = binding;
+                fallback_binding.with_fallback = true;
+                output.push_back(std::move(fallback_binding));
             } else {
                 LOG_EVERY_N(WARNING, 100) << "drop scalar shredded binding due to missing node, path=" << binding.path;
             }
@@ -1555,15 +1549,18 @@ VariantScalarMaterializeMode VariantColumnReader::decide_variant_scalar_material
     if (has_typed && !has_fallback) {
         return VariantScalarMaterializeMode::KEEP_SCALAR;
     }
-    if (has_typed || has_fallback) {
-        return VariantScalarMaterializeMode::DEMOTE_VARIANT;
+    if (has_fallback) {
+        return VariantScalarMaterializeMode::KEEP_SCALAR_WITH_FALLBACK;
     }
     // Keep all-null scalar bindings to preserve a stable shredded-path shape.
     // append_top_scalar_binding_value() will append null for every row in this batch.
     return VariantScalarMaterializeMode::KEEP_SCALAR;
 }
 
-static void append_top_scalar_binding_value(size_t row, const TopBinding& binding, Column* dst_column) {
+// Appends one row of a SCALAR binding: the typed value to `dst_column`, or, when the row's value is in the
+// field's `value` column, those variant bytes to `fallback_dst` (nullptr when the binding has no fallback).
+static void append_top_scalar_binding_value(size_t row, const TopBinding& binding, Column* dst_column,
+                                            Column* fallback_dst) {
     if (dst_column == nullptr || binding.node == nullptr) {
         return;
     }
@@ -1572,9 +1569,25 @@ static void append_top_scalar_binding_value(size_t row, const TopBinding& bindin
     if (ParquetUtils::get_non_null_data_column_and_row(binding.node->typed_value_column.get(), row, &typed_col,
                                                        &typed_row)) {
         dst_column->append_datum(typed_col->get(typed_row));
-    } else {
-        dst_column->append_nulls(1);
+        if (fallback_dst != nullptr) {
+            fallback_dst->append_nulls(1);
+        }
+        return;
     }
+    dst_column->append_nulls(1);
+    if (fallback_dst == nullptr) {
+        return;
+    }
+    const Column* value_col = nullptr;
+    size_t value_row = 0;
+    if (ParquetUtils::get_non_null_data_column_and_row(binding.node->value_column.get(), row, &value_col, &value_row)) {
+        const Slice value = value_col->get(value_row).get_slice();
+        if (value.size > 0) {
+            fallback_dst->append_datum(Datum(value));
+            return;
+        }
+    }
+    fallback_dst->append_nulls(1);
 }
 
 static StatusOr<VariantPath> make_relative_variant_path(const VariantPath& full_path, size_t prefix_segments) {
@@ -1796,6 +1809,11 @@ static void append_null_to_typed_bindings(VariantColumn* variant_column) {
     for (auto& typed_column : variant_column->mutable_typed_columns()) {
         typed_column->append_nulls(1);
     }
+    for (auto& fallback_column : variant_column->mutable_fallback_columns()) {
+        if (fallback_column != nullptr) {
+            fallback_column->append_nulls(1);
+        }
+    }
 }
 
 class VariantReadRangeRowMaterializer {
@@ -1846,7 +1864,8 @@ public:
             const auto& binding = _batch_ctx.materialized_bindings[i];
             Column* typed_col_dst = _variant_column->mutable_typed_columns()[i].get();
             if (binding.kind == TopBinding::Kind::SCALAR) {
-                append_top_scalar_binding_value(_row, binding, typed_col_dst);
+                Column* fallback_dst = _variant_column->mutable_fallback_columns()[i].get();
+                append_top_scalar_binding_value(_row, binding, typed_col_dst, fallback_dst);
             } else {
                 // When the base value column is null (fully-shredded row), _row_value is an
                 // empty string_view which is not a valid VariantValue.  Use the default null
@@ -2049,11 +2068,11 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, _requested_shredded_paths, &collected_bindings);
 
-    // If any binding is demoted to VARIANT (type mismatch), signal the caller to use the normal
-    // per-row path. Shredded fields are already populated so the caller skips re-reading them.
+    // If any binding is VARIANT or has fallback values (which need the row metadata), signal the caller to use
+    // the normal per-row path. Shredded fields are already populated so the caller skips re-reading them.
     std::vector<TopBinding> materialized_bindings = select_materialized_bindings(collected_bindings, num_rows);
     for (const auto& b : materialized_bindings) {
-        if (b.kind == TopBinding::Kind::VARIANT) {
+        if (b.kind == TopBinding::Kind::VARIANT || b.with_fallback) {
             return false;
         }
     }
@@ -2192,14 +2211,17 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     std::vector<std::string> typed_paths;
     std::vector<TypeDescriptor> typed_types;
     MutableColumns typed_columns;
+    MutableColumns fallback_columns;
     typed_paths.reserve(materialized_bindings.size());
     typed_types.reserve(materialized_bindings.size());
     typed_columns.reserve(materialized_bindings.size());
+    fallback_columns.reserve(materialized_bindings.size());
     for (const auto& binding : materialized_bindings) {
         typed_paths.emplace_back(binding.path);
         typed_types.emplace_back(binding.type);
         // One-level only: SCALAR → scalar column, VARIANT → plain VariantColumn (no nested typed_columns).
         typed_columns.emplace_back(ColumnHelper::create_column(binding.type, true));
+        fallback_columns.emplace_back(binding.with_fallback ? VariantColumn::create_fallback_column() : nullptr);
     }
     NullColumn reconstructed_null_column(num_rows);
     auto& reconstructed_nulls = reconstructed_null_column.get_data();
@@ -2211,7 +2233,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
 
     variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
-                                         BinaryColumn::create(), BinaryColumn::create());
+                                         std::move(fallback_columns), BinaryColumn::create(), BinaryColumn::create());
 
     // Per-row materialization path keeps the top-level metadata/value as the base remain
     // payload. Shredded bindings are stored separately in typed_columns so full-row
