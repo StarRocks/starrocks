@@ -444,10 +444,6 @@ private:
     // In that case metadata/value base payload columns are never needed and can be skipped
     // entirely (IO range, offset-index selection, and data read).
     bool _skip_base_payload = false;
-    // Cached auto-discovered paths when _requested_shredded_paths is empty (request-all-paths mode).
-    // _shredded_fields is fixed after construction, so this only needs to be computed once.
-    mutable std::vector<VariantPath> _cached_auto_paths;
-    mutable bool _auto_paths_cached = false;
 };
 
 // A thin, read-only wrapper ColumnReader that exposes zone-map filtering for a specific

@@ -5087,4 +5087,126 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path
     ASSERT_NE(-1, variant_col->find_shredded_path("events"));
 }
 
+// variant_shredding_nested_residual.parquet (see gen_variant_shredding_nested_residual.py) shreds
+// `commit.collection` and keeps the other fields of `commit` in the residual `typed_value.commit.value`.
+static const char* kNestedResidualVariantFile =
+        "./be/test/formats/parquet/test_data/variant_shredding_nested_residual.parquet";
+
+static std::string variant_row_json(const VariantColumn* variant_col, size_t row) {
+    VariantRowValue value;
+    EXPECT_NE(variant_col->get_row_value(row, &value), nullptr);
+    auto json = value.to_json();
+    EXPECT_TRUE(json.ok()) << json.status().to_string();
+    return json.ok() ? json.value() : std::string();
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    // The residual of `commit` is only reachable through `commit` itself.
+    ASSERT_NE(-1, variant_col->find_shredded_path("commit"));
+    ASSERT_EQ(-1, variant_col->find_shredded_path("commit.collection"));
+
+    ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
+              variant_row_json(variant_col, 0));
+    ASSERT_EQ(R"({"commit":{"collection":"like"},"kind":"commit"})", variant_row_json(variant_col, 1));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
+    ASSERT_TRUE(nullable->is_null(3));
+    // A row whose only payload is the residual of `commit` is not null.
+    ASSERT_FALSE(nullable->is_null(4));
+    ASSERT_EQ(R"({"commit":{"rev":"r1"}})", variant_row_json(variant_col, 4));
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual_with_access_path) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
+
+    // data.commit.record is not shredded: it lives in the residual of the shredded `commit`.
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    ASSIGN_OR_ABORT(auto commit, ColumnAccessPath::create(TAccessPathType::FIELD, "commit", 0, root->absolute_path()));
+    ASSIGN_OR_ABORT(auto record,
+                    ColumnAccessPath::create(TAccessPathType::FIELD, "record", 0, commit->absolute_path()));
+    commit->children().emplace_back(std::move(record));
+    root->children().emplace_back(std::move(commit));
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    int record_idx = variant_col->find_shredded_path("commit.record");
+    ASSERT_NE(-1, record_idx);
+    const Column* record_col = variant_col->typed_column_by_index(record_idx);
+    ASSERT_FALSE(record_col->is_null(0));
+    const auto* record_variant =
+            down_cast<const VariantColumn*>(down_cast<const NullableColumn*>(record_col)->data_column().get());
+    ASSERT_EQ(R"({"text":"hello"})", variant_row_json(record_variant, 0));
+    ASSERT_TRUE(record_col->is_null(1));
+    ASSERT_TRUE(record_col->is_null(2));
+    ASSERT_TRUE(nullable->is_null(3));
+}
+
+TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_access_path) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
+
+    // The extended access path the FE emits for a virtual column of get_variant_string(data, '$.commit.collection')
+    // describes that virtual column, not `data`: the full `data` column must not be narrowed to it.
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_type_desc(TypeDescriptor::create_varchar_type(1048576).to_thrift());
+    TColumnAccessPath tcommit;
+    tcommit.__set_type(TAccessPathType::FIELD);
+    tcommit.__set_children({tleaf});
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_extended(true);
+    troot.__set_children({tcommit});
+    std::vector<std::string> resolved = {"data", "commit", "collection"};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> { return resolved[resolve_index++]; };
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(troot, resolver));
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
+              variant_row_json(variant_col, 0));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
+}
+
 } // namespace starrocks::parquet

@@ -79,6 +79,30 @@ const ShreddedFieldNode* find_shredded_field_node_for_path(const std::vector<Shr
     return found_node;
 }
 
+// Returns the deepest shredded node on `path` when `path` itself is not shredded, or nullptr when
+// `path` is shredded or no prefix of it is. The value at `path` then lives in that node's residual
+// `value`, since a field shredded in typed_value never appears in its parent's residual.
+const ShreddedFieldNode* find_deepest_shredded_ancestor_for_path(const std::vector<ShreddedFieldNode>& shredded_fields,
+                                                                 const VariantPath& path) {
+    const std::vector<ShreddedFieldNode>* current = &shredded_fields;
+    const ShreddedFieldNode* ancestor = nullptr;
+    for (const auto& seg : path.segments) {
+        if (!seg.is_object()) break;
+        const ShreddedFieldNode* found_node = nullptr;
+        for (const auto& node : *current) {
+            if (node.name == seg.key) {
+                found_node = &node;
+                break;
+            }
+        }
+        if (found_node == nullptr) return ancestor;
+        ancestor = found_node;
+        current = &found_node->children;
+    }
+    // Every object segment is shredded: the path itself (or its array boundary) is the node.
+    return nullptr;
+}
+
 Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
                                    const TypeDescriptor& target_type_desc, ObjectPool* pool,
                                    std::vector<const ColumnPredicate*>* rewritten_predicates) {
@@ -836,6 +860,21 @@ static bool _should_read_shredded_field_node(const ShreddedFieldNode& node,
     return false;
 }
 
+// Returns true when `node` has a shredded child at the segment of `path` just below `node`.
+// Requires node.parsed_full_path to be a strict prefix of `path`.
+static bool _has_child_on_path(const ShreddedFieldNode& node, const VariantPath& path) {
+    const VariantSegment& seg = path.segments[node.parsed_full_path.segments.size()];
+    if (!seg.is_object()) {
+        return false;
+    }
+    for (const auto& child : node.children) {
+        if (child.name == seg.key) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Returns true when the node's own columns (value / typed_value / array_element_value) should
 // be read from disk. "Visiting" a node is not the same as reading its columns:
 //   - Ancestor nodes must be visited so recursion can reach the requested leaves, but their
@@ -855,6 +894,11 @@ static bool _should_read_shredded_field_node_columns(const ShreddedFieldNode& no
         // ARRAY node: its offsets are needed by child readers even when the request targets
         // a deeper descendant, so read whenever the node is an ancestor of a requested path.
         if (node.kind == ShreddedFieldNode::Kind::ARRAY && node.parsed_full_path.is_ancestor_or_same(path)) {
+            return true;
+        }
+        // The request targets a descendant that is not shredded below this node: it can only live in
+        // this node's residual `value`, so the node must be read to rebuild it.
+        if (node.parsed_full_path.is_strict_prefix_of(path) && !_has_child_on_path(node, path)) {
             return true;
         }
     }
@@ -1385,25 +1429,31 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
 
 // Auto-discover binding paths from the shredded_fields tree when no explicit shredded_paths are
 // provided.  Stops at ARRAY boundaries (does not recurse into array element children) and at SCALAR
-// leaves.  Struct-like NONE nodes are recursed.
-static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes,
+// leaves.  A NONE node whose `value` is non-null in some row of the batch is emitted and rebuilt
+// from that value plus its children: it is either a fallback-only field, whose data lives only in
+// its own `value`, or a partially shredded object, whose non-shredded fields live only there.
+// Other struct-like NONE nodes are recursed.
+static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes, size_t num_rows,
                                           std::vector<VariantPath>* paths) {
     for (const auto& node : nodes) {
         if (node.kind != ShreddedFieldNode::Kind::NONE) {
             // SCALAR leaf or ARRAY boundary — emit and stop recursing.
             paths->push_back(node.parsed_full_path);
+        } else if (ParquetUtils::has_non_null_binary_value(node.value_column.get(), num_rows)) {
+            // Fallback-only field or partially shredded object — emit it with its value and stop recursing.
+            paths->push_back(node.parsed_full_path);
         } else if (!node.children.empty()) {
             // Struct-like grouping node — recurse into children.
-            collect_all_top_binding_paths(node.children, paths);
+            collect_all_top_binding_paths(node.children, num_rows, paths);
         }
-        // NONE node with no children: pure remain-binary; no typed binding needed.
+        // NONE node with no children and no value in this batch: nothing to bind.
     }
 }
 
 // Guided by shredded_paths: each path maps to SCALAR or VARIANT typed_column entry.
 // If a requested path is not found in current file/row-group shredded fields, keep it as VARIANT
 // with null node so output typed_columns keep request-shape stability.
-// When shredded_paths is empty, all paths are auto-discovered from the nodes tree.
+// Callers resolve the paths first: in request-all-paths mode they pass the auto-discovered ones.
 //
 // Accepts pre-parsed VariantPath objects directly to avoid string→VariantPath round-trips.
 // Callers must not pass string-form paths.
@@ -1420,14 +1470,7 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
     if (nodes.empty()) {
         return;
     }
-    std::vector<VariantPath> auto_paths;
-    const std::vector<VariantPath>* effective_paths = &shredded_paths;
-    if (shredded_paths.empty()) {
-        collect_all_top_binding_paths(nodes, &auto_paths);
-        effective_paths = &auto_paths;
-        if (effective_paths->empty()) return;
-    }
-    for (const auto& path : *effective_paths) {
+    for (const auto& path : shredded_paths) {
         // Derive the canonical string form for binding.path (used in error messages).
         // Paths in shredded_paths are object-segment-only (guaranteed by add_path validation),
         // so to_shredded_path() always succeeds here.
@@ -1437,11 +1480,13 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
 
         const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
         if (node == nullptr) {
-            // Path requested but not shredded in this file/RG: keep requested typed path.
+            // Path requested but not shredded in this file/RG: keep requested typed path. When a prefix of
+            // it is shredded, the value lives in the residual of the deepest shredded ancestor, so the
+            // binding is rebuilt from that node; otherwise it is sought from the top-level payload.
             out->push_back({.kind = TopBinding::Kind::VARIANT,
                             .path = std::move(path_str),
                             .type = variant_type_desc(),
-                            .node = nullptr,
+                            .node = find_deepest_shredded_ancestor_for_path(nodes, path),
                             .parsed_path = path});
             continue;
         }
@@ -1579,6 +1624,18 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
             append_null();
             return Status::OK();
         }
+        const size_t node_depth = binding.node->parsed_full_path.segments.size();
+        if (node_depth < binding.parsed_path.segments.size()) {
+            // binding.node is the deepest shredded ancestor of the requested path: seek the rest of the
+            // path in the rebuilt ancestor value.
+            auto field = VariantPath::seek_view((*value)->as_ref(), binding.parsed_path, node_depth);
+            if (!field.ok()) {
+                append_null();
+                return Status::OK();
+            }
+            append_value_ref(field.value());
+            return Status::OK();
+        }
         append_value(**value);
         return Status::OK();
     }
@@ -1599,7 +1656,9 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
     return Status::OK();
 }
 
-// Collect all top-row-indexed typed_value_column pointers from the shredded field tree.
+// Collect all top-row-indexed typed_value_column and value_column pointers from the shredded field tree.
+// A field's value_column holds its fallback or, for a partially shredded object, its residual fields, so a
+// row whose only payload is there is still a non-null row.
 // ARRAY node children are element-indexed, not row-indexed, so they are excluded.
 // The result is used to build the typed-value presence bitmap in a single column-level pass
 // rather than per-row tree traversal, which is more cache-friendly.
@@ -1609,6 +1668,9 @@ static void collect_row_typed_value_columns(const std::vector<ShreddedFieldNode>
         if (node.typed_value_column != nullptr) {
             out->push_back(node.typed_value_column.get());
         }
+        if (node.value_column != nullptr) {
+            out->push_back(node.value_column.get());
+        }
         // Do not recurse into ARRAY children: they use element-level indices, not row indices.
         if (node.kind != ShreddedFieldNode::Kind::ARRAY) {
             collect_row_typed_value_columns(node.children, out);
@@ -1616,7 +1678,7 @@ static void collect_row_typed_value_columns(const std::vector<ShreddedFieldNode>
     }
 }
 
-// Build a per-row bitmap: bitmap[i] = true when at least one typed_value_column has a
+// Build a per-row bitmap: bitmap[i] = true when at least one typed_value_column or value_column has a
 // non-null value at row i.  Uses a column-level scan (cache-friendly) instead of a
 // per-row tree traversal, giving O(num_leaf_cols * num_rows) with simple inner loops.
 static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& shredded_fields, size_t num_rows,
@@ -2115,13 +2177,14 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     const size_t num_rows = metadata_column->size();
 
     // When no explicit paths are requested, auto-discover paths from the shredded field tree.
-    // The tree is fixed after construction, so cache the result to avoid repeated traversal.
-    if (_requested_shredded_paths.empty() && !_auto_paths_cached) {
-        collect_all_top_binding_paths(_shredded_fields, &_cached_auto_paths);
-        _auto_paths_cached = true;
+    // Discovery depends on whether this batch carries residual values of partially shredded objects,
+    // so it runs per batch.
+    std::vector<VariantPath> auto_paths;
+    if (_requested_shredded_paths.empty()) {
+        collect_all_top_binding_paths(_shredded_fields, num_rows, &auto_paths);
     }
     const std::vector<VariantPath>& effective_paths =
-            _requested_shredded_paths.empty() ? _cached_auto_paths : _requested_shredded_paths;
+            _requested_shredded_paths.empty() ? auto_paths : _requested_shredded_paths;
 
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);

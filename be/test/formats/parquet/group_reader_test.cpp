@@ -4055,9 +4055,33 @@ TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyWhenFullColumnAccessI
     subfield_root->children()[0]->children().emplace_back(std::move(field_b));
     column_access_paths.emplace_back(std::move(subfield_root));
 
-    auto hints = build_variant_shredded_hints(&column_access_paths, "data");
+    auto hints = build_variant_shredded_hints(&column_access_paths, "data", false);
     EXPECT_TRUE(hints.shredded_paths.empty());
     EXPECT_TRUE(hints.parsed_shredded_paths.empty());
+}
+
+TEST_F(GroupReaderTest, GetVariantShreddedHintsSkipsExtendedAccessPathUnlessIncluded) {
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_type_desc(TypeDescriptor::create_varchar_type(1048576).to_thrift());
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_extended(true);
+    troot.__set_children({tleaf});
+    std::vector<std::string> resolved = {"data", "kind"};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> { return resolved[resolve_index++]; };
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(troot, resolver));
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    column_access_paths.emplace_back(std::move(root));
+
+    // A reader of the full column ignores the extended path of a virtual subfield column.
+    auto physical_hints = build_variant_shredded_hints(&column_access_paths, "data", false);
+    EXPECT_TRUE(physical_hints.shredded_paths.empty());
+    // A hidden source that only feeds the virtual column reads exactly that subfield.
+    auto hidden_hints = build_variant_shredded_hints(&column_access_paths, "data", true);
+    ASSERT_EQ(1u, hidden_hints.shredded_paths.size());
+    EXPECT_EQ("kind", hidden_hints.shredded_paths[0]);
 }
 
 // ── Decimal virtual column fallback tests ──────────────────────────────────────
