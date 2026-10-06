@@ -78,6 +78,7 @@
 #include <system_error>
 
 #include "base/path/file_util.h"
+#include "base/simd/filter.h"
 #include "base/string/string_parser.hpp"
 #include "base/system/errno.h"
 #include "common/config_runtime_fwd.h"
@@ -420,6 +421,9 @@ void CpuInfo::init() {
     _init_numa();
     _init_cache_info();
     initialized_ = true;
+#if defined(__aarch64__)
+    SIMD::Filter::detail::set_sve2_enabled(is_supported(ARM_SVE2));
+#endif
 }
 
 void CpuInfo::_init_numa() {

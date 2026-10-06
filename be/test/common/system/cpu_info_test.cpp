@@ -17,6 +17,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "base/simd/filter.h"
 #include "gtest/gtest.h"
 
 namespace starrocks {
@@ -409,5 +410,14 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
     EXPECT_FALSE(flags_neon_only & CpuInfo::ARM_AES);
 }
 #endif
+
+TEST_F(CpuInfoTest, init_publishes_sve2_to_simd_filter) {
+#if defined(__aarch64__)
+    CpuInfo::init();
+    EXPECT_EQ(CpuInfo::is_supported(CpuInfo::ARM_SVE2), SIMD::Filter::detail::is_sve2_enabled());
+#else
+    GTEST_SKIP() << "ARM_SVE2 capability exists on AArch64 only";
+#endif
+}
 
 } // namespace starrocks
