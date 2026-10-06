@@ -25,6 +25,12 @@ namespace detail {
 // implementation in the .cpp and free of higher-level type dependencies.
 size_t filter_range(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from, size_t to);
 
+// Runtime capability control for SVE2 stream compaction.
+// Initialized at startup by CpuInfo::init() in Common.
+// Defaults to false (safe NEON fallback).
+void set_sve2_enabled(bool enabled);
+bool is_sve2_enabled();
+
 #if defined(__x86_64__)
 size_t compress_avx2_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selector, size_t from, size_t to);
 size_t compress_avx2_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selector, size_t from, size_t to);

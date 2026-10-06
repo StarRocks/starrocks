@@ -15,6 +15,7 @@
 #include "base/simd/filter.h"
 
 #include <array>
+#include <atomic>
 #include <cstring>
 
 #include "base/simd/multi_version.h"
@@ -548,6 +549,20 @@ MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_siz
 #endif // __x86_64__
 
 } // namespace
+
+namespace detail {
+namespace {
+std::atomic<bool> g_sve2_enabled{false};
+} // namespace
+
+void set_sve2_enabled(bool enabled) {
+    g_sve2_enabled.store(enabled, std::memory_order_relaxed);
+}
+
+bool is_sve2_enabled() {
+    return g_sve2_enabled.load(std::memory_order_relaxed);
+}
+} // namespace detail
 
 size_t detail::filter_range(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                             size_t to) {

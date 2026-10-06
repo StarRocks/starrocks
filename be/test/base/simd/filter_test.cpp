@@ -1307,4 +1307,22 @@ PARALLEL_TEST(SimdFilterTest, mixed_group_within_single_batch) {
     }
 }
 
+// RAII guard to ensure test execution does not leak modified state to subsequent tests
+struct Sve2HookGuard {
+    explicit Sve2HookGuard(bool value) : _prev(SIMD::Filter::detail::is_sve2_enabled()) {
+        SIMD::Filter::detail::set_sve2_enabled(value);
+    }
+    ~Sve2HookGuard() { SIMD::Filter::detail::set_sve2_enabled(_prev); }
+    bool _prev;
+};
+
+PARALLEL_TEST(SimdFilterTest, sve2_hook_defaults_off_and_round_trips) {
+    ASSERT_FALSE(SIMD::Filter::detail::is_sve2_enabled());
+    {
+        Sve2HookGuard on(true);
+        ASSERT_TRUE(SIMD::Filter::detail::is_sve2_enabled());
+    }
+    ASSERT_FALSE(SIMD::Filter::detail::is_sve2_enabled());
+}
+
 } // namespace starrocks
