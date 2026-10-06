@@ -1126,13 +1126,13 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
 //   with shredded fields). We collect overlays per element and use VariantBuilder to reconstruct.
 // - ARRAY without children (fully-typed scalar array): The typed_value_column holds the array data directly,
 //   with no shredded sub-paths. We extract elements directly from the typed array's elements_column.
-// `base_value` is the node's own `value` for this row, or nullopt when it has none. It cannot be told apart by its
+// `node_value` is the node's own `value` for this row, or nullopt when it has none. It cannot be told apart by its
 // bytes: a variant null (a JSON null at the array path) has the same bytes as VariantValue::kEmptyValue.
 static StatusOr<std::optional<VariantRowValue>> _rebuild_array_overlay(size_t row, const ShreddedFieldNode& array_node,
                                                                        std::string_view metadata_raw,
-                                                                       std::optional<std::string_view> base_value,
+                                                                       std::optional<std::string_view> node_value,
                                                                        int depth = 0) {
-    const std::string_view base_array_raw = base_value.value_or(VariantValue::kEmptyValue);
+    const std::string_view base_array_raw = node_value.value_or(VariantValue::kEmptyValue);
     if (depth > kMaxShreddedArrayNestingDepth) {
         LOG(WARNING) << "variant shredded array nesting depth exceeded limit (" << kMaxShreddedArrayNestingDepth
                      << ") at path='" << array_node.full_path << "'";
@@ -1143,8 +1143,8 @@ static StatusOr<std::optional<VariantRowValue>> _rebuild_array_overlay(size_t ro
     if (!ParquetUtils::get_non_null_data_column_and_row(array_node.typed_value_column.get(), row, &typed_col,
                                                         &typed_row) ||
         !typed_col->is_array()) {
-        if (base_value.has_value()) {
-            return std::optional<VariantRowValue>(VariantRowValue(metadata_raw, *base_value));
+        if (node_value.has_value()) {
+            return std::optional<VariantRowValue>(VariantRowValue(metadata_raw, *node_value));
         }
         return std::nullopt;
     }
