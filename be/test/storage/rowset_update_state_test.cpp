@@ -453,13 +453,20 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     manager->index_cache().release(index_entry);
 }
 
+// Primary keys must be written in sorted order, within a segment and across the segments of a rowset.
+// Zero-pad the number so that the lexicographic order of the keys matches their numeric order.
+static std::string make_pk(size_t k) {
+    std::string digits = std::to_string(k);
+    return "key_" + std::string(digits.size() < 6 ? 6 - digits.size() : 0, '0') + digits;
+}
+
 static std::vector<std::vector<std::string>> make_segment_keys(size_t num_segments, size_t rows_per_segment,
                                                                size_t key_begin) {
     std::vector<std::vector<std::string>> segment_keys(num_segments);
     size_t key = key_begin;
     for (auto& keys : segment_keys) {
         for (size_t i = 0; i < rows_per_segment; i++) {
-            keys.emplace_back("key_" + std::to_string(key++));
+            keys.emplace_back(make_pk(key++));
         }
     }
     return segment_keys;
@@ -547,9 +554,9 @@ TEST_F(RowsetUpdateStateTest, apply_multi_segment_varchar_upserts) {
     ASSERT_OK(read_varchar_pk_rows(_tablet, 3, &rows));
     ASSERT_EQ(kOverlapBegin + kTotalRows, rows.size());
     for (size_t k = 0; k < kOverlapBegin + kTotalRows; k++) {
-        auto it = rows.find("key_" + std::to_string(k));
-        ASSERT_TRUE(it != rows.end()) << "missing key_" << k;
-        ASSERT_EQ(k < kOverlapBegin ? 1 : 2, it->second) << "key_" << k;
+        auto it = rows.find(make_pk(k));
+        ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
+        ASSERT_EQ(k < kOverlapBegin ? 1 : 2, it->second) << make_pk(k);
     }
 }
 
@@ -621,10 +628,10 @@ TEST_F(RowsetUpdateStateTest, compaction_without_light_publish_varchar_pk) {
     ASSERT_OK(read_varchar_pk_rows(_tablet, 4, &rows));
     ASSERT_EQ(450u, rows.size());
     for (size_t k = 0; k < 450; k++) {
-        auto it = rows.find("key_" + std::to_string(k));
-        ASSERT_TRUE(it != rows.end()) << "missing key_" << k;
+        auto it = rows.find(make_pk(k));
+        ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
         const int16_t expected = k < 100 ? 3 : (k < 150 ? 1 : 2);
-        ASSERT_EQ(expected, it->second) << "key_" << k;
+        ASSERT_EQ(expected, it->second) << make_pk(k);
     }
 }
 
