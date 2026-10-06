@@ -16,13 +16,11 @@
 
 #include <gtest/gtest.h>
 
-#include <chrono>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
-#include <thread>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -609,8 +607,13 @@ TEST_F(RowsetUpdateStateTest, compaction_without_light_publish_varchar_pk) {
     ASSERT_EQ(450, read_tablet(_tablet, 4));
     ASSERT_EQ(3u, _tablet->updates()->num_rowsets());
 
+    // compaction() can return OK after its apply wait times out, so wait for the compaction apply itself;
+    // otherwise the checks below could read the pre-compaction rowsets and never exercise CompactionState.
     ASSERT_OK(_tablet->updates()->compaction(_compaction_mem_tracker.get()));
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    _tablet->updates()->wait_apply_done();
+    EditVersion applied_version;
+    ASSERT_OK(_tablet->updates()->get_latest_applied_version(&applied_version));
+    ASSERT_EQ(EditVersion(4, 1), applied_version);
     ASSERT_EQ(1u, _tablet->updates()->num_rowsets());
     ASSERT_OK(_tablet->verify());
 
