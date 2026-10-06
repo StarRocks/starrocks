@@ -90,11 +90,14 @@ static VariantReadResult drill_down_column(const Column* col, size_t row, const 
                                  seg_offset + 1);
     }
 
-    // Scalar / other complex types: encode datum and seek any remaining suffix.
-    Datum datum = col->get(row);
-    auto encoded = VariantEncoder::encode_datum(datum, type_desc);
+    // Scalar / other complex types: encode the cell and seek any remaining suffix. Encode from the columns rather
+    // than a Datum: an ARRAY<VARIANT> cell (a shredded array) holds a VariantColumn, which a Datum cannot read.
+    auto encoded = VariantColumn::encode_typed_row_as_variant(col, row, type_desc);
     if (!encoded.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
-    auto val = std::move(encoded).value();
+    if (encoded.value().state == VariantColumn::EncodedVariantState::kNull) {
+        return VariantReadResult{.state = VariantReadState::kNull};
+    }
+    auto val = std::move(encoded.value().value);
     if (suffix_empty) return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(val)};
     VariantRowRef val_ref = val.as_ref();
     DCHECK(suffix != nullptr);

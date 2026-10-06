@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -1700,6 +1701,72 @@ TEST_F(VariantFunctionsTest, variant_typeof_with_fallback_values) {
     ASSERT_TRUE(result.ok()) << result.status().to_string();
     for (size_t i = 0; i < 4; ++i) {
         EXPECT_EQ("Object", result.value()->get(i).get_slice().to_string()) << "row " << i;
+    }
+}
+
+// An ARRAY<VARIANT> typed path (a shredded array) whose elements are a shredded VariantColumn, with a fallback
+// value in another row: the path is not typed-exact, so rows are read one by one and the array cell must be
+// encoded from the columns (a Datum cannot read the element VariantColumn).
+TEST_F(VariantFunctionsTest, variant_query_array_of_variant_path_with_fallback) {
+    // Elements: [{"k":1},{"k":2}] for row 0, as a typed-only element VariantColumn with typed path "k".
+    MutableColumns element_typed;
+    element_typed.emplace_back(build_nullable_int64_column({1, 2}, {0, 0}));
+    auto element_column = VariantColumn::create();
+    element_column->set_shredded_columns({"k"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(element_typed), nullptr,
+                                         nullptr);
+    auto elements = NullableColumn::create(std::move(element_column), NullColumn::create(2, 0));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    offsets->append(2);
+    auto nulls = NullColumn::create(2, 0);
+    nulls->get_data()[1] = 1;
+    MutableColumns typed;
+    typed.emplace_back(
+            NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)), std::move(nulls)));
+
+    // Row 1: "items" is the string "x", kept in the fallback column.
+    VariantRowValue string_value = create_variant_from_json_text(R"("x")");
+    auto string_raw = string_value.get_value().raw();
+    MutableColumns fallback;
+    auto fallback_column = VariantColumn::create_fallback_column();
+    fallback_column->append_nulls(1);
+    fallback_column->append_datum(Datum(Slice(string_raw.data(), string_raw.size())));
+    fallback.emplace_back(std::move(fallback_column));
+
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    auto metadata_raw = string_value.get_metadata().raw();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (int i = 0; i < 2; ++i) {
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(empty_object));
+    }
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"items"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT))},
+                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+    ColumnPtr variant_column = std::move(col);
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items", ctx.get());
+        auto result = VariantFunctions::variant_query(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(R"([{"k":1},{"k":2}])", variant_result_to_json(result.value(), 0).value());
+        EXPECT_EQ(R"("x")", variant_result_to_json(result.value(), 1).value());
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items[1].k", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(2, result.value()->get(0).get_int64());
+        EXPECT_TRUE(result.value()->is_null(1));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     }
 }
 
