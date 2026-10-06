@@ -492,27 +492,20 @@ public class ExpressionStatisticCalculator {
                         // Look up and sum matching MCV frequencies.
                         .mapToLong(val -> val.getValue())
                         .sum();
-
-                final long unMatchedMcvRows = partitionedInputMcvs.get(false)
-                        .stream()
-                        // Look up and sum matching MCV frequencies.
-                        .mapToLong(val -> val.getValue())
-                        .sum();
-
-
                 if (matchedMcvRows > 0) {
                     Map<String, Long> mcvs = new HashMap<>();
                     // We only propagate mcv values we know about, and don't do estimates for all other values.
                     if (operator.isNotIn()) {
                         mcvs.put(booleanToMcvValue(false), matchedMcvRows);
-                        mcvs.put(booleanToMcvValue(true), unMatchedMcvRows);
+                        // although the remaining `trueRows` could be utilized to estimate the nulls fraction, we only propagate exact values here.
                     } else {
                         mcvs.put(booleanToMcvValue(true), matchedMcvRows);
-                        mcvs.put(booleanToMcvValue(false), unMatchedMcvRows);
+                        // although the remaining `falseRows` could be utilized to estimate the nulls fraction, we only propagate exact values here.
                     }
+
                     resultBuilder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
                 }
-            } 
+            }
             return resultBuilder.build();
         }
 

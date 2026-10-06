@@ -1985,13 +1985,9 @@ public class ExpressionStatisticsCalculatorTest {
             Assertions.assertNotNull(resultIn.getHistogram());
             long trueRows = resultIn.getHistogram().getMCV().getOrDefault("1", 0L);
             Assertions.assertEquals(700L, trueRows);
-            long falseRows = resultIn.getHistogram().getMCV().getOrDefault("0", 0L);
-            Assertions.assertEquals(800L, falseRows);
         }
         {
             Assertions.assertNotNull(resultNotIn.getHistogram());
-            long trueRows = resultNotIn.getHistogram().getMCV().getOrDefault("1", 0L);
-            Assertions.assertEquals(800L, trueRows);
             long falseRows = resultNotIn.getHistogram().getMCV().getOrDefault("0", 0L);
             Assertions.assertEquals(700L, falseRows);
         }
