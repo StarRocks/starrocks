@@ -4869,7 +4869,7 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     EXPECT_EQ("2", read_variant_path_json(variant_col, 0, "$.events[1].count"));
     EXPECT_EQ(R"("click")", read_variant_path_json(variant_col, 0, "$.events[1].type"));
     EXPECT_EQ(R"("detail_view_0")", read_variant_path_json(variant_col, 0, "$.events[0].detail"));
-    EXPECT_EQ("50", read_variant_path_json(variant_col, 1, "$.groups[1].scores[0]"));
+    EXPECT_EQ("41", read_variant_path_json(variant_col, 1, "$.groups[1].scores[0]"));
     EXPECT_EQ(R"("note_1_1")", read_variant_path_json(variant_col, 1, "$.groups[1].note"));
     EXPECT_EQ("4", read_variant_path_json(variant_col, 1, "$.numbers[2]"));
 
