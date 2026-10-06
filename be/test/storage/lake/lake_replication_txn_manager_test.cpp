@@ -1514,7 +1514,10 @@ TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_reuses_existing_s
         ASSERT_OK(result.status());
         const auto& copied = (*result)->rowsets(0).segment_metas(0);
         EXPECT_EQ("target-encryption-meta", copied.encryption_meta());
-        EXPECT_EQ(23, copied.size());
+        // Taking the standalone path is the point: on this branch ExistingFileInfo carries no size, so a
+        // standalone segment reusing an existing target file keeps the source size, and a synthetic-offset
+        // one now does exactly the same. (main reuses the target's size there; that is a separate change.)
+        EXPECT_EQ(11, copied.size());
         EXPECT_TRUE(copied.synthetic_bundle_file_offset());
     }
 }
