@@ -28,7 +28,8 @@ struct TypeDescriptor;
 
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
 // Semantic metadata is immutable; transport restores storage metadata after validation.
-// Column-to-column copies require identical descriptors;
+// A typed materialization placeholder binds its storage metadata on the first payload copy.
+// Populated columns and concrete physical descriptors require identical storage metadata;
 // SQL assignment/coercion belongs to FE, not to these physical copy operations.
 // NULL is represented by NullableColumn. Empty bytes are only a default/null placeholder,
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
@@ -123,7 +124,8 @@ public:
                                                bool& has_null) override;
 
 private:
-    const GeoColumn& _source(const Column& src) const;
+    bool _is_storage_placeholder() const;
+    const GeoColumn& _source(const Column& src);
     struct CachedWkb {
         size_t row;
         GeoWkbInfo info;

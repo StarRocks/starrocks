@@ -1257,6 +1257,10 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
+                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
+                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
+            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:
