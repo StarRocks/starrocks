@@ -396,6 +396,7 @@ public class ReorderJoinRule extends Rule {
                     .setOutputRowCount(oldStats.getOutputRowCount())
                     .setTableRowCountMayInaccurate(oldStats.isTableRowCountMayInaccurate())
                     .setShadowColumns(oldStats.getShadowColumns())
+                    .setStatsSource(oldStats.getStatsSource())
                     .addMultiColumnStatistics(oldStats.getMultiColumnCombinedStats());
             oldStats.getColumnStatistics().forEach((col, stat) -> {
                 if (newCols.contains(col)) {
