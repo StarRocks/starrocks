@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 50
+sidebar_position: 20
 description: "StarRocks 版本命名约定：MAJOR.MINOR.PATCH 格式、预发布版本标识以及版本号的解读方式。"
 ---
 
