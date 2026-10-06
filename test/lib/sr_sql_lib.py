@@ -103,8 +103,10 @@ ALTER_RERUN_MAX_RETRY = 3
 # ALTER MATERIALIZED VIEW (RollupProcDir).
 SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
 ROLLUP_INDEX_NAME_COL, ROLLUP_STATE_COL, ROLLUP_MSG_COL = 5, 8, 9
+# An unquoted identifier. Stops at the `;` SQL-tester keeps on the statement.
+_ALTER_UNQUOTED = r"[^\s`.(;]+"
 # An identifier, possibly backquoted (and then possibly containing spaces).
-_ALTER_IDENT = r"(?:`[^`]+`|[^\s`.(]+)"
+_ALTER_IDENT = r"(?:`[^`]+`|{u})".format(u=_ALTER_UNQUOTED)
 # A possibly db-qualified name.
 _ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
 ALTER_STMT_RE = re.compile(
@@ -126,7 +128,7 @@ def alter_job_key(statement):
     if not m:
         return None
     column = "RollupIndexName" if m.group("mv") else "TableName"
-    parts = re.findall(r"`([^`]+)`|([^\s`.(]+)", m.group("alter") or m.group("index") or m.group("mv"))
+    parts = re.findall(r"`([^`]+)`|(%s)" % _ALTER_UNQUOTED, m.group("alter") or m.group("index") or m.group("mv"))
     quoted, plain = parts[-1]
     return column, quoted or plain
 
