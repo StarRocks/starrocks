@@ -3208,13 +3208,17 @@ protected:
             return count;
         };
         const size_t baseline_inherited_dels = inherited_dels(*current);
-        if (primary_key) ASSERT_GT(baseline_inherited_dels, 0);
+        if (primary_key) {
+            ASSERT_GT(baseline_inherited_dels, 0);
+        }
         size_t prior_lookup_batches = _cold_pk_lookup_batches;
         size_t prior_deleted_keys = _cold_pk_deleted_keys_checked;
         ASSIGN_OR_ABORT(auto baseline_signature, semantic_reshard_signature(current));
         ASSERT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
                 << "every PK baseline must exercise a cold PK lookup batch";
-        if (primary_key) ASSERT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+        if (primary_key) {
+            ASSERT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+        }
         const auto baseline = collect_reshard_inventory(*current);
         // Conservative field census: tablet scalars plus per-rowset/segment/del,
         // sidecar and SST integer slots. Each varint can grow by at most 10 bytes.
@@ -3235,7 +3239,9 @@ protected:
             ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
             EXPECT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
                     << "every PK cycle must exercise a cold PK lookup batch";
-            if (primary_key) EXPECT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+            if (primary_key) {
+                EXPECT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+            }
             const auto inventory = collect_reshard_inventory(*current);
             EXPECT_EQ(baseline_inherited_dels, inherited_dels(*current));
             EXPECT_EQ(baseline_signature, signature);

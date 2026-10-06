@@ -1095,8 +1095,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_pre_trailing_key_add_segme
         }
         EXPECT_EQ((std::set<std::string>{"seg_lo.dat", "seg_hi.dat"}), segs);
         // Every emitted bound speaks the widened sort key.
-        if (c->range().has_lower_bound()) EXPECT_EQ(2, c->range().lower_bound().values_size());
-        if (c->range().has_upper_bound()) EXPECT_EQ(2, c->range().upper_bound().values_size());
+        if (c->range().has_lower_bound()) {
+            EXPECT_EQ(2, c->range().lower_bound().values_size());
+        }
+        if (c->range().has_upper_bound()) {
+            EXPECT_EQ(2, c->range().upper_bound().values_size());
+        }
     }
 }
 
