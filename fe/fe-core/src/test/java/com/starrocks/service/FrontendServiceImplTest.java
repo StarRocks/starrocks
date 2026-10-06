@@ -161,6 +161,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -1640,11 +1641,19 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
         Assertions.assertNull(result2.getReason());
         request.setTxnId(transactionId);
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        // Mock isLeader() instead of flipping feType: leader daemons check feType directly and stop
+        // themselves for good once it is not LEADER, which leaves later alter jobs in this class PENDING.
+        AtomicBoolean actAsFollower = new AtomicBoolean(true);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader(mockit.Invocation invocation) {
+                return !actAsFollower.get() && invocation.<Boolean>proceed();
+            }
+        };
         TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
         Assertions.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
         Assertions.assertNull(result3.getReason());
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        actAsFollower.set(false);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assertions.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
         Assertions.assertEquals("", result4.getReason());
