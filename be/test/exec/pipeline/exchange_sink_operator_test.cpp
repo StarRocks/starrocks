@@ -23,6 +23,7 @@
 #include "base/compression/block_compression.h"
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
@@ -299,6 +300,78 @@ TEST_F(SinkBufferCancelTest, cancel_with_no_inflight_rpc_is_safe) {
 
     buffer->cancel_one_sinker(_runtime_state.get());
     EXPECT_TRUE(buffer->is_finished());
+}
+
+// Records whether a sink notification arrived while the buffer was already finished, which is what
+// the event scheduler needs to move a PENDING_FINISH driver forward.
+class FinishedNotifyObserver final : public PipelineObserver {
+public:
+    explicit FinishedNotifyObserver(const SinkBuffer* buffer) : _buffer(buffer) {}
+
+    void source_trigger() override {}
+    void sink_trigger() override {
+        if (_buffer->is_finished()) {
+            notified_finished = true;
+        }
+    }
+    void cancel_trigger() override {}
+    void all_trigger() override {}
+    void runtime_filter_timeout_trigger() override {}
+    std::string debug_string() const override { return "FinishedNotifyObserver"; }
+
+    std::atomic<bool> notified_finished{false};
+
+private:
+    const SinkBuffer* _buffer;
+};
+
+// Driver 0 cancels the buffer while another sinker is still inside _try_to_send_rpc(). The cancel
+// notification sees that sinker as sending, so the buffer becomes finished only when the sinker leaves.
+// That transition must be notified too, otherwise driver 0 stays PENDING_FINISH until the query timeout.
+TEST_F(SinkBufferCancelTest, notify_when_last_sender_leaves_after_cancel) {
+    auto dest_id = make_dest_id(/*lo*/ 135792468);
+    // No RPC is sent: the sinker sees _is_finishing before issuing one.
+    auto buffer = make_remote_sink_buffer(/*port*/ 1, dest_id);
+    buffer->incr_sinker(_runtime_state.get());
+    buffer->incr_sinker(_runtime_state.get());
+
+    _runtime_state->set_enable_event_scheduler(true);
+    FinishedNotifyObserver observer(buffer.get());
+    buffer->attach_observer(_runtime_state.get(), &observer);
+
+    CountDownLatch entered(1);
+    CountDownLatch release(1);
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("SinkBuffer::_try_to_send_rpc:after_incr_sending");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("SinkBuffer::_try_to_send_rpc:after_incr_sending", [&](void*) {
+        entered.count_down();
+        release.wait();
+    });
+
+    std::thread sender([&]() {
+        auto request = make_request(dest_id, /*port*/ 1, /*stub*/ nullptr);
+        EXPECT_OK(buffer->add_request(request));
+    });
+    DeferOp join_sender([&]() {
+        release.count_down();
+        if (sender.joinable()) {
+            sender.join();
+        }
+    });
+    ASSERT_TRUE(entered.wait_for(std::chrono::seconds(10)));
+
+    buffer->cancel_one_sinker(_runtime_state.get());
+    EXPECT_FALSE(buffer->is_finished());
+    EXPECT_FALSE(observer.notified_finished);
+
+    release.count_down();
+    sender.join();
+
+    EXPECT_TRUE(buffer->is_finished());
+    EXPECT_TRUE(observer.notified_finished);
 }
 
 } // namespace starrocks::pipeline
