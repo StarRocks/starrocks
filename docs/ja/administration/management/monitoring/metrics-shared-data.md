@@ -81,6 +81,14 @@ Shared-data Dashboard には、次のカテゴリの監視メトリクスが含�
 
 - 説明: 失敗した Vacuum Deletes 操作の数。
 
+#### Vacuum Tasks Succeeded
+
+- 説明: 各 CN で正常に完了した Vacuum リクエスト数（`lake_vacuum_succeeded_tasks`）。
+
+#### Vacuum Tasks Failed
+
+- 説明: 各 CN で失敗した Vacuum リクエスト数（`lake_vacuum_failed_tasks`）。
+
 ### Loading
 
 #### Queue Size

@@ -303,6 +303,18 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：Gauge
 - 描述：存算分离集群下 Vacuum 在过去 60 秒内触发的删除重试次数。反映对象存储瞬时限流压力（SlowDown / try-again）。
 
+## `lake_vacuum_failed_tasks`
+
+- 单位：次数
+- 类型：Counter
+- 描述：仅存算分离。该 CN 处理的 Vacuum 请求中以错误结束的次数。每个请求对应该 CN 上一个分区的 Tablet 清理。
+
+## `lake_vacuum_succeeded_tasks`
+
+- 单位：次数
+- 类型：Counter
+- 描述：仅存算分离。该 CN 处理的 Vacuum 请求中成功完成的次数。每个请求对应该 CN 上一个分区的 Tablet 清理。
+
 ## `load_bytes`
 
 - 单位：字节

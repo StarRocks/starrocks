@@ -124,6 +124,9 @@ static bvar::Adder<uint64_t> g_del_fails("lake_vacuum_del_file_fails");
 static bvar::Adder<uint64_t> g_deleted_files("lake_vacuum_deleted_files");
 static bvar::LatencyRecorder g_metadata_travel_latency("lake_vacuum_metadata_travel"); // unit: ms
 static bvar::LatencyRecorder g_vacuum_txnlog_latency("lake_vacuum_delete_txnlog");
+// number of vacuum requests (one partition on one node) that succeeded or failed
+static bvar::Adder<int64_t> g_vacuum_succeeded_tasks("lake_vacuum_succeeded_tasks");
+static bvar::Adder<int64_t> g_vacuum_failed_tasks("lake_vacuum_failed_tasks");
 static bvar::LatencyRecorder g_vacuum_load_spill_latency("lake_vacuum_load_spill");
 static bvar::Adder<uint64_t> g_vacuum_load_spill_deleted_files("lake_vacuum_load_spill_deleted_files");
 static bvar::PassiveStatus<int> g_queued_delete_file_tasks("lake_vacuum_queued_delete_file_tasks",
@@ -1488,7 +1491,12 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
 void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response, int64_t deadline_ms) {
     auto st = vacuum_impl(tablet_mgr, request, response, deadline_ms);
-    LOG_IF(ERROR, !st.ok()) << "Fail to vacuum partition " << request.partition_id() << ": " << st;
+    if (st.ok()) {
+        g_vacuum_succeeded_tasks << 1;
+    } else {
+        g_vacuum_failed_tasks << 1;
+        LOG(ERROR) << "Fail to vacuum partition " << request.partition_id() << ": " << st;
+    }
     st.to_protobuf(response->mutable_status());
 }
 

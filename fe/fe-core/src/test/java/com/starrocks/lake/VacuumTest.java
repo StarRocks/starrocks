@@ -29,6 +29,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.VacuumFullRequest;
 import com.starrocks.proto.VacuumFullResponse;
@@ -161,6 +162,8 @@ public class VacuumTest {
     @Test
     public void testLastSuccVacuumVersionUpdate() throws Exception {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        long succeededBefore = MetricRepo.COUNTER_VACUUM_SUCCESS.getValue();
+        long failedBefore = MetricRepo.COUNTER_VACUUM_FAILED.getValue();
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setMetadataSwitchVersion(5L);
@@ -197,6 +200,8 @@ public class VacuumTest {
         }
         Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
         Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+        Assertions.assertEquals(succeededBefore + 2, MetricRepo.COUNTER_VACUUM_SUCCESS.getValue().longValue());
+        Assertions.assertEquals(failedBefore, MetricRepo.COUNTER_VACUUM_FAILED.getValue().longValue());
     }
 
     @Test
@@ -740,6 +745,8 @@ public class VacuumTest {
     @Test
     public void testLastSuccVacuumVersionUpdateFailed() throws Exception {
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        long succeededBefore = MetricRepo.COUNTER_VACUUM_SUCCESS.getValue();
+        long failedBefore = MetricRepo.COUNTER_VACUUM_FAILED.getValue();
         partition.setVisibleVersion(10L, System.currentTimeMillis());
         partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
@@ -769,6 +776,8 @@ public class VacuumTest {
         
         Assertions.assertEquals(4L, partition.getLastSuccVacuumVersion());
         Assertions.assertEquals(5L, partition.getMetadataSwitchVersion());
+        Assertions.assertEquals(succeededBefore, MetricRepo.COUNTER_VACUUM_SUCCESS.getValue().longValue());
+        Assertions.assertEquals(failedBefore + 1, MetricRepo.COUNTER_VACUUM_FAILED.getValue().longValue());
     }
 
     @Test

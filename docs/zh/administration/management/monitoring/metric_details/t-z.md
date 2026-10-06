@@ -281,6 +281,18 @@ description: "Alphabetical t - z"
 - 单位：计数
 - 描述：主键表中行集 COMMIT 请求总数。
 
+## `vacuum_failed`
+
+- 单位：次数
+- 类型：Counter
+- 描述：仅存算分离。Leader FE 上增量（自动）Vacuum 轮次中，某个分区的任一 Vacuum 请求发送失败或返回错误的次数。
+
+## `vacuum_success`
+
+- 单位：次数
+- 类型：Counter
+- 描述：仅存算分离。Leader FE 上增量（自动）Vacuum 轮次中，某个分区发往 CN 的所有 Vacuum 请求都成功的次数。未发出任何请求的轮次不计。
+
 ## `vector_index_cache_async_load_failure`
 
 - 类型：累计
