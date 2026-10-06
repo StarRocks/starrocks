@@ -60,6 +60,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
@@ -1181,5 +1182,61 @@ public class DatabaseTransactionMgrTest {
         @Override
         public void replayOnPrepared(TransactionState txnState) {
         }
+    }
+
+    @Test
+    public void testReplayFinalTransactionStateTwiceEnqueuesOnce() throws AnalysisException {
+        // A follower replays whatever the leader logged. setUp() already replayed txn1 as VISIBLE once;
+        // replaying the same final state again, as a fresh object like a deserialized edit log entry, must
+        // not add a second deque entry, otherwise the label cleaner pops it after the label mapping is gone.
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        // The first replay already advanced the catalog and the lake applier rejects the same version twice;
+        // the subject here is only the bookkeeping of the transaction manager, so the applier is a no-op
+        // (the batch replay path only exists for lake tables).
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+        new MockUp<LakeTableTxnLogApplier>() {
+            @Mock
+            public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+            }
+
+            @Mock
+            public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+            }
+        };
+        DatabaseTransactionMgr slaveDbTransMgr =
+                slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+
+        TransactionState replayedAgain = deserializeAgain(fakeEditLog.getTransaction(txnId1));
+        assertEquals(TransactionStatus.VISIBLE, replayedAgain.getTransactionStatus());
+        slaveTransMgr.replayUpsertTransactionState(replayedAgain);
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+        Assertions.assertSame(replayedAgain, slaveDbTransMgr.getTransactionState(txnId1));
+
+        // the batch path records the final state through the same containers
+        TransactionState replayedInBatch = deserializeAgain(fakeEditLog.getTransaction(txnId1));
+        slaveTransMgr.replayUpsertTransactionStateBatch(
+                new TransactionStateBatch(Lists.newArrayList(replayedInBatch)));
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+        Assertions.assertSame(replayedInBatch, slaveDbTransMgr.getTransactionState(txnId1));
+
+        // the label cleaner drops the single entry together with its label mapping
+        Config.label_keep_max_second = -1;
+        slaveDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertEquals(0, slaveDbTransMgr.getFinishedTxnNums());
+        assertNull(slaveDbTransMgr.getTransactionState(txnId1));
+        assertNull(slaveDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
+    }
+
+    // main carries a TransactionState copy constructor that this branch does not have. A replayed edit
+    // log entry is a freshly deserialized object, so rebuild it the way the journal does: through gson.
+    private static TransactionState deserializeAgain(TransactionState txnState) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(txnState), TransactionState.class);
     }
 }
