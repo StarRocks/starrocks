@@ -1399,18 +1399,22 @@ static bool _is_structured_array_node(const ShreddedFieldNode& node) {
     return !node.children.empty() && _is_variant_binary_array_type(node.typed_value_read_type.get());
 }
 
-// Splits a nullable/const column into its data column and null flags (nullptr when there are none).
-static const Column* _data_column_and_nulls(const Column* column, const NullData** nulls) {
+// Splits a nullable column into its data column and null column (nullptr when the column is not nullable).
+static const Column* _data_column_and_nulls(const Column* column, const NullColumn** nulls) {
     *nulls = nullptr;
     if (column == nullptr) {
         return nullptr;
     }
     if (column->is_nullable()) {
         const auto* nullable = down_cast<const NullableColumn*>(column);
-        *nulls = &nullable->null_column_data();
+        *nulls = nullable->null_column().get();
         return nullable->data_column().get();
     }
     return column;
+}
+
+static bool _is_null_at(const NullColumn* nulls, size_t row) {
+    return nulls != nullptr && nulls->get_data()[row] != 0;
 }
 
 static bool _has_non_null_cell(const Column* column) {
@@ -1518,7 +1522,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         }
     }
 
-    const NullData* element_nulls = nullptr;
+    const NullColumn* element_nulls = nullptr;
     const Column* elements = _data_column_and_nulls(typed_array.elements_column().get(), &element_nulls);
     auto metadata_column = BinaryColumn::create();
     auto remain_column = BinaryColumn::create();
@@ -1536,9 +1540,9 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         DCHECK(array_node.typed_value_read_type->type == TYPE_ARRAY);
         const TypeDescriptor& element_type = array_node.typed_value_read_type->children[0];
         const Column* element_values = nullptr;
-        const NullData* element_value_nulls = nullptr;
+        const NullColumn* element_value_nulls = nullptr;
         if (array_node.array_element_value_column != nullptr) {
-            const NullData* value_row_nulls = nullptr;
+            const NullColumn* value_row_nulls = nullptr;
             const Column* value_array =
                     _data_column_and_nulls(array_node.array_element_value_column.get(), &value_row_nulls);
             if (value_array != nullptr && value_array->is_array() &&
@@ -1549,14 +1553,14 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         }
         for (size_t e = 0; e < num_elements; ++e) {
             metadata_column->append(element_metadata[e]);
-            if (element_nulls == nullptr || !(*element_nulls)[e]) {
+            if !_is_null_at (element_nulls, e) {
                 ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(elements->get(e), element_type));
                 // Scalars do not reference the metadata dictionary, so the row metadata decodes them as well.
                 const auto raw = encoded.get_value().raw();
                 remain_column->append(Slice(raw.data(), raw.size()));
                 continue;
             }
-            if (element_values != nullptr && (element_value_nulls == nullptr || !(*element_value_nulls)[e])) {
+            if (element_values != nullptr && !_is_null_at(element_value_nulls, e)) {
                 const Slice value = down_cast<const BinaryColumn*>(element_values)->get_slice(e);
                 if (value.size > 0) {
                     remain_column->append(value);
@@ -1572,7 +1576,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         for (size_t e = 0; e < num_elements; ++e) {
             const std::string_view metadata(element_metadata[e].data, element_metadata[e].size);
             std::optional<VariantRowRef> base;
-            if (element_nulls == nullptr || !(*element_nulls)[e]) {
+            if !_is_null_at (element_nulls, e) {
                 const Slice value = element_value_binary->get_slice(e);
                 if (value.size > 0) {
                     base.emplace(metadata, std::string_view(value.data, value.size));
@@ -1605,7 +1609,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         for (size_t e = 0; e < num_elements; ++e) {
             metadata_column->append(element_metadata[e]);
             Slice base;
-            if (element_nulls == nullptr || !(*element_nulls)[e]) {
+            if !_is_null_at (element_nulls, e) {
                 base = element_value_binary->get_slice(e);
             }
             if (base.size == 0) {
@@ -1632,7 +1636,7 @@ static StatusOr<ColumnPtr> build_array_variant_column(const ShreddedFieldNode& a
     if (depth > kMaxShreddedArrayNestingDepth) {
         return Status::ResourceBusy("shredded array nesting depth limit exceeded");
     }
-    const NullData* row_nulls = nullptr;
+    const NullColumn* row_nulls = nullptr;
     const Column* typed_data = _data_column_and_nulls(array_node.typed_value_column.get(), &row_nulls);
     if (typed_data == nullptr || !typed_data->is_array()) {
         return Status::InternalError(
@@ -1644,11 +1648,13 @@ static StatusOr<ColumnPtr> build_array_variant_column(const ShreddedFieldNode& a
     const size_t num_elements = element_column->size();
     auto elements = NullableColumn::create(std::move(element_column), NullColumn::create(num_elements, 0));
     auto offsets = UInt32Column::create();
-    offsets->get_data() = typed_array->offsets().get_data();
+    const auto source_offsets = typed_array->offsets().get_data();
+    offsets->get_data().assign(source_offsets.begin(), source_offsets.end());
     auto array = ArrayColumn::create(std::move(elements), std::move(offsets));
     auto nulls = NullColumn::create(typed_array->size(), 0);
     if (row_nulls != nullptr) {
-        nulls->get_data() = *row_nulls;
+        const auto source_nulls = row_nulls->get_data();
+        std::copy(source_nulls.begin(), source_nulls.end(), nulls->get_data().begin());
     }
     auto result = NullableColumn::create(std::move(array), std::move(nulls));
     result->update_has_null();
