@@ -1553,7 +1553,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         }
         for (size_t e = 0; e < num_elements; ++e) {
             metadata_column->append(element_metadata[e]);
-            if !_is_null_at (element_nulls, e) {
+            if (!_is_null_at(element_nulls, e)) {
                 ASSIGN_OR_RETURN(auto encoded, VariantEncoder::encode_datum(elements->get(e), element_type));
                 // Scalars do not reference the metadata dictionary, so the row metadata decodes them as well.
                 const auto raw = encoded.get_value().raw();
@@ -1576,7 +1576,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         for (size_t e = 0; e < num_elements; ++e) {
             const std::string_view metadata(element_metadata[e].data, element_metadata[e].size);
             std::optional<VariantRowRef> base;
-            if !_is_null_at (element_nulls, e) {
+            if (!_is_null_at(element_nulls, e)) {
                 const Slice value = element_value_binary->get_slice(e);
                 if (value.size > 0) {
                     base.emplace(metadata, std::string_view(value.data, value.size));
@@ -1609,7 +1609,7 @@ static StatusOr<MutableColumnPtr> build_array_element_variant_column(const Shred
         for (size_t e = 0; e < num_elements; ++e) {
             metadata_column->append(element_metadata[e]);
             Slice base;
-            if !_is_null_at (element_nulls, e) {
+            if (!_is_null_at(element_nulls, e)) {
                 base = element_value_binary->get_slice(e);
             }
             if (base.size == 0) {
