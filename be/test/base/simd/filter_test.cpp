@@ -25,6 +25,11 @@
 #include <type_traits>
 #include <vector>
 
+#if defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
+
 #include "base/testutil/parallel_test.h"
 
 namespace starrocks {
@@ -33,6 +38,11 @@ namespace starrocks {
 template <typename T>
 static size_t filter_range(T* dst, const T* src, const std::vector<uint8_t>& selector, size_t from, size_t to) {
     return SIMD::Filter::filter_range(dst, src, selector.data(), from, to);
+}
+
+template <typename T>
+static size_t filter_range(T* dst, const T* src, const uint8_t* selector, size_t from, size_t to) {
+    return SIMD::Filter::filter_range(dst, src, selector, from, to);
 }
 
 PARALLEL_TEST(SimdFilterTest, in_place_filter_int32) {
@@ -1323,6 +1333,55 @@ PARALLEL_TEST(SimdFilterTest, sve2_hook_defaults_off_and_round_trips) {
         ASSERT_TRUE(SIMD::Filter::detail::is_sve2_enabled());
     }
     ASSERT_FALSE(SIMD::Filter::detail::is_sve2_enabled());
+}
+
+PARALLEL_TEST(SimdFilterTest, sve2_and_neon_paths_agree) {
+#if defined(__aarch64__) && defined(HWCAP2_SVE2)
+    if ((getauxval(AT_HWCAP2) & HWCAP2_SVE2) == 0) {
+        GTEST_SKIP() << "CPU lacks SVE2; skipping SVE2 hardware comparison";
+    }
+    const std::vector<size_t> test_sizes = {15, 32, 64, 97, 256, 511, 1024};
+    const std::vector<int> selectivities = {0, 10, 33, 50, 75, 90, 100};
+
+    for (size_t n : test_sizes) {
+        for (int sel_pct : selectivities) {
+            std::vector<uint32_t> src(n);
+            std::vector<uint8_t> selector(n);
+            for (size_t i = 0; i < n; ++i) {
+                src[i] = static_cast<uint32_t>(i * 101 + 7);
+                selector[i] =
+                        ((i * 37 + sel_pct) % 100 < static_cast<size_t>(sel_pct)) ? static_cast<uint8_t>(i % 5 + 1) : 0;
+            }
+
+            std::vector<uint32_t> dst_neon(n, 0);
+            std::vector<uint32_t> dst_sve2(n, 0);
+            std::vector<uint32_t> in_place_neon = src;
+            std::vector<uint32_t> in_place_sve2 = src;
+            size_t count_neon, count_sve2, in_count_neon, in_count_sve2;
+
+            {
+                Sve2HookGuard off(false);
+                count_neon = filter_range(dst_neon.data(), src.data(), selector.data(), 0, n);
+                in_count_neon = filter_range(in_place_neon.data(), in_place_neon.data(), selector.data(), 0, n);
+            }
+            {
+                Sve2HookGuard on(true);
+                count_sve2 = filter_range(dst_sve2.data(), src.data(), selector.data(), 0, n);
+                in_count_sve2 = filter_range(in_place_sve2.data(), in_place_sve2.data(), selector.data(), 0, n);
+            }
+
+            ASSERT_EQ(count_neon, count_sve2) << "n=" << n << " sel=" << sel_pct;
+            ASSERT_EQ(in_count_neon, in_count_sve2) << "in-place n=" << n << " sel=" << sel_pct;
+            for (size_t i = 0; i < count_neon; ++i) {
+                ASSERT_EQ(dst_neon[i], dst_sve2[i]) << "Mismatch at " << i << " (n=" << n << " sel=" << sel_pct << ")";
+                ASSERT_EQ(in_place_neon[i], in_place_sve2[i])
+                        << "In-place mismatch at " << i << " (n=" << n << " sel=" << sel_pct << ")";
+            }
+        }
+    }
+#else
+    GTEST_SKIP() << "SVE2 parity check applies to AArch64 hardware only";
+#endif
 }
 
 } // namespace starrocks

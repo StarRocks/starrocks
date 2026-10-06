@@ -354,28 +354,11 @@ __attribute__((target("avx2"))) size_t scan_avx2_any(void* dst, const void* src,
 #if defined(__ARM_NEON) && defined(__aarch64__)
 
 #if defined(__has_include)
-#if __has_include(<sys/auxv.h>) && __has_include(<asm/hwcap.h>)
-#include <asm/hwcap.h>
-#include <sys/auxv.h>
-#define STARROCKS_HAS_ARM_HWCAP 1
-#endif
-#endif
-
-#if defined(__has_include)
 #if __has_include(<arm_sve.h>)
 #define STARROCKS_HAS_ARM_SVE 1
 #include <arm_sve.h>
 #endif
 #endif
-
-inline bool cpu_has_sve2() {
-#if defined(STARROCKS_HAS_ARM_HWCAP) && defined(HWCAP2_SVE2)
-    static const bool has_sve2 = (getauxval(AT_HWCAP2) & HWCAP2_SVE2) != 0;
-    return has_sve2;
-#else
-    return false;
-#endif
-}
 
 constexpr size_t kBatchNums = 128 / 8; // selector bytes per 128-bit NEON load
 
@@ -570,7 +553,7 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
     return filter_impl(dst, src, element_size, selector, from, to);
 #elif defined(__ARM_NEON) && defined(__aarch64__)
 #if defined(STARROCKS_HAS_ARM_SVE)
-    if (cpu_has_sve2()) {
+    if (detail::is_sve2_enabled()) {
         if (element_size == 4) return FILTER_CALL(compress_sve2_w4, uint32_t);
     }
 #endif
