@@ -105,8 +105,10 @@ SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
 ROLLUP_INDEX_NAME_COL, ROLLUP_STATE_COL, ROLLUP_MSG_COL = 5, 8, 9
 # An unquoted identifier. Stops at the `;` SQL-tester keeps on the statement.
 _ALTER_UNQUOTED = r"[^\s`.(;]+"
-# An identifier, possibly backquoted (and then possibly containing spaces).
-_ALTER_IDENT = r"(?:`[^`]+`|{u})".format(u=_ALTER_UNQUOTED)
+# A backquoted identifier, which may contain spaces and `` (StarRocksLex.g4 BACKQUOTED_IDENTIFIER).
+_ALTER_QUOTED = r"`(?:[^`]|``)+`"
+# An identifier, either of the two.
+_ALTER_IDENT = r"(?:{q}|{u})".format(q=_ALTER_QUOTED, u=_ALTER_UNQUOTED)
 # A possibly db-qualified name.
 _ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
 ALTER_STMT_RE = re.compile(
@@ -128,9 +130,10 @@ def alter_job_key(statement):
     if not m:
         return None
     column = "RollupIndexName" if m.group("mv") else "TableName"
-    parts = re.findall(r"`([^`]+)`|(%s)" % _ALTER_UNQUOTED, m.group("alter") or m.group("index") or m.group("mv"))
-    quoted, plain = parts[-1]
-    return column, quoted or plain
+    names = re.findall(_ALTER_IDENT, m.group("alter") or m.group("index") or m.group("mv"))
+    # The FE drops every backquote of a backquoted identifier, `` included
+    # (AstBuilder#visitBackQuotedIdentifier), so that is the name SHOW ALTER reports.
+    return column, names[-1].replace("`", "")
 
 
 def is_watershed_cancel(state, msg):
