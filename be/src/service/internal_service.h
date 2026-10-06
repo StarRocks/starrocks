@@ -66,6 +66,11 @@ public:
                              BatchWriteMgr* batch_write_mgr);
     ~PInternalServiceImplBase() override;
 
+    // Override to intercept the call so that we can account the request and response payload sizes
+    void CallMethod(const ::google::protobuf::MethodDescriptor* method, ::google::protobuf::RpcController* controller,
+                    const ::google::protobuf::Message* request, ::google::protobuf::Message* response,
+                    ::google::protobuf::Closure* done) override;
+
     void transmit_data(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitDataParams* request,
                        ::starrocks::PTransmitDataResult* response, ::google::protobuf::Closure* done) override;
 

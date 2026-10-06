@@ -530,6 +530,10 @@ TEST_F(BackendMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("lake_txn_log_collect_orphan_partition_total"));
     ASSERT_NE(nullptr, instance->get_metric("short_circuit_request_total"));
     ASSERT_NE(nullptr, instance->get_metric("short_circuit_request_duration_us"));
+    ASSERT_NE(nullptr, instance->get_metric("internal_service_rpc_request_bytes",
+                                            MetricLabels().add("method", "transmit_chunk")));
+    ASSERT_NE(nullptr, instance->get_metric("internal_service_rpc_response_bytes",
+                                            MetricLabels().add("method", "transmit_chunk")));
     ASSERT_NE(nullptr, instance->get_metric("staros_shard_info_fallback_total"));
     ASSERT_NE(nullptr, instance->get_metric("staros_shard_info_fallback_failed_total"));
     ASSERT_NE(nullptr, instance->get_metric("meta_request_total", MetricLabels().add("type", "write")));

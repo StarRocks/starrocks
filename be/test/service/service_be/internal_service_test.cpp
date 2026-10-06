@@ -15,19 +15,23 @@
 #include "service/service_be/internal_service.h"
 
 #include <brpc/controller.h>
+#include <google/protobuf/descriptor.h>
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <string>
 
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
+#include "service/service_metrics.h"
 
 namespace starrocks {
 
@@ -252,6 +256,51 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
     }
 }
 #endif
+
+TEST_F(InternalServiceTest, test_call_method_records_rpc_payload_bytes) {
+    // The process-wide ServiceMetrics is shared with the other metric tests, so install the very
+    // same registry they use; install() is a no-op once that registry is already installed.
+    auto* process_metrics_registry = ExecEnv::GetInstance()->process_metrics_registry();
+    ASSERT_NE(nullptr, process_metrics_registry);
+    auto* registry = process_metrics_registry->root_registry();
+    auto* service_metrics = ServiceMetrics::instance();
+    service_metrics->install(registry);
+
+    const auto* method = PInternalService::descriptor()->FindMethodByName("get_load_replica_status");
+    ASSERT_NE(nullptr, method);
+    auto* method_metrics = service_metrics->internal_service_rpc_metrics(method);
+    ASSERT_NE(nullptr, method_metrics);
+    MetricLabels labels;
+    labels.add("method", "get_load_replica_status");
+    ASSERT_EQ(&method_metrics->request_bytes, registry->get_metric("internal_service_rpc_request_bytes", labels));
+    ASSERT_EQ(&method_metrics->response_bytes, registry->get_metric("internal_service_rpc_response_bytes", labels));
+
+    const int64_t request_bytes_before = method_metrics->request_bytes.value();
+    const int64_t response_bytes_before = method_metrics->response_bytes.value();
+
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
+    PLoadReplicaStatusRequest request;
+    request.mutable_load_id()->set_hi(0);
+    request.mutable_load_id()->set_lo(0);
+    request.set_txn_id(1);
+    request.set_sink_id(1);
+    request.set_node_id(1);
+    request.add_tablet_ids(1);
+    PLoadReplicaStatusResult response;
+    brpc::Controller cntl;
+    const std::string attachment = "0123456789";
+    cntl.request_attachment().append(attachment);
+    MockClosure closure;
+
+    service.CallMethod(method, &cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(1, response.replica_statuses_size());
+    ASSERT_EQ(request_bytes_before + static_cast<int64_t>(request.ByteSizeLong() + attachment.size()),
+              method_metrics->request_bytes.value());
+    ASSERT_EQ(response_bytes_before + static_cast<int64_t>(response.ByteSizeLong()),
+              method_metrics->response_bytes.value());
+}
 
 TEST_F(InternalServiceTest, test_get_load_replica_status) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), nullptr, _load_channel_mgr.get());
