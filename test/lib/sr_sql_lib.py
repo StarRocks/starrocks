@@ -2704,8 +2704,12 @@ class StarrocksSQLApiLib(object):
         that job has landed. The explicit form of the statement followed by wait_alter_table_finish:
         being handed the statement, it needs no statement matching to retry a watershed cancel
         (ALTER_RERUN_MSG), which it does like wait_alter_table_finish, through _resubmit_alter.
-        Any other outcome than FINISHED fails, and `timeout` bounds the whole call, retries
-        included.
+        Any other outcome than FINISHED fails.
+
+        `timeout` bounds waiting for the job and for the table, retries included, and no statement
+        is submitted once it has passed. The statements themselves (the SHOWs and each submission
+        of `sql`) are not interrupted: they run under the connection's own timeouts, so a slow one
+        can take the call past `timeout`.
 
         The job is told apart by JobId: the newest id is read before `sql` is submitted, and since
         a job is registered within the DDL's own execution (see wait_alter_table_finish), a newer
