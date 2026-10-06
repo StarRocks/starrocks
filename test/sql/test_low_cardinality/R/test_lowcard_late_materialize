@@ -93,7 +93,6 @@ select x.k1, x.v1, y.v1 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 4	a4	a4
 5	a5	a5
 -- !result
-
 -- name: test_lowcard_late_materialize_force_encode @sequential
 CREATE TABLE `lm_force_dict` (
   `k1` bigint NULL,
