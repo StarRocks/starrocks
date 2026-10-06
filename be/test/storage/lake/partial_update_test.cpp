@@ -15,8 +15,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <map>
+#include <mutex>
 #include <random>
+#include <set>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -370,6 +373,118 @@ TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_seg
 // This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
 // records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
 // segment is flagged shared.
+// Many update files, each touching rows of every source segment, applied by concurrent segment
+// tasks. The update files' columns are read once per column batch and shared by all source segments;
+// the result must be the same as reading them for every source segment, which is what happens when
+// the memory limit does not allow keeping them.
+TEST_P(LakePartialUpdateTest, test_column_mode_many_update_files) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads update files while generating DCGs";
+    }
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    // Four source segments with distinct key ranges.
+    const int kSourceSegments = 4;
+    for (int shift = 0; shift < kSourceSegments; shift++) {
+        auto chunk = generate_data(kChunkSize, shift, false, 3);
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+    ASSERT_EQ(kChunkSize * kSourceSegments,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Keys k, k + 4, k + 8, ... so that every update file carries rows of every source segment.
+    auto strided_update = [&](int slice, int update_ratio) {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = slice + i * kSourceSegments;
+            v1[i] = v0[i] * update_ratio;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    std::atomic<int> reads{0};
+    std::mutex upt_ids_mu;
+    std::set<uint32_t> upt_ids;
+    bool keep_in_cache = true;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_get_upt_chunk:read", [&](void* arg) {
+        reads++;
+        std::lock_guard<std::mutex> l(upt_ids_mu);
+        upt_ids.insert(*static_cast<uint32_t*>(arg));
+    });
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_get_upt_chunk:keep",
+                                          [&](void* arg) { *static_cast<bool*>(arg) = keep_in_cache; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_get_upt_chunk:read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_get_upt_chunk:keep");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto run_update = [&](int update_ratio) {
+        // One column-mode update that rewrites c1 of every row, flushed as one update file per write.
+        ConfigResetGuard<int64_t> write_buffer_guard(&config::write_buffer_size, 1);
+        reads = 0;
+        upt_ids.clear();
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (int slice = 0; slice < kSourceSegments; slice++) {
+            auto chunk = strided_update(slice, update_ratio);
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+        ASSERT_EQ(kChunkSize * kSourceSegments, check(version, [update_ratio](int c0, int c1, int c2) {
+                      return (c0 * update_ratio == c1) && (c0 * 4 == c2);
+                  }));
+    };
+
+    // With memory to keep the update files: each file is read once, whatever the number of source
+    // segments it touches.
+    run_update(5);
+    const int update_files = static_cast<int>(upt_ids.size());
+    EXPECT_GT(update_files, 1);
+    EXPECT_EQ(update_files, reads.load());
+
+    // Without: every read is dropped after use and every source segment reads the file again, as the
+    // code did before the cache existed. Same result, source segments x update files reads.
+    keep_in_cache = false;
+    run_update(7);
+    EXPECT_EQ(update_files, static_cast<int>(upt_ids.size()));
+    EXPECT_EQ(kSourceSegments * update_files, reads.load());
+    EXPECT_EQ(0, _update_mgr->update_state_mem_tracker()->consumption());
+}
+
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.

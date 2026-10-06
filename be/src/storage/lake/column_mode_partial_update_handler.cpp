@@ -78,6 +78,7 @@ ColumnModePartialUpdateHandler::ColumnModePartialUpdateHandler(int64_t base_vers
         : _base_version(base_version), _txn_id(txn_id), _tracker(tracker) {}
 
 ColumnModePartialUpdateHandler::~ColumnModePartialUpdateHandler() {
+    _release_upt_chunk_cache();
     _tracker->release(_memory_usage);
 }
 
@@ -303,7 +304,7 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     return Status::OK();
 }
 
-static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const ChunkUniquePtr& result_chunk) {
+static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, Chunk* result_chunk) {
     auto chunk = result_chunk->clone_empty(1024);
     while (true) {
         chunk->reset();
@@ -325,43 +326,118 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // corresponding source rows keep their previous values. Equal values let the new row
 // win, matching the existing upsert/row-mode condition-update semantics (see
 // UpdateManager::_process_single_chunk_update_with_condition).
+void ColumnModePartialUpdateHandler::_prepare_upt_chunk_cache() {
+    _release_upt_chunk_cache();
+    const uint32_t num_segments = _rowset_ptr == nullptr ? 0 : _rowset_ptr->num_segments();
+    _upt_cache.entries.reserve(num_segments);
+    for (uint32_t i = 0; i < num_segments; i++) {
+        _upt_cache.entries.emplace_back(std::make_unique<UptChunkCache::Entry>());
+    }
+}
+
+void ColumnModePartialUpdateHandler::_release_upt_chunk_cache() {
+    _upt_cache.entries.clear();
+    std::lock_guard<std::mutex> l(_upt_cache.bytes_mu);
+    _tracker->release(_upt_cache.bytes);
+    _upt_cache.bytes = 0;
+}
+
+StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_get_upt_chunk(uint32_t upt_id, const Schema& partial_schema,
+                                                                  bool* cached) {
+    *cached = false;
+    UptChunkCache::Entry* entry = upt_id < _upt_cache.entries.size() ? _upt_cache.entries[upt_id].get() : nullptr;
+    if (entry != nullptr) {
+        std::unique_lock<std::mutex> l(entry->mu);
+        // Another segment task is reading this file: share its result instead of reading it again.
+        entry->cv.wait(l, [&]() { return !entry->loading; });
+        if (entry->chunk != nullptr) {
+            TRACE_COUNTER_INCREMENT("pcu_upt_chunk_cache_hit", 1);
+            *cached = true;
+            return entry->chunk;
+        }
+        entry->loading = true;
+    }
+    bool published = false;
+    DeferOp wake_waiters([&]() {
+        // On a failed read the waiters re-check the entry, find it empty and read it themselves.
+        if (entry != nullptr && !published) {
+            std::lock_guard<std::mutex> l(entry->mu);
+            entry->loading = false;
+            entry->cv.notify_all();
+        }
+    });
+
+    TRACE_COUNTER_INCREMENT("pcu_upt_chunk_read_cnt", 1);
+    TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_get_upt_chunk:read", &upt_id);
+    // Build the update rowset's iterators with statistics local to this read, as the code did for
+    // every source segment before the cache existed. Each read consumes only its own file's iterator.
+    OlapReaderStatistics stats;
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
+    DeferOp close_iters([&]() {
+        for (auto& iter : segment_iters) {
+            if (iter != nullptr) {
+                iter->close();
+            }
+        }
+    });
+    // A nullptr iterator is a lost update-file segment ignored via
+    // experimental_lake_ignore_lost_segment. A lost upt segment produces no rowid pairs, so this
+    // upt_id should not appear here; guard anyway so read_chunk_from_update_file never dereferences
+    // a null iterator.
+    if (upt_id >= segment_iters.size() || segment_iters[upt_id] == nullptr) {
+        return ChunkPtr(nullptr);
+    }
+    ChunkPtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+    RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], upt_chunk.get()));
+    // A whole .upt file lands in one chunk, because the upt rowids index into it. Check before
+    // append_selective() reads its offsets.
+    RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update upt file chunk",
+                                                         _rowset_ptr->tablet_id(), _txn_id));
+    const int64_t bytes = upt_chunk->memory_usage();
+    _tracker->consume(bytes);
+    if (entry != nullptr) {
+        // Keep it for the other source segments this update file touches, unless the worker is
+        // already over its memory limit. Then the caller releases it after use and the next source
+        // segment that needs this file reads it again.
+        bool keep = !_tracker->any_limit_exceeded();
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_get_upt_chunk:keep", &keep);
+        std::lock_guard<std::mutex> l(entry->mu);
+        if (keep) {
+            entry->chunk = upt_chunk;
+            std::lock_guard<std::mutex> bl(_upt_cache.bytes_mu);
+            _upt_cache.bytes += bytes;
+            *cached = true;
+        }
+        entry->loading = false;
+        published = true;
+        entry->cv.notify_all();
+    }
+    return upt_chunk;
+}
+
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                                    const Schema& partial_schema,
                                                                    StreamChunkContainer container,
                                                                    int32_t condition_idx_in_partial_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
-    // build iterators
-    OlapReaderStatistics stats;
-    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
-    RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
     // handle upt files one by one
     for (const auto& each : upt_id_to_rowid_pairs) {
         const uint32_t upt_id = each.first;
-        // A nullptr iterator is a lost update-file segment ignored via
-        // experimental_lake_ignore_lost_segment. A lost upt segment produces no rowid pairs, so this
-        // upt_id should not appear here; guard anyway so read_chunk_from_update_file never dereferences
-        // a null iterator (mirrors the close() guard below).
-        if (segment_iters[upt_id] == nullptr) {
+        // 1. get chunk from upt file (read once per column batch and shared by all source segments)
+        bool cached = false;
+        ASSIGN_OR_RETURN(ChunkPtr upt_chunk, _get_upt_chunk(upt_id, partial_schema, &cached));
+        if (upt_chunk == nullptr) {
             LOG(WARNING) << "column-mode partial update skips a null update-file segment iterator, tablet: "
                          << _rowset_ptr->tablet_id() << ", upt_id: " << upt_id
                          << " (a lost segment via experimental_lake_ignore_lost_segment, or an unexpected empty slot)";
             continue;
         }
-        // 1. get chunk from upt file
-        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
-        DeferOp iter_defer([&]() {
-            if (segment_iters[upt_id] != nullptr) {
-                segment_iters[upt_id]->close();
+        DeferOp tracker_defer([&]() {
+            if (!cached) {
+                _tracker->release(upt_chunk->memory_usage());
             }
         });
-        RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], upt_chunk));
-        // A whole .upt file lands in one chunk, because the upt rowids below index into it. Check
-        // before append_selective() reads its offsets.
-        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update upt file chunk",
-                                                             _rowset_ptr->tablet_id(), _txn_id));
-        const size_t upt_chunk_size = upt_chunk->memory_usage();
-        _tracker->consume(upt_chunk_size);
-        DeferOp tracker_defer([&]() { _tracker->release(upt_chunk_size); });
         // 2. update source chunk
         std::vector<uint32_t> sorted_source_rowids;
         std::vector<uint32_t> unsorted_upt_rowids;
@@ -556,6 +632,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             ASSIGN_OR_RETURN(condition_idx_in_partial_schema,
                              _locate_condition_idx_in_partial_schema(selective_update_column_ids, condition_cid));
         }
+
+        // The update files are read once per column batch and shared by all segment tasks below.
+        // Declared before the runner so the cache outlives every task that may still hold a chunk.
+        _prepare_upt_chunk_cache();
+        DeferOp release_upt_cache([&]() { _release_upt_chunk_cache(); });
 
         // Create thread pool token for segment-level parallelism
         auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
