@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstring>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -61,6 +62,53 @@ uint64_t crc64_fallback(const void* data, int32_t bytes, uint64_t hash) {
     h1 = HashUtil::zlib_crc_hash(data, bytes, h1);
     h2 = HashUtil::zlib_crc_hash(data, bytes, h2);
     return (static_cast<uint64_t>(h1) << 32) | h2;
+}
+
+// Bitwise CRC-32C (Castagnoli, reflected poly 0x82F63B78), no pre/post inversion:
+// same semantics as the x86 _mm_crc32_* / ARM __crc32c* instructions.
+uint32_t ref_crc32c_byte(uint32_t crc, uint8_t byte) {
+    crc ^= byte;
+    for (int bit = 0; bit < 8; ++bit) {
+        crc = (crc >> 1) ^ (0x82F63B78u * (crc & 1u));
+    }
+    return crc;
+}
+
+uint32_t ref_half_swap(uint32_t h) {
+    return (h << 16) | (h >> 16);
+}
+
+// Model of HashUtil::crc_hash.
+uint32_t ref_crc_hash(const uint8_t* p, int32_t bytes, uint32_t seed) {
+    uint32_t h = seed;
+    for (int32_t i = 0; i < bytes; ++i) h = ref_crc32c_byte(h, p[i]);
+    return ref_half_swap(h);
+}
+
+// Model of HashUtil::crc_hash64: 4-byte words alternate between two accumulators
+// (h1 when the number of remaining words after this one is odd, else h2), then tail
+// bytes use the same rule over the remaining tail bytes.
+uint64_t ref_crc_hash64(const uint8_t* p, int32_t bytes, uint64_t seed) {
+    uint32_t h1 = static_cast<uint32_t>(seed >> 32);
+    uint32_t h2 = static_cast<uint32_t>(seed);
+    const int32_t words = bytes / 4;
+    const int32_t tail = bytes % 4;
+    for (int32_t w = 0; w < words; ++w) {
+        uint32_t& h = (((words - 1 - w) & 1) != 0) ? h1 : h2;
+        for (int32_t b = 0; b < 4; ++b) h = ref_crc32c_byte(h, p[w * 4 + b]);
+    }
+    const uint8_t* t = p + words * 4;
+    for (int32_t j = 0; j < tail; ++j) {
+        uint32_t& h = (((tail - 1 - j) & 1) != 0) ? h1 : h2;
+        h = ref_crc32c_byte(h, t[j]);
+    }
+    return (static_cast<uint64_t>(ref_half_swap(h2)) << 32) | ref_half_swap(h1);
+}
+
+std::vector<uint8_t> make_pattern(size_t n) {
+    std::vector<uint8_t> v(n);
+    for (size_t i = 0; i < n; ++i) v[i] = static_cast<uint8_t>((i * 31 + 17) & 0xff);
+    return v;
 }
 
 } // namespace
@@ -265,6 +313,106 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
 
     EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(aligned.data(), len, seed32));
     EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
+}
+
+// Runs on every platform: validates the test oracle itself against the library CRC32C.
+TEST(HashUtilTest, ReferenceModelMatchesCrc32cLibrary) {
+    const auto buf = make_pattern(130);
+    for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu}) {
+        for (int32_t len = 0; len <= 130; ++len) {
+            uint32_t ref = seed;
+            for (int32_t i = 0; i < len; ++i) ref = ref_crc32c_byte(ref, buf[i]);
+            const uint32_t lib = ~starrocks::crc32c::Extend(~seed, reinterpret_cast<const char*>(buf.data()), len);
+            ASSERT_EQ(ref, lib) << "len=" << len << " seed=" << seed;
+        }
+    }
+}
+
+TEST(HashUtilTest, ReferenceCrc32cCrossCheck) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C not available in this build/CPU";
+    }
+    const auto buf = make_pattern(4096 + 8);
+    std::vector<int32_t> lens;
+    for (int32_t l = 0; l <= 64; ++l) lens.push_back(l);
+    for (int32_t l : {127, 255, 1024, 4096}) lens.push_back(l);
+
+    for (int32_t offset = 0; offset <= 7; ++offset) {
+        const uint8_t* p = buf.data() + offset;
+        for (int32_t len : lens) {
+            for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu}) {
+                EXPECT_EQ(HashUtil::crc_hash(p, len, seed), ref_crc_hash(p, len, seed))
+                        << "crc_hash len=" << len << " offset=" << offset << " seed=" << seed;
+            }
+            for (uint64_t seed : {0ULL, 1ULL, 0x1234567890abcdefULL, 0xdeadbeefcafebabeULL}) {
+                EXPECT_EQ(HashUtil::crc_hash64(p, len, seed), ref_crc_hash64(p, len, seed))
+                        << "crc_hash64 len=" << len << " offset=" << offset << " seed=" << seed;
+            }
+        }
+    }
+}
+
+TEST(HashUtilTest, CrcHashDeterministicVectors) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C not available in this build/CPU";
+    }
+    const std::string_view text = "StarRocks ARM64 CRC-32C Acceleration Engine.";
+    ASSERT_EQ(text.size(), 44u);
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+    const int32_t lengths[] = {0, 1, 3, 4, 7, 8, 15, 16, 32, 44};
+
+    // Generated on x86_64 SSE4.2; ARM64 must reproduce them. If one fails, hash compatibility is broken.
+    // clang-format off
+    static constexpr uint32_t expected_h32[] = {
+            0x9DC5811Cu, 0x0762B488u, 0x60B1116Du, 0xB850D0CCu, 0xDF66F24Bu,
+            0x070CBFDAu, 0xB9E88345u, 0x3BB249D7u, 0x21184402u, 0x708E853Bu};
+    static constexpr uint64_t expected_h64[] = {
+            0xCDEF90AB56781234ULL, 0x16D4FFC656781234ULL, 0xA0C3871BFB864D51ULL, 0x74BCDAD856781234ULL,
+            0x34294B1097D2C486ULL, 0x7175EAE90A011154ULL, 0x67214794B55D5F37ULL, 0xDB7328D2A86E8C3CULL,
+            0xD7229F1598122DE0ULL, 0x54E2C29FAFDEACB0ULL};
+    // clang-format on
+
+    for (size_t i = 0; i < std::size(lengths); ++i) {
+        EXPECT_EQ(HashUtil::crc_hash(text.data(), lengths[i], seed32), expected_h32[i]) << "len=" << lengths[i];
+        EXPECT_EQ(HashUtil::crc_hash64(text.data(), lengths[i], seed64), expected_h64[i]) << "len=" << lengths[i];
+    }
+}
+
+TEST(HashUtilTest, ZeroLengthDispatch) {
+    const char dummy = 'x';
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+    if (hardware_crc_available()) {
+        EXPECT_EQ(HashUtil::hash(&dummy, 0, seed32), HashUtil::crc_hash(&dummy, 0, seed32));
+        EXPECT_EQ(HashUtil::hash64(&dummy, 0, seed64), HashUtil::crc_hash64(&dummy, 0, seed64));
+        // Zero length: only the half-swap of the seed remains.
+        EXPECT_EQ(HashUtil::crc_hash(&dummy, 0, seed32), ref_half_swap(seed32));
+    } else {
+        // Zero length: FNV-1a runs no rounds, so the seed comes back unchanged.
+        EXPECT_EQ(HashUtil::hash(&dummy, 0, seed32), seed32);
+        uint64_t murmur = 0;
+        murmur_hash3_x64_64(&dummy, 0, seed64, &murmur);
+        EXPECT_EQ(HashUtil::hash64(&dummy, 0, seed64), murmur);
+        EXPECT_EQ(HashUtil::crc_hash(&dummy, 0, seed32), HashUtil::zlib_crc_hash(&dummy, 0, seed32));
+        EXPECT_EQ(HashUtil::crc_hash64(&dummy, 0, seed64), crc64_fallback(&dummy, 0, seed64));
+    }
+}
+
+TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
+    const auto raw = make_pattern(64);
+    const uint32_t seed32 = 0x811C9DC5;
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+    for (int32_t len = 1; len <= 48; ++len) {
+        for (int32_t offset = 1; offset <= 7; ++offset) {
+            const uint8_t* unaligned = raw.data() + offset;
+            const std::vector<uint8_t> copy(unaligned, unaligned + len);
+            EXPECT_EQ(HashUtil::crc_hash(unaligned, len, seed32), HashUtil::crc_hash(copy.data(), len, seed32))
+                    << "len=" << len << " offset=" << offset;
+            EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(copy.data(), len, seed64))
+                    << "len=" << len << " offset=" << offset;
+        }
+    }
 }
 
 #if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
