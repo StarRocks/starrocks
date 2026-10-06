@@ -28,15 +28,6 @@ Chunk::Chunk() {
     _slot_id_to_index.reserve(4);
 }
 
-bool Chunk::has_large_column() const {
-    for (const auto& column : _columns) {
-        if (column != nullptr && column->has_large_column()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 Chunk::Chunk(Columns&& columns, SchemaPtr schema) : Chunk(std::move(columns), std::move(schema), nullptr) {}
 
 // TODO: FlatMap don't support std::move
@@ -601,15 +592,6 @@ void Chunk::_append_column_checked(size_t idx, ColumnPtr&& ptr) {
 
 MutableChunk::MutableChunk() {
     _slot_id_to_index.reserve(4);
-}
-
-bool MutableChunk::has_large_column() const {
-    for (const auto& column : _columns) {
-        if (column != nullptr && column->has_large_column()) {
-            return true;
-        }
-    }
-    return false;
 }
 
 MutableChunk::MutableChunk(MutableColumns columns, SchemaPtr schema)

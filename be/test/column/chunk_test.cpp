@@ -1134,25 +1134,6 @@ TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_has_large_column) {
-    auto c1 = BinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = LargeBinaryColumn::create();
-    c2->append_string("2");
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    ASSERT_TRUE(mutable_chunk->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_mutable_chunk_is_column_nullable) {
     auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
     auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
