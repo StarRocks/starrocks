@@ -601,8 +601,7 @@ TEST_F(RowsetUpdateStateTest, compaction_without_light_publish_varchar_pk) {
     ASSERT_OK(_tablet->rowset_commit(
             2, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 0), 1), 0));
     ASSERT_OK(_tablet->rowset_commit(
-            3, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 150), 2),
-            0));
+            3, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(kSegments, kRowsPerSegment, 150), 2), 0));
     ASSERT_OK(_tablet->rowset_commit(4, create_multi_segment_varchar_rowset(_tablet, make_segment_keys(1, 100, 0), 3),
                                      0));
     ASSERT_EQ(4, _tablet->updates()->max_version());
