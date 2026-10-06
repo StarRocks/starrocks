@@ -99,7 +99,8 @@ static VariantReadResult drill_down_column(const Column* col, size_t row, const 
     VariantRowRef val_ref = val.as_ref();
     DCHECK(suffix != nullptr);
     auto field = VariantPath::seek_view(val_ref, *suffix, seg_offset);
-    if (!field.ok() || field.value().is_null()) return VariantReadResult{.state = VariantReadState::kMissing};
+    // NotFound means the path does not exist; a JSON null at the path is a value.
+    if (!field.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
     return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
 }
 
@@ -168,6 +169,32 @@ void VariantPathReader::_try_match_typed(const VariantPath* path) {
         int idx = _col->find_shredded_path(*typed_key);
         if (idx < 0) continue;
 
+        // The matched path may be a partially shredded object whose residual is its fallback, with shredded
+        // descendants as their own typed paths. When the query path leads to such a descendant (the query's
+        // object keys are a prefix of it), the matched column alone misses those values: materialize instead.
+        // A query that leaves the descendants (e.g. a residual field) is answered by the matched column.
+        bool covers_typed_descendant = false;
+        for (const auto& sp : _col->parsed_shredded_paths()) {
+            if (sp.segments.size() <= object_keys.size()) {
+                continue;
+            }
+            bool is_prefix = true;
+            for (size_t i = 0; i < object_keys.size(); ++i) {
+                if (!sp.segments[i].is_object() || sp.segments[i].get_key() != object_keys[i]) {
+                    is_prefix = false;
+                    break;
+                }
+            }
+            if (is_prefix) {
+                covers_typed_descendant = true;
+                break;
+            }
+        }
+        if (covers_typed_descendant) {
+            _has_typed_child = true;
+            return;
+        }
+
         _match_index = idx;
         const size_t suffix_start = _seg_offset + prefix_len;
         if (suffix_start < path->segments.size()) {
@@ -222,7 +249,7 @@ VariantReadResult VariantPathReader::_read_typed_row(size_t row) {
             return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(fallback).value()};
         }
         auto field = VariantPath::seek_view(fallback.value().as_ref(), *suffix, 0);
-        if (!field.ok() || field.value().is_null()) {
+        if (!field.ok()) {
             return VariantReadResult{.state = VariantReadState::kMissing};
         }
         return VariantReadResult{.state = VariantReadState::kValue, .value = field.value().to_owned()};

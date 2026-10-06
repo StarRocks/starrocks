@@ -1543,4 +1543,42 @@ PARALLEL_TEST(VariantColumnTest, test_fallback_column_serde_roundtrip) {
     assert_variant_row_json(restored.get(), 2, R"({"a":{"k":1}})");
 }
 
+// A partially shredded object: path "a" has no typed value, its fallback is the residual {"x":...}, and its
+// shredded child "a.b" is a typed path. The child is listed first to check that the residual is applied before it.
+PARALLEL_TEST(VariantColumnTest, test_residual_fallback_with_shredded_child) {
+    auto residual_row = create_variant_row_from_json_text(R"({"a":{"x":1}})");
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    ASSERT_TRUE(path_a.ok());
+    auto residual = VariantPath::seek_view(residual_row.as_ref(), path_a.value());
+    ASSERT_TRUE(residual.ok());
+    std::string_view residual_raw = residual->get_value().raw();
+    std::string_view metadata_raw = residual_row.get_metadata().raw();
+
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (int i = 0; i < 2; ++i) {
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(empty_object));
+    }
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({2, 3}, {0, 0})); // a.b
+    auto residual_typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARIANT), true);
+    residual_typed->append_nulls(2);
+    typed.emplace_back(std::move(residual_typed)); // a
+    MutableColumns fallback;
+    fallback.emplace_back(nullptr);
+    auto residual_fallback = VariantColumn::create_fallback_column();
+    residual_fallback->append_datum(Datum(Slice(residual_raw.data(), residual_raw.size())));
+    residual_fallback->append_nulls(1);
+    fallback.emplace_back(std::move(residual_fallback));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a.b", "a"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARIANT)},
+                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+
+    assert_variant_row_json(col.get(), 0, R"({"a":{"b":2,"x":1}})");
+    assert_variant_row_json(col.get(), 1, R"({"a":{"b":3}})");
+}
+
 } // namespace starrocks

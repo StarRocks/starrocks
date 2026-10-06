@@ -5224,9 +5224,19 @@ TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual) {
 
     const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
     const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
-    // The residual of `commit` is only reachable through `commit` itself.
-    ASSERT_NE(-1, variant_col->find_shredded_path("commit"));
-    ASSERT_EQ(-1, variant_col->find_shredded_path("commit.collection"));
+    // The residual of `commit` is the fallback of path `commit` (its typed column stays null), and the shredded
+    // child `commit.collection` keeps its own typed path; rows are rebuilt from the residual plus the children.
+    const int commit_idx = variant_col->find_shredded_path("commit");
+    ASSERT_NE(-1, commit_idx);
+    EXPECT_EQ(TYPE_VARIANT, variant_col->shredded_types()[commit_idx].type);
+    EXPECT_TRUE(variant_col->has_any_fallback_value(commit_idx));
+    ASSERT_NE(-1, variant_col->find_shredded_path("commit.collection"));
+    // A residual field is read from the residual, a shredded child from its typed column, and the object itself
+    // merges both.
+    EXPECT_EQ(R"({"text":"hello"})", read_variant_path_json(variant_col, 0, "$.commit.record"));
+    EXPECT_EQ(R"("post")", read_variant_path_json(variant_col, 0, "$.commit.collection"));
+    EXPECT_EQ(R"({"collection":"post","record":{"text":"hello"}})", read_variant_path_json(variant_col, 0, "$.commit"));
+    EXPECT_EQ("<missing>", read_variant_path_json(variant_col, 1, "$.commit.record"));
 
     ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
               variant_row_json(variant_col, 0));

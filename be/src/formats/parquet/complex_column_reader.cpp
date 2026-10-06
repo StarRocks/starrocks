@@ -1776,24 +1776,27 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
 
 // Auto-discover binding paths from the shredded_fields tree when no explicit shredded_paths are
 // provided.  Stops at ARRAY boundaries (does not recurse into array element children) and at SCALAR
-// leaves.  A NONE node whose `value` is non-null in some row of the batch is emitted and rebuilt
-// from that value plus its children: it is either a fallback-only field, whose data lives only in
-// its own `value`, or a partially shredded object, whose non-shredded fields live only there.
-// Other struct-like NONE nodes are recursed.
+// leaves.  A NONE node whose `value` is non-null in some row of the batch is emitted: it is either a
+// fallback-only field, whose data lives only in its own `value`, or a partially shredded object, whose
+// non-shredded fields (the residual) live only there. It is bound as a path whose fallback column is that
+// `value` (see collect_top_bindings), and its children are still recursed so they keep their own typed
+// bindings, e.g. arrays below a partially shredded object stay ARRAY<VARIANT>. The row is rebuilt by
+// applying the residual at the object path first and the children on top of it.
+// Emitted parents always precede their descendants.
 static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes, size_t num_rows,
                                           std::vector<VariantPath>* paths) {
     for (const auto& node : nodes) {
         if (node.kind != ShreddedFieldNode::Kind::NONE) {
             // SCALAR leaf or ARRAY boundary — emit and stop recursing.
             paths->push_back(node.parsed_full_path);
-        } else if (ParquetUtils::has_non_null_binary_value(node.value_column.get(), num_rows)) {
-            // Fallback-only field or partially shredded object — emit it with its value and stop recursing.
-            paths->push_back(node.parsed_full_path);
-        } else if (!node.children.empty()) {
-            // Struct-like grouping node — recurse into children.
-            collect_all_top_binding_paths(node.children, num_rows, paths);
+            continue;
         }
-        // NONE node with no children and no value in this batch: nothing to bind.
+        if (ParquetUtils::has_non_null_binary_value(node.value_column.get(), num_rows)) {
+            // Fallback-only field or partially shredded object — emit its value as the path's fallback.
+            paths->push_back(node.parsed_full_path);
+        }
+        // Struct-like grouping node — recurse into children.
+        collect_all_top_binding_paths(node.children, num_rows, paths);
     }
 }
 
@@ -1804,8 +1807,13 @@ static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& 
 //
 // Accepts pre-parsed VariantPath objects directly to avoid string→VariantPath round-trips.
 // Callers must not pass string-form paths.
+// `discovered_paths` is true when `shredded_paths` come from collect_all_top_binding_paths: a struct-like (NONE)
+// node is then bound to its own `value` only (residual or fallback-only value, as a fallback column), because
+// its children are bound separately. For explicitly requested paths the children are not, so such a node is
+// rebuilt with its whole subtree into a VARIANT binding.
 static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
-                                 const std::vector<VariantPath>& shredded_paths, std::vector<TopBinding>* out) {
+                                 const std::vector<VariantPath>& shredded_paths, bool discovered_paths,
+                                 std::vector<TopBinding>* out) {
     if (out == nullptr) {
         return;
     }
@@ -1837,7 +1845,15 @@ static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
                             .parsed_path = path});
             continue;
         }
-        if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
+        if (discovered_paths && node->kind == ShreddedFieldNode::Kind::NONE) {
+            // Residual of a partially shredded object, or a fallback-only field: a VARIANT path whose typed
+            // column stays null and whose fallback column is the node's `value` (see select_materialized_bindings).
+            out->push_back({.kind = TopBinding::Kind::SCALAR,
+                            .path = std::move(path_str),
+                            .type = variant_type_desc(),
+                            .node = node,
+                            .parsed_path = path});
+        } else if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
             out->push_back({.kind = TopBinding::Kind::SCALAR,
                             .path = std::move(path_str),
                             .type = *node->typed_value_read_type,
@@ -2427,7 +2443,7 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     }
 
     std::vector<TopBinding> collected_bindings;
-    collect_top_bindings(_shredded_fields, _requested_shredded_paths, &collected_bindings);
+    collect_top_bindings(_shredded_fields, _requested_shredded_paths, false, &collected_bindings);
 
     // If any binding is VARIANT or has fallback values (which need the row metadata), signal the caller to use
     // the normal per-row path. Shredded fields are already populated so the caller skips re-reading them.
@@ -2567,7 +2583,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             _requested_shredded_paths.empty() ? auto_paths : _requested_shredded_paths;
 
     std::vector<TopBinding> collected_bindings;
-    collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);
+    collect_top_bindings(_shredded_fields, effective_paths, _requested_shredded_paths.empty(), &collected_bindings);
     std::vector<TopBinding> materialized_bindings = select_materialized_bindings(collected_bindings, num_rows);
     std::vector<std::string> typed_paths;
     std::vector<TypeDescriptor> typed_types;

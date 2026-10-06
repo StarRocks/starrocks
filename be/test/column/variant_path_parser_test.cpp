@@ -498,4 +498,28 @@ TEST_F(VariantPathTest, RejectsMalformedPaths) {
     }
 }
 
+// A path that does not exist is NotFound; a JSON null at the path is a null value.
+TEST_F(VariantPathTest, SeekViewDistinguishesMissingFromJsonNull) {
+    auto encoded = VariantEncoder::encode_json_text_to_variant(R"({"a":null,"b":{"c":1},"arr":[1,null]})");
+    ASSERT_TRUE(encoded.ok());
+    auto seek = [&](const std::string& path) {
+        auto parsed = VariantPathParser::parse(path);
+        EXPECT_TRUE(parsed.ok()) << path;
+        return VariantPath::seek_view(encoded->as_ref(), parsed.value());
+    };
+    auto json_null = seek("$.a");
+    ASSERT_TRUE(json_null.ok());
+    EXPECT_TRUE(json_null->is_null());
+    auto null_element = seek("$.arr[1]");
+    ASSERT_TRUE(null_element.ok());
+    EXPECT_TRUE(null_element->is_null());
+    EXPECT_EQ("1", seek("$.b.c")->to_owned().to_json().value());
+
+    EXPECT_TRUE(seek("$.missing").status().is_not_found());
+    EXPECT_TRUE(seek("$.b.missing").status().is_not_found());
+    EXPECT_TRUE(seek("$.arr[5]").status().is_not_found());
+    // Below a JSON null there is nothing.
+    EXPECT_TRUE(seek("$.a.x").status().is_not_found());
+}
+
 } // namespace starrocks

@@ -263,6 +263,11 @@ static bool collect_typed_overlays(const VariantColumn* column, size_t row, std:
                 .value = std::move(value.value),
         });
     }
+    // An overlay replaces the subtree at its path, so a path must be applied before its descendants: the residual
+    // of a partially shredded object (its fallback) is the base its shredded children are applied on.
+    std::stable_sort(overlays->begin(), overlays->end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.path.segments.size() < rhs.path.segments.size();
+    });
     return true;
 }
 
