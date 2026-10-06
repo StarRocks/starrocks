@@ -1704,6 +1704,83 @@ TEST_F(VariantFunctionsTest, variant_typeof_with_fallback_values) {
     }
 }
 
+// is_variant_null is TRUE only for a VARIANT null: a JSON null at a path is told apart from a missing path, and a
+// SQL NULL input is FALSE.
+TEST_F(VariantFunctionsTest, is_variant_null) {
+    auto variant_column = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    for (const char* json : {R"({"a":null})", R"({"a":1})", R"({"b":2})", "null"}) {
+        auto row = VariantEncoder::encode_json_text_to_variant(json);
+        ASSERT_TRUE(row.ok()) << row.status().to_string();
+        variant_column->append_datum(Datum(&row.value()));
+    }
+    variant_column->append_nulls(1);
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // The rows themselves: only the top-level JSON null is a VARIANT null; SQL NULL is FALSE, not NULL.
+    {
+        Columns columns{variant_column};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_FALSE(result.value()->is_nullable());
+        const std::vector<uint8_t> expected = {0, 0, 0, 1, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // On '$.a': JSON null -> TRUE, value -> FALSE, missing path / null input -> FALSE.
+    {
+        auto path = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("$.a"), variant_column->size());
+        Columns query_columns{variant_column, path};
+        ctx->set_constant_columns(query_columns);
+        auto prepared = VariantFunctions::variant_segments_prepare(ctx.get(),
+                                                                   FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepared.ok()) << prepared.to_string();
+        auto queried = VariantFunctions::variant_query(ctx.get(), query_columns);
+        ASSERT_TRUE(queried.ok()) << queried.status().to_string();
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Columns columns{queried.value()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        const std::vector<uint8_t> expected = {1, 0, 0, 0, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // Only-null and constant inputs.
+    {
+        Columns columns{ColumnHelper::create_const_null_column(3)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_EQ(3, result.value()->size());
+        EXPECT_EQ(0, result.value()->get(2).get_uint8());
+    }
+    {
+        auto null_row = VariantEncoder::encode_json_text_to_variant("null");
+        ASSERT_TRUE(null_row.ok());
+        auto data = VariantColumn::create();
+        data->append_datum(Datum(&null_row.value()));
+        Columns columns{ConstColumn::create(std::move(data), 4)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_TRUE(result.value()->is_constant());
+        ASSERT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, result.value()->get(3).get_uint8());
+    }
+
+    // Shredded rows with typed or fallback values are objects.
+    {
+        Columns columns{build_bigint_path_with_fallback_rows()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(0, result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+}
+
 // An ARRAY<VARIANT> typed path (a shredded array) whose elements are a shredded VariantColumn, with a fallback
 // value in another row: the path is not typed-exact, so rows are read one by one and the array cell must be
 // encoded from the columns (a Datum cannot read the element VariantColumn).

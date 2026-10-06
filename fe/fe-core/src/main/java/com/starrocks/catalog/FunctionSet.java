@@ -305,6 +305,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -816,6 +817,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =

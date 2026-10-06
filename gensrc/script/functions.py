@@ -1003,6 +1003,7 @@ vectorized_functions = [
      "VariantFunctions::get_variant_time",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
+    [110209, "is_variant_null", False, False, "BOOLEAN", ["VARIANT"], "VariantFunctions::is_variant_null"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
