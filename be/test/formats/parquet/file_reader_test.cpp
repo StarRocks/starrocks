@@ -27,11 +27,13 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/array_column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
@@ -45,6 +47,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
+#include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/column_materializer.h"
 #include "formats/parquet/metadata.h"
@@ -4777,6 +4780,37 @@ TEST_F(FileReaderTest, test_read_variant) {
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
 }
 
+// Reads `path` from row `row` of a VariantColumn through VariantPathReader, as JSON ("<missing>" when absent).
+static std::string read_variant_path_json(const VariantColumn* column, size_t row, const std::string& path) {
+    auto parsed = VariantPathParser::parse(path);
+    if (!parsed.ok()) {
+        return "<bad path>";
+    }
+    VariantPathReader reader;
+    reader.prepare(column, &parsed.value());
+    auto read = reader.read_row(row);
+    if (read.state != VariantReadState::kValue) {
+        return "<missing>";
+    }
+    auto json = read.value.to_json();
+    return json.ok() ? json.value() : "<bad value>";
+}
+
+// The element VariantColumn of the ARRAY<VARIANT> typed path `path`, or nullptr.
+static const VariantColumn* variant_array_element_column(const VariantColumn* column, const std::string& path) {
+    const int idx = column->find_shredded_path(path);
+    if (idx < 0) {
+        return nullptr;
+    }
+    const Column* typed = ColumnHelper::get_data_column(column->typed_column_by_index(idx));
+    if (!typed->is_array()) {
+        return nullptr;
+    }
+    const Column* elements =
+            ColumnHelper::get_data_column(down_cast<const ArrayColumn*>(typed)->elements_column().get());
+    return elements->is_variant() ? down_cast<const VariantColumn*>(elements) : nullptr;
+}
+
 TEST_F(FileReaderTest, test_read_variant_shredding) {
     const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
     auto file_reader = _create_file_reader(variant_file_path);
@@ -4821,6 +4855,24 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     ASSERT_TRUE(score_fallback.ok()) << score_fallback.status().to_string();
     EXPECT_EQ(R"("S81")", score_fallback->to_json().value());
 
+    // Shredded arrays are kept as ARRAY<VARIANT>, with the element children as typed paths of the element column.
+    const TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    for (const char* array_path : {"events", "numbers", "groups"}) {
+        EXPECT_EQ(array_of_variant, variant_col->shredded_types()[variant_col->find_shredded_path(array_path)])
+                << array_path;
+    }
+    const VariantColumn* event_elements = variant_array_element_column(variant_col, "events");
+    ASSERT_NE(nullptr, event_elements);
+    EXPECT_EQ(10, event_elements->size()); // 5 rows x 2 events
+    EXPECT_NE(-1, event_elements->find_shredded_path("type"));
+    EXPECT_NE(-1, event_elements->find_shredded_path("count"));
+    EXPECT_EQ("2", read_variant_path_json(variant_col, 0, "$.events[1].count"));
+    EXPECT_EQ(R"("click")", read_variant_path_json(variant_col, 0, "$.events[1].type"));
+    EXPECT_EQ(R"("detail_view_0")", read_variant_path_json(variant_col, 0, "$.events[0].detail"));
+    EXPECT_EQ("50", read_variant_path_json(variant_col, 1, "$.groups[1].scores[0]"));
+    EXPECT_EQ(R"("note_1_1")", read_variant_path_json(variant_col, 1, "$.groups[1].note"));
+    EXPECT_EQ("4", read_variant_path_json(variant_col, 1, "$.numbers[2]"));
+
     VariantRowValue row0;
     ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
     auto row0_json = row0.to_json();
@@ -4843,6 +4895,52 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     ASSERT_TRUE(row1_json.value().find("\"score\":\"S81\"") != std::string::npos);
     ASSERT_TRUE(row1_json.value().find("\"rank\":\"L2\"") != std::string::npos);
     ASSERT_TRUE(row1_json.value().find("\"numbers\":[2,3,4]") != std::string::npos);
+}
+
+// A shredded array requested through an access path keeps its shredded element fields: the element children have
+// element-relative paths and must be read even though they do not match the row-level requested path.
+TEST_F(FileReaderTest, test_read_variant_shredding_with_array_access_path) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    for (const char* field : {"events", "groups"}) {
+        auto field_or = ColumnAccessPath::create(TAccessPathType::FIELD, field, 0, root->absolute_path());
+        ASSERT_TRUE(field_or.ok()) << field_or.status().to_string();
+        root->children().emplace_back(std::move(field_or).value());
+    }
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    for (size_t row = 0; row < 5; ++row) {
+        EXPECT_EQ(std::to_string(row + 1), read_variant_path_json(variant_col, row, "$.events[0].count"));
+        EXPECT_EQ(std::to_string((row + 1) * 2), read_variant_path_json(variant_col, row, "$.events[1].count"));
+        EXPECT_EQ(R"("view")", read_variant_path_json(variant_col, row, "$.events[0].type"));
+        EXPECT_EQ(std::to_string(40 + row), read_variant_path_json(variant_col, row, "$.groups[1].scores[0]"));
+    }
+    VariantRowValue row0;
+    ASSERT_NE(nullptr, variant_col->get_row_value(0, &row0));
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    EXPECT_NE(std::string::npos, row0_json.value().find(R"("count":1)")) << row0_json.value();
+    EXPECT_NE(std::string::npos, row0_json.value().find(R"("scores":[40,50,60])")) << row0_json.value();
 }
 
 TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {

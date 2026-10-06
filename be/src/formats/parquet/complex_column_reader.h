@@ -316,7 +316,9 @@ enum class VariantScalarMaterializeMode : uint8_t {
 };
 
 struct TopBinding {
-    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1 };
+    // SCALAR: typed scalar column. VARIANT: VariantColumn rebuilt per row. ARRAY: ARRAY<VARIANT> whose elements are
+    // a VariantColumn built from the array node's element children (see build_array_variant_column).
+    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1, ARRAY = 2 };
     Kind kind = Kind::SCALAR;
     std::string path;
     TypeDescriptor type;
