@@ -16,8 +16,42 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 import json
+
+
+# The runner's own grammar, and it has to be exactly this. choose_cases.read_t_r_file
+# tests for the NAME_FLAG prefix literally and then pulls the name out with NAME_RE, which
+# stops at the first character outside its set -- so `-- name: test_x;` declares the case
+# `test_x`. Reading a marker any more loosely here means acting on a line the runner does
+# not read as a marker, or filtering on a name the runner does not have.
+NAME_FLAG = "-- name: "
+NAME_RE = re.compile(r"name: ([a-zA-Z0-9_-]+)")
+# choose_cases.py:444, the tag list it reads off the same line.
+TAG_RE = re.compile(r"@([a-zA-Z0-9_-]+)")
+
+
+def first_case_marker(file_path: Path) -> Optional[Tuple[int, str, str]]:
+    """The file's first case marker as (line index, line, case name), or None.
+
+    The marker is not always on line 1. A case file may open with a blank line or with an
+    ordinary comment, and a file under T/ may not be a case file at all. Everything below
+    starts here instead of reading line 1 and hoping.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+    except Exception as e:
+        print(f"❌ Cannot read file {file_path}: {e}")
+        return None
+
+    for index, line in enumerate(lines):
+        if not line.startswith(NAME_FLAG):
+            continue
+        found = NAME_RE.findall(line)
+        if found:
+            return index, line, found[0]
+    return None
 
 
 class MacTestTagger:
@@ -36,42 +70,51 @@ class MacTestTagger:
         self.tagged_files: List[str] = []
 
     def find_test_files(self) -> List[Path]:
-        """Find all test case files (files under T directory)"""
+        """Find all test case files: files under a T directory that declare a case.
+
+        Not everything under T/ is a case file. Suites keep shell helpers there too --
+        test_profile/T/test_profile_analysis.sh, test_optimize_table/T/insert.sh and five
+        others -- and those declare no case. Taking every file meant the tagger could
+        prepend a `-- name:` line to a bash script, pushing its shebang off line 1.
+        """
         test_files = []
 
         # Find all test files under T directories
         for t_dir in self.test_dir.rglob("T"):
             if t_dir.is_dir():
                 for file in t_dir.iterdir():
-                    if file.is_file() and not file.name.startswith('.'):
-                        test_files.append(file)
+                    if not file.is_file() or file.name.startswith('.'):
+                        continue
+                    if first_case_marker(file) is None:
+                        continue
+                    test_files.append(file)
 
         return sorted(test_files)
 
     def has_mac_tag(self, file_path: Path) -> bool:
-        """Check if file already has @mac tag"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                first_line = f.readline()
-                return '@mac' in first_line.lower()
-        except Exception as e:
-            print(f"❌ Cannot read file {file_path}: {e}")
+        """Whether the file's first case already carries the @mac tag.
+
+        Matched as a whole tag, the way choose_cases reads tags off the line, and on the
+        marker rather than on line 1. A substring test would say yes to @macos too.
+        """
+        marker = first_case_marker(file_path)
+        if marker is None:
             return False
+        return 'mac' in TAG_RE.findall(marker[1])
 
     def get_test_name(self, file_path: Path) -> str:
-        """Extract test name from file"""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                first_line = f.readline().strip()
-                # Match pattern: -- name: test_name @attr1 @attr2
-                match = re.match(r'--\s*name:\s*(\S+)', first_line)
-                if match:
-                    return match.group(1)
-                # If no name comment, use filename
-                return file_path.stem
-        except Exception as e:
-            print(f"❌ Cannot extract test name {file_path}: {e}")
+        """The name of the file's first case, as the runner reads it.
+
+        This name goes straight into `run.py --case_filter ^<name>$`, so it has to be the
+        name the runner has. Matching \\S+ instead would read `-- name: test_x;` as the
+        case `test_x;`, whose filter selects nothing -- and a run that selects no case
+        does not pass, so the file would be recorded as failed rather than tagged.
+        """
+        marker = first_case_marker(file_path)
+        if marker is None:
+            # find_test_files keeps these out; the filename is the historical fallback.
             return file_path.stem
+        return marker[2]
 
     def run_test(self, test_file: Path) -> bool:
         """Run a single test and return whether it passes"""
@@ -126,32 +169,29 @@ class MacTestTagger:
             return False
 
     def add_mac_tag(self, file_path: Path) -> bool:
-        """Add @mac tag to the first line of file"""
+        """Append @mac to the marker of the file's first case.
+
+        The marker is found, never invented. This used to fall back to writing a fresh
+        `-- name: <filename> @mac` line at the top whenever line 1 was not a marker, which
+        is how T/test_array_map_2 ended up declaring one name twice: cases become test
+        methods through parameterized.expand, which keys them on the case name, so of two
+        declarations only the last survives and the other silently stops running.
+        """
+        marker = first_case_marker(file_path)
+        if marker is None:
+            print(f"   ❌ No case marker in {file_path}, leaving it alone")
+            return False
+
+        index, line, _ = marker
+        if 'mac' in TAG_RE.findall(line):
+            print(f"   ⏭️  Already tagged: {file_path}")
+            return False
+
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 lines = f.readlines()
 
-            if not lines:
-                print(f"   ⚠️  File is empty: {file_path}")
-                return False
-
-            first_line = lines[0].rstrip()
-
-            # Check if first line is name comment
-            if first_line.startswith('--') and 'name:' in first_line:
-                # If already has tags, append @mac at the end
-                if '@' in first_line:
-                    new_first_line = first_line + ' @mac\n'
-                else:
-                    new_first_line = first_line + ' @mac\n'
-            else:
-                # If no name comment, add one
-                test_name = file_path.stem
-                new_first_line = f'-- name: {test_name} @mac\n'
-                lines.insert(0, new_first_line)
-                new_first_line = lines[0]
-
-            lines[0] = new_first_line
+            lines[index] = line.rstrip() + ' @mac\n'
 
             if not self.dry_run:
                 with open(file_path, 'w', encoding='utf-8') as f:
@@ -170,7 +210,7 @@ class MacTestTagger:
         # File in T directory
         t_file = test_file
         # File in R directory
-        r_file = Path(str(test_file).replace('/T/', '/R/'))
+        r_file = Path(str(test_file).replace('/T/', '/R/', 1))
 
         files_to_tag = [t_file]
         if r_file.exists():
