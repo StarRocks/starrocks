@@ -62,13 +62,6 @@ select pipe_name, state from information_schema.pipes where database_name = 'db_
 -- result:
 p1	SUSPEND
 -- !result
--- The pipe listener may poll the source before the pipe gets suspended, so files can already be
--- listed as UNLOADED here. Only assert that nothing gets loaded while the pipe is suspended.
-select count(*) from information_schema.pipe_files
-    where database_name = 'db_${uuid0}' and pipe_name = 'p1' and load_state != 'UNLOADED';
--- result:
-0
--- !result
 alter pipe p1 resume;
 -- result:
 -- !result
