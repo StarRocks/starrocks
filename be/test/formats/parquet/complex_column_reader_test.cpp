@@ -252,6 +252,25 @@ TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNullTypedHasBase) {
     ASSERT_TRUE(result->has_value());
 }
 
+// ARRAY node: typed column row is null and value_column holds a variant null (a JSON null at the array path).
+// The null is a value of the field and must be kept: its bytes equal VariantValue::kEmptyValue, which used to be
+// mistaken for "no value" and dropped the field from the rebuilt row.
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNullTypedVariantNullBase) {
+    auto base_row = parse_variant_json("null");
+    std::string metadata_raw(base_row.get_metadata().raw());
+
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    node.typed_value_read_type =
+            std::make_unique<TypeDescriptor>(TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY));
+    node.typed_value_column = make_null_binary_column();
+    node.value_column = make_variant_value_column("null");
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, metadata_raw);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    ASSERT_TRUE(result->has_value());
+    EXPECT_EQ("null", (*result)->to_json().value());
+}
+
 // ARRAY node: typed column row is null, no value_column → nullopt  (line 826)
 TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNullTypedNoBase) {
     ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);

@@ -1126,9 +1126,13 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
 //   with shredded fields). We collect overlays per element and use VariantBuilder to reconstruct.
 // - ARRAY without children (fully-typed scalar array): The typed_value_column holds the array data directly,
 //   with no shredded sub-paths. We extract elements directly from the typed array's elements_column.
+// `base_value` is the node's own `value` for this row, or nullopt when it has none. It cannot be told apart by its
+// bytes: a variant null (a JSON null at the array path) has the same bytes as VariantValue::kEmptyValue.
 static StatusOr<std::optional<VariantRowValue>> _rebuild_array_overlay(size_t row, const ShreddedFieldNode& array_node,
                                                                        std::string_view metadata_raw,
-                                                                       std::string_view base_array_raw, int depth = 0) {
+                                                                       std::optional<std::string_view> base_value,
+                                                                       int depth = 0) {
+    const std::string_view base_array_raw = base_value.value_or(VariantValue::kEmptyValue);
     if (depth > kMaxShreddedArrayNestingDepth) {
         LOG(WARNING) << "variant shredded array nesting depth exceeded limit (" << kMaxShreddedArrayNestingDepth
                      << ") at path='" << array_node.full_path << "'";
@@ -1139,8 +1143,8 @@ static StatusOr<std::optional<VariantRowValue>> _rebuild_array_overlay(size_t ro
     if (!ParquetUtils::get_non_null_data_column_and_row(array_node.typed_value_column.get(), row, &typed_col,
                                                         &typed_row) ||
         !typed_col->is_array()) {
-        if (base_array_raw != VariantValue::kEmptyValue) {
-            return std::optional<VariantRowValue>(VariantRowValue(metadata_raw, base_array_raw));
+        if (base_value.has_value()) {
+            return std::optional<VariantRowValue>(VariantRowValue(metadata_raw, *base_value));
         }
         return std::nullopt;
     }
@@ -1334,11 +1338,12 @@ static Status _collect_overlays_for_array_element(size_t element_row, const std:
             // Nested array sub-field within an array element (e.g., array-of-objects where
             // one field is itself a shredded array). Reconstruct recursively.
             Slice fallback_slice;
-            std::string_view base_array_raw = VariantValue::kEmptyValue;
-            if (ColumnHelper::get_binary_slice_at(node.value_column.get(), element_row, &fallback_slice)) {
-                base_array_raw = std::string_view(fallback_slice.data, fallback_slice.size);
+            std::optional<std::string_view> base_value;
+            if (ColumnHelper::get_binary_slice_at(node.value_column.get(), element_row, &fallback_slice) &&
+                fallback_slice.size > 0) {
+                base_value = std::string_view(fallback_slice.data, fallback_slice.size);
             }
-            auto array_overlay = _rebuild_array_overlay(element_row, node, metadata_raw, base_array_raw, depth + 1);
+            auto array_overlay = _rebuild_array_overlay(element_row, node, metadata_raw, base_value, depth + 1);
             if (!array_overlay.ok()) {
                 return array_overlay.status().clone_and_prepend(
                         strings::Substitute("rebuild shredded array element failed, path=$0", node.full_path));
@@ -1696,7 +1701,8 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
     std::optional<VariantRowRef> base;
     if (node.value_column != nullptr) {
         Slice fallback_slice;
-        if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice)) {
+        if (ColumnHelper::get_binary_slice_at(node.value_column.get(), row, &fallback_slice) &&
+            fallback_slice.size > 0) {
             base.emplace(metadata_raw, std::string_view(fallback_slice.data, fallback_slice.size));
         }
     }
@@ -1721,11 +1727,11 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
     }
 
     if (node.kind == ShreddedFieldNode::Kind::ARRAY && node.typed_value_column != nullptr) {
-        std::string_view base_array_raw = VariantValue::kEmptyValue;
+        std::optional<std::string_view> base_value;
         if (base.has_value()) {
-            base_array_raw = base->get_value().raw();
+            base_value = base->get_value().raw();
         }
-        auto array_overlay = _rebuild_array_overlay(row, node, metadata_raw, base_array_raw);
+        auto array_overlay = _rebuild_array_overlay(row, node, metadata_raw, base_value);
         if (!array_overlay.ok()) {
             return array_overlay.status().clone_and_prepend(
                     strings::Substitute("rebuild shredded array failed, path=$0", node.full_path));
