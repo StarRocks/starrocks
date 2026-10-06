@@ -1,5 +1,4 @@
 ---
-sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks は MPP データベースとして、サブセカンド単位のクエリ速度と大規模データの超高速並列処理によりリアルタイム分析を実現します。"
 ---
@@ -13,8 +12,6 @@ StarRocks はエレガントな設計を持ち、完全にベクトル化され�
 StarRocks は、新鮮なデータに対するリアルタイム分析に最適です。データは高速で取り込まれ、リアルタイムで更新および削除されます。StarRocks は、フラット、スター、スノーフレークスキーマなど、さまざまなスキーマを使用してテーブルを作成することを可能にします。
 
 MySQL プロトコルおよび標準 SQL と互換性があり、Tableau や Power BI などの主要な BI ツールに対して即座にサポートを提供します。StarRocks は外部コンポーネントに依存せず、高拡張性、高可用性、簡素化された管理と保守を可能にする統合データ分析プラットフォームです。
-
-[StarRocks](https://github.com/StarRocks/starrocks/tree/main) は Apache 2.0 ライセンスの下でライセンスされており、StarRocks GitHub リポジトリで利用可能です（[StarRocks ライセンス](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)を参照）。StarRocks は、(i) サードパーティのソフトウェアライブラリからの関数をリンクまたは呼び出し、そのライセンスはフォルダ [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) にあります。また、(ii) サードパーティのソフトウェアコードを組み込み、そのライセンスはフォルダ [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) にあります。
 
 ## Scenarios
 
@@ -79,3 +76,9 @@ StarRocks は、統合されたデータ分析体験を提供します。
 - 1 つのシステムでさまざまな分析シナリオを実現し、システムの複雑さを軽減し、TCO を削減します。
 
 - StarRocks は、データレイクとデータウェアハウスを統合します。レイクハウス内のデータはすべて StarRocks で管理できます。高同時実行を必要とするレイテンシーに敏感なクエリは StarRocks で実行できます。データレイク内のデータは、StarRocks が提供する external catalog または外部テーブルを使用してアクセスできます。
+
+## ライセンスとコミュニティ
+
+[StarRocks](https://github.com/StarRocks/starrocks/tree/main) は Apache 2.0 ライセンスの下でライセンスされており、StarRocks GitHub リポジトリで利用可能です（[StarRocks ライセンス](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt)を参照）。StarRocks は、(i) サードパーティのソフトウェアライブラリからの関数をリンクまたは呼び出し、そのライセンスはフォルダ [licenses-binary](https://github.com/StarRocks/starrocks/tree/main/licenses-binary) にあります。また、(ii) サードパーティのソフトウェアコードを組み込み、そのライセンスはフォルダ [licenses](https://github.com/StarRocks/starrocks/tree/main/licenses) にあります。
+
+一般的な質問やチャットについては、[Slack channel](https://docs.starrocks.io/join/) にご参加ください。コミュニティのニュースについては、[StarRocks.io Blog](https://www.starrocks.io/blog) をお読みください。また、[LinkedIn](https://www.linkedin.com/company/starrocks) でフォローして、新機能、イベント、共有に関する最新情報を入手することもできます。
