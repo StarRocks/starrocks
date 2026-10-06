@@ -134,20 +134,6 @@ public:
 
     virtual void resize(size_t n) = 0;
 
-    // If the column has already overflowed, upgrade to one larger Column type,
-    // Return internal error if upgrade failed.
-    // Return null, if the column is not overflow.
-    // Return the new larger column, if upgrade success
-    // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<MutablePtr> upgrade_if_overflow() = 0;
-
-    // Downgrade the column from large column to normal column.
-    // Return internal error if downgrade failed.
-    // Return null, if the column is already normal column, no need to downgrade.
-    // Return the new normal column, if downgrade success
-    // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<MutablePtr> downgrade() = 0;
-
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
     virtual bool has_large_column() const = 0;
@@ -488,17 +474,6 @@ public:
     }
 
 protected:
-    // Helper functions for downgrade and upgrade,
-    // if downgrade failed, return the error status.
-    // if upgrade success, always return nullptr.
-    // if downgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
-    // Helper functions for upgrade and downgrade,
-    // if upgrade failed, return the error status.
-    // if upgrade success, always return nullptr.
-    // if upgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
-
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 

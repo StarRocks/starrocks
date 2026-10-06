@@ -104,8 +104,6 @@ public:
     Status capacity_limit_reached() const override { return _data->capacity_limit_reached(); }
     void check_or_die() const override { _data->check_or_die(); }
     bool has_large_column() const override { return _data->has_large_column(); }
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-    StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
     // Dedicated GEO visitors only; never fall back to binary equality/order/hash.
     Status accept(ColumnVisitor* visitor) const override;

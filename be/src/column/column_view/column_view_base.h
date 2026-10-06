@@ -40,10 +40,6 @@ public:
     using LocationType = uint32_t;
     using Locations = std::vector<LocationType>;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; };
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
     bool has_large_column() const override { return false; }
 
     size_t size() const override { return _num_rows; }
