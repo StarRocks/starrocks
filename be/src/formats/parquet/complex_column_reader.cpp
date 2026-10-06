@@ -1499,6 +1499,14 @@ static Status _collect_element_typed_paths(const std::vector<ShreddedFieldNode>&
             }
             fallback = nullptr; // build_variant_binding_from_node already merged node.value.
         }
+        // The element children must have exactly one cell per array element; a mismatch would silently shift
+        // values onto other elements.
+        if (typed->size() != num_elements || (fallback != nullptr && fallback->size() != num_elements)) {
+            return Status::InternalError(strings::Substitute(
+                    "variant shredded array element child is not element-aligned, path=$0, elements=$1, typed=$2, "
+                    "fallback=$3",
+                    node.full_path, num_elements, typed->size(), fallback != nullptr ? fallback->size() : 0));
+        }
         paths->emplace_back(node.full_path);
         types->emplace_back(std::move(type));
         typed_columns->emplace_back(std::move(typed));
