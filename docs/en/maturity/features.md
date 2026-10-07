@@ -1,6 +1,15 @@
+<<<<<<< HEAD
+=======
+---
+sidebar_position: 10
+displayed_sidebar: docs
+description: "Explains feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
+---
+
+>>>>>>> 9a6d4a4 ([Doc] Use product-neutral wording on the feature maturity page (#80220))
 # Beta and experimental features
 
-StarRocks features have five potential maturity levels:
+Features have five potential maturity levels:
 
 - Experimental
 - Beta
@@ -8,7 +17,7 @@ StarRocks features have five potential maturity levels:
 - Deprecated
 - Removed
 
-Most of the StarRocks features are GA, and if there is no label in the documentation to indicate that a feature is Experimental, Beta, or Deprecated—then the feature is GA.
+Most features are GA, and if there is no label in the documentation to indicate that a feature is Experimental, Beta, or Deprecated—then the feature is GA.
 
 ## Experimental features
 
@@ -17,7 +26,7 @@ Most of the StarRocks features are GA, and if there is no label in the documenta
 - **Interface**: The interface may be changed in the future. This includes command syntax, configuration parameters, defaults, feature removal, etc.
 - **Availability**: Experimental features are off by default, and need to be allowed by setting a parameter with SQL or in a configuration file.
 - **Production readiness**: Experimental features should not be used in production.
-- **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the StarRocks Engineering team will try to help you.
+- **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the Engineering team will try to help you.
 
 ## Beta features
 
@@ -27,7 +36,7 @@ May be not good for corner cases.
 - **Interface**: The interface may be changed in the future. May be not backward compatible.
 - **Availability**: Beta features are off by default, and need to be allowed by setting a parameter with SQL or in a configuration file.
 - **Production readiness**: Beta features are not recommended for production use.
-- **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the StarRocks Engineering team will try to help you.
+- **Support**: Please open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the Engineering team will try to help you.
 
 ## GA features
 
@@ -36,7 +45,7 @@ May be not good for corner cases.
 - **Interface**: Stable API.
 - **Availability**: GA features are on by default.
 - **Production readiness**: Production ready.
-- **Support**: The support team provides support to customers. Open-source community members should open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the StarRocks Engineering team will try to help you.
+- **Support**: The support team provides support to customers. Open-source community members should open a [GitHub issue](https://github.com/StarRocks/starrocks/issues) or ask questions in [Slack](https://docs.starrocks.io/join/) and the Engineering team will try to help you.
 
 ## Deprecated features
 
