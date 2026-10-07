@@ -32,6 +32,7 @@
 #include "exprs/array_size_limit.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "types/constexpr.h"
 
 namespace starrocks {
 
@@ -5269,6 +5270,43 @@ TEST_F(ArrayFunctionsTest, array_generate_when_overflow) {
 
     _check_array<int8_t>({(int8_t)(9), (int8_t)(97)}, dest_column->get(0).get_array());
     _check_array<int8_t>({(int8_t)(-9), (int8_t)(-97)}, dest_column->get(1).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
+    auto bigint_const = [](int64_t v) { return ColumnHelper::create_const_column<TYPE_BIGINT>(v, 1); };
+    constexpr int64_t kMin = std::numeric_limits<int64_t>::min();
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+
+    // array_generate(9, 9223372036854775807, 1) used to reserve ~9.2e18 elements, which threw
+    // std::length_error past TRY_CATCH_BAD_ALLOC and aborted the BE.
+    auto st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(9), bigint_const(kMax), bigint_const(1)});
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+
+    // The full range in both directions: stop - start and -step overflow int64 here.
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(kMin), bigint_const(kMax), bigint_const(1)});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {bigint_const(kMax), bigint_const(kMin), bigint_const(kMin)});
+    ASSERT_TRUE(st.ok()) << st.status();
+    _check_array<int64_t>({kMax, (int64_t)-1}, st.value()->get(0).get_array());
+
+    // LARGEINT's own range.
+    auto largeint_const = [](int128_t v) { return ColumnHelper::create_const_column<TYPE_LARGEINT>(v, 1); };
+    st = ArrayGenerate<TYPE_LARGEINT>::process(
+            nullptr, {largeint_const(MIN_INT128), largeint_const(MAX_INT128), largeint_const(1)});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
+
+    // Rows that are each small but together exceed the limit.
+    auto start = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto stop = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto step = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    for (int i = 0; i < 3; i++) {
+        start->append_datum(Datum((int64_t)0));
+        stop->append_datum(Datum((int64_t)std::numeric_limits<uint32_t>::max() / 2));
+        step->append_datum(Datum((int64_t)1));
+    }
+    st = ArrayGenerate<TYPE_BIGINT>::process(nullptr, {start, stop, step});
+    ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
 }
 
 TEST_F(ArrayFunctionsTest, array_distinct_any_type_only_null) {
