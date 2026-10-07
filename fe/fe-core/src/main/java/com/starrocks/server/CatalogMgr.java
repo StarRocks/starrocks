@@ -208,7 +208,7 @@ public class CatalogMgr {
                 AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties, unsetProperties);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog,
                         wal -> alterCatalogInternal(catalog, newConnector, properties, unsetProperties));
-                logRecreateCatalog(catalog, unsetProperties, false);
+                LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, catalog.getConfig());
             } catch (Exception e) {
                 LOG.warn("alter catalog failed, shutdown new connector", e);
                 newConnector.shutdown();
@@ -226,9 +226,7 @@ public class CatalogMgr {
         connectorMgr.removeConnector(catalogName);
         // replace old connector with new connector
         connectorMgr.addConnector(catalogName, newConnector);
-        if (properties != null) {
-            catalog.getConfig().putAll(properties);
-        }
+        catalog.getConfig().putAll(properties);
         if (unsetProperties != null) {
             for (String key : unsetProperties) {
                 catalog.getConfig().remove(key);
@@ -270,25 +268,6 @@ public class CatalogMgr {
         }
 
         return newConnector;
-    }
-
-    private static void logRecreateCatalog(Catalog catalog, List<String> unsetProperties, boolean replay) {
-        if (unsetProperties == null || unsetProperties.isEmpty()) {
-            if (replay) {
-                LOG.info("Recreate catalog [{}] with properties [{}] in replay",
-                        catalog.getName(), catalog.getConfig());
-            } else {
-                LOG.info("Recreate catalog [{}] with properties [{}]", catalog.getName(), catalog.getConfig());
-            }
-            return;
-        }
-        if (replay) {
-            LOG.info("Recreate catalog [{}] with properties [{}], unset [{}] in replay",
-                    catalog.getName(), catalog.getConfig(), unsetProperties);
-        } else {
-            LOG.info("Recreate catalog [{}] with properties [{}], unset [{}]",
-                    catalog.getName(), catalog.getConfig(), unsetProperties);
-        }
     }
 
     // TODO @caneGuy we should put internal catalog into catalogmgr
@@ -416,7 +395,7 @@ public class CatalogMgr {
             }
 
             alterCatalogInternal(catalog, newConnector, properties, unsetProperties);
-            logRecreateCatalog(catalog, unsetProperties, true);
+            LOG.info("Recreate catalog [{}] with properties [{}] in replay", catalog.getName(), catalog.getConfig());
         } finally {
             writeUnLock();
         }
