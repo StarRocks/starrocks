@@ -28,6 +28,12 @@
 #include <streambuf>
 #include <thread>
 
+<<<<<<< HEAD
+=======
+#include "base/auth/credential_mask.h"
+#include "common/config_update_registry.h"
+#include "common/glog_init.h"
+>>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 #include "common/status.h"
 #include "gutil/strings/join.h"
 
@@ -336,9 +342,9 @@ TEST_F(ConfigTest, test_list_configs_masks_credentials) {
         by_name[info.name] = info;
     }
     // Set credential: value and non-empty default are masked, alias included.
-    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key"].value);
-    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key"].defval);
-    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key_alias"].value);
+    EXPECT_EQ(kCredentialMask, by_name["object_storage_secret_access_key"].value);
+    EXPECT_EQ(kCredentialMask, by_name["object_storage_secret_access_key"].defval);
+    EXPECT_EQ(kCredentialMask, by_name["object_storage_secret_access_key_alias"].value);
     // Unset credential stays empty, so it is still visible that none is configured.
     EXPECT_EQ("", by_name["object_storage_access_key_id"].value);
     EXPECT_EQ("", by_name["object_storage_access_key_id"].defval);

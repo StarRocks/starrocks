@@ -19,9 +19,16 @@
 
 #include <gtest/gtest.h>
 
+<<<<<<< HEAD
 #include "common/config.h"
 #include "runtime/exec_env.h"
 #include "util/defer_op.h"
+=======
+#include "base/auth/credential_mask.h"
+#include "base/utility/defer_op.h"
+#include "common/config_object_storage_fwd.h"
+#include "exec/exec_env.h"
+>>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 
 namespace starrocks {
 
@@ -87,7 +94,7 @@ TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials)
 
     EXPECT_EQ(std::string::npos, page.find("AKIDEXAMPLEACCESSKEY"));
     EXPECT_EQ(std::string::npos, page.find("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
-    const std::string mask(config::kSensitiveConfigMask);
+    const std::string mask(kCredentialMask);
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_access_key_id=" + mask + "\n"));
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_secret_access_key=" + mask + "\n"));
     // Non-credential configs are still printed as is.

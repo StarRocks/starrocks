@@ -27,12 +27,17 @@
 #include <string>
 #include <string_view>
 
+<<<<<<< HEAD
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
 #undef __IN_CONFIGBASE_CPP__
 
 #include <fmt/format.h>
 
+=======
+#include "base/auth/credential_mask.h"
+#include "common/configbase_impl.h"
+>>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 #include "common/status.h"
 
 namespace starrocks::config {
@@ -278,7 +283,7 @@ bool is_sensitive_config(std::string_view name) {
 // An empty value stays empty, so the output still tells an unset credential from a set one.
 static std::string mask_if_sensitive(std::string_view name, std::string value) {
     if (is_sensitive_config(name) && !value.empty()) {
-        return std::string(kSensitiveConfigMask);
+        return std::string(kCredentialMask);
     }
     return value;
 }
