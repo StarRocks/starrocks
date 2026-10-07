@@ -338,7 +338,7 @@ public class AnalyzeMgrTest {
         OlapTable table = (OlapTable) starRocksAssert.getTable(dbName, "t1");
         // Simulate a TabletStatMgr pass that saw 1000 rows
         for (Partition partition : table.getPartitions()) {
-            partition.getDefaultPhysicalPartition().getQueryableBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
         }
         Assertions.assertEquals(1000, table.getRowCount());
 
