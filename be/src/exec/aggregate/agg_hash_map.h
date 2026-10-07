@@ -132,11 +132,14 @@ struct ExtraAggParam {
     size_t limits = 0;
 };
 
-template <bool allocate_and_compute_state, bool compute_not_founds, bool has_limit>
+// `mark_null_key_creation`: also mark the row that allocates `null_key_data` in `not_founds`, so that with
+// allocate + fill_not_found every row that created a group is marked (see build_hash_map_marking_new_groups).
+template <bool allocate_and_compute_state, bool compute_not_founds, bool has_limit, bool mark_null_key_creation = false>
 struct HTBuildOp {
     static auto constexpr allocate = allocate_and_compute_state;
     static auto constexpr fill_not_found = compute_not_founds;
     static auto constexpr process_limit = has_limit;
+    static auto constexpr mark_null_key = mark_null_key_creation;
 };
 
 template <bool fill_not_found>
@@ -219,6 +222,21 @@ struct AggHashMapWithKey {
                 chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
         defer.cancel();
     }
+
+    // Same as build_hash_map, and additionally sets new_groups[i] = 1 for every row i that created a group
+    // (including the NULL-key group), 0 for the others.
+    template <AllocFunc<Impl> Func>
+    void build_hash_map_marking_new_groups(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                           Func&& allocate_func, Buffer<AggDataPtr>* agg_states, Filter* new_groups) {
+        CancelableDefer defer = [this]() { hash_map.clear(); };
+        ExtraAggParam extra;
+        extra.not_founds = new_groups;
+        DCHECK(new_groups);
+        (*new_groups).assign(chunk_size, 0);
+        static_cast<Impl*>(this)->template compute_agg_states<Func, HTBuildOp<true, true, false, true>>(
+                chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, &extra);
+        defer.cancel();
+    }
 };
 
 // ==============================================================
@@ -285,6 +303,11 @@ struct AggHashMapWithOneNumberKeyWithNullable
         if (key_column->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func(nullptr);
+                if constexpr (HTBuildOp::mark_null_key) {
+                    if (chunk_size > 0) {
+                        (*extra->not_founds)[0] = 1;
+                    }
+                }
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -378,6 +401,9 @@ struct AggHashMapWithOneNumberKeyWithNullable
             if (null_data[i]) {
                 if (UNLIKELY(null_key_data == nullptr)) {
                     null_key_data = allocate_func(nullptr);
+                    if constexpr (HTBuildOp::mark_null_key) {
+                        (*not_founds)[i] = 1;
+                    }
                 }
                 (*agg_states)[i] = null_key_data;
             } else {
@@ -505,6 +531,11 @@ struct AggHashMapWithOneStringKeyWithNullable
         if (key_column->only_null()) {
             if (null_key_data == nullptr) {
                 null_key_data = allocate_func(nullptr);
+                if constexpr (HTBuildOp::mark_null_key) {
+                    if (chunk_size > 0) {
+                        (*extra->not_founds)[0] = 1;
+                    }
+                }
             }
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
@@ -590,6 +621,9 @@ struct AggHashMapWithOneStringKeyWithNullable
             if (null_data[i]) {
                 if (UNLIKELY(null_key_data == nullptr)) {
                     null_key_data = allocate_func(nullptr);
+                    if constexpr (HTBuildOp::mark_null_key) {
+                        (*not_founds)[i] = 1;
+                    }
                 }
                 (*agg_states)[i] = null_key_data;
             } else {
