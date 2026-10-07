@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
@@ -171,6 +172,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
+        // The filters pushed sideways are built by other joins, so the size limits on this join's own filters below
+        // do not apply to them.
+        pushDownRuntimeFiltersSideways(descTbl, execGroupSets);
+
         if (distrMode.equals(DistributionMode.PARTITIONED) || distrMode.equals(DistributionMode.SHUFFLE_HASH_BUCKET)) {
             // If it's partitioned join, and we can not get correct ndv
             // then it's hard to estimate right bloom filter size, or it's too big.
@@ -260,6 +265,77 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 }
             }
         }
+    }
+
+    /**
+     * Push the runtime filters built by broadcast joins under the build side of this join into its probe side.
+     * <p>
+     * A runtime filter only drops probe rows that can not contribute to the output of the join building it, so each
+     * non-null value its probe column carries out of that join is in the filter, and no operator above invents one.
+     * When that column is the build key of an equal conjunct of this join, every non-null build key reaching this
+     * join is in the filter, so a probe row whose key is not in it finds no match. The filter is then valid wherever
+     * a filter this join builds on that key is, and is pushed along the same conjunct onto the probe key. It is built
+     * by a broadcast join, whose build is small, under this join's build side, so it arrives before any filter this
+     * join builds.
+     */
+    private void pushDownRuntimeFiltersSideways(DescriptorTable descTbl, ExecGroupSets execGroupSets) {
+        if (joinOp.isCrossJoin() || !(getChild(1) instanceof ExchangeNode)) {
+            return;
+        }
+        if (this instanceof HashJoinNode hashJoinNode && hashJoinNode.isSkewJoin()) {
+            return;
+        }
+        List<RuntimeFilterDescription> filters = collectBroadcastJoinRuntimeFilters(getChild(1));
+        if (filters.isEmpty()) {
+            return;
+        }
+        for (BinaryPredicate joinConjunct : eqJoinConjuncts) {
+            // a null build key matches a null probe key under <=>, but a filter never holds null keys
+            if (!BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct)) {
+                continue;
+            }
+            Expr buildExpr = joinConjunct.getChild(0);
+            Expr probeExpr = joinConjunct.getChild(1);
+            if (!ExprUtils.isBoundByTupleIds(buildExpr, getChild(1).getTupleIds())) {
+                buildExpr = joinConjunct.getChild(1);
+                probeExpr = joinConjunct.getChild(0);
+            }
+            if (!(buildExpr instanceof SlotRef buildSlot)) {
+                continue;
+            }
+            for (RuntimeFilterDescription rf : filters) {
+                if (rf.getEqualForNull() || !rf.canPushAcrossExchangeNode()) {
+                    continue;
+                }
+                boolean boundsBuildKey = rf.getNodeIdToProbeExpr().values().stream().anyMatch(
+                        expr -> expr instanceof SlotRef slot && slot.getSlotId().equals(buildSlot.getSlotId()));
+                if (!boundsBuildKey) {
+                    continue;
+                }
+                // The filter is built in a fragment under the build-side exchange of this join, so every target it
+                // gets on the probe side is remote.
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                rf.enterExchangeNode();
+                boolean accepted = getChild(0).pushDownRuntimeFilters(rfPushDownCxt, probeExpr, Lists.newArrayList());
+                rf.exitExchangeNode();
+                if (accepted) {
+                    rf.setHasRemoteTargets(true);
+                }
+            }
+        }
+    }
+
+    private static List<RuntimeFilterDescription> collectBroadcastJoinRuntimeFilters(PlanNode root) {
+        List<RuntimeFilterDescription> filters = Lists.newArrayList();
+        List<JoinNode> joinNodes = Lists.newArrayList();
+        root.collectAll(Predicates.instanceOf(JoinNode.class), joinNodes);
+        for (JoinNode joinNode : joinNodes) {
+            joinNode.getBuildRuntimeFilters().stream()
+                    .filter(RuntimeFilterDescription::isBroadcastJoin)
+                    .forEach(filters::add);
+        }
+        return filters;
     }
 
     /**
