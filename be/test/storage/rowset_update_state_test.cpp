@@ -36,9 +36,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
 #include "storage/primary_key_compaction_conflict_resolver.h"
+#include "storage/rows_mapper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
-#include "storage/rows_mapper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
@@ -685,7 +685,7 @@ public:
         params.delvec_loader = _delvec_loader;
         params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
                                      const Column& pks) {
-            ReplaceCall call{rssid, rowid_start, replace_indexes, pks.is_binary(), pks.is_large_binary(),
+            ReplaceCall call{rssid,          rowid_start, replace_indexes, pks.is_binary(), pks.is_large_binary(),
                              pks.get_name(), {}};
             for (uint32_t idx : replace_indexes) {
                 call.keys.emplace_back(pks.get(idx).get_slice().to_string());
@@ -699,9 +699,9 @@ public:
     }
 
     Status segment_iterator(
-            const std::function<Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
-                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
-            override {
+            const std::function<
+                    Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                           const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) override {
         return Status::NotSupported("not used by execute()");
     }
 
