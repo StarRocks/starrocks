@@ -655,4 +655,219 @@ TEST_F(BitShufflePageTest, TestReadByRowids) {
     ASSERT_EQ(99, column->get(2).get_int32());
 }
 
+namespace {
+
+// An encoded bitshuffle page, its decoder and the source values it was built from.
+template <LogicalType Type>
+struct ReadByRowidsPage {
+    using CppType = StorageCppType<Type>;
+
+    std::vector<CppType> src;
+    OwnedSlice owned;
+    Slice encoded;
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    std::unique_ptr<BitShufflePageDecoder<Type>> decoder;
+
+    void build(size_t rows) {
+        src.resize(rows);
+        for (size_t i = 0; i < rows; i++) {
+            src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
+        }
+        PageBuilderOptions options;
+        options.data_page_size = 1024 * 1024;
+        BitshufflePageBuilder<Type> builder(options);
+        ASSERT_EQ(rows, builder.add(reinterpret_cast<const uint8_t*>(src.data()), rows));
+        owned = builder.finish()->build();
+        encoded = owned.slice();
+
+        PageFooterPB footer;
+        footer.set_type(DATA_PAGE);
+        footer.mutable_data_page_footer()->set_nullmap_size(0);
+        ASSERT_TRUE(StoragePageDecoder::decode_page(&footer, 0, BIT_SHUFFLE, &decoded_page, &encoded).ok());
+        decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded);
+        ASSERT_TRUE(decoder->init().ok());
+    }
+};
+
+template <LogicalType Type>
+void check_non_nullable_stride(size_t rows, size_t stride) {
+    using CppType = StorageCppType<Type>;
+    ReadByRowidsPage<Type> page;
+    page.build(rows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < rows; i += stride) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    auto column = ChunkFactory::column_from_field_type(Type, false);
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, column->size());
+
+    const auto values = GetStorageContainer<Type>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(0, memcmp(&page.src[rowids[i]], &values[i], sizeof(CppType))) << "type=" << Type << " at " << i;
+    }
+}
+
+} // namespace
+
+TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
+    constexpr size_t kRows = 16384;
+    constexpr size_t kStride = 7;
+    check_non_nullable_stride<TYPE_TINYINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_SMALLINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_INT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_BIGINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_LARGEINT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_FLOAT>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DOUBLE>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL32>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL64>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL128>(kRows, kStride);
+}
+
+// Review focus 2: output appends and never overwrites rows already in the column.
+TEST_F(BitShufflePageTest, appends_to_populated_column) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(1000);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {-1, -2, -3, -4, -5};
+    ASSERT_EQ(5, column->append_numbers(existing, sizeof(existing)));
+
+    const rowid_t rowids[] = {3, 10, 500, 999};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(existing[i], values[i]);
+    }
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[5 + i]);
+    }
+}
+
+// Review focus 2: a column whose rows live in shared (zero-copy) storage must be appended to
+// without writing through to the shared buffer.
+TEST_F(BitShufflePageTest, destination_backed_by_shared_resource) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(1000);
+
+    auto shared = std::make_shared<std::vector<int32_t>>(std::vector<int32_t>{11, 22, 33, 44});
+    const std::vector<int32_t> shared_before = *shared;
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    ContainerResource resource(shared, shared->data(), shared->size() * sizeof(int32_t));
+    ASSERT_EQ(4, column->append_numbers(resource));
+
+    const rowid_t rowids[] = {0, 1, 2, 998, 999};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(5, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(shared_before[i], values[i]);
+    }
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[4 + i]);
+    }
+    EXPECT_EQ(shared_before, *shared) << "shared backing storage was modified";
+}
+
+// Review focus 3: stop at the first rowid outside the page; `count` reports rows actually read.
+TEST_F(BitShufflePageTest, truncates_at_first_out_of_page_rowid) {
+    constexpr uint32_t kRows = 100;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const rowid_t rowids[] = {5, 10, kRows, kRows + 10};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(2, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    EXPECT_EQ(page.src[5], values[0]);
+    EXPECT_EQ(page.src[10], values[1]);
+}
+
+// Truncation must also leave rows that were already in the column untouched.
+TEST_F(BitShufflePageTest, truncation_preserves_existing_rows) {
+    constexpr uint32_t kRows = 100;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {-7, -8, -9};
+    ASSERT_EQ(3, column->append_numbers(existing, sizeof(existing)));
+    const rowid_t rowids[] = {1, 2, 3, kRows + 5, 4};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(6, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_EQ(existing[i], values[i]);
+        EXPECT_EQ(page.src[rowids[i]], values[3 + i]);
+    }
+}
+
+// The page's first ordinal is subtracted from the rowids before bounds checking.
+TEST_F(BitShufflePageTest, nonzero_first_ordinal_in_page) {
+    constexpr uint32_t kRows = 100;
+    constexpr ordinal_t kFirst = 1000;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const rowid_t rowids[] = {1000, 1050, 1099, 1100};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(kFirst, rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(3, column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    EXPECT_EQ(page.src[0], values[0]);
+    EXPECT_EQ(page.src[50], values[1]);
+    EXPECT_EQ(page.src[99], values[2]);
+}
+
+// Review focus 1: row counts that are not a multiple of 8 (the bitshuffle block width).
+TEST_F(BitShufflePageTest, page_not_multiple_of_eight) {
+    constexpr uint32_t kRows = 1003;
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(kRows);
+    std::vector<rowid_t> rowids;
+    for (uint32_t i = 0; i < kRows; i += 3) {
+        rowids.push_back(i);
+    }
+    rowids.push_back(kRows - 1); // 1002, the last row, which sits in the padded tail group
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(rowids.size(), column->size());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(page.src[rowids[i]], values[i]) << "at " << i;
+    }
+    EXPECT_EQ(page.src[kRows - 1], values[count - 1]);
+}
+
+TEST_F(BitShufflePageTest, count_zero_is_noop) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(100);
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    const int32_t existing[] = {42};
+    ASSERT_EQ(1, column->append_numbers(existing, sizeof(existing)));
+    const rowid_t rowids[] = {1};
+    size_t count = 0;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    EXPECT_EQ(0, count);
+    ASSERT_EQ(1, column->size());
+    EXPECT_EQ(42, GetStorageContainer<TYPE_INT>::get_data(column)[0]);
+}
+
 } // namespace starrocks
