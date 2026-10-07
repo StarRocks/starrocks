@@ -1377,7 +1377,7 @@ TEST_F(AIProjectPipelineTest, ZeroRowLastChunkSkipsExpressionEvaluationAndProduc
 }
 
 TEST_F(AIProjectPipelineTest, InvalidConstantArrayFailsPreparationBeforeAnyInput) {
-    for (const std::string& categories : {"[]", "['  ']", "not-an-array"}) {
+    for (const char* categories : {"[]", "['  ']", "not-an-array"}) {
         SCOPED_TRACE(categories);
         auto projection_or = create_classify_projection(categories);
         ASSERT_TRUE(projection_or.ok()) << projection_or.status();
