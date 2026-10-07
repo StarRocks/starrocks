@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "base/auth/credential_mask.h"
 #include "base/url_coding.h"
 #include "platform/http/ev_http_server.h"
 #include "platform/http/http_auth.h"
@@ -101,7 +102,7 @@ TEST(PlatformHttpTest, DebugStringMasksCredentialHeaders) {
     EXPECT_EQ(std::string::npos, s.find(encoded));
     EXPECT_EQ(std::string::npos, s.find("cHJveHk6cHJveHlQd2Q="));
     EXPECT_EQ(std::string::npos, s.find("FakeSessionCookie"));
-    const std::string mask(HttpRequest::kMaskedHeaderValue);
+    const std::string mask(kCredentialMask);
     EXPECT_NE(std::string::npos, s.find("key=Authorization, value=" + mask + "\n"));
     EXPECT_NE(std::string::npos, s.find("key=proxy-authorization, value=" + mask + "\n"));
     EXPECT_NE(std::string::npos, s.find("key=Cookie, value=" + mask + "\n"));

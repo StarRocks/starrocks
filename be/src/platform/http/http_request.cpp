@@ -26,6 +26,7 @@
 #include <sstream>
 #include <string>
 
+#include "base/auth/credential_mask.h"
 #include "common/logging.h"
 #include "platform/http/http_handler.h"
 #include "platform/http/http_headers.h"
@@ -92,7 +93,7 @@ std::string HttpRequest::debug_string() const {
        << "headers: \n";
     for (auto& iter : _headers) {
         if (is_credential_header(iter.first)) {
-            ss << "key=" << iter.first << ", value=" << kMaskedHeaderValue << "\n";
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
         } else {
             ss << "key=" << iter.first << ", value=" << iter.second << "\n";
         }
