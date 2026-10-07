@@ -54,3 +54,6 @@ ADD_BE_BENCH(${SRC_DIR}/bench/agg_simd_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/flat_json_vertical_compaction_mem_bench)
 # Measure task memory with the same malloc hooks as starrocks_be.
 target_sources(flat_json_vertical_compaction_mem_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
+ADD_BE_BENCH(${SRC_DIR}/bench/gather_bench)
+# Use the same malloc hooks as starrocks_be so allocator behavior matches production.
+target_sources(gather_bench PRIVATE ${SRC_DIR}/service/mem_hook.cpp)
