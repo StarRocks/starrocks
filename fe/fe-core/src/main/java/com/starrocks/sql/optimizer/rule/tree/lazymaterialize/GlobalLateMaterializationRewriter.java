@@ -500,11 +500,22 @@ public class GlobalLateMaterializationRewriter {
         }
 
         Map<ColumnRefOperator, ColumnRefOperator> buildUnMaterializedAlias(CollectorContext context,
-                                                                           AliasResolver resolver) {
+                                                                           AliasResolver resolver,
+                                                                           ColumnRefSet childDeferred) {
             Map<ColumnRefOperator, ColumnRefOperator> alias = Maps.newHashMap();
             resolver.resolved.forEach((k, v) -> {
-                if (!k.equals(v) && context.columnSources.containsKey(v)) {
-                    alias.put(k, v);
+                // `resolver` only knows this projection, so `v` is the column as the child names it, which is a
+                // scan column only when the child is the scan. A deferred column renamed more than once on its way
+                // up (scan col -> a -> b) reaches the second rename as another projection's output; resolve it
+                // through the aliases collected below to land back on the scan column. Without that the second
+                // rename is dropped: `b` never becomes deferred here, while the Rewriter, which follows the rename
+                // at every projection, still defers the column and strips it, leaving the consumer above reading a
+                // column nothing produces.
+                //
+                // Only a column the child still defers gets an alias; one materialized below is just a value.
+                final ColumnRefOperator origin = context.getOriginColumnRef(v);
+                if (!k.equals(origin) && childDeferred.contains(v) && context.columnSources.containsKey(origin)) {
+                    alias.put(k, origin);
                 }
             });
             return alias;
@@ -514,6 +525,10 @@ public class GlobalLateMaterializationRewriter {
         public Void visitPhysicalProject(OptExpression optExpression, CollectorContext context) {
             visitChildren(optExpression, context);
             PhysicalProjectOperator op = (PhysicalProjectOperator) optExpression.getOp();
+
+            // the columns the child hands up still deferred
+            final ColumnRefSet childDeferred = new ColumnRefSet();
+            context.unMaterializedColumns.values().forEach(childDeferred::union);
 
             AliasResolver resolver = new AliasResolver();
             resolver.addProjection(op.getCommonSubOperatorMap());
@@ -525,15 +540,23 @@ public class GlobalLateMaterializationRewriter {
             collectEarlyMaterialized(context, resolver, op.getColumnRefMap(), earlyMaterializedColumns);
 
             // collect un-materialized columns
-            final Map<ColumnRefOperator, ColumnRefOperator> alias = buildUnMaterializedAlias(context, resolver);
+            final Map<ColumnRefOperator, ColumnRefOperator> alias =
+                    buildUnMaterializedAlias(context, resolver, childDeferred);
             context.alias.putAll(alias);
 
             recordMaterializedBefore(earlyMaterializedColumns, op, context);
 
-            // remove un-projected un-materialized columns
+            // An output stays deferred only when the column it reads, as the child names it, is still deferred
+            // by the child. Matching the id against columnSources alone is not enough: an aggregate outputs its
+            // group key under the scan column's id, and above it that id can be a different value.
+            final ColumnRefSet childUnMaterialized = new ColumnRefSet();
+            context.unMaterializedColumns.values().forEach(childUnMaterialized::union);
             context.unMaterializedColumns.clear();
 
             for (ColumnRefOperator columnRefOperator : op.getColumnRefMap().keySet()) {
+                if (!childUnMaterialized.contains(resolver.resolve(columnRefOperator))) {
+                    continue;
+                }
                 final ColumnRefOperator origin = context.getOriginColumnRef(columnRefOperator);
                 if (context.columnSources.containsKey(origin)) {
                     final IdentifyOperator identifyOperator = context.columnSources.get(origin);
