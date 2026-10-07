@@ -28,6 +28,7 @@
 #include "service/backend_options.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
@@ -286,8 +287,8 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HDFSWritableFile : public WritableFile {
 public:
-    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
-            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {
+    HDFSWritableFile(std::shared_ptr<HdfsFsClient> hdfs_client, hdfsFile file, std::string path, size_t offset)
+            : _hdfs_client(std::move(hdfs_client)), _file(file), _path(std::move(path)), _offset(offset) {
         FileSystem::on_file_write_open(this);
     }
 
@@ -302,13 +303,13 @@ public:
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("HDFS file pre_allocate not supported"); }
 
     Status flush(FlushMode mode) override {
-        int status = hdfsHFlush(_fs, _file);
+        int status = hdfsHFlush(_fs(), _file);
         return status == 0 ? Status::OK()
                            : Status::IOError(fmt::format("Fail to flush {}: {}", _path, get_hdfs_err_msg()));
     }
 
     Status sync() override {
-        int status = hdfsHSync(_fs, _file);
+        int status = hdfsHSync(_fs(), _file);
         return status == 0 ? Status::OK()
                            : Status::IOError(fmt::format("Fail to sync {}: {}", _path, get_hdfs_err_msg()));
     }
@@ -318,7 +319,14 @@ public:
     const std::string& filename() const override { return _path; }
 
 private:
-    hdfsFS _fs;
+    hdfsFS _fs() const {
+        DCHECK(_hdfs_client != nullptr) << "HDFS file used after close: " << _path;
+        return _hdfs_client->hdfs_fs;
+    }
+
+    // Keeps the filesystem connected while the file is open, even if its cache entry is evicted.
+    // close() releases it on a pthread, so it is nullptr afterwards.
+    std::shared_ptr<HdfsFsClient> _hdfs_client;
     hdfsFile _file;
     std::string _path;
     size_t _offset;
@@ -327,7 +335,7 @@ private:
 
 Status HDFSWritableFile::append(const Slice& data) {
     FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
-    tSize r = hdfsWrite(_fs, _file, data.data, data.size);
+    tSize r = hdfsWrite(_fs(), _file, data.data, data.size);
     if (r == -1) { // error
         auto error_msg = fmt::format("Fail to append {}: {}", _path, get_hdfs_err_msg());
         LOG(WARNING) << error_msg;
@@ -357,6 +365,10 @@ Status HDFSWritableFile::close() {
     }
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
+        // Drop our client reference on this pthread, after hdfsCloseFile(). If the cache has already evicted
+        // the client, this is the last owner and ~HdfsFsClient() calls hdfsDisconnect(), a JNI call that must
+        // not run on a bthread (see the TODO above ~HdfsInputStream).
+        DeferOp release_client([this] { _hdfs_client.reset(); });
         FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
         // No hdfsHSync() here. hdfsCloseFile() already flushes the remaining
         // packets, waits for the acks of every DataNode in the pipeline and
@@ -365,7 +377,7 @@ Status HDFSWritableFile::close() {
         // block for a long time on busy disks. Use sync() explicitly if the
         // data must be on disk before close().
         auto st = Status::OK();
-        int r = hdfsCloseFile(_fs, _file);
+        int r = hdfsCloseFile(_fs(), _file);
         TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
         if (r == -1) {
             auto error_msg = fmt::format("Fail to close file {}: {}", _path, get_hdfs_err_msg());
@@ -734,7 +746,7 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
                     fmt::format("hdfsOpenFile failed, file={}. err_msg: {}", path, get_hdfs_err_msg()));
         }
     }
-    return wrap_encrypted(std::make_unique<HDFSWritableFile>(hdfs_client->hdfs_fs, file, path, 0),
+    return wrap_encrypted(std::make_unique<HDFSWritableFile>(std::move(hdfs_client), file, path, 0),
                           opts.encryption_info);
 }
 
