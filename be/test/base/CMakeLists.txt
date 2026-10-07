@@ -75,6 +75,7 @@ set(BASE_TEST_FILES
     simd/byte_stream_split_test.cpp
     simd/batch_run_counter_test.cpp
     simd/filter_test.cpp
+    simd/gather_test.cpp
     simd/simd_expand_test.cpp
     simd/simd_test.cpp
     simd/rle_simd_test.cpp
@@ -127,6 +128,10 @@ set(BASE_TEST_LINK_LIBS
     gtest
     ${WL_END_GROUP}
 )
+
+if (WITH_GCOV)
+    list(APPEND BASE_TEST_LINK_LIBS --coverage)
+endif()
 
 add_library(starrocks_base_test_objs OBJECT ${BASE_TEST_FILES})
 target_link_libraries(starrocks_base_test_objs PRIVATE StarRocksPCH)
