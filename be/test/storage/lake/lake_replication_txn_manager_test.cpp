@@ -1926,7 +1926,7 @@ TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
     const std::string bundle_name = file_name(61, "dat");
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
-    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
+    for (const auto& [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);
         segment->set_size(logical_size);
@@ -3343,7 +3343,7 @@ TEST_F(LakeReplicationRemoteStorageTest, copies_complete_bundle_object_through_f
     source->set_version(2);
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
-    for (const auto [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
+    for (const auto& [logical_size, offset] : {std::pair<int64_t, int64_t>{5, 0}, {7, 5}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);
         segment->set_size(logical_size);
@@ -3577,7 +3577,7 @@ TEST_F(LakeReplicationRemoteStorageTest, rejects_conflicting_bundled_encryption_
     auto* rowset = source->add_rowsets();
     rowset->set_id(1);
     const std::string bundle_name = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000073.dat";
-    for (const auto [offset, encryption_meta] :
+    for (const auto& [offset, encryption_meta] :
          {std::pair<int64_t, const char*>{0, "slice-zero-encryption"}, {11, "slice-one-encryption"}}) {
         auto* segment = rowset->add_segment_metas();
         segment->set_filename(bundle_name);
