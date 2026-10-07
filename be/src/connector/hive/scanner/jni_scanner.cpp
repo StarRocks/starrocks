@@ -68,13 +68,21 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
         JNIEnv* env = JVMHelper::getInstance().getEnv();
         if (_jni_scanner_close != nullptr) {
             env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
+            // A failing close() must not leave a pending exception on this thread's JNIEnv. The
+            // scan-executor thread that runs do_close() is reused for unrelated scan tasks, and the
+            // JVM aborts with a native SIGSEGV when the next JNI call sees a stale exception. Clear
+            // it here and log, since do_close() cannot report a Status.
+            Status st = _check_jni_exception(env, "Failed to close the off-heap table scanner.");
+            if (!st.ok()) {
+                LOG(WARNING) << st.message();
+            }
         }
-        env->DeleteLocalRef(_jni_scanner_obj);
+        env->DeleteGlobalRef(_jni_scanner_obj);
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
         JNIEnv* env = JVMHelper::getInstance().getEnv();
-        env->DeleteLocalRef(_jni_scanner_cls);
+        env->DeleteGlobalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }
 }
@@ -105,8 +113,14 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     jmethodID get_scanner_method =
             env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
     jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
-    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
+    jclass local_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
+    LOCAL_REF_GUARD_ENV(env, local_scanner_cls);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
+    // A JniScanner's do_open/do_get_next/do_close are not guaranteed to run on the same OS thread,
+    // and JNI local references are only valid on the thread that created them. Hold these as global
+    // references so the lifecycle calls can safely run on different scan-executor threads.
+    _jni_scanner_cls = (jclass)env->NewGlobalRef(local_scanner_cls);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to create a global reference of the scanner class."));
     env->DeleteLocalRef(scanner_factory_class);
     env->DeleteLocalRef(scanner_factory_obj);
 
@@ -140,10 +154,13 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     LOG(INFO) << message;
 
     int fetch_size = runtime_state->chunk_size();
-    _jni_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
+    jobject local_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
     env->DeleteLocalRef(hashmap_object);
-    DCHECK(_jni_scanner_obj != nullptr);
+    LOCAL_REF_GUARD_ENV(env, local_scanner_obj);
+    DCHECK(local_scanner_obj != nullptr);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to initialize a scanner instance."));
+    _jni_scanner_obj = env->NewGlobalRef(local_scanner_obj);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to create a global reference of the scanner instance."));
 
     return Status::OK();
 }
