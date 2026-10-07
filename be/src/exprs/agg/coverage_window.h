@@ -15,28 +15,33 @@
 #pragma once
 
 #include "exprs/agg/window.h"
+#include "geo/geo_coverage_simplify.h"
 
 namespace starrocks {
 struct CoverageWindowState {
-    struct Impl;
-    CoverageWindowState();
-    ~CoverageWindowState();
-    std::unique_ptr<Impl> impl;
+    std::unique_ptr<GeoCoverageSimplify> core;
+    GeoCoverageLimits limits;
+    std::optional<double> tolerance;
+    std::optional<bool> boundary;
+    size_t emitted = 0;
+    size_t calls = 0;
+    bool initialized = false;
 };
 
-// Window-only: no aggregate update/merge/serialization semantics. Analytor
-// admits whole partitions and preallocates output chunks before evaluation.
+// Uses the normal full-partition window lifecycle. The state owns the kernel;
+// output columns own their WKB and do not retain the partition state.
 class CoverageWindowFunction final : public WindowFunction<CoverageWindowState> {
 public:
-    Status validate_window_plan(FunctionContext*) const;
-    Status admit_window_segment(FunctionContext*, AggDataPtr, const Column*, size_t, size_t, size_t, bool,
-                                const Chunk*) const;
-    MutableColumnPtr window_result_column(FunctionContext*, AggDataPtr) const;
+    void create(FunctionContext*, AggDataPtr) const override;
     void update_batch_single_state_with_frame(FunctionContext*, AggDataPtr, const Column**, int64_t, int64_t, int64_t,
                                               int64_t) const override;
     void get_values(FunctionContext*, ConstAggDataPtr, Column*, size_t, size_t) const override;
     void reset(FunctionContext*, const Columns&, AggDataPtr) const override;
     std::string get_name() const override { return "st_coveragesimplify"; }
     size_t kernel_calls(ConstAggDataPtr) const;
+
+private:
+    Status initialize(FunctionContext*, CoverageWindowState&) const;
+    Status prepare_partition(FunctionContext*, CoverageWindowState&, const Column*, int64_t, int64_t) const;
 };
 } // namespace starrocks

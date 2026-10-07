@@ -40,16 +40,16 @@ Returns native XY WKB GEOMETRY with the input CRS and one output per input row. 
 
 ## Resource limits
 
-The following positive mutable BE settings are captured when each partition begins:
+The following positive mutable BE settings are captured when the window function state is initialized and reused for its partitions:
 
 | Setting | Default | Limit |
 | --- | ---: | --- |
 | `geo_coverage_max_rows_per_partition` | 10000 | All rows, including NULL and EMPTY. |
 | `geo_coverage_max_vertices_per_partition` | 1000000 | Original WKB coordinate positions, including closures and repetitions. |
 | `geo_coverage_max_input_bytes_per_partition` | 67108864 | Input WKB bytes, including typed EMPTY. |
-| `geo_coverage_max_working_bytes_per_partition` | 268435456 | Retained input, models, indices, scratch, mapping and output capacities in bytes. |
+| `geo_coverage_max_working_bytes_per_partition` | 268435456 | Kernel-owned input WKB, models, indices, scratch, mapping and output storage in bytes. |
 
-Admission checks run before window accumulation. Shared native input/output backing is counted at its retained allocation size, so a small visible slice can retain a larger chunk. Query memory limits also apply across partitions. Exceeding a limit returns an error naming the setting, without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation checks run during accumulation, kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
+The standard window operator first materializes a complete partition under StarRocks query memory accounting. The function then checks rows, vertices and input WKB limits while admitting data to the kernel, before decoding and simplifying the coverage. The working limit covers kernel-owned allocations; it excludes the window operator's input buffers, fixed function state and independently owned output columns, which remain subject to the query memory limit. Exceeding a limit returns an error naming the setting, without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation follows the standard window lifecycle and is also checked in kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
 
 ## Examples
 

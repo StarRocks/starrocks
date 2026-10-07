@@ -31,15 +31,11 @@ namespace starrocks {
 
 template <typename T>
 BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets)
-        : BinaryColumnBase(std::move(resource), std::move(offsets), false) {}
-
-template <typename T>
-BinaryColumnBase<T>::BinaryColumnBase(ContainerResource resource, Offsets offsets, bool immutable_execution_backing)
         : _bytes(), _offsets(std::move(offsets)), _resource(std::move(resource)) {
     if (_offsets.empty()) {
         _offsets.emplace_back(0);
     }
-    if (!immutable_execution_backing && !config::enable_zero_copy_from_page_cache) {
+    if (!config::enable_zero_copy_from_page_cache) {
         _ensure_materialized();
     }
 }

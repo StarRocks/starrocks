@@ -18,7 +18,6 @@
 #include <optional>
 #include <span>
 
-#include "base/memory/memory_allocator.h"
 #include "column/binary_column.h"
 #include "types/geo_type_descriptor.h"
 #include "types/geo_wkb.h"
@@ -26,13 +25,6 @@
 namespace starrocks {
 
 struct TypeDescriptor;
-
-// An immutable execution view can retain more than its visible WKB slice.
-// Admission must count that owner, not just the visible byte length.
-struct GeoColumnViewOwner {
-    virtual ~GeoColumnViewOwner() = default;
-    virtual size_t retained_bytes() const = 0;
-};
 
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
 // Semantic metadata is immutable; transport restores storage metadata after validation.
@@ -51,12 +43,6 @@ public:
     explicit GeoColumn(size_t size = 0);
     GeoColumn(const TypeDescriptor& type, size_t size);
     explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
-    // The producer fills reserved offsets/backing before publishing. Later
-    // mutation materializes a copy; execution owners never cross the wire.
-    GeoColumn(GeoColumnDescriptor descriptor, ContainerResource resource, AdaptiveOffsets offsets,
-              std::shared_ptr<GeoColumnViewOwner> owner);
-    void finish_wkb_view(size_t bytes) { _data->finish_resource_view(bytes); }
-    size_t allocation_footprint(const memory::Allocator& allocator) const;
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
@@ -113,9 +99,7 @@ public:
     std::string get_name() const override { return "geo"; }
     std::string debug_item(size_t row) const override;
     size_t container_memory_usage() const override;
-    size_t reference_memory_usage(size_t from, size_t count) const override {
-        return _view_owner && count ? _view_owner->retained_bytes() : 0;
-    }
+    size_t reference_memory_usage(size_t from, size_t count) const override { return 0; }
     Status capacity_limit_reached() const override { return _data->capacity_limit_reached(); }
     void check_or_die() const override { _data->check_or_die(); }
     bool has_large_column() const override { return _data->has_large_column(); }
@@ -150,7 +134,6 @@ private:
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
     // One fixed-size entry; no heap allocation, geometry objects or source-buffer references.
     std::optional<CachedWkb> _cache;
-    std::shared_ptr<GeoColumnViewOwner> _view_owner;
 };
 
 } // namespace starrocks

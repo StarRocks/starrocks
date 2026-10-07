@@ -22,6 +22,7 @@
 #include "base/utility/defer_op.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/analytor.h"
 #include "geo/wkb.h"
 #include "runtime/descriptor_helper.h"
@@ -69,7 +70,8 @@ const std::string right = "POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))";
 // buffers complete groups, maps each row, and publishes ordinary native chunks.
 Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& keys,
                                const std::vector<std::optional<std::string>>& input, bool null_parameter,
-                               std::vector<std::pair<int32_t, std::string>>* output) {
+                               std::vector<std::pair<int32_t, std::string>>* output, double tolerance = 0,
+                               bool spill = false, bool companion = false, bool exceeded_query_limit = false) {
     ObjectPool pool;
     auto type = coverage_type();
     TDescriptorTableBuilder builder;
@@ -80,9 +82,13 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     in_tuple.build(&builder);
     TTupleDescriptorBuilder out_tuple;
     out_tuple.add_slot(TSlotDescriptorBuilder().type(type).nullable(true).build());
+    if (companion) out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).nullable(false).build());
     out_tuple.build(&builder);
-    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
-    state.init_mem_trackers(std::make_shared<MemTracker>(-1));
+    TQueryOptions options;
+    options.__set_enable_spill(spill);
+    RuntimeState state(TUniqueId(), options, TQueryGlobals(), nullptr);
+    auto query = std::make_shared<MemTracker>(exceeded_query_limit ? 1 : -1);
+    state.init_mem_trackers(query);
     DescriptorTbl* descriptors = nullptr;
     RETURN_IF_ERROR(DescriptorTbl::create(&state, &pool, builder.desc_tbl(), &descriptors, 4096));
     state.set_desc_tbl(descriptors);
@@ -124,13 +130,30 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     literal.__set_is_nullable(null_parameter);
     literal.__set_node_type(null_parameter ? TExprNodeType::NULL_LITERAL : TExprNodeType::FLOAT_LITERAL);
     TFloatLiteral value;
-    value.__set_value(0);
+    value.__set_value(tolerance);
     literal.__set_float_literal(value);
     TExpr call;
     call.nodes = {root, slot(0), literal};
     TAnalyticNode analytic;
     analytic.__set_buffered_tuple_id(0);
     analytic.analytic_functions = {call};
+    if (companion) {
+        TExprNode sibling = root;
+        sibling.__set_num_children(1);
+        sibling.__set_type(TypeDescriptor(TYPE_BIGINT).to_thrift());
+        sibling.__set_has_nullable_child(false);
+        sibling.__set_is_nullable(false);
+        TFunction sibling_function = function;
+        TFunctionName sibling_name;
+        sibling_name.__set_function_name("count");
+        sibling_function.__set_name(sibling_name);
+        sibling_function.__set_arg_types({TypeDescriptor(TYPE_INT).to_thrift()});
+        sibling_function.__set_ret_type(TypeDescriptor(TYPE_BIGINT).to_thrift());
+        sibling.__set_fn(sibling_function);
+        TExpr expression;
+        expression.nodes = {sibling, slot(2)};
+        analytic.analytic_functions.push_back(expression);
+    }
     if (!keys.empty()) {
         TExpr partition;
         partition.nodes = {slot(1)};
@@ -144,15 +167,27 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     RuntimeProfile profile("CoverageAnalytor");
     Analytor processor(plan, out, false);
     RETURN_IF_ERROR(processor.prepare(&state, &pool, &profile));
-    RETURN_IF_ERROR(processor.open(&state));
     auto close = DeferOp([&] { processor.close(&state); });
+    RETURN_IF_ERROR(processor.open(&state));
+    if (exceeded_query_limit) query->consume(2);
+    auto release = DeferOp([&] {
+        if (exceeded_query_limit) query->release(2);
+    });
     auto collect = [&] {
         while (auto chunk = processor.poll_chunk_buffer()) {
             auto result = chunk->get_column_by_slot_id(out->slots()[0]->id());
             auto ids = chunk->get_column_by_slot_id(in->slots()[2]->id());
             result->check_or_die();
-            for (size_t row = 0; row < chunk->num_rows(); ++row)
-                output->emplace_back(ids->get(row).get_int32(), output_text(result, row));
+            for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                const auto id = ids->get(row).get_int32();
+                if (companion) {
+                    const auto key = keys.empty() ? 0 : keys[id];
+                    const auto count = keys.empty() ? input.size() : std::count(keys.begin(), keys.end(), key);
+                    auto result_count = chunk->get_column_by_slot_id(out->slots()[1]->id());
+                    EXPECT_EQ(result_count->get(row).get_int64(), count);
+                }
+                output->emplace_back(id, output_text(result, row));
+            }
         }
     };
     for (size_t first = 0; first < input.size(); first += chunk_rows) {
@@ -198,6 +233,55 @@ TEST(CoverageAnalytorTest, OverAllRowsAndNullParameterUseTheRealExecutor) {
         EXPECT_EQ(output[1].second, "NULL");
         EXPECT_EQ(output[2].second, null ? "NULL" : output_text(coverage_input({right}), 0));
     }
+}
+
+TEST(CoverageAnalytorTest, EmptyInputPreservesInitializationErrors) {
+    for (double tolerance : {-1.0, 1e200}) {
+        std::vector<std::pair<int32_t, std::string>> output;
+        auto status = drive_coverage_analytor(1, {}, {}, false, &output, tolerance);
+        EXPECT_FALSE(status.ok());
+        EXPECT_TRUE(output.empty());
+    }
+    std::vector<std::pair<int32_t, std::string>> output;
+    EXPECT_FALSE(drive_coverage_analytor(1, {}, {}, false, &output, 0, true).ok());
+    EXPECT_TRUE(drive_coverage_analytor(1, {}, {}, false, &output).ok());
+}
+TEST(CoverageAnalytorTest, LateInvalidPartitionCannotPublishItsRows) {
+    std::vector<std::pair<int32_t, std::string>> output;
+    auto status = drive_coverage_analytor(1, {1, 2, 2}, {left, left, left}, false, &output);
+    EXPECT_FALSE(status.ok());
+    for (const auto& row : output) EXPECT_EQ(row.first, 0);
+}
+TEST(CoverageAnalytorTest, BufferContractionAndCompanionWindowPreserveRowIdentity) {
+    const auto previous = config::pipeline_analytic_removable_chunk_num;
+    auto restore = DeferOp([&] { config::pipeline_analytic_removable_chunk_num = previous; });
+    config::pipeline_analytic_removable_chunk_num = 1;
+    std::vector<int32_t> keys;
+    std::vector<std::optional<std::string>> input;
+    for (int32_t partition = 0; partition < 30; ++partition) {
+        keys.insert(keys.end(), {partition, partition, partition, partition});
+        input.insert(input.end(), {left, std::nullopt, right, "MULTIPOLYGON EMPTY"});
+    }
+    for (size_t rows : {size_t(1), size_t(3), size_t(7)}) {
+        std::vector<std::pair<int32_t, std::string>> output;
+        auto status = drive_coverage_analytor(rows, keys, input, false, &output, 1, false, true);
+        ASSERT_TRUE(status.ok()) << status;
+        ASSERT_EQ(output.size(), input.size());
+        for (size_t row = 0; row < output.size(); ++row) {
+            EXPECT_EQ(output[row].first, row);
+            EXPECT_EQ(output[row].second, row % 4 == 0
+                                                  ? "POLYGON ((0 0, 0 8, 4 8, 4 0, 0 0))"
+                                                  : row % 4 == 1 ? "NULL"
+                                                                 : row % 4 == 2 ? "POLYGON ((4 0, 4 8, 8 8, 8 0, 4 0))"
+                                                                                : "MULTIPOLYGON EMPTY");
+        }
+    }
+}
+TEST(CoverageAnalytorTest, ExceededQueryMemoryLimitUsesTheStandardStatusPath) {
+    std::vector<std::pair<int32_t, std::string>> output;
+    auto status = drive_coverage_analytor(1, {}, {left}, false, &output, 0, false, false, true);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(output.empty());
 }
 } // namespace
 } // namespace starrocks

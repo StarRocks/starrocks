@@ -42,7 +42,7 @@ This topic introduces the following types of BE configurations:
 
 ### Coverage simplification resource limits
 
-These mutable positive settings are captured per complete ST_CoverageSimplify window partition. Limits are rows (including NULL/EMPTY), original WKB coordinate positions (including closures/repetitions), input WKB bytes, and retained working bytes. Shared native backing, models, indices, mapping and output capacities count toward working memory. Query memory limits also apply. Admission checks precede window accumulation; exceeded limits return an error naming the setting, without partial partition results. See [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md).
+These mutable positive settings are captured when the ST_CoverageSimplify window function state is initialized. They limit rows (including NULL/EMPTY), original WKB coordinate positions (including closures/repetitions), input WKB bytes, and kernel-owned working bytes. The standard window operator materializes each complete partition before the function checks input limits and simplifies it. Working memory covers the kernel's input copies, models, indices, mapping, scratch and internal output; operator buffers, fixed function state and final output columns are covered by standard query memory accounting. Exceeded limits return an error naming the setting, without partial partition results. See [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md).
 
 #### geo_coverage_max_rows_per_partition
 

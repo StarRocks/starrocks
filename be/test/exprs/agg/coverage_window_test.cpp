@@ -21,6 +21,7 @@
 #include <limits>
 #include <thread>
 
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/geo_column.h"
 #include "common/config_exec_flow_fwd.h"
@@ -28,6 +29,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
 #include "geo/wkb.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -105,30 +107,29 @@ struct WindowHarness {
         }
     }
     ~WindowHarness() { destroy(); }
-    Status admit(const ColumnPtr& input, bool fresh = true, size_t start = 0, size_t end = 0) {
-        return fn.admit_window_segment(ctx.get(), storage.data(), input.get(), input->size(), start,
-                                       end ? end : input->size(), fresh, nullptr);
+    void recreate() {
+        destroy();
+        fn.create(ctx.get(), storage.data());
+        destroyed = false;
     }
-    void finish(size_t rows) {
-        fn.update_batch_single_state_with_frame(ctx.get(), storage.data(), nullptr, 0, rows, 0, rows);
+    void evaluate(const ColumnPtr& input, int64_t start = 0, int64_t end = -1) {
+        const Column* columns[] = {input.get()};
+        if (end < 0) end = input->size();
+        fn.update_batch_single_state_with_frame(ctx.get(), storage.data(), columns, start, end, start, end);
     }
     ColumnPtr result(size_t rows) {
-        auto result = fn.window_result_column(ctx.get(), storage.data());
+        auto result = ColumnHelper::create_column(ctx->get_return_type(), true);
+        result->reserve(rows);
         fn.get_values(ctx.get(), storage.data(), result.get(), 0, rows);
         return result;
     }
 };
 
-TEST(CoverageWindowTest, FullPartitionAcrossChunksPreservesEveryPosition) {
+TEST(CoverageWindowTest, FullPartitionEmitsDistinctRowsAcrossChunks) {
     for (const char* crs : {"EPSG:3857", "EPSG:4326"}) {
         auto type = coverage_type(crs);
         WindowHarness h(1, false, true, -1, type);
-        auto a = coverage_input({left, std::nullopt}, type);
-        auto b = coverage_input({right, "MULTIPOLYGON EMPTY"}, type);
-        ASSERT_TRUE(h.admit(a).ok());
-        ASSERT_TRUE(h.admit(b, false).ok());
-        EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
-        h.finish(4);
+        h.evaluate(coverage_input({left, std::nullopt, right, "MULTIPOLYGON EMPTY"}, type));
         ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
         EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 1);
         auto first = h.result(2), second = h.result(2);
@@ -142,31 +143,30 @@ TEST(CoverageWindowTest, FullPartitionAcrossChunksPreservesEveryPosition) {
         second->check_or_die();
     }
 }
+
 TEST(CoverageWindowTest, MultiplePartitionsShareAChunkWithoutDeduplicatingRows) {
     WindowHarness h(0);
-    auto source = coverage_input({left, left, "POLYGON EMPTY", std::nullopt});
-    ASSERT_TRUE(h.admit(source, true, 0, 1).ok());
-    ASSERT_TRUE(h.admit(source, true, 1, 4).ok());
-    h.finish(1);
-    auto result = h.fn.window_result_column(h.ctx.get(), h.storage.data());
+    auto input = coverage_input({left, left, "POLYGON EMPTY", std::nullopt});
+    auto result = ColumnHelper::create_column(coverage_type(), true);
+    h.evaluate(input, 0, 1);
     h.fn.get_values(h.ctx.get(), h.storage.data(), result.get(), 0, 1);
     h.fn.reset(h.ctx.get(), {}, h.storage.data());
-    h.finish(3);
+    h.evaluate(input, 1, 4);
     h.fn.get_values(h.ctx.get(), h.storage.data(), result.get(), 1, 4);
     ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
     EXPECT_EQ(geo_data(result)->get_wkb(0).to_string(), bytes(left));
     EXPECT_EQ(geo_data(result)->get_wkb(1).to_string(), bytes(left));
     EXPECT_EQ(output_text(result, 2), "POLYGON EMPTY");
     EXPECT_TRUE(result->is_null(3));
+    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0); // Zero tolerance validates without simplifying.
     result->check_or_die();
 }
+
 TEST(CoverageWindowTest, NullParametersSkipInvalidTopologyAndDefaultIsTrue) {
     for (bool null_tolerance : {false, true}) {
         WindowHarness h(null_tolerance ? std::optional<double>{} : -1,
                         null_tolerance ? std::optional<bool>{true} : std::optional<bool>{});
-        auto source = coverage_input({left, left, std::nullopt});
-        ASSERT_TRUE(h.admit(source).ok());
-        h.finish(3);
+        h.evaluate(coverage_input({left, left, std::nullopt}));
         auto result = h.result(3);
         ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
         for (size_t i = 0; i < 3; ++i) EXPECT_TRUE(result->is_null(i));
@@ -174,94 +174,100 @@ TEST(CoverageWindowTest, NullParametersSkipInvalidTopologyAndDefaultIsTrue) {
     }
     WindowHarness two(1, true, false), three(1, true);
     auto input = coverage_input({left, right});
-    ASSERT_TRUE(two.admit(input).ok());
-    ASSERT_TRUE(three.admit(input).ok());
-    two.finish(2);
-    three.finish(2);
+    two.evaluate(input);
+    three.evaluate(input);
     auto a = two.result(2), b = three.result(2);
     ASSERT_FALSE(two.ctx->has_error());
     ASSERT_FALSE(three.ctx->has_error());
     for (size_t i = 0; i < 2; ++i) EXPECT_EQ(geo_data(a)->get_wkb(i), geo_data(b)->get_wkb(i));
 }
-TEST(CoverageWindowTest, ParameterAndDescriptorGuardsAlsoApplyToNullOrEmptyInput) {
+
+TEST(CoverageWindowTest, GuardsApplyDuringInitializationAndToNativeInput) {
     for (double value :
          {-1.0, 1e200, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
         WindowHarness h(value);
-        EXPECT_FALSE(h.admit(coverage_input({std::nullopt, "POLYGON EMPTY"})).ok());
+        EXPECT_TRUE(h.ctx->has_error());
     }
     WindowHarness varying;
     varying.ctx->set_constant_columns({nullptr, nullptr, ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, 1)});
-    EXPECT_FALSE(varying.admit(coverage_input({"POLYGON EMPTY"})).ok());
+    varying.recreate();
+    EXPECT_TRUE(varying.ctx->has_error());
     WindowHarness wrong_descriptor;
-    EXPECT_FALSE(wrong_descriptor.admit(coverage_input({"POLYGON EMPTY"}, coverage_type("EPSG:4326"))).ok());
+    wrong_descriptor.evaluate(coverage_input({"POLYGON EMPTY"}, coverage_type("EPSG:4326")));
+    EXPECT_TRUE(wrong_descriptor.ctx->has_error());
     WindowHarness malformed;
     auto raw = GeoColumn::create(coverage_type(), 0);
     raw->append_wkb(Slice("x"));
-    EXPECT_FALSE(malformed.admit(raw).ok());
+    malformed.evaluate(raw);
+    EXPECT_TRUE(malformed.ctx->has_error());
     WindowHarness line;
-    EXPECT_FALSE(line.admit(coverage_input({"LINESTRING (0 0,1 1)"})).ok());
+    line.evaluate(coverage_input({"LINESTRING (0 0,1 1)"}));
+    EXPECT_TRUE(line.ctx->has_error());
 }
-TEST(CoverageWindowTest, InvalidCoverageFailsBeforeAnyPartitionOutput) {
+
+TEST(CoverageWindowTest, InvalidCoveragePadsOutputButFailsTheQuery) {
     WindowHarness h;
-    auto source = coverage_input({left, left});
-    ASSERT_TRUE(h.admit(source).ok());
-    h.finish(2);
+    h.evaluate(coverage_input({left, left}));
     ASSERT_TRUE(h.ctx->has_error());
     EXPECT_NE(std::string(h.ctx->error_msg()).find("ST_CoverageSimplify"), std::string::npos);
+    auto result = h.result(2);
+    EXPECT_EQ(result->size(), 2);
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    result->check_or_die();
 }
-TEST(CoverageWindowTest, EmptyInputStillChecksPlanParametersAndTypes) {
-    WindowHarness negative(-1);
-    EXPECT_FALSE(negative.fn.validate_window_plan(negative.ctx.get()).ok());
-    WindowHarness valid(0);
-    EXPECT_TRUE(valid.fn.validate_window_plan(valid.ctx.get()).ok());
+
+TEST(CoverageWindowTest, EmptyInputStillChecksParametersAndTypes) {
+    WindowHarness negative(-1), valid(0);
+    EXPECT_TRUE(negative.ctx->has_error());
+    EXPECT_FALSE(valid.ctx->has_error());
     TypeDescriptor missing(TYPE_GEOMETRY);
     WindowHarness descriptor(0, true, false, -1, missing);
-    EXPECT_FALSE(descriptor.fn.validate_window_plan(descriptor.ctx.get()).ok());
+    EXPECT_TRUE(descriptor.ctx->has_error());
     std::unique_ptr<FunctionContext> arity(
             FunctionContext::create_context(&valid.runtime, &valid.pool, coverage_type(), {coverage_type()}));
-    EXPECT_FALSE(valid.fn.validate_window_plan(arity.get()).ok());
+    alignas(CoverageWindowState) std::array<uint8_t, sizeof(CoverageWindowState)> state;
+    valid.fn.create(arity.get(), state.data());
+    EXPECT_TRUE(arity->has_error());
+    valid.fn.destroy(arity.get(), state.data());
 }
-TEST(CoverageWindowTest, LimitsAreCapturedAndQueryMemoryHasAnExplicitOwner) {
+
+TEST(CoverageWindowTest, LimitsAreCapturedAtInitialization) {
     const auto previous = config::geo_coverage_max_rows_per_partition;
-    struct Restore {
-        int64_t value;
-        ~Restore() { config::geo_coverage_max_rows_per_partition = value; }
-    } restore{previous};
+    auto restore = DeferOp([&] { config::geo_coverage_max_rows_per_partition = previous; });
     config::geo_coverage_max_rows_per_partition = 2;
     WindowHarness h;
-    ASSERT_TRUE(h.admit(coverage_input({left})).ok());
     config::geo_coverage_max_rows_per_partition = 100;
-    auto status = h.admit(coverage_input({right, "POLYGON EMPTY"}), false);
-    EXPECT_FALSE(status.ok());
-    EXPECT_NE(status.to_string().find("max_rows"), std::string::npos);
-    WindowHarness query_limited(1, false, true, 1);
-    EXPECT_FALSE(query_limited.admit(coverage_input({left})).ok());
-    query_limited.destroy();
-    EXPECT_EQ(query_limited.query->consumption(), 0);
+    h.evaluate(coverage_input({left, right, "POLYGON EMPTY"}));
+    ASSERT_TRUE(h.ctx->has_error());
+    EXPECT_NE(std::string(h.ctx->error_msg()).find("max_rows"), std::string::npos);
+    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
 }
-TEST(CoverageWindowTest, CancellationAndOutputOwnerSurviveWorkerTransfer) {
+
+TEST(CoverageWindowTest, CancellationAndOutputOwnershipUseTheNormalLifecycle) {
     WindowHarness cancelled;
     cancelled.runtime.set_is_cancelled(true);
-    EXPECT_FALSE(cancelled.admit(coverage_input({left})).ok());
+    cancelled.evaluate(coverage_input({left}));
+    EXPECT_TRUE(cancelled.ctx->has_error());
     WindowHarness h;
-    ASSERT_TRUE(h.admit(coverage_input({left, right})).ok());
-    h.finish(2);
+    h.evaluate(coverage_input({left, right}));
     auto result = h.result(2);
     ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
-    EXPECT_GT(h.query->consumption(), 0);
-    EXPECT_GT(geo_data(result)->reference_memory_usage(0, 2), 0);
+    EXPECT_EQ(geo_data(result)->reference_memory_usage(0, 2), 0);
+    h.fn.reset(h.ctx.get(), {}, h.storage.data());
     h.destroy();
-    EXPECT_GT(h.query->consumption(), 0);
-    auto query = h.query;
-    std::thread worker([column = std::move(result), query]() mutable {
+    std::thread worker([column = std::move(result)]() mutable {
         column->check_or_die();
-        EXPECT_FALSE(output_text(column, 0).empty());
-        column.reset();
-        EXPECT_EQ(query->consumption(), 0);
+        EXPECT_EQ(output_text(column, 0), "POLYGON ((0 0, 0 8, 4 8, 4 0, 0 0))");
+        EXPECT_EQ(output_text(column, 1), "POLYGON ((4 0, 4 8, 8 8, 8 0, 4 0))");
+        column->as_mutable_raw_ptr()->remove_first_n_values(2);
+        EXPECT_TRUE(column->empty());
+        column->check_or_die();
     });
     worker.join();
 }
-TEST(CoverageWindowTest, EveryAdmissionLimitRejectsBeforeKernelAndCleansUp) {
+
+TEST(CoverageWindowTest, EveryKernelLimitRejectsBeforeSimplification) {
     struct LimitsRestore {
         int64_t rows = config::geo_coverage_max_rows_per_partition;
         int64_t vertices = config::geo_coverage_max_vertices_per_partition;
@@ -273,70 +279,96 @@ TEST(CoverageWindowTest, EveryAdmissionLimitRejectsBeforeKernelAndCleansUp) {
             config::geo_coverage_max_input_bytes_per_partition = input;
             config::geo_coverage_max_working_bytes_per_partition = working;
         }
-    } saved;
-    const auto wkb_bytes = bytes(left).size() + bytes(right).size();
-    config::geo_coverage_max_rows_per_partition = 2;
-    config::geo_coverage_max_vertices_per_partition = 16;
-    config::geo_coverage_max_input_bytes_per_partition = wkb_bytes;
-    auto source = coverage_input({left, right});
-    {
+    };
+    for (auto* limit :
+         {&config::geo_coverage_max_rows_per_partition, &config::geo_coverage_max_vertices_per_partition,
+          &config::geo_coverage_max_input_bytes_per_partition, &config::geo_coverage_max_working_bytes_per_partition}) {
+        LimitsRestore restore;
+        *limit = 1;
         WindowHarness h;
-        ASSERT_TRUE(h.admit(source).ok());
-        h.finish(2);
-        ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
-        EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 1);
-    }
-    for (int limit = 0; limit < 4; ++limit) {
-        config::geo_coverage_max_rows_per_partition = limit == 0 ? 1 : 2;
-        config::geo_coverage_max_vertices_per_partition = limit == 1 ? 15 : 16;
-        config::geo_coverage_max_input_bytes_per_partition = limit == 2 ? wkb_bytes - 1 : wkb_bytes;
-        config::geo_coverage_max_working_bytes_per_partition = limit == 3 ? 1 : saved.working;
-        WindowHarness h;
-        auto status = h.admit(source);
-        EXPECT_FALSE(status.ok());
-        EXPECT_NE(status.to_string().find("geo_coverage_max_"), std::string::npos) << status;
+        h.evaluate(coverage_input({left, right}));
+        ASSERT_TRUE(h.ctx->has_error());
         EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
         h.destroy();
-        EXPECT_EQ(h.query->consumption(), 0);
     }
 }
-TEST(CoverageWindowTest, SpillAndWrongPhysicalParameterFailAtTheBoundary) {
-    WindowHarness h;
-    auto& options = const_cast<TQueryOptions&>(h.runtime.query_options());
+
+TEST(CoverageWindowTest, SpillAndWrongPhysicalParameterFailDuringInitialization) {
+    WindowHarness spill;
+    auto& options = const_cast<TQueryOptions&>(spill.runtime.query_options());
     options.__set_enable_spill(true);
-    EXPECT_FALSE(h.fn.validate_window_plan(h.ctx.get()).ok());
-    options.__set_enable_spill(false);
-    h.ctx->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_INT>(1, 1),
-                                 ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, 1)});
-    EXPECT_FALSE(h.fn.validate_window_plan(h.ctx.get()).ok());
+    spill.recreate();
+    EXPECT_TRUE(spill.ctx->has_error());
+    WindowHarness parameter;
+    parameter.ctx->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_INT>(1, 1),
+                                         ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, 1)});
+    parameter.recreate();
+    EXPECT_TRUE(parameter.ctx->has_error());
 }
+
+TEST(CoverageWindowTest, IncompleteFrameIsRejectedAndOutputIsPadded) {
+    WindowHarness h;
+    auto input = coverage_input({left, right});
+    const Column* columns[] = {input.get()};
+    h.fn.update_batch_single_state_with_frame(h.ctx.get(), h.storage.data(), columns, 0, 2, 0, 1);
+    ASSERT_TRUE(h.ctx->has_error());
+    auto result = h.result(2);
+    EXPECT_EQ(result->size(), 2);
+    result->check_or_die();
+}
+
+TEST(CoverageWindowTest, CancellationDuringOutputPadsWithoutPublishingSuccess) {
+    WindowHarness h;
+    h.evaluate(coverage_input({left, right}));
+    ASSERT_FALSE(h.ctx->has_error());
+    h.runtime.set_is_cancelled(true);
+    auto result = h.result(2);
+    EXPECT_TRUE(h.ctx->has_error());
+    EXPECT_EQ(result->size(), 2);
+    EXPECT_TRUE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    result->check_or_die();
+}
+
+TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
+    WindowHarness h;
+    auto input = coverage_input({left, right});
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
+        if (CurrentThread::mem_tracker() == nullptr)
+            GTEST_SKIP() << "The test harness has not initialized the runtime memory tracker source";
+        h.evaluate(input);
+    } // Changing the thread tracker commits its batched accounting.
+    ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
+    EXPECT_GT(h.query->consumption(), 0);
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(h.query.get());
+        h.fn.reset(h.ctx.get(), {}, h.storage.data());
+    }
+    EXPECT_EQ(h.query->consumption(), 0);
+}
+
 TEST(CoverageWindowTest, IndependentPartitionsCanRunOnConcurrentWorkers) {
     std::array<std::thread, 2> workers;
     for (auto& worker : workers)
         worker = std::thread([] {
             WindowHarness h;
-            ASSERT_TRUE(h.admit(coverage_input({left})).ok());
-            ASSERT_TRUE(h.admit(coverage_input({right}), false).ok());
-            h.finish(2);
+            h.evaluate(coverage_input({left, right}));
             auto first = h.result(1), second = h.result(1);
             ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
             EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 1);
             EXPECT_EQ(output_text(first, 0), "POLYGON ((0 0, 0 8, 4 8, 4 0, 0 0))");
             EXPECT_EQ(output_text(second, 0), "POLYGON ((4 0, 4 8, 8 8, 8 0, 4 0))");
-            first.reset();
-            second.reset();
-            h.destroy();
-            EXPECT_EQ(h.query->consumption(), 0);
         });
     for (auto& worker : workers) worker.join();
 }
-TEST(CoverageWindowTest, NativeViewSerializesWithoutExecutionPointers) {
+
+TEST(CoverageWindowTest, OwnedOutputSerializesAfterStateDestruction) {
     WindowHarness h(0);
-    auto input = coverage_input({left, std::nullopt, "MULTIPOLYGON EMPTY"});
-    ASSERT_TRUE(h.admit(input).ok());
-    h.finish(3);
+    h.evaluate(coverage_input({left, std::nullopt, "MULTIPOLYGON EMPTY"}));
     auto result = h.result(3);
     ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
+    h.destroy();
     const auto* source = geo_data(result);
     std::vector<uint8_t> wire(source->serialized_column_size());
     ASSERT_TRUE(source->serialize_column(wire.data()).ok());
@@ -346,10 +378,9 @@ TEST(CoverageWindowTest, NativeViewSerializesWithoutExecutionPointers) {
     EXPECT_EQ(restored->descriptor(), source->descriptor());
     for (size_t i = 0; i < 3; ++i) EXPECT_EQ(restored->get_wkb(i), source->get_wkb(i));
     result.reset();
-    h.destroy();
-    EXPECT_EQ(h.query->consumption(), 0);
     EXPECT_EQ(restored->get_wkb(0).to_string(), bytes(left));
 }
+
 TEST(CoverageWindowTest, WindowOnlyRegistrationDoesNotExposeOrdinaryAggregation) {
     EXPECT_NE(get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, false), nullptr);
     EXPECT_NE(get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, true), nullptr);

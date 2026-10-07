@@ -43,7 +43,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### Coverage 簡略化の資源制限
 
-変更可能な正値設定を、完全な ST_CoverageSimplify ウィンドウパーティションの開始時に取得します。全行（NULL/EMPTY 含む）、元の WKB 座標位置（閉合/重複含む）、入力 WKB バイト、保持作業バイトを制限します。共有ネイティブ領域、モデル、索引、行マッピング、出力容量を作業メモリに計上し、クエリメモリ制限も適用します。累積前に確認し、超過時は設定名を示すエラーを返し、パーティションの部分結果は返しません。[ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md) を参照してください。
+変更可能な正値設定を ST_CoverageSimplify ウィンドウ関数の状態初期化時に取得します。全行（NULL/EMPTY 含む）、元の WKB 座標位置（閉合/重複含む）、入力 WKB バイト、カーネル所有の作業バイトを制限します。標準ウィンドウ演算子が完全なパーティションを保持した後、関数が入力制限を確認して簡略化します。作業メモリはカーネルの入力コピー、モデル、索引、行マッピング、一時領域、内部出力を対象とし、演算子バッファ、固定関数状態、最終出力列は標準クエリメモリ管理の対象です。超過時は設定名を示すエラーを返し、パーティションの部分結果は返しません。[ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md) を参照してください。
 
 #### geo_coverage_max_rows_per_partition
 

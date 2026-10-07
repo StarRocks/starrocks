@@ -55,8 +55,8 @@ CONF_mInt64(jit_lru_cache_size, "0");
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
 
-// Snapshot per ST_CoverageSimplify partition. Positive values are required;
-// retained shared geometry backing and output capacities count toward working bytes.
+// Snapshot at ST_CoverageSimplify window-state initialization. Positive values are required;
+// working bytes cover kernel-owned allocations; operator/output columns use query memory accounting.
 CONF_mInt64(geo_coverage_max_rows_per_partition, "10000");
 
 CONF_mInt64(geo_coverage_max_vertices_per_partition, "1000000");

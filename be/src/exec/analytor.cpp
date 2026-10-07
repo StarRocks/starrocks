@@ -27,7 +27,6 @@
 #include "common/status.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/count.h"
-#include "exprs/agg/coverage_window.h"
 #include "exprs/agg/window.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -57,11 +56,6 @@
     }
 
 namespace starrocks {
-namespace {
-const CoverageWindowFunction* coverage_window(const AggregateFunction* fn) {
-    return dynamic_cast<const CoverageWindowFunction*>(fn);
-}
-} // namespace
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context,
                                const TCloudConfiguration& cloud_configuration, bool use_cache,
@@ -352,14 +346,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         DCHECK(_agg_functions[i] != nullptr);
-        if (coverage_window(_agg_functions[i])) {
-            _need_partition_materializing = true;
-            if (_is_merge_funcs || !_tnode.analytic_node.order_by_exprs.empty() ||
-                (_tnode.analytic_node.__isset.window && (_tnode.analytic_node.window.__isset.window_start ||
-                                                         _tnode.analytic_node.window.__isset.window_end))) {
-                return Status::NotSupported("ST_CoverageSimplify requires an unordered complete window partition");
-            }
-        }
         _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
         // Ask once which functions can defer a row, so the per-row streaming loop does not
         // virtual-dispatch into every other window function.
@@ -484,9 +470,6 @@ Status Analytor::open(RuntimeState* state) {
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(ExprExecutor::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
-        if (const auto* fn = coverage_window(_agg_functions[i])) {
-            RETURN_IF_ERROR(fn->validate_window_plan(_agg_fn_ctxs[i]));
-        }
     }
 
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
@@ -557,7 +540,7 @@ Status Analytor::open(RuntimeState* state) {
     }
 #endif
 
-    return Status::OK();
+    return _check_has_error();
 }
 
 void Analytor::close(RuntimeState* state) {
@@ -923,7 +906,6 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
     {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            if (coverage_window(_agg_functions[i])) continue;
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 _agg_intput_columns[i][j]->as_mutable_raw_ptr()->remove_first_n_values(remove_rows);
             }
@@ -979,50 +961,9 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr && !chunk->is_empty());
     const size_t chunk_size = chunk->num_rows();
 
-    // Evaluate partition keys once. Coverage admission scans the fresh chunk
-    // and the previous buffered key before ANY argument/chunk accumulation.
-    const bool admission = std::any_of(_agg_functions.begin(), _agg_functions.end(),
-                                       [](auto* fn) { return coverage_window(fn) != nullptr; });
-    Columns fresh_keys;
-    if (admission) {
-        for (auto* ctx : _partition_ctxs) {
-            ASSIGN_OR_RETURN(auto column, ctx->evaluate(chunk.get()));
-            fresh_keys.emplace_back(std::move(column));
-        }
-        auto same = [&](size_t left, size_t right) {
-            for (const auto& key : fresh_keys)
-                if (key->compare_at(left, right, *key, 1) != 0) return false;
-            return true;
-        };
-        bool continues = _input_rows != 0;
-        for (size_t k = 0; continues && k < fresh_keys.size(); ++k) {
-            continues = _partition_columns[k]->compare_at(_partition_columns[k]->size() - 1, 0, *fresh_keys[k], 1) == 0;
-        }
-        for (size_t i = 0; i < _agg_functions.size(); ++i) {
-            const auto* fn = coverage_window(_agg_functions[i]);
-            if (!fn) continue;
-            ASSIGN_OR_RETURN(auto geometry, _agg_expr_ctxs[i][0]->evaluate(chunk.get()));
-            size_t start = 0;
-            bool new_partition = !continues;
-            for (size_t end = 1; end <= chunk_size; ++end) {
-                if (end % 128 == 0) {
-                    RETURN_IF_CANCELLED(_agg_fn_ctxs[i]->state());
-                    RETURN_IF_ERROR(_agg_fn_ctxs[i]->state()->check_query_state("ST_CoverageSimplify"));
-                }
-                if (end != chunk_size && same(end - 1, end)) continue;
-                RETURN_IF_ERROR(fn->admit_window_segment(
-                        _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], geometry.get(),
-                        chunk_size, start, end, new_partition, chunk.get()));
-                start = end;
-                new_partition = true;
-            }
-        }
-    }
-
     {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            if (coverage_window(_agg_functions[i])) continue;
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
                 // will not generate a single column larger than 4GB.
@@ -1034,12 +975,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
-            ColumnPtr column;
-            if (admission)
-                column = fresh_keys[i];
-            else {
-                ASSIGN_OR_RETURN(column, _partition_ctxs[i]->evaluate(chunk.get()));
-            }
+            ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             _append_column(chunk_size, _partition_columns[i].get(), column);
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
@@ -1581,11 +1517,6 @@ void Analytor::_init_window_result_columns() {
     const auto chunk_size = _current_chunk_size();
     _result_window_columns.resize(_agg_fn_types.size());
     for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-        if (const auto* fn = coverage_window(_agg_functions[i])) {
-            _result_window_columns[i] = fn->window_result_column(
-                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
-            continue;
-        }
         // Materialize the result column with the function's window-result nullability (see
         // FunctionTypes::is_result_nullable): a frame can be empty, so it is nullable when the input OR the
         // declared result is nullable, unless the aggregate declares is_result_non_nullable(). An always-non-null
@@ -1604,7 +1535,9 @@ void Analytor::_init_window_result_columns() {
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOMETRY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOGRAPHY) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);

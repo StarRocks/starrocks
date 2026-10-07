@@ -39,7 +39,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### 覆盖简化资源限制
 
-这些可动态修改的正数配置在每个完整 ST_CoverageSimplify 窗口分区开始时取快照。分别限制所有行（含 NULL/EMPTY）、原始 WKB 坐标位置（含闭合和重复）、输入 WKB 字节和保留工作字节。共享原生缓冲区、模型、索引、行映射及输出容量计入工作内存；查询内存限制也适用。在窗口累积前检查准入，超限错误指出配置名，不返回部分分区结果。参见 [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md)。
+这些可动态修改的正数配置在 ST_CoverageSimplify 窗口函数状态初始化时取快照，分别限制所有行（含 NULL/EMPTY）、原始 WKB 坐标位置（含闭合和重复）、输入 WKB 字节和内核拥有的工作字节。标准窗口算子先物化完整分区，函数再检查输入限制并简化覆盖。工作内存包括内核的输入副本、模型、索引、行映射、临时数据和内部输出；算子缓冲区、固定函数状态及最终输出列使用标准查询内存管理。超限错误指出配置名，不返回部分分区结果。参见 [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md)。
 
 #### geo_coverage_max_rows_per_partition
 
