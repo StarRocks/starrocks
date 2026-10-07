@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -47,7 +48,11 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -58,7 +63,6 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
@@ -72,6 +76,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -201,19 +206,28 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testInsertWithLoadPropertiesShortCircuits() throws Exception {
-        // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
-        // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
-        // may fail property validation is wrong. Skip conservatively when any property is present.
-        // The gate reads the parse-time key set, not getProperties(), which the analyzer overwrites.
-        InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("strict_mode"));
+    public void testInsertWithLoadPropertiesDispatches() throws Exception {
+        // A PROPERTIES(...) clause no longer disqualifies the statement. No INSERT load property can
+        // move a row to a different tablet: the live ones (strict_mode, max_filter_ratio,
+        // merge_condition) only remove rows, and the rest are shared load vocabulary an INSERT
+        // ignores. So the sampled boundaries stay valid and the statement must reach the flow.
+        // Driven with the mix the requirement asks for plus two keys the removed gate rejected
+        // (partial_update, merge_condition) and a max_filter_ratio the analyzer will itself reject,
+        // so re-adding any arm of that gate makes this fail.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "2.0",
+                    "partial_update", "true", "merge_condition", "v"));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+            InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context);
+
+            flow.verify(() -> PreSplitFlow.dispatch(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context),
+                    any(PreSplitPartitionScope.class)), times(1));
+        }
     }
-
-    // ---------- extractSingleTableSource: query-shape filters ----------
 
     @Test
     public void testNullQueryStatementShortCircuits() throws Exception {
@@ -527,9 +541,136 @@ public class InsertPreSplitHookTableTest {
                 "total-files-size", "872000000000",
                 "total-records", "3500000000"));
 
+        when(icebergTable.getCatalogName()).thenReturn("iceberg_catalog");
+        when(icebergTable.getType()).thenReturn(Table.TableType.ICEBERG);
+
         Assertions.assertTrue(TablePreSplitSource.isSupportedSourceTable(icebergTable));
+        // A usable snapshot summary answers without consulting the table statistics at all, so no
+        // ConnectContext / MetadataMgr is needed here.
         Assertions.assertEquals(new Estimates(872000000000L, 3500000000L),
-                TablePreSplitSource.sourceEstimates(icebergTable));
+                TablePreSplitSource.sourceEstimates(icebergTable, null));
+    }
+
+    @Test
+    public void testExternalCatalogBaseTablesAreSupportedSources() {
+        for (Table.TableType type : List.of(Table.TableType.HIVE, Table.TableType.PAIMON,
+                Table.TableType.DELTALAKE, Table.TableType.HUDI, Table.TableType.JDBC,
+                Table.TableType.ELASTICSEARCH)) {
+            Assertions.assertTrue(TablePreSplitSource.isSupportedSourceTable(externalTable("ext_catalog", type)),
+                    "an external-catalog " + type + " table must be a supported source");
+        }
+    }
+
+    @Test
+    public void testViewsMetadataAndInternalNonOlapTablesAreNotSupportedSources() {
+        // Views would need the projection mapped through the view definition.
+        for (Table.TableType type : List.of(Table.TableType.HIVE_VIEW, Table.TableType.ICEBERG_VIEW,
+                Table.TableType.PAIMON_VIEW)) {
+            Table view = externalTable("ext_catalog", type);
+            when(view.isView()).thenReturn(true);
+            Assertions.assertFalse(TablePreSplitSource.isSupportedSourceTable(view), type + " must be excluded");
+        }
+        Table metadataTable = externalTable("ext_catalog", Table.TableType.METADATA);
+        when(metadataTable.isMetadataTable()).thenReturn(true);
+        Assertions.assertFalse(TablePreSplitSource.isSupportedSourceTable(metadataTable));
+        Assertions.assertFalse(TablePreSplitSource.isSupportedSourceTable(
+                externalTable("ext_catalog", Table.TableType.SCHEMA)));
+        // A non-OLAP table of the internal catalog (an old-style MySQL / ES external table, a view)
+        // keeps being declined.
+        Assertions.assertFalse(TablePreSplitSource.isSupportedSourceTable(
+                externalTable("default_catalog", Table.TableType.MYSQL)));
+        Assertions.assertFalse(TablePreSplitSource.isSupportedSourceTable(null));
+    }
+
+    private static Table externalTable(String catalogName, Table.TableType type) {
+        Table table = mock(Table.class);
+        when(table.getCatalogName()).thenReturn(catalogName);
+        when(table.getType()).thenReturn(type);
+        when(table.getCatalogDBName()).thenReturn("ext_db");
+        when(table.getName()).thenReturn("ext_t");
+        when(table.isUnPartitioned()).thenReturn(true);
+        when(table.getBaseSchema()).thenReturn(List.of(bigintColumn("k"), bigintColumn("v")));
+        when(table.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k"), bigintColumn("v")));
+        return table;
+    }
+
+    /** Stubs the fixture-less MetadataMgr the connector-statistics estimate reads. */
+    private static MockedStatic<com.starrocks.server.GlobalStateMgr> mockStatistics(Statistics statistics) {
+        MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr =
+                Mockito.mockStatic(com.starrocks.server.GlobalStateMgr.class);
+        com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
+        com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
+        when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
+        globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
+        stubStatistics(metadataMgr, statistics);
+        return globalStateMgr;
+    }
+
+    private static void stubStatistics(com.starrocks.server.MetadataMgr metadataMgr, Statistics statistics) {
+        when(metadataMgr.getTableVersionRange(any(), any(), any(), any())).thenReturn(TvrTableSnapshot.empty());
+        when(metadataMgr.getTableStatistics(any(), any(), any(), any(), any(), any(), anyLong(), any()))
+                .thenReturn(statistics);
+    }
+
+    private static Statistics connectorStatistics(double rows, double columnWidth,
+                                                  Statistics.StatsSource statsSource) {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.BIGINT, "k", true);
+        ColumnRefOperator v = new ColumnRefOperator(2, IntegerType.BIGINT, "v", true);
+        ColumnStatistic width = ColumnStatistic.builder().setAverageRowSize(columnWidth).build();
+        return Statistics.builder().setOutputRowCount(rows)
+                .addColumnStatistic(k, width).addColumnStatistic(v, width)
+                .setStatsSource(statsSource).build();
+    }
+
+    @Test
+    public void testExternalSourceIsSizedFromConnectorStatistics() {
+        // The rows are what the connector reports; the bytes are those rows at the statistics' width
+        // (two 8-byte columns here), since the optimizer's statistics carry no stored-file size.
+        try (MockedStatic<com.starrocks.server.GlobalStateMgr> ignored = mockStatistics(
+                connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA))) {
+            Assertions.assertEquals(new Estimates(16_000_000L, 1_000_000L),
+                    TablePreSplitSource.sourceEstimates(externalTable("hive_catalog", Table.TableType.HIVE),
+                            mockConnectContextWithSessionPreSplit(true)));
+        }
+    }
+
+    @Test
+    public void testPlaceholderConnectorStatisticsAreNotAnEstimate() {
+        // StatsSource.NONE is what the optimizer returns when it knows nothing -- e.g. a JDBC table
+        // whose statistics are still loading, or a catalog with stats-from-metadata turned off. Its
+        // row count is Config.default_statistics_output_row_count, not a measurement.
+        try (MockedStatic<com.starrocks.server.GlobalStateMgr> ignored = mockStatistics(
+                connectorStatistics(1d, 8d, Statistics.StatsSource.NONE))) {
+            Assertions.assertEquals(Estimates.ZERO,
+                    TablePreSplitSource.sourceEstimates(externalTable("jdbc_catalog", Table.TableType.JDBC),
+                            mockConnectContextWithSessionPreSplit(true)));
+        }
+    }
+
+    @Test
+    public void testConnectorStatisticsFailureIsNotAnEstimate() {
+        try (MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr = mockStatistics(null)) {
+            com.starrocks.server.MetadataMgr metadataMgr =
+                    com.starrocks.server.GlobalStateMgr.getCurrentState().getMetadataMgr();
+            when(metadataMgr.getTableStatistics(any(), any(), any(), any(), any(), any(), anyLong(), any()))
+                    .thenThrow(new RuntimeException("simulated metastore outage"));
+            Assertions.assertEquals(Estimates.ZERO,
+                    TablePreSplitSource.sourceEstimates(externalTable("hive_catalog", Table.TableType.HIVE),
+                            mockConnectContextWithSessionPreSplit(true)));
+        }
+    }
+
+    @Test
+    public void testIcebergSourceWithoutSummaryTotalsFallsBackToConnectorStatistics() {
+        IcebergTable icebergTable = mockIcebergTableWithSummary(Map.of("operation", "append"));
+        when(icebergTable.getCatalogName()).thenReturn("iceberg_catalog");
+        when(icebergTable.isUnPartitioned()).thenReturn(true);
+        when(icebergTable.getBaseSchema()).thenReturn(List.of(bigintColumn("k"), bigintColumn("v")));
+        try (MockedStatic<com.starrocks.server.GlobalStateMgr> ignored = mockStatistics(
+                connectorStatistics(500d, 8d, Statistics.StatsSource.TABLE_METADATA))) {
+            Assertions.assertEquals(new Estimates(8_000L, 500L),
+                    TablePreSplitSource.sourceEstimates(icebergTable, mockConnectContextWithSessionPreSplit(true)));
+        }
     }
 
     // The snapshot-summary keys below are written by whichever engine produced the snapshot, not by
@@ -554,7 +695,7 @@ public class InsertPreSplitHookTableTest {
     public void testIcebergSourceWithoutCurrentSnapshotEstimatesZero() {
         // An empty (never-written) Iceberg table has no current snapshot.
         Assertions.assertEquals(Estimates.ZERO,
-                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(null)));
+                TablePreSplitSource.icebergSnapshotEstimates(mockIcebergTableWithSummary(null)));
     }
 
     @Test
@@ -562,7 +703,8 @@ public class InsertPreSplitHookTableTest {
         // The case most likely to bite in production: a snapshot exists and the scan works, but the
         // writer never recorded the totals, so pre-split has no size to work from.
         Assertions.assertEquals(Estimates.ZERO,
-                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(Map.of("operation", "append"))));
+                TablePreSplitSource.icebergSnapshotEstimates(
+                        mockIcebergTableWithSummary(Map.of("operation", "append"))));
     }
 
     @Test
@@ -570,19 +712,75 @@ public class InsertPreSplitHookTableTest {
         // Never propagate a partially-parsed size: one bad key must not be combined with a good one
         // into a ratio that over- or under-splits.
         Assertions.assertEquals(Estimates.ZERO,
-                TablePreSplitSource.sourceEstimates(mockIcebergTableWithSummary(
+                TablePreSplitSource.icebergSnapshotEstimates(mockIcebergTableWithSummary(
                         Map.of("total-files-size", "not-a-number", "total-records", "-17"))));
     }
 
     @Test
     public void testZeroSourceEstimateRemovesTheSamplingRateLimit() {
-        // The consequence of the three cases above, asserted end-to-end so it cannot regress
-        // unnoticed: a zero byte estimate makes the Bernoulli rate 1.0, so every predicate-matching
-        // row reaches the ORDER BY rand() LIMIT rather than a small sample. On a large Iceberg
-        // snapshot that turns a cheap sample into a top-N over the whole filtered input.
+        // Why an unsized external source is declined rather than sampled: a zero byte estimate makes
+        // the Bernoulli rate 1.0, so every predicate-matching row reaches the ORDER BY rand() LIMIT
+        // rather than a small sample. On a large lake table that turns a cheap sample into a top-N
+        // over the whole filtered input.
         Assertions.assertEquals(1.0, AbstractSqlSampleSubqueryExecutor.pickSamplingRate(0L));
         Assertions.assertTrue(AbstractSqlSampleSubqueryExecutor.pickSamplingRate(872000000000L) < 1.0e-4,
                 "a sized snapshot must still be sampled at a small rate");
+    }
+
+    @Test
+    public void prepareSizesAnExternalSourceFromItsStatistics() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
+
+            PreSplitFlow.Prepared prepared = fixture.prepare();
+
+            Assertions.assertNotNull(prepared, "a sized external source must be pre-split");
+            InsertFromTableScanContext scanContext = (InsertFromTableScanContext) prepared.scanContext();
+            Assertions.assertEquals(16_000_000L, scanContext.sourceTotalBytes());
+            Assertions.assertEquals(1_000_000L, scanContext.sourceTotalRows());
+            Assertions.assertEquals(16_000_000L, prepared.estimatedBytes());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareDeclinesAnUnsizedExternalSourceWithEstimateUnavailable() throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withExternalSource(connectorStatistics(1d, 8d, Statistics.StatsSource.NONE));
+            String label = SkipReason.ESTIMATE_UNAVAILABLE.name().toLowerCase();
+            long baseline = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+
+            Assertions.assertNull(fixture.prepare(), "an unsized external source must not be sampled");
+            Assertions.assertEquals(baseline + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue());
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void prepareStillSamplesAnUnsizedOlapSource() throws Exception {
+        // The fixture's OLAP source reports zero bytes; that keeps today's unrated sampling.
+        try (SourceFixture fixture = sourceFixture()) {
+            Assertions.assertNotNull(fixture.prepare());
+        }
+    }
+
+    @Test
+    public void prepareDoesNotSizeAnExternalSourceTheUserCannotSelect() throws Exception {
+        // The SELECT re-check and the policy gate still guard a new source kind, and they run before
+        // the connector statistics are read.
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
+            fixture.authorizer.when(() -> Authorizer.getRowAccessPolicy(any(), any()))
+                    .thenReturn(mock(Expr.class));
+
+            Assertions.assertNull(fixture.prepare());
+            verify(fixture.metadataMgr, never())
+                    .getTableStatistics(any(), any(), any(), any(), any(), any(), anyLong(), any());
+        }
     }
 
     @Test
@@ -660,6 +858,40 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void prepareAcceptsPartialTargetColumnList() throws Exception {
+        // target base (k, v, extra); INSERT INTO t (k, v) SELECT * FROM src(k, v). This path used
+        // to decline every non-identity list; the shared targetColumnListIsPreSplitSafe gate (see
+        // InsertPreSplitHookColumnListTest) is now the only column-list gate, and the omitted
+        // "extra" -- defaulted by the load -- simply never enters the map.
+        try (SourceFixture fixture = sourceFixture(List.of("k", "v", "extra"), List.of("k", "v"))) {
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("k", "v"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a partial target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareAcceptsReorderedTargetColumnList() throws Exception {
+        // INSERT INTO t (v, k) SELECT k, v FROM src -- outputs pair against the list as written,
+        // so the target sort key k is sampled from source column v, not from source column k.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectList projection = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
+            when(selectRelation.getSelectList()).thenReturn(projection);
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a reordered target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "v", "v", "k"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
     public void prepareThreadsWherePredicateSqlIntoScanContext() throws Exception {
         // A deterministic, safe WHERE clause must be rendered by SamplingPredicateGate.toSql
         // and threaded verbatim into the scan context. Mock the WHERE Expr so the gate's
@@ -680,6 +912,47 @@ public class InsertPreSplitHookTableTest {
                 Assertions.assertNotNull(scanContext, "prepare must build a scan context");
                 Assertions.assertEquals("`a` > 10", scanContext.wherePredicateSql(),
                         "the rendered WHERE predicate SQL must be threaded into the scan context");
+            }
+        }
+    }
+
+    @Test
+    public void prepareRendersTheFoldedWherePredicate() throws Exception {
+        // prepare must hand the sampler the predicate folded in the caller's context, not the
+        // parsed one: the parsed date_sub(current_date(), 7) would be evaluated as ROOT.
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            Expr folded = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(folded);
+                gate.when(() -> SamplingPredicateGate.toSql(folded)).thenReturn("`dt` >= '2026-09-16'");
+
+                InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+                Assertions.assertNotNull(scanContext);
+                Assertions.assertEquals("`dt` >= '2026-09-16'", scanContext.wherePredicateSql());
+            }
+        }
+    }
+
+    @Test
+    public void prepareSkipsWhenTheWherePredicateDoesNotFold() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(null);
+
+                Assertions.assertNull(fixture.prepareScanContext());
             }
         }
     }
@@ -780,7 +1053,6 @@ public class InsertPreSplitHookTableTest {
             when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
             when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
                     "strict_mode", "true", "max_filter_ratio", "0.0", "timeout", "14400"));
-            when(fixture.insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
 
             InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
 
@@ -791,12 +1063,24 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void dynamicOverwriteHookSkipsUserSpecifiedProperties() throws Exception {
-        assertDynamicOverwriteHookSkips(42L, stmt -> {
-            when(stmt.isDynamicOverwrite()).thenReturn(true);
-            when(stmt.hasOverwriteJob()).thenReturn(true);
-            when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("max_filter_ratio"));
-        });
+    public void dynamicOverwriteHookDispatchesWithUserSpecifiedProperties() throws Exception {
+        // Parity with the normal entry point, which the properties gate used to break separately:
+        // this hook is the one that runs AFTER analysis, so it sees a getProperties() the analyzer
+        // has already filled. Neither the parse-time key set nor that map may disqualify it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "0.1", "timeout", "14400",
+                    "timezone", "Asia/Shanghai"));
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
     }
 
     @Test
@@ -931,6 +1215,7 @@ public class InsertPreSplitHookTableTest {
         private final MockedStatic<TabletPreSplitCoordinator> coordinator;
         private final MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr;
         private final MockedStatic<com.starrocks.sql.analyzer.AnalyzerUtils> analyzerUtils;
+        private final com.starrocks.server.MetadataMgr metadataMgr;
 
         OlapTable target() {
             return targetTable;
@@ -985,6 +1270,7 @@ public class InsertPreSplitHookTableTest {
 
             com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
             com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
+            this.metadataMgr = metadataMgr;
             when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
             globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
             // Target db resolves first, then source db (both via getDb).
@@ -1059,6 +1345,16 @@ public class InsertPreSplitHookTableTest {
                     (SelectRelation) insertStmt.getQueryStatement().getQueryRelation();
             return new TablePreSplitSource().prepare(
                     insertStmt, selectRelation, targetTable, mock(Database.class), context);
+        }
+
+        /**
+         * Re-points the source at an external-catalog Hive table with the fixture's (k, v) schema
+         * and makes the connector statistics answer with {@code statistics}.
+         */
+        private void withExternalSource(Statistics statistics) {
+            Table external = externalTable("hive_catalog", Table.TableType.HIVE);
+            metaUtils.when(() -> MetaUtils.getSessionAwareTable(any(), eq(sourceDb), any())).thenReturn(external);
+            stubStatistics(metadataMgr, statistics);
         }
 
         /**

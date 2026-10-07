@@ -1,0 +1,82 @@
+-- name: test_colocate_range_colocate_agg @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_colocate_agg_${uuid0}:k1');
+-- result:
+-- !result
+create table t_ref (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t (k1, k2, v)
+select cast(x % 7 as int), cast(x % 200 as int), x from table(generate_series(1, 2000)) as g(x);
+-- result:
+-- !result
+insert into t values (null, 1, 1), (null, 150, 2);
+-- result:
+-- !result
+insert into t_ref select k1, k2, v from t;
+-- result:
+-- !result
+function: assert_explain_contains("select k1, count(*), sum(v) from t group by k1", "AGGREGATE (update finalize)")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select k1, count(*), sum(v) from t group by k1", "HASH_PARTITIONED", "merge finalize")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select k1, count(distinct v) from t group by k1", "HASH_PARTITIONED", "merge finalize")
+-- result:
+None
+-- !result
+function: assert_explain_not_contains("select k1, v, row_number() over (partition by k1 order by v) from t", "HASH_PARTITIONED")
+-- result:
+None
+-- !result
+function: assert_equal_result("select k1, count(*), sum(v) from t group by k1 order by k1", "select k1, count(*), sum(v) from t_ref group by k1 order by k1")
+-- result:
+None
+-- !result
+function: assert_equal_result("select k1, count(distinct v % 13) from t group by k1 order by k1", "select k1, count(distinct v % 13) from t_ref group by k1 order by k1")
+-- result:
+None
+-- !result
+function: assert_equal_result("select k1, v, row_number() over (partition by k1 order by v) from t order by k1, v", "select k1, v, row_number() over (partition by k1 order by v) from t_ref order by k1, v")
+-- result:
+None
+-- !result
+select k1, count(*), sum(v) from t group by k1 order by k1;
+-- result:
+None	2	3
+0	285	285285
+1	286	285571
+2	286	285857
+3	286	286143
+4	286	286429
+5	286	286715
+6	285	285000
+-- !result
+drop table t;
+-- result:
+-- !result
+drop table t_ref;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

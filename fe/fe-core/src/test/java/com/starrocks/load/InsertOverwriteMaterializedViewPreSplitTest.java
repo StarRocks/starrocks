@@ -434,7 +434,6 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             when(insertStmt.isOverwrite()).thenReturn(true);
             when(insertStmt.hasOverwriteJob()).thenReturn(true);
             when(insertStmt.getTxnId()).thenReturn(DmlStmt.INVALID_TXN_ID);
-            when(insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
             when(insertStmt.getTableRef()).thenReturn(mock(TableRef.class));
 
             // The runner is handed a stubbed context so the load's compute resource is fixed whatever

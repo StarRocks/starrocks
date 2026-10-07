@@ -555,12 +555,29 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size
     } else if (max_length <= 128) {
         append_fixed_length<T, 128>(data, size, &bytes, &_offsets);
     } else {
+        // Values wider than the largest fixed-length specialization are copied at their
+        // exact length, so we cannot reuse append_fixed_length here. Size the destination
+        // up front anyway: appending one value at a time lets the byte buffer grow
+        // geometrically, which re-copies the whole buffer on every doubling and leaves the
+        // final capacity at up to twice the bytes actually held. That is what turns a chunk
+        // of large strings into a multi-hundred-MB allocation spike in the scan path.
+        uint64_t total_length = 0;
         for (size_t i = 0; i < size; i++) {
-            const auto& s = data[i];
-            const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
-            bytes.insert(bytes.end(), p, p + s.size);
-            _offsets.emplace_back(bytes.size());
+            total_length += data[i].size;
         }
+
+        const uint64_t old_bytes_size = bytes.size();
+        const uint64_t new_bytes_size = old_bytes_size + total_length;
+        bytes.resize(new_bytes_size);
+
+        auto* __restrict dst_bytes = bytes.data();
+        uint64_t offset = old_bytes_size;
+        for (size_t i = 0; i < size; i++) {
+            memcpy(dst_bytes + offset, data[i].data, data[i].size);
+            offset += data[i].size;
+            _offsets.emplace_back(offset);
+        }
+        DCHECK_EQ(offset, new_bytes_size);
     }
     invalidate_slice_cache();
     return true;
@@ -1293,76 +1310,6 @@ std::string BinaryColumnBase<T>::raw_item_value(size_t idx) const {
     s.reserve(slice.size);
     s.append(slice.data, slice.size);
     return s;
-}
-
-template <typename T>
-StatusOr<MutableColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
-    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-
-    if constexpr (std::is_same_v<T, uint32_t>) {
-        if (_offsets.size() > Column::MAX_CAPACITY_LIMIT) {
-            return Status::InternalError("column size exceed the limit");
-        }
-        // Keep the pre-AdaptiveOffsets contract: upgrade only when the current content
-        // overflows uint32_t offsets. is_large() alone is not the trigger -- it is sticky,
-        // so a column that grew past the limit and then shrank keeps uint64_t storage but
-        // must stay in this class.
-        if (get_immutable_bytes().size() < Column::MAX_CAPACITY_LIMIT) {
-            return nullptr;
-        }
-        DCHECK(_offsets.is_large());
-
-        auto new_column = BinaryColumnBase<uint64_t>::create();
-        new_column->get_bytes().swap(get_bytes());
-        new_column->get_offset() = std::move(_offsets);
-
-        // Keep the moved-from column internally consistent until the caller replaces it.
-        _offsets.reset();
-        _offsets.emplace_back(0);
-        invalidate_slice_cache();
-        return new_column;
-    } else {
-        return nullptr;
-    }
-}
-
-template <typename T>
-StatusOr<MutableColumnPtr> BinaryColumnBase<T>::downgrade() {
-    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-
-    if constexpr (std::is_same_v<T, uint32_t>) {
-        return nullptr;
-    } else {
-        if (_offsets.back() >= Column::MAX_CAPACITY_LIMIT) {
-            return Status::InternalError("column size exceed the limit, can't downgrade");
-        }
-
-        auto new_column = BinaryColumn::create();
-        auto& dst_offsets = new_column->get_offset();
-        dst_offsets.resize_uninitialized(_offsets.size(), _offsets.back());
-        Offsets::visit_storage_pair(dst_offsets, _offsets, [&](auto& dst_buf, const auto& src_buf) {
-            using DstValue = typename std::decay_t<decltype(dst_buf)>::value_type;
-            using SrcValue = typename std::decay_t<decltype(src_buf)>::value_type;
-            auto* __restrict dst_offsets_data = dst_buf.data();
-            const auto* __restrict src_offsets = src_buf.data();
-
-            if constexpr (std::is_same_v<SrcValue, DstValue>) {
-                strings::memcpy_inlined(dst_offsets_data, src_offsets, _offsets.size() * sizeof(DstValue));
-            } else {
-                for (size_t i = 0; i < _offsets.size(); i++) {
-                    dst_offsets_data[i] = static_cast<DstValue>(src_offsets[i]);
-                }
-            }
-        });
-
-        new_column->get_bytes().swap(get_bytes());
-
-        // Keep the moved-from column internally consistent until the caller replaces it.
-        _offsets.reset();
-        _offsets.emplace_back(0);
-        invalidate_slice_cache();
-        return new_column;
-    }
 }
 
 template <typename T>

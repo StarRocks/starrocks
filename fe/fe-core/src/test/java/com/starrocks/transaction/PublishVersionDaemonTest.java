@@ -875,6 +875,39 @@ public class PublishVersionDaemonTest {
         Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(old), now));
     }
 
+    @Test
+    public void testPublishRetryIntervalIsConfigurable() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            long now = 1_000_000L;
+            PartitionCommitInfo pci = new PartitionCommitInfo(1000L, 2, 0);
+            pci.markPublishFailed(now);
+
+            // The window widens with the config, so an operator can slow a retry loop that is hammering a
+            // struggling object store without waiting for a new build.
+            Config.lake_publish_version_retry_interval_ms = 5000;
+            Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now + 4999));
+            Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now + 5000));
+
+            // Zero is the escape hatch back to the behaviour from before the back-off existed: retry on
+            // every tick, never hold a partition.
+            Config.lake_publish_version_retry_interval_ms = 0;
+            Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now));
+
+            // A negative value is clamped rather than wrapping the comparison into a permanent retry.
+            Config.lake_publish_version_retry_interval_ms = -1000;
+            Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now));
+
+            // The batch pre-pass reads the same window, so the two publish paths cannot drift apart.
+            Config.lake_publish_version_retry_interval_ms = 5000;
+            List<TransactionState> states = Lists.newArrayList(stateWith(1L, 10L, pci));
+            Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(states, now + 4999));
+            Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(states, now + 5000));
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
+    }
+
     private static TransactionState stateWith(long txnId, long tableId, PartitionCommitInfo... pcis) {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
         for (PartitionCommitInfo pci : pcis) {

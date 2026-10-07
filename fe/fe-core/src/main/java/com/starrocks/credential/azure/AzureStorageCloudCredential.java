@@ -378,6 +378,10 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.ADLS2);
+        // Preserve FE Hadoop credential scoping without changing the native ADLS2 file-store schema.
+        if (!storageAccount.isEmpty()) {
+            fileStore.putProperties(CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount);
+        }
         ADLS2FileStoreInfo.Builder adls2FileStoreInfo = ADLS2FileStoreInfo.newBuilder();
         adls2FileStoreInfo.setEndpoint(endpoint);
         ADLS2CredentialInfo.Builder adls2CredentialInfo = ADLS2CredentialInfo.newBuilder();

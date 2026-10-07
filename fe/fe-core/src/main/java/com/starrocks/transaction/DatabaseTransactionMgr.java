@@ -1683,8 +1683,13 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
-            finalStatusTransactionStateDeque.add(transactionState);
+            // A transaction may reach a final status more than once (a duplicated finish, a replayed edit
+            // log, an image load). The deque is what removeExpiredTxns walks and it must hold every
+            // transaction exactly once: a second entry is popped after its label mapping was already
+            // removed and aborts the whole cleanup round.
+            if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
+                finalStatusTransactionStateDeque.add(transactionState);
+            }
         }
         updateTxnLabels(transactionState);
     }
@@ -1731,8 +1736,10 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
-            finalStatusTransactionStateDeque.add(transactionState);
+            // See unprotectUpsertTransactionState(): enqueue a transaction at most once.
+            if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
+                finalStatusTransactionStateDeque.add(transactionState);
+            }
             updateTxnLabels(transactionState);
         }
     }

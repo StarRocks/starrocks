@@ -1236,6 +1236,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
     public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
+    public static final String ENABLE_SHARE_JSON_PARSE = "enable_share_json_parse";
+    public static final String SHARE_JSON_PARSE_MIN_EXTRACTIONS = "share_json_parse_min_extractions";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
 
@@ -2422,6 +2424,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enablePredicateExprReuse = true;
+
+    // Parse a VARCHAR document once when several get_json_xxx calls in one projection read it.
+    @VarAttr(name = ENABLE_SHARE_JSON_PARSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShareJsonParse = true;
+
+    // Minimum number of distinct get_json_xxx calls on one VARCHAR document before its parse is shared.
+    @VarAttr(name = SHARE_JSON_PARSE_MIN_EXTRACTIONS, flag = VariableMgr.INVISIBLE)
+    private int shareJsonParseMinExtractions = 2;
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
@@ -6479,6 +6489,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnablePredicateExprReuse() {
         return enablePredicateExprReuse;
+    }
+
+    public void setEnableShareJsonParse(boolean enableShareJsonParse) {
+        this.enableShareJsonParse = enableShareJsonParse;
+    }
+
+    public boolean isEnableShareJsonParse() {
+        return enableShareJsonParse;
+    }
+
+    public void setShareJsonParseMinExtractions(int shareJsonParseMinExtractions) {
+        this.shareJsonParseMinExtractions = shareJsonParseMinExtractions;
+    }
+
+    public int getShareJsonParseMinExtractions() {
+        return shareJsonParseMinExtractions;
     }
 
     public int getConnectorIncrementalScanRangeNumber() {

@@ -700,6 +700,29 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
     }
 
     @Test
+    public void resolveSkipsPartitionWithCommittedLoadButStaleRowCount() throws Exception {
+        // The final re-check under the READ lock must not trust a row count the stats sweep has not
+        // refreshed yet: a visible version past the initial one means a load already wrote rows.
+        installExistingPartition("pStale", 11_001L, 21_001L, /*rowCount*/ 0L);
+        when(table.getPartition("pStale").getDefaultPhysicalPartition().getVisibleVersion())
+                .thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        List<PartitionSamples> entries = List.of(
+                existingEntry("pStale", 11_001L, 21_001L, 100, 100L * DebugUtil.MEGABYTE));
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
+
+            assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
+                    never());
+        }
+    }
+
+    @Test
     public void resolveSkipsPartitionWithNullPhysicalPartition() throws Exception {
         // resolveUnderReadLock returns null when getDefaultPhysicalPartition() is null.
         Partition partition = mock(Partition.class);

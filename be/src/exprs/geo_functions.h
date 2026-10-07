@@ -67,6 +67,88 @@ public:
     DEFINE_VECTORIZED_FN(st_geog_from_wkb);
     DEFINE_VECTORIZED_FN(st_geography_as_text);
     DEFINE_VECTORIZED_FN(st_geography_as_wkb);
+    DEFINE_VECTORIZED_FN(st_geom_from_text);
+    DEFINE_VECTORIZED_FN(st_geom_from_wkb);
+    DEFINE_VECTORIZED_FN(st_geometry_as_text);
+    DEFINE_VECTORIZED_FN(st_geometry_as_wkb);
+    DEFINE_VECTORIZED_FN(st_geography_x);
+    DEFINE_VECTORIZED_FN(st_geography_y);
+    DEFINE_VECTORIZED_FN(st_geography_type);
+    DEFINE_VECTORIZED_FN(st_geography_distance);
+    DEFINE_VECTORIZED_FN(st_geography_dwithin);
+    DEFINE_VECTORIZED_FN(st_geometry_x);
+    DEFINE_VECTORIZED_FN(st_geometry_y);
+    DEFINE_VECTORIZED_FN(st_geometry_type);
+    DEFINE_VECTORIZED_FN(st_geometry_distance);
+    DEFINE_VECTORIZED_FN(st_geometry_dwithin);
+
+    static Status native_geo_distance_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_distance_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+
+    static Status native_geo_containment_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_containment_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+
+    DEFINE_VECTORIZED_FN(st_geography_contains);
+    DEFINE_VECTORIZED_FN(st_geometry_contains);
+    DEFINE_VECTORIZED_FN(st_geography_within);
+    DEFINE_VECTORIZED_FN(st_geometry_within);
+    DEFINE_VECTORIZED_FN(st_geography_covers);
+    DEFINE_VECTORIZED_FN(st_geometry_covers);
+    DEFINE_VECTORIZED_FN(st_geography_covered_by);
+    DEFINE_VECTORIZED_FN(st_geometry_covered_by);
+    DEFINE_VECTORIZED_FN(st_geography_intersects);
+    DEFINE_VECTORIZED_FN(st_geometry_intersects);
+
+    DEFINE_VECTORIZED_FN(st_geometry_buffer);
+    static Status native_geo_buffer_prepare(FunctionContext*, FunctionContext::FunctionStateScope);
+    static Status native_geo_buffer_close(FunctionContext*, FunctionContext::FunctionStateScope);
+
+    DEFINE_VECTORIZED_FN(st_geometry_simplify_preserve_topology);
+    static Status native_geo_simplify_prepare(FunctionContext*, FunctionContext::FunctionStateScope);
+    static Status native_geo_simplify_close(FunctionContext*, FunctionContext::FunctionStateScope);
+
+    DEFINE_VECTORIZED_FN(st_geometry_intersection);
+    DEFINE_VECTORIZED_FN(st_geometry_union);
+    DEFINE_VECTORIZED_FN(st_geometry_difference);
+    DEFINE_VECTORIZED_FN(st_geometry_sym_difference);
+    static Status native_geo_overlay_prepare(FunctionContext*, FunctionContext::FunctionStateScope);
+    static Status native_geo_overlay_close(FunctionContext*, FunctionContext::FunctionStateScope);
+
+    static Status native_geo_unary_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+    static Status native_geo_unary_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+
+    DEFINE_VECTORIZED_FN(st_geography_area);
+    DEFINE_VECTORIZED_FN(st_geometry_area);
+    DEFINE_VECTORIZED_FN(st_geography_length);
+    DEFINE_VECTORIZED_FN(st_geometry_length);
+    DEFINE_VECTORIZED_FN(st_geography_perimeter);
+    DEFINE_VECTORIZED_FN(st_geometry_perimeter);
+    DEFINE_VECTORIZED_FN(st_geography_centroid);
+    DEFINE_VECTORIZED_FN(st_geometry_centroid);
+    DEFINE_VECTORIZED_FN(st_geography_is_valid);
+    DEFINE_VECTORIZED_FN(st_geometry_is_valid);
+    DEFINE_VECTORIZED_FN(st_geometry_srid);
+    DEFINE_VECTORIZED_FN(st_geometry_set_srid);
+    DEFINE_VECTORIZED_FN(st_geometry_transform);
+    DEFINE_VECTORIZED_FN(h3_from_geo);
+    DEFINE_VECTORIZED_FN(h3_grid_disk);
+    DEFINE_VECTORIZED_FN(h3_to_parent);
+    DEFINE_VECTORIZED_FN(h3_to_children);
+    DEFINE_VECTORIZED_FN(h3_resolution);
+    DEFINE_VECTORIZED_FN(h3_to_boundary);
+    DEFINE_VECTORIZED_FN(h3_polygon_to_cells);
+
+    static Status h3_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+    static Status h3_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+
+    static Status native_geo_transform_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_transform_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
 
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,

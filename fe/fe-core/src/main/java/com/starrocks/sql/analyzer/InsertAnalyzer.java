@@ -413,6 +413,13 @@ public class InsertAnalyzer {
                     tableFunctionProperties.put(property, properties.get(property));
                 }
             }
+            // The relation may already carry a FILES() table resolved outside the meta lock, before
+            // this push-down ran -- StatementPlanner's lock-free pre-analysis, or the tablet
+            // pre-split hook. QueryAnalyzer#resolveTableRef reuses that instance rather than
+            // rebuilding it from the map above, so the pushed-down keys would never reach it.
+            if (relation.getTable() instanceof TableFunctionTable preResolved) {
+                preResolved.applyPushedDownLoadProperties(tableFunctionProperties);
+            }
         }
     }
 
@@ -834,12 +841,18 @@ public class InsertAnalyzer {
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
-        if (database == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        // An external target was resolved before the lock was taken, because the lock covers nothing about
+        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
+        // succeed -- falls through to the resolve this has always done.
+        Table table = session.getPreResolvedWriteTargets().take(tableNameObj);
+        if (table == null) {
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
+            if (database == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        }
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

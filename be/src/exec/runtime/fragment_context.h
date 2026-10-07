@@ -174,6 +174,12 @@ public:
     bool enable_group_execution() const { return _enable_group_execution; }
     void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
 
+    // Whether the FE handed some scan of this instance its scan ranges per driver sequence. The FE makes that
+    // choice once per instance, and the same choice binds every bucket shuffle exchange sent to this instance to
+    // the driver owning each bucket; without it the sender spreads each bucket over the drivers by hash.
+    bool has_per_driver_scan_ranges() const { return _has_per_driver_scan_ranges; }
+    void set_has_per_driver_scan_ranges() { _has_per_driver_scan_ranges = true; }
+
     void set_report_when_finish(bool report) { _report_when_finish = report; }
     // Optional event-driven completion hook. Set only for BE-local synchronous stream
     // load (see orchestration::StreamLoadOrchestrator): invoked exactly once on the
@@ -192,6 +198,7 @@ private:
     void _close_fragment_attachments();
 
     bool _enable_group_execution = false;
+    bool _has_per_driver_scan_ranges = false;
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance

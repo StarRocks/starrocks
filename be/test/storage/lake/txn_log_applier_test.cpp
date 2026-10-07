@@ -19,7 +19,9 @@
 #include <string>
 #include <vector>
 
+#include "base/testutil/assert.h"
 #include "exec/exec_env.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -118,12 +120,12 @@ bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
     meta->mutable_schema()->set_id(1);
     meta->mutable_schema()->set_keys_type(DUP_KEYS);
     (void)mgr->put_tablet_metadata(meta);
-    *out_tablet = Tablet(mgr, tablet_id); // 修改参数顺序
+    *out_tablet = Tablet(mgr, tablet_id);
     return true;
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001);
     auto meta = build_non_pk_metadata(10001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -353,7 +355,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002);
     auto meta = build_non_pk_metadata(10002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -364,7 +366,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
 }
 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003);
     auto meta = build_non_pk_metadata(10003);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -390,7 +392,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001);
     auto meta = build_pk_metadata(20001);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -408,7 +410,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
 }
 
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002);
     auto meta = build_pk_metadata(20002);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
@@ -712,40 +714,57 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
     EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
-// Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
-// data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
+// The statements of a multi-statement transaction write one log each: bundled when the statement's share
+// of the tablet was one segment at end of stream, standalone when it flushed mid-load. The merged rowset
+// keeps the bundled offsets and gives each standalone segment offset 0, the same bytes as a one-slice bundle.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"seg_a"}, {0}));
-    // Second log does NOT have bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"bundle_a"}, {4096}));
     logs.push_back(make_op_write_log(10012, 11, 7, 140, {"seg_b"}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(2, rs.segment_metas_size());
+    EXPECT_EQ(4096, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ("seg_b", rs.segment_metas(1).filename());
+    EXPECT_EQ(123, rs.segment_metas(1).size());
+    // The rowset now encodes into the legacy all-or-nothing offsets array.
+    RowsetMetadataPB saved = rs;
+    ASSERT_OK(normalize_rowset_before_save(&saved));
+    ASSERT_EQ(2, saved.deprecated_bundle_file_offsets_size());
 }
 
-// Test reverse order: first TxnLog has no offsets, second has offsets.
-// This must also be detected as inconsistent and return error.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
+// Same as above with the standalone statement first.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log does NOT have bundle offsets
     logs.push_back(make_op_write_log(10013, 10, 5, 100, {"seg_a", "seg_b"}));
-    // Second log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"seg_c"}, {0}));
+    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"bundle_c"}, {2048}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(3, rs.segment_metas_size());
+    ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(2).synthetic_bundle_file_offset());
 }
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.
@@ -1289,8 +1308,10 @@ TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
     output->set_data_size(300);
     output->add_segment_metas()->set_filename("out.dat");
     op_compaction->set_compact_version(2);
+    op_compaction->set_base_compaction_time(12345);
 
     ASSERT_TRUE(applier->apply(*log).ok());
+    EXPECT_EQ(12345, meta->last_base_compaction_time());
 
     // Input rowsets archived into compaction_inputs must NOT retain delete_predicate.
     ASSERT_EQ(2, meta->compaction_inputs_size());

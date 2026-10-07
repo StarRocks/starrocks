@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -37,6 +38,9 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ExportHandleTest {
     private static ConnectContext connectContext;
@@ -109,5 +113,39 @@ public class ExportHandleTest {
         Assertions.assertEquals(1, exportResultSet.getResultRows().size());
         List<String> row = exportResultSet.getResultRows().get(0);
         Assertions.assertEquals("PENDING", row.get(2));
+    }
+
+    /**
+     * Without a broker the export sink needs the file system's THdfsProperties, and for a path whose file system
+     * is not cached yet getTProperties builds it -- a round trip to the storage. setJob plans the fragments under
+     * the table's READ lock, so the properties have to be resolved before it, once, and shared by every fragment,
+     * including one rebuilt by resetCoord. The dynamic sql-test run reported it from ExportJob.genPlanFragment.
+     */
+    @Test
+    public void testABrokerlessExportResolvesItsFileSystemOutsideTheTableLock() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        AtomicBoolean underLock = new AtomicBoolean(false);
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) {
+                calls.incrementAndGet();
+                if (LockHoldDepth.isUnderLock()) {
+                    underLock.set(true);
+                }
+            }
+        };
+        String sql = "EXPORT TABLE export_tbl TO \"hdfs://hdfs_host:port/lock/\" "
+                + "WITH BROKER (\"username\"=\"test\", \"password\"=\"test\");";
+        ExportStmt exportStmt = (ExportStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        UUID queryId = UUIDUtil.genUUID();
+        GlobalStateMgr.getCurrentState().getExportMgr().addExportJob(queryId, exportStmt);
+        ExportJob job = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob("test", queryId);
+
+        // Otherwise the sink was never built and the lock-held path this pins was not exercised at all.
+        Assertions.assertFalse(job.getCoordList().isEmpty(), "the export planned no fragment");
+        job.resetCoord(0, UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+
+        Assertions.assertFalse(underLock.get(), "getTProperties ran with the table lock held");
+        Assertions.assertEquals(1, calls.get(), "the file system properties should be resolved exactly once");
     }
 }
