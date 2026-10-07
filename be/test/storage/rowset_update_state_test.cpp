@@ -35,8 +35,10 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
+#include "storage/primary_key_compaction_conflict_resolver.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
+#include "storage/rows_mapper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
@@ -632,6 +634,161 @@ TEST_F(RowsetUpdateStateTest, compaction_without_light_publish_varchar_pk) {
         ASSERT_TRUE(it != rows.end()) << "missing " << make_pk(k);
         const int16_t expected = k < 100 ? 3 : (k < 150 ? 1 : 2);
         ASSERT_EQ(expected, it->second) << make_pk(k);
+    }
+}
+
+// Resolver driving PrimaryKeyCompactionConflictResolver::execute() over a real rowset and rows mapper file, but
+// recording the primary key columns handed to replace_rows() instead of updating a primary index.
+class RecordingCompactionConflictResolver : public PrimaryKeyCompactionConflictResolver {
+public:
+    struct ReplaceCall {
+        uint32_t rssid;
+        uint32_t rowid_start;
+        std::vector<uint32_t> replace_indexes;
+        bool is_binary;
+        bool is_large_binary;
+        std::string column_name;
+        std::vector<std::string> keys;
+    };
+
+    RecordingCompactionConflictResolver(Rowset* rowset, std::string mapper_path, DelvecLoader* delvec_loader)
+            : _rowset(rowset), _mapper_path(std::move(mapper_path)), _delvec_loader(delvec_loader) {}
+
+    StatusOr<FileInfo> filename() const override { return FileInfo{.path = _mapper_path}; }
+
+    StatusOr<PrimaryKeyEncodingType> primary_key_encoding_type() const override {
+        return PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+    }
+
+    Schema generate_pkey_schema() override {
+        const auto& schema = _rowset->schema();
+        std::vector<uint32_t> pk_columns;
+        for (size_t i = 0; i < schema->num_key_columns(); i++) {
+            pk_columns.push_back(static_cast<uint32_t>(i));
+        }
+        return ChunkHelper::convert_schema(schema, pk_columns);
+    }
+
+    Status segment_iterator(
+            const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
+                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
+            override {
+        OlapReaderStatistics stats;
+        auto pkey_schema = generate_pkey_schema();
+        ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_segment_iterators2(pkey_schema, _rowset->schema(),
+                                                                             MetaLoadMode::NONE, 0, &stats));
+        CompactConflictResolveParams params;
+        params.tablet_id = _rowset->rowset_meta()->tablet_id();
+        params.rowset_id = _rowset->rowset_meta()->get_rowset_seg_id();
+        params.base_version = 2;
+        params.new_version = 3;
+        params.delvec_loader = _delvec_loader;
+        params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                     const Column& pks) {
+            ReplaceCall call{rssid, rowid_start, replace_indexes, pks.is_binary(), pks.is_large_binary(),
+                             pks.get_name(), {}};
+            for (uint32_t idx : replace_indexes) {
+                call.keys.emplace_back(pks.get(idx).get_slice().to_string());
+            }
+            replace_calls.emplace_back(std::move(call));
+            return Status::OK();
+        };
+        return handler(params, segment_iters, [this](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
+            num_dels_by_rssid[rssid] = num_dels;
+        });
+    }
+
+    Status segment_iterator(
+            const std::function<Status(const CompactConflictResolveParams&, const std::vector<std::shared_ptr<Segment>>&,
+                                       const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
+            override {
+        return Status::NotSupported("not used by execute()");
+    }
+
+    std::vector<ReplaceCall> replace_calls;
+    std::map<uint32_t, uint32_t> num_dels_by_rssid;
+
+private:
+    Rowset* _rowset;
+    std::string _mapper_path;
+    DelvecLoader* _delvec_loader;
+};
+
+// Marks the given rowids of one input rssid as deleted; every other input rssid has no deletes.
+class FixedDelvecLoader : public DelvecLoader {
+public:
+    FixedDelvecLoader(uint32_t rssid, std::vector<uint32_t> deleted_rowids)
+            : _rssid(rssid), _deleted_rowids(std::move(deleted_rowids)) {}
+
+    Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) override {
+        auto dv = std::make_shared<DelVector>();
+        if (tsid.segment_id == _rssid) {
+            dv->init(version, _deleted_rowids.data(), _deleted_rowids.size());
+        } else {
+            dv->init(version, nullptr, 0);
+        }
+        *pdelvec = std::move(dv);
+        return Status::OK();
+    }
+
+private:
+    uint32_t _rssid;
+    std::vector<uint32_t> _deleted_rowids;
+};
+
+// PrimaryKeyCompactionConflictResolver::execute() (the light PK compaction publish path, used by default for
+// both local and shared-data tables) used to encode the output rowset's primary keys into a LargeBinaryColumn.
+// Resolve a three-segment VARCHAR primary key rowset whose input rows are partly deleted, and check that every
+// batch passed to replace_rows() is a BinaryColumn with exactly the surviving keys, and that deleted rows go to
+// the output delvec.
+TEST_F(RowsetUpdateStateTest, compaction_conflict_resolver_uses_binary_column) {
+    const size_t kSegments = 3;
+    const size_t kRowsPerSegment = 100;
+    const uint32_t kInputRssid = 1000;
+    _tablet = create_varchar_pk_tablet(rand(), rand());
+    auto segment_keys = make_segment_keys(kSegments, kRowsPerSegment, 0);
+    RowsetSharedPtr rowset = create_multi_segment_varchar_rowset(_tablet, segment_keys, 1);
+    ASSERT_EQ(static_cast<int64_t>(kSegments), rowset->num_segments());
+
+    // Output row r comes from input (kInputRssid, r); every 10th input row was deleted after compaction started.
+    const std::string mapper_path = _tablet->schema_hash_path() + "/compaction_conflict_resolver_test.crm";
+    DeferOp remove_mapper([&]() { (void)FileSystem::Default()->delete_file(mapper_path); });
+    std::vector<uint64_t> rssid_rowids;
+    std::vector<uint32_t> deleted_rowids;
+    for (uint32_t r = 0; r < kSegments * kRowsPerSegment; r++) {
+        rssid_rowids.push_back((static_cast<uint64_t>(kInputRssid) << 32) | r);
+        if (r % 10 == 0) {
+            deleted_rowids.push_back(r);
+        }
+    }
+    RowsMapperBuilder mapper_builder(mapper_path);
+    ASSERT_OK(mapper_builder.append(rssid_rowids));
+    ASSERT_OK(mapper_builder.finalize());
+
+    FixedDelvecLoader delvec_loader(kInputRssid, deleted_rowids);
+    RecordingCompactionConflictResolver resolver(rowset.get(), mapper_path, &delvec_loader);
+    ASSERT_OK(resolver.execute());
+
+    // Each segment fits in one batch (primary_key_compaction_replace_batch_rows is far above 100 rows).
+    ASSERT_EQ(kSegments, resolver.replace_calls.size());
+    const uint32_t base_rssid = rowset->rowset_meta()->get_rowset_seg_id();
+    for (uint32_t i = 0; i < kSegments; i++) {
+        const auto& call = resolver.replace_calls[i];
+        EXPECT_EQ(base_rssid + i, call.rssid);
+        EXPECT_EQ(0u, call.rowid_start);
+        EXPECT_TRUE(call.is_binary) << "segment " << i << " is " << call.column_name;
+        EXPECT_FALSE(call.is_large_binary) << "segment " << i;
+        std::vector<std::string> expected_keys;
+        std::vector<uint32_t> expected_indexes;
+        for (uint32_t j = 0; j < kRowsPerSegment; j++) {
+            if ((i * kRowsPerSegment + j) % 10 != 0) {
+                expected_indexes.push_back(j);
+                expected_keys.push_back(segment_keys[i][j]);
+            }
+        }
+        EXPECT_EQ(expected_indexes, call.replace_indexes) << "segment " << i;
+        EXPECT_EQ(expected_keys, call.keys) << "segment " << i;
+        EXPECT_EQ(kRowsPerSegment / 10, resolver.num_dels_by_rssid[base_rssid + i]) << "segment " << i;
     }
 }
 
