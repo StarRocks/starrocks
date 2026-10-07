@@ -724,6 +724,8 @@ TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
     check_non_nullable_stride<TYPE_LARGEINT>(kRows, kStride);
     check_non_nullable_stride<TYPE_FLOAT>(kRows, kStride);
     check_non_nullable_stride<TYPE_DOUBLE>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATE>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATETIME>(kRows, kStride);
     check_non_nullable_stride<TYPE_DECIMAL32>(kRows, kStride);
     check_non_nullable_stride<TYPE_DECIMAL64>(kRows, kStride);
     check_non_nullable_stride<TYPE_DECIMAL128>(kRows, kStride);

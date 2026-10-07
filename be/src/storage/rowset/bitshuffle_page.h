@@ -47,7 +47,9 @@
 #include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
+#include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
+#include "column/storage_column_traits.h"
 #include "common/logging.h"
 #include "gutil/port.h"
 #include "storage/olap_common.h"
@@ -432,6 +434,43 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
+
+    if constexpr (!std::is_same_v<CppType, bool>) {
+        if (!column->is_nullable() && !column->is_constant()) {
+            auto try_direct_write = [&](auto* fc) -> bool {
+                if (!fc) {
+                    return false;
+                }
+                size_t orig_size = fc->size();
+                fc->resize_uninitialized(orig_size + total);
+                uint8_t* dst_raw = fc->mutable_raw_data() + orig_size * sizeof(CppType);
+                for (size_t i = 0; i < total; i++) {
+                    ordinal_t ord = rowids[i] - first_ordinal_in_page;
+                    if (UNLIKELY(ord >= _num_elements)) {
+                        break;
+                    }
+                    std::memcpy(dst_raw + read_count * sizeof(CppType), get_data(ord * SIZE_OF_TYPE), sizeof(CppType));
+                    read_count++;
+                }
+                if (read_count < total) {
+                    fc->resize(orig_size + read_count);
+                }
+                *count = read_count;
+                return true;
+            };
+
+            using StorageCol = StorageColumnType<Type>;
+            if (try_direct_write(dynamic_cast<StorageCol*>(column))) {
+                return Status::OK();
+            }
+            if constexpr (!std::is_same_v<StorageCol, FixedLengthColumnBase<CppType>>) {
+                if (try_direct_write(dynamic_cast<FixedLengthColumnBase<CppType>*>(column))) {
+                    return Status::OK();
+                }
+            }
+        }
+    }
+
     auto data = std::make_unique_for_overwrite<CppType[]>(total);
     for (size_t i = 0; i < total; i++) {
         ordinal_t ord = rowids[i] - first_ordinal_in_page;
