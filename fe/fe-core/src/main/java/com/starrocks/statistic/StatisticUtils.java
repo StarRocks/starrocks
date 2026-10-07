@@ -107,13 +107,13 @@ public class StatisticUtils {
     /**
      * Builds a stats ConnectContext and populates its auth token from, in order: the caller's
      * ConnectContext.get() (user-triggered ANALYZE), then the bot token provider when
-     * {@code use_bot_for_background_tasks} is enabled (background/scheduled collection).
+     * {@code use_oidc_identity_for_background_tasks} is enabled (background/scheduled collection).
      */
     public static ConnectContext buildConnectContextWithAuth() {
         ConnectContext context;
         if (ConnectContext.get() != null && ConnectContext.get().getAuthToken() != null) {
             context = buildConnectContext(ConnectContext.get());
-        } else if (Config.use_bot_for_background_tasks) {
+        } else if (Config.use_oidc_identity_for_background_tasks) {
             context = buildConnectContext();
             JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
             if (tokenProvider != null) {
@@ -131,7 +131,7 @@ public class StatisticUtils {
 
     /**
      * Builds a plain ConnectContext for background tasks and populates it with the
-     * bot service token when {@code use_bot_for_background_tasks} is enabled.
+     * bot service token when {@code use_oidc_identity_for_background_tasks} is enabled.
      * Unlike {@link #buildConnectContextWithAuth()}, this method does NOT call
      * {@code ConnectContext.buildInner()} and requires no warehouse, making it safe
      * for use in Iceberg connector background operations (refresh, partition load, etc.).
@@ -140,7 +140,7 @@ public class StatisticUtils {
      */
     public static ConnectContext buildBotContext() {
         ConnectContext ctx = new ConnectContext();
-        if (Config.use_bot_for_background_tasks) {
+        if (Config.use_oidc_identity_for_background_tasks) {
             JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
             if (tokenProvider != null) {
                 try {
@@ -151,6 +151,47 @@ public class StatisticUtils {
             }
         }
         return ctx;
+    }
+
+    /**
+     * Resolves the ConnectContext an iceberg/connector background operation should authenticate with:
+     * the caller's thread-local context when present (user query/ANALYZE, carrying the user's JWT),
+     * otherwise a bot context (scheduled/background threads where no user session exists).
+     * Callers that require authentication (JWT REST catalogs) must still check
+     * {@code ctx.getAuthToken() == null} and fail or skip when no token is available.
+     */
+    public static ConnectContext resolveAuthContext() {
+        ConnectContext current = ConnectContext.get();
+        return current != null ? current : buildBotContext();
+    }
+
+    /**
+     * Resolves the external-catalog auth token for a background task, preferring the caller's JWT
+     * (user-triggered REFRESH) over the bot's token (background refresh). Returns {@code null} when
+     * neither is available. The returned token authenticates only the external REST catalog call;
+     * it does not affect StarRocks-internal identity/role resolution.
+     */
+    public static String resolveExternalAuthToken(ConnectContext callerCtx) {
+        if (callerCtx != null && callerCtx.getAuthToken() != null) {
+            String token = callerCtx.getAuthToken();
+            LOG.info("Using caller JWT token (token_prefix={})", maskToken(token));
+            return token;
+        }
+        JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
+        if (tokenProvider != null) {
+            try {
+                String token = tokenProvider.getToken();
+                LOG.info("Using bot JWT token (token_prefix={})", maskToken(token));
+                return token;
+            } catch (AuthenticationException e) {
+                LOG.warn("Failed to get bot token", e);
+            }
+        }
+        return null;
+    }
+
+    private static String maskToken(String token) {
+        return token == null ? "null" : token.substring(0, Math.min(5, token.length()));
     }
 
     public static ConnectContext buildConnectContext(ConnectContext userConnectContext) {

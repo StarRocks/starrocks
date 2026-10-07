@@ -157,42 +157,48 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            ConnectContext context = StatisticUtils.buildBotContext();
-                            context.setOnlyReadIcebergCache(true);
+                            // Prefer the caller's thread-local context (a user query carries their JWT);
+                            // fall back to a bot context on background/cache-maintenance threads.
+                            ConnectContext context = StatisticUtils.resolveAuthContext();
                             if (context.getAuthToken() == null && getSecurityType() == IcebergRESTCatalog.Security.JWT) {
                                 throw new StarRocksConnectorException(
-                                        "No bot token available for JWT REST catalog partition load %s.%s",
+                                        "No auth token available for JWT REST catalog partition load %s.%s",
                                         key.dbName, key.tableName);
                             }
-                            Table nativeTable = getTable(context, key.dbName, key.tableName);
-                            IcebergTable icebergTable =
-                                    IcebergTable.builder()
-                                            .setCatalogDBName(key.dbName)
-                                            .setSrTableName(key.tableName)
-                                            .setCatalogTableName(key.tableName)
-                                            .setNativeTable(nativeTable).build();
-                            Map<String, Partition> partitions =
-                                    delegate.getPartitions(icebergTable, key.snapshotId, null);
-                            if (partitions.size() > PARTITION_LOAD_LOG_THRESHOLD) {
-                                // -1 is used by callers as "use current snapshot" (see IcebergCatalog#getPartitions);
-                                // resolve it here so the summary and logged snapshot id reflect the snapshot actually scanned.
-                                Snapshot snapshot = key.snapshotId == -1
-                                        ? nativeTable.currentSnapshot() : nativeTable.snapshot(key.snapshotId);
-                                long loggedSnapshotId = snapshot != null ? snapshot.snapshotId() : key.snapshotId;
-                                Map<String, String> summary =
-                                        (snapshot != null && snapshot.summary() != null)
-                                                ? snapshot.summary() : Collections.emptyMap();
-                                LOG.info("Loaded large iceberg partition set: catalog={}, table={}.{}, snapshot={}, "
-                                                + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
-                                                + "partitionFields={}",
-                                        catalogName, key.dbName, key.tableName, loggedSnapshotId,
-                                        partitions.size(),
-                                        summary.getOrDefault(SnapshotSummary.TOTAL_DATA_FILES_PROP, "?"),
-                                        summary.getOrDefault(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "?"),
-                                        nativeTable.specs().size(),
-                                        nativeTable.spec().fields().size());
+                            // onlyReadIcebergCache makes the getTable() below serve the already-cached table
+                            // rather than forcing another remote load. Use the scope so a caller's live
+                            // context is restored afterwards (same thread, so no cross-thread mutation).
+                            try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(context)) {
+                                Table nativeTable = getTable(scope.getContext(), key.dbName, key.tableName);
+                                IcebergTable icebergTable =
+                                        IcebergTable.builder()
+                                                .setCatalogDBName(key.dbName)
+                                                .setSrTableName(key.tableName)
+                                                .setCatalogTableName(key.tableName)
+                                                .setNativeTable(nativeTable).build();
+                                Map<String, Partition> partitions =
+                                        delegate.getPartitions(icebergTable, key.snapshotId, null);
+                                if (partitions.size() > PARTITION_LOAD_LOG_THRESHOLD) {
+                                    // -1 is used by callers as "use current snapshot" (see IcebergCatalog#getPartitions);
+                                    // resolve it here so the summary and logged snapshot id reflect the snapshot actually scanned.
+                                    Snapshot snapshot = key.snapshotId == -1
+                                            ? nativeTable.currentSnapshot() : nativeTable.snapshot(key.snapshotId);
+                                    long loggedSnapshotId = snapshot != null ? snapshot.snapshotId() : key.snapshotId;
+                                    Map<String, String> summary =
+                                            (snapshot != null && snapshot.summary() != null)
+                                                    ? snapshot.summary() : Collections.emptyMap();
+                                    LOG.info("Loaded large iceberg partition set: catalog={}, table={}.{}, snapshot={}, "
+                                                    + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
+                                                    + "partitionFields={}",
+                                            catalogName, key.dbName, key.tableName, loggedSnapshotId,
+                                            partitions.size(),
+                                            summary.getOrDefault(SnapshotSummary.TOTAL_DATA_FILES_PROP, "?"),
+                                            summary.getOrDefault(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "?"),
+                                            nativeTable.specs().size(),
+                                            nativeTable.spec().fields().size());
+                                }
+                                return partitions;
                             }
-                            return partitions;
                         }
                     });
         long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *

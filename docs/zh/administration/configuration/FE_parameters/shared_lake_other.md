@@ -697,6 +697,87 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
+### `use_oidc_identity_for_background_tasks`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: No
+- 描述: 是否使用通过 OAuth2 客户端凭证流获取的 OIDC bot/系统身份，在没有用户会话时为后台任务（如物化视图异步刷新以及 Iceberg/Hive 统计信息和元数据采集）进行认证。禁用时，这些后台任务将不携带认证令牌运行，从而导致对受 JWT 保护的 Iceberg REST Catalog 的访问失败。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_client_id`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 启用 `use_oidc_identity_for_background_tasks` 时，用于获取 OIDC bot JWT 的 OAuth2 客户端 ID。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_client_password`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 启用 `use_oidc_identity_for_background_tasks` 时，用于获取 OIDC bot JWT 的 OAuth2 客户端密钥。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_token_issuer_url`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 启用 `use_oidc_identity_for_background_tasks` 时，用于获取 OIDC bot JWT 的 OAuth2 令牌端点基础 URL。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_scope`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 获取 OIDC bot JWT 时请求的 OAuth2 scope。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_audience`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 获取 OIDC bot JWT 时请求的 OAuth2 audience。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_issuer`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 获取 OIDC bot JWT 时请求的 OAuth2 issuer。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_http_connection_timeout_s`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: No
+- 描述: 用于获取 OIDC bot JWT 的 HTTP 客户端连接超时时间。
+- 引入版本: v4.2.0
+
+### `background_task_oidc_http_read_timeout_s`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: No
+- 描述: 用于获取 OIDC bot JWT 的 HTTP 客户端读取超时时间。
+- 引入版本: v4.2.0
+
 ### `files_enable_insert_push_down_column_type`
 
 - 默认值: true

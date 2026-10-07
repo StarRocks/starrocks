@@ -5463,37 +5463,31 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lock_invariant_violation_log_interval_ms = 10000;
 
-    @ConfField(comment = "Use a bot/system JWT identity (client-credentials flow) for background tasks " +
+    @ConfField(comment = "Use an OIDC bot/system identity (OAuth2 client-credentials flow) for background tasks " +
             "such as MV async refresh and Iceberg stats collection, instead of running unauthenticated")
-    public static boolean use_bot_for_background_tasks = false;
+    public static boolean use_oidc_identity_for_background_tasks = false;
 
-    @ConfField(comment = "OAuth2 client id used to fetch the bot JWT for background tasks")
-    public static String background_task_client_id = "";
+    @ConfField(comment = "OAuth2 client id used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_client_id = "";
 
-    @ConfField(comment = "OAuth2 client secret used to fetch the bot JWT for background tasks")
-    public static String background_task_client_password = "";
+    @ConfField(comment = "OAuth2 client secret used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_client_password = "";
 
-    @ConfField(comment = "OAuth2 token endpoint base URL used to fetch the bot JWT for background tasks")
-    public static String background_task_client_token_issuer_url = "";
+    @ConfField(comment = "OAuth2 token endpoint base URL used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_token_issuer_url = "";
 
-    @ConfField(comment = "OAuth2 scope requested when fetching the bot JWT for background tasks")
-    public static String background_task_client_scope = "";
+    @ConfField(comment = "OAuth2 scope requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_scope = "";
 
-    @ConfField(comment = "OAuth2 audience requested when fetching the bot JWT for background tasks")
-    public static String background_task_client_audience = "";
+    @ConfField(comment = "OAuth2 audience requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_audience = "";
 
-    @ConfField(comment = "OAuth2 issuer requested when fetching the bot JWT for background tasks")
-    public static String background_task_client_issuer = "";
+    @ConfField(comment = "OAuth2 issuer requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_issuer = "";
 
-    @ConfField(comment = "JWKS URL used to validate the bot JWT for background tasks")
-    public static String background_task_client_token_jwks_url = "";
+    @ConfField(comment = "Connection timeout, in seconds, for the HTTP client used to fetch the OIDC bot JWT")
+    public static int background_task_oidc_http_connection_timeout_s = 30;
 
-    @ConfField(comment = "JWT claim field used as the principal when fetching the bot JWT for background tasks")
-    public static String background_task_client_principal_field = "";
-
-    @ConfField(comment = "Connection timeout, in seconds, for the HTTP client used to fetch the bot JWT")
-    public static int background_task_http_client_connection_timeout_s = 30;
-
-    @ConfField(comment = "Read timeout, in seconds, for the HTTP client used to fetch the bot JWT")
-    public static int background_task_http_client_read_timeout_s = 30;
+    @ConfField(comment = "Read timeout, in seconds, for the HTTP client used to fetch the OIDC bot JWT")
+    public static int background_task_oidc_http_read_timeout_s = 30;
 }

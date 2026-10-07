@@ -56,10 +56,10 @@ public class StatisticUtilsAuthTest {
                 MockedStatic<ConnectContext> connectContextMockedStatic = Mockito.mockStatic(ConnectContext.class)) {
             connectContextMockedStatic.when(ConnectContext::get).thenReturn(null);
             globalStateMgrMockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
-            Config.use_bot_for_background_tasks = true;
+            Config.use_oidc_identity_for_background_tasks = true;
             ConnectContext context = StatisticUtils.buildConnectContextWithAuth();
             Assert.assertEquals("bot_token", context.getAuthToken());
-            Config.use_bot_for_background_tasks = false;
+            Config.use_oidc_identity_for_background_tasks = false;
         }
 
         // 3. test with no auth

@@ -23,9 +23,7 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
-import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.JWTTokenProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -52,6 +50,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -362,23 +361,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
             // External-catalog auth token: orthogonal to the identity above. Prefer the caller's
             // JWT (user-triggered REFRESH) over the bot's (background refresh).
-            String jwtToken = null;
-            if (parentRunCtx != null && parentRunCtx.getAuthToken() != null) {
-                jwtToken = parentRunCtx.getAuthToken();
-                LOG.info("TaskRun switchUser: using caller JWT token (user={}, token_prefix={})",
-                        status.getUser(), jwtToken.substring(0, Math.min(5, jwtToken.length())));
-            } else {
-                JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
-                if (tokenProvider != null) {
-                    try {
-                        jwtToken = tokenProvider.getToken();
-                        LOG.info("TaskRun switchUser: using bot JWT token (user={}, token_prefix={})",
-                                status.getUser(), jwtToken.substring(0, Math.min(5, jwtToken.length())));
-                    } catch (AuthenticationException e) {
-                        LOG.warn("TaskRun switchUser: failed to get bot token", e);
-                    }
-                }
-            }
+            String jwtToken = StatisticUtils.resolveExternalAuthToken(parentRunCtx);
             if (jwtToken != null) {
                 context.setAuthToken(jwtToken);
             }

@@ -1512,7 +1512,7 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        ConnectContext callerCtx = StatisticUtils.resolveAuthContext();
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
@@ -1527,7 +1527,7 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        ConnectContext callerCtx = StatisticUtils.resolveAuthContext();
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTableWithIdentifier(scope.getContext(), baseTableInfo);
@@ -1544,7 +1544,7 @@ public class MvUtils {
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        ConnectContext callerCtx = StatisticUtils.resolveAuthContext();
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(scope.getContext(), baseTableInfo);
         }

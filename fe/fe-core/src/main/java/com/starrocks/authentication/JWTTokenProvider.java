@@ -66,26 +66,17 @@ public class JWTTokenProvider {
     private final long connectionTimeoutSec;
     private final long readTimeoutSec;
     private final HttpTracing httpTracing;
-    private final String jwksUrl;
-    private final String principalField;
     private final String issuer;
 
-    enum Policy {
-        ROOT,
-        STATIC_CLIENT
-    }
-
     private JWTTokenProvider(
-            String url, 
+            String url,
             String clientId,
-            String clientSecret, 
+            String clientSecret,
             String scope,
             String audience,
             long connectionTimeoutSec,
             long readTimeoutSec,
             HttpTracing httpTracing,
-            String jwksUrl,
-            String principalField,
             String issuer) {
         this.url = url;
         this.clientId = clientId;
@@ -95,8 +86,6 @@ public class JWTTokenProvider {
         this.connectionTimeoutSec = connectionTimeoutSec;
         this.readTimeoutSec = readTimeoutSec;
         this.httpTracing = httpTracing;
-        this.jwksUrl = jwksUrl;
-        this.principalField = principalField;
         this.issuer = issuer;
 
         // tokenCache = CacheBuilder.newBuilder().maximumSize(this.maxSize)
@@ -260,8 +249,6 @@ public class JWTTokenProvider {
         private long connectionTimeoutSec = 30;
         private long readTimeoutSec = 30;
         private HttpTracing httpTracing;
-        private String jwksUrl;
-        private String principalField;
         private String issuer;
 
         public Builder url(String url) {
@@ -295,16 +282,6 @@ public class JWTTokenProvider {
             return this;
         }
 
-        public Builder jwksUrl(String jwksUrl) {
-            this.jwksUrl = jwksUrl;
-            return this;
-        }
-
-        public Builder principalField(String principalField) {
-            this.principalField = principalField;
-            return this;
-        }
-
         public Builder issuer(String issuer) {
             this.issuer = issuer;
             return this;
@@ -322,10 +299,8 @@ public class JWTTokenProvider {
             Preconditions.checkArgument(isNotEmpty(url), "url is mandatory");
             Preconditions.checkArgument(isNotEmpty(clientID), "clientID is mandatory");
             Preconditions.checkArgument(isNotEmpty(clientSecret), "clientSecret is mandatory");
-            Preconditions.checkArgument(isNotEmpty(jwksUrl), "jwksUrl is mandatory");
             return new JWTTokenProvider(url, clientID, clientSecret, scope, audience,
-                    connectionTimeoutSec, readTimeoutSec, httpTracing, jwksUrl,
-                    principalField, issuer);
+                    connectionTimeoutSec, readTimeoutSec, httpTracing, issuer);
         }
     }
 

@@ -3850,48 +3850,42 @@ public class GlobalStateMgr {
     /**
      * Initializes the bot JWT token provider used to authenticate background tasks
      * (MV async refresh, Iceberg stats/metadata collection) when no user session is
-     * available. No-op when {@code use_bot_for_background_tasks} is disabled.
+     * available. No-op when {@code use_oidc_identity_for_background_tasks} is disabled.
      */
     public void initTokenProvider() {
-        if (!Config.use_bot_for_background_tasks) {
-            LOG.info("Bot token for background tasks is disabled (use_bot_for_background_tasks=false)");
+        if (!Config.use_oidc_identity_for_background_tasks) {
+            LOG.info("Bot token for background tasks is disabled (use_oidc_identity_for_background_tasks=false)");
             return;
         }
         LOG.info("Initializing JWT token provider for background tasks. " +
-                "url={}, clientId={}, clientSecret={}, jwksUrl={}, scope={}, audience={}, issuer={}, " +
-                "principalField={}, connectionTimeout={}, readTimeout={}",
-                Config.background_task_client_token_issuer_url,
-                maskPrefix(Config.background_task_client_id),
-                maskPrefix(Config.background_task_client_password),
-                Config.background_task_client_token_jwks_url,
-                Config.background_task_client_scope,
-                Config.background_task_client_audience,
-                Config.background_task_client_issuer,
-                Config.background_task_client_principal_field,
-                Config.background_task_http_client_connection_timeout_s,
-                Config.background_task_http_client_read_timeout_s);
+                "url={}, clientId={}, clientSecret={}, scope={}, audience={}, issuer={}, " +
+                "connectionTimeout={}, readTimeout={}",
+                Config.background_task_oidc_token_issuer_url,
+                maskPrefix(Config.background_task_oidc_client_id),
+                maskPrefix(Config.background_task_oidc_client_password),
+                Config.background_task_oidc_scope,
+                Config.background_task_oidc_audience,
+                Config.background_task_oidc_issuer,
+                Config.background_task_oidc_http_connection_timeout_s,
+                Config.background_task_oidc_http_read_timeout_s);
 
         JWTTokenProvider.Builder builder = JWTTokenProvider.newBuilder();
-        builder.url(Config.background_task_client_token_issuer_url);
-        builder.clientID(Config.background_task_client_id);
-        builder.clientSecret(Config.background_task_client_password);
-        builder.jwksUrl(Config.background_task_client_token_jwks_url);
-        builder.connectionParams(Config.background_task_http_client_connection_timeout_s,
-                Config.background_task_http_client_read_timeout_s);
+        builder.url(Config.background_task_oidc_token_issuer_url);
+        builder.clientID(Config.background_task_oidc_client_id);
+        builder.clientSecret(Config.background_task_oidc_client_password);
+        builder.connectionParams(Config.background_task_oidc_http_connection_timeout_s,
+                Config.background_task_oidc_http_read_timeout_s);
         if (httpTracing != null) {
             builder.httpTracing(httpTracing);
         }
-        if (StringUtils.isNotEmpty(Config.background_task_client_scope)) {
-            builder.scope(Config.background_task_client_scope);
+        if (StringUtils.isNotEmpty(Config.background_task_oidc_scope)) {
+            builder.scope(Config.background_task_oidc_scope);
         }
-        if (StringUtils.isNotEmpty(Config.background_task_client_audience)) {
-            builder.audience(Config.background_task_client_audience);
+        if (StringUtils.isNotEmpty(Config.background_task_oidc_audience)) {
+            builder.audience(Config.background_task_oidc_audience);
         }
-        if (StringUtils.isNotEmpty(Config.background_task_client_issuer)) {
-            builder.issuer(Config.background_task_client_issuer);
-        }
-        if (StringUtils.isNotEmpty(Config.background_task_client_principal_field)) {
-            builder.principalField(Config.background_task_client_principal_field);
+        if (StringUtils.isNotEmpty(Config.background_task_oidc_issuer)) {
+            builder.issuer(Config.background_task_oidc_issuer);
         }
 
         try {

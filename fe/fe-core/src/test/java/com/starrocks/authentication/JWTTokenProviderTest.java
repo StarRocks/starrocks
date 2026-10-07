@@ -75,8 +75,6 @@ public class JWTTokenProviderTest {
                 .clientSecret("test-secret")
                 .audience("test-audience")
                 .scope("test-scope")
-                .jwksUrl("jwks.json")
-                .principalField("sub")
                 .issuer("test-issuer")
                 .httpTracing(HttpTracing.create(brave.Tracing.newBuilder().build()))
                 .connectionParams(10, 10)
@@ -100,8 +98,6 @@ public class JWTTokenProviderTest {
                     .clientSecret(properties.getProperty("service.client.ias.client.secret"))
                     .scope(properties.getProperty("service.client.scope"))
                     .audience(properties.getProperty("service.client.audience"))
-                    .jwksUrl(properties.getProperty("iam.token.jwks.url"))
-                    .principalField("sub")
                     .issuer(properties.getProperty("iam.token.issuer.url"))
                     .httpTracing(HttpTracing.create(brave.Tracing.newBuilder().build()))
                     .connectionParams(20, 20)
@@ -226,7 +222,6 @@ public class JWTTokenProviderTest {
             JWTTokenProvider.newBuilder()
                     .clientID("id")
                     .clientSecret("secret")
-                    .jwksUrl("url")
                     .build();
         });
         assertEquals("url is mandatory", e.getMessage());
@@ -236,7 +231,6 @@ public class JWTTokenProviderTest {
             JWTTokenProvider.newBuilder()
                     .url("url")
                     .clientSecret("secret")
-                    .jwksUrl("url")
                     .build();
         });
         assertEquals("clientID is mandatory", e.getMessage());
@@ -246,20 +240,9 @@ public class JWTTokenProviderTest {
             JWTTokenProvider.newBuilder()
                     .url("url")
                     .clientID("id")
-                    .jwksUrl("url")
                     .build();
         });
         assertEquals("clientSecret is mandatory", e.getMessage());
-
-        // jwksUrl is mandatory
-        e = assertThrows(IllegalArgumentException.class, () -> {
-            JWTTokenProvider.newBuilder()
-                    .url("url")
-                    .clientID("id")
-                    .clientSecret("secret")
-                    .build();
-        });
-        assertEquals("jwksUrl is mandatory", e.getMessage());
     }
 
     @Test

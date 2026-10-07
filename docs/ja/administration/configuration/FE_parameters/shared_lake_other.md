@@ -697,6 +697,87 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
+### `use_oidc_identity_for_background_tasks`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：ユーザーセッションが利用できない場合に、マテリアライズドビューの非同期リフレッシュや Iceberg/Hive の統計情報およびメタデータ収集などのバックグラウンドタスクを認証するために、OAuth2 クライアントクレデンシャルフローで取得した OIDC bot/システム ID を使用するかどうか。無効の場合、これらのバックグラウンドタスクは認証トークンなしで実行されるため、JWT で保護された Iceberg REST カタログに対しては失敗します。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_client_id`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：`use_oidc_identity_for_background_tasks` が有効な場合に、バックグラウンドタスク用の OIDC bot JWT を取得するために使用される OAuth2 クライアント ID。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_client_password`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：`use_oidc_identity_for_background_tasks` が有効な場合に、バックグラウンドタスク用の OIDC bot JWT を取得するために使用される OAuth2 クライアントシークレット。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_token_issuer_url`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：`use_oidc_identity_for_background_tasks` が有効な場合に、バックグラウンドタスク用の OIDC bot JWT を取得するために使用される OAuth2 トークンエンドポイントのベース URL。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_scope`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：バックグラウンドタスク用の OIDC bot JWT を取得する際に要求される OAuth2 scope。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_audience`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：バックグラウンドタスク用の OIDC bot JWT を取得する際に要求される OAuth2 audience。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_issuer`
+
+- デフォルト：（空）
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：バックグラウンドタスク用の OIDC bot JWT を取得する際に要求される OAuth2 issuer。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_http_connection_timeout_s`
+
+- デフォルト：30
+- タイプ：Int
+- 単位：秒
+- 変更可能：No
+- 説明：バックグラウンドタスク用の OIDC bot JWT を取得するために使用される HTTP クライアントの接続タイムアウト。
+- 導入時期：v4.2.0
+
+### `background_task_oidc_http_read_timeout_s`
+
+- デフォルト：30
+- タイプ：Int
+- 単位：秒
+- 変更可能：No
+- 説明：バックグラウンドタスク用の OIDC bot JWT を取得するために使用される HTTP クライアントの読み取りタイムアウト。
+- 導入時期：v4.2.0
+
 ### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true
