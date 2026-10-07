@@ -699,6 +699,7 @@ set(STARROCKS_DEPENDENCIES
     crypto
     leveldb
     bitshuffle
+    alp
     roaring
     brotlicommon
     brotlidec

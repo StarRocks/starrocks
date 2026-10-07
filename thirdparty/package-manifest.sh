@@ -77,6 +77,7 @@ starrocks_set_default_packages() {
         s2
         h3
         bitshuffle
+        alp
         croaringbitmap
         cctz
         fmt

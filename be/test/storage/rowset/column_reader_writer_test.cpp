@@ -843,6 +843,63 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
     }
 }
 
+// The numeric dictionary speculation fallback must honor the ALP gate: a
+// high-cardinality DOUBLE column written through DictColumnWriter is encoded
+// with ALP_ENCODING (not the former hard-coded BIT_SHUFFLE) when
+// enable_alp_float_encoding is on.
+TEST_F(ColumnReaderWriterTest, test_numeric_dict_speculate_alp_fallback) {
+    double old_ratio = config::dictionary_encoding_ratio_for_non_string_column;
+    int32_t old_chunk_size = config::dictionary_speculate_min_chunk_size;
+    config::dictionary_encoding_ratio_for_non_string_column = 0.01;
+    config::dictionary_speculate_min_chunk_size = 300;
+    config::enable_alp_float_encoding = true;
+
+    // > dictionary_min_rowcount (256) rows, all distinct, so the cardinality
+    // probe exceeds row_count * ratio and takes the non-dictionary fallback.
+    const int kRows = 1000;
+    auto col = ChunkFactory::column_from_field_type(TYPE_DOUBLE, true);
+    col->reserve(kRows);
+    for (int i = 0; i < kRows; ++i) {
+        double v = 0.25 + i;
+        (void)col->append_numbers(&v, sizeof(v));
+    }
+
+    ColumnMetaPB meta;
+    const std::string fname = TEST_DIR + "/" + generate_uuid_string() + ".data";
+    auto segment = create_dummy_segment(fname);
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(fname));
+        ColumnWriterOptions writer_opts = make_writer_opts<TYPE_DOUBLE, DICT_ENCODING, 2>(&meta);
+        TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_DOUBLE);
+        ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+        ASSERT_OK(writer->init());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
+    }
+
+    ASSERT_EQ(ALP_ENCODING, meta.encoding());
+
+    // Read back through the column reader and verify values round-trip.
+    {
+        auto iter = create_and_init_iterator(meta, segment.get(), fname);
+        ASSERT_TRUE(iter->seek_to_first().ok());
+        MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_DOUBLE, true);
+        dst->reserve(kRows);
+        size_t rows_read = kRows;
+        ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());
+        ASSERT_EQ(kRows, dst->size());
+        TypeInfoPtr type_info = get_type_info(TYPE_DOUBLE);
+        for (int i = 0; i < kRows; ++i) {
+            ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i)));
+        }
+    }
+
+    config::dictionary_encoding_ratio_for_non_string_column = old_ratio;
+    config::dictionary_speculate_min_chunk_size = old_chunk_size;
+    config::enable_alp_float_encoding = false;
+}
+
 TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
     // write data
     {
