@@ -3523,7 +3523,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document rowset_details;
     rowset_details.SetArray();
-    for (int i = 0; i < rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
@@ -3546,21 +3546,21 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document apply_rowset_details;
     apply_rowset_details.SetArray();
-    for (int i = 0; i < apply_version_rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < apply_version_rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
         rapidjson::Value rowset_id;
-        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        std::string rowset_id_value = apply_version_rowsets[i]->rowset_id().to_string();
         rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
         value.AddMember("rowset_id", rowset_id, root.GetAllocator());
 
         rapidjson::Value num_segments;
-        num_segments.SetInt64(rowsets[i]->num_segments());
+        num_segments.SetInt64(apply_version_rowsets[i]->num_segments());
         value.AddMember("num_segments", num_segments, root.GetAllocator());
 
         rapidjson::Value rowset_size;
-        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        rowset_size.SetInt64(apply_version_rowsets[i]->data_disk_size());
         value.AddMember("rowset_size", rowset_size, root.GetAllocator());
 
         apply_rowset_details.PushBack(value, apply_rowset_details.GetAllocator());
