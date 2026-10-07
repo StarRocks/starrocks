@@ -24,6 +24,7 @@
 #include "column/global_dict/types_fwd_decl.h"
 #include "column/nullable_column.h"
 #include "column/variant_encoder.h"
+#include "column/variant_path_parser.h"
 #include "common/object_pool.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
@@ -250,6 +251,25 @@ TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNullTypedHasBase) {
     auto result = VariantColumnReader::build_variant_binding_from_node(0, node, metadata_raw);
     ASSERT_TRUE(result.ok()) << result.status().to_string();
     ASSERT_TRUE(result->has_value());
+}
+
+// ARRAY node: typed column row is null and value_column holds a variant null (a JSON null at the array path).
+// The null is a value of the field and must be kept: its bytes equal VariantValue::kEmptyValue, which used to be
+// mistaken for "no value" and dropped the field from the rebuilt row.
+TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNullTypedVariantNullBase) {
+    auto base_row = parse_variant_json("null");
+    std::string metadata_raw(base_row.get_metadata().raw());
+
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    node.typed_value_read_type =
+            std::make_unique<TypeDescriptor>(TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY));
+    node.typed_value_column = make_null_binary_column();
+    node.value_column = make_variant_value_column("null");
+
+    auto result = VariantColumnReader::build_variant_binding_from_node(0, node, metadata_raw);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    ASSERT_TRUE(result->has_value());
+    EXPECT_EQ("null", (*result)->to_json().value());
 }
 
 // ARRAY node: typed column row is null, no value_column → nullopt  (line 826)
@@ -1196,6 +1216,258 @@ TEST(ParquetComplexColumnReaderTest, StructLevelSourcePrefersChildWithoutExtraRe
     ASSERT_OK(reader2.prepare());
     reader2.get_levels(&def_levels, &rep_levels, &num_levels);
     EXPECT_EQ(1, def_levels[0]);
+}
+
+// ─── ARRAY nodes as ARRAY<VARIANT> batch columns ───────────────────────────
+
+namespace {
+
+using OptInt = std::optional<int64_t>;
+using OptBytes = std::optional<std::string>;
+
+// Variant value bytes of a JSON scalar; scalars do not reference the metadata dictionary.
+std::string scalar_variant_bytes(std::string_view json_text) {
+    auto row = parse_variant_json(json_text);
+    return std::string(row.get_value().raw());
+}
+
+ColumnPtr make_bigint_column(const std::vector<OptInt>& values) {
+    auto col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    for (const auto& v : values) {
+        if (v.has_value()) {
+            col->append_datum(Datum(*v));
+        } else {
+            col->append_nulls(1);
+        }
+    }
+    return col;
+}
+
+ColumnPtr make_binary_column(const std::vector<OptBytes>& values) {
+    auto col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    for (const auto& v : values) {
+        if (v.has_value()) {
+            col->append_datum(Datum(Slice(v->data(), v->size())));
+        } else {
+            col->append_nulls(1);
+        }
+    }
+    return col;
+}
+
+// Nullable ARRAY<BIGINT>: one array (or null) per row.
+ColumnPtr make_bigint_array_column(const std::vector<std::optional<std::vector<int64_t>>>& rows) {
+    auto elements = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    auto offsets = UInt32Column::create();
+    auto nulls = NullColumn::create();
+    offsets->append(0);
+    for (const auto& row : rows) {
+        if (row.has_value()) {
+            for (int64_t v : *row) {
+                elements->append_datum(Datum(v));
+            }
+        }
+        offsets->append(static_cast<uint32_t>(elements->size()));
+        nulls->append(row.has_value() ? 0 : 1);
+    }
+    return NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)), std::move(nulls));
+}
+
+// The rewritten typed column of an object array: ARRAY<VARBINARY> over element.value, here with null element values
+// (elements made only of shredded fields). A row is null when its count is nullopt.
+ColumnPtr make_element_value_array_column(const std::vector<std::optional<size_t>>& counts) {
+    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    auto nulls = NullColumn::create();
+    offsets->append(0);
+    for (const auto& count : counts) {
+        if (count.has_value()) {
+            elements->append_nulls(*count);
+        }
+        offsets->append(static_cast<uint32_t>(elements->size()));
+        nulls->append(count.has_value() ? 0 : 1);
+    }
+    return NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)), std::move(nulls));
+}
+
+ShreddedFieldNode make_bigint_child(const std::string& path, const std::vector<OptInt>& typed,
+                                    const std::vector<OptBytes>& value) {
+    ShreddedFieldNode node = make_node(path, ShreddedFieldNode::Kind::SCALAR);
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(TYPE_BIGINT_DESC);
+    node.typed_value_column = make_bigint_column(typed);
+    node.value_column = make_binary_column(value);
+    return node;
+}
+
+ShreddedFieldNode make_bigint_array_child(const std::string& path, bool scalar_array_layout,
+                                          const std::vector<std::optional<std::vector<int64_t>>>& rows) {
+    ShreddedFieldNode node = make_node(path, ShreddedFieldNode::Kind::ARRAY);
+    node.scalar_array_layout = scalar_array_layout;
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(TypeDescriptor::create_array_type(TYPE_BIGINT_DESC));
+    node.typed_value_column = make_bigint_array_column(rows);
+    return node;
+}
+
+ShreddedFieldNode make_object_array_node(const std::string& path, const std::vector<std::optional<size_t>>& counts) {
+    ShreddedFieldNode node = make_node(path, ShreddedFieldNode::Kind::ARRAY);
+    node.typed_value_read_type =
+            std::make_unique<TypeDescriptor>(TypeDescriptor::create_array_type(TYPE_VARBINARY_DESC));
+    node.typed_value_column = make_element_value_array_column(counts);
+    return node;
+}
+
+// The element VariantColumn (as a nullable column) of an ARRAY<VARIANT> batch column.
+const Column* array_elements_of(const Column* batch_column) {
+    const auto* nullable = down_cast<const NullableColumn*>(batch_column);
+    return down_cast<const ArrayColumn*>(nullable->data_column().get())->elements_column().get();
+}
+
+} // namespace
+
+// Object elements: scalar child with fallback values, field without typed_value, partially shredded object without
+// residual (flattened into its leaves), nested scalar array in scalar-array layout (structured), and a nested array
+// in a layout that is not structured (kept as a VARIANT path rebuilt per element).
+TEST(ParquetComplexColumnReaderTest, BuildArrayBindingColumnObjectElements) {
+    auto row = parse_variant_json(R"({"a":0,"k":0,"l":0,"n":0,"o":0,"s":0})");
+    const std::string metadata_raw(row.get_metadata().raw());
+    const std::vector<Slice> row_metadata(2, Slice(metadata_raw));
+
+    // row 0: [elem0, elem1]; row 1: not an array (string in the array node's value column).
+    ShreddedFieldNode node = make_object_array_node("arr", {2, std::nullopt});
+    node.value_column = make_binary_column({std::nullopt, scalar_variant_bytes(R"("notarray")")});
+    node.children.emplace_back(
+            make_bigint_child("a", {1, std::nullopt}, {std::nullopt, scalar_variant_bytes(R"("s")")}));
+    ShreddedFieldNode n = make_node("n");
+    n.value_column = make_binary_column({scalar_variant_bytes(R"("x")"), std::nullopt});
+    node.children.emplace_back(std::move(n));
+    ShreddedFieldNode o = make_node("o");
+    o.value_column = make_binary_column({std::nullopt, std::nullopt});
+    o.children.emplace_back(make_bigint_child("o.k", {2, std::nullopt}, {std::nullopt, std::nullopt}));
+    node.children.emplace_back(std::move(o));
+    node.children.emplace_back(
+            make_bigint_array_child("s", true, {std::vector<int64_t>{7}, std::vector<int64_t>{8, 9}}));
+    node.children.emplace_back(make_bigint_array_child("l", false, {std::vector<int64_t>{1, 2}, std::nullopt}));
+
+    auto batch = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    const Column* batch_column = batch.value().get();
+    ASSERT_EQ(2, batch_column->size());
+    EXPECT_FALSE(batch_column->is_null(0));
+    EXPECT_TRUE(batch_column->is_null(1));
+
+    const Column* elements = array_elements_of(batch_column);
+    ASSERT_EQ(2, elements->size());
+    EXPECT_EQ(R"({"a":1,"l":[1,2],"n":"x","o":{"k":2},"s":[7]})", nullable_variant_json_at(elements, 0));
+    EXPECT_EQ(R"({"a":"s","s":[8,9]})", nullable_variant_json_at(elements, 1));
+
+    // Row 0 is an array; row 1 keeps its non-array value in the fallback column.
+    TopBinding binding;
+    binding.kind = TopBinding::Kind::ARRAY;
+    binding.node = &node;
+    auto dst = batch_column->clone_empty();
+    auto fallback = VariantColumn::create_fallback_column();
+    VariantColumnReader::append_array_binding_row(0, binding, *batch_column, dst.get(), fallback.get());
+    VariantColumnReader::append_array_binding_row(1, binding, *batch_column, dst.get(), fallback.get());
+    ASSERT_EQ(2, dst->size());
+    EXPECT_FALSE(dst->is_null(0));
+    EXPECT_TRUE(dst->is_null(1));
+    ASSERT_EQ(2, fallback->size());
+    EXPECT_TRUE(fallback->is_null(0));
+    ASSERT_FALSE(fallback->is_null(1));
+    EXPECT_EQ(scalar_variant_bytes(R"("notarray")"), fallback->get(1).get_slice().to_string());
+
+    // Without a fallback destination only the array column is appended.
+    auto dst2 = batch_column->clone_empty();
+    VariantColumnReader::append_array_binding_row(1, binding, *batch_column, dst2.get(), nullptr);
+    ASSERT_EQ(1, dst2->size());
+    EXPECT_TRUE(dst2->is_null(0));
+}
+
+// A partially shredded object inside the elements has residual fields: every element is rebuilt in full into the
+// element remain, including a nested array child.
+TEST(ParquetComplexColumnReaderTest, BuildArrayBindingColumnNestedObjectResidual) {
+    auto row = parse_variant_json(R"({"k":0,"l":0,"o":{"r":3}})");
+    const std::string metadata_raw(row.get_metadata().raw());
+    auto residual = VariantPath::seek_view(row.as_ref(), VariantPathParser::parse(std::string("$.o")).value());
+    ASSERT_TRUE(residual.ok()) << residual.status().to_string();
+    const std::string residual_bytes(residual->get_value().raw());
+    const std::vector<Slice> row_metadata(1, Slice(metadata_raw));
+
+    // One row with three elements; the third has no value at all.
+    ShreddedFieldNode node = make_object_array_node("arr", {3});
+    ShreddedFieldNode o = make_node("o");
+    o.value_column = make_binary_column({residual_bytes, std::nullopt, std::nullopt});
+    o.children.emplace_back(
+            make_bigint_child("o.k", {2, std::nullopt, std::nullopt}, {std::nullopt, std::nullopt, std::nullopt}));
+    node.children.emplace_back(std::move(o));
+    node.children.emplace_back(
+            make_bigint_array_child("l", false, {std::vector<int64_t>{1, 2}, std::vector<int64_t>{3}, std::nullopt}));
+
+    auto batch = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    const Column* elements = array_elements_of(batch.value().get());
+    ASSERT_EQ(3, elements->size());
+    const auto* element_variant =
+            down_cast<const VariantColumn*>(down_cast<const NullableColumn*>(elements)->data_column().get());
+    // Remain only: no typed paths in this batch.
+    EXPECT_TRUE(element_variant->shredded_paths().empty());
+    EXPECT_EQ(R"({"l":[1,2],"o":{"k":2,"r":3}})", nullable_variant_json_at(elements, 0));
+    EXPECT_EQ(R"({"l":[3]})", nullable_variant_json_at(elements, 1));
+    EXPECT_EQ("null", nullable_variant_json_at(elements, 2));
+}
+
+// Scalar-array layout: a null typed element is read from element.value, which must share the typed array offsets.
+TEST(ParquetComplexColumnReaderTest, BuildArrayBindingColumnScalarArrayElementValue) {
+    auto row = parse_variant_json(R"({"s":0})");
+    const std::string metadata_raw(row.get_metadata().raw());
+    const std::vector<Slice> row_metadata(2, Slice(metadata_raw));
+
+    // Element value bytes as ARRAY<VARBINARY>: row 0 = [null, "x"], row 1 = [null].
+    auto make_value_array = [](const std::vector<uint32_t>& offsets_data) {
+        auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        elements->append_nulls(1);
+        const std::string x = scalar_variant_bytes(R"("x")");
+        elements->append_datum(Datum(Slice(x)));
+        elements->append_nulls(1);
+        auto offsets = UInt32Column::create();
+        for (uint32_t o : offsets_data) {
+            offsets->append(o);
+        }
+        return NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                      NullColumn::create(offsets_data.size() - 1, 0));
+    };
+
+    // Typed: row 0 = [1, null], row 1 = [3].
+    ShreddedFieldNode node = make_node("arr", ShreddedFieldNode::Kind::ARRAY);
+    node.scalar_array_layout = true;
+    node.typed_value_read_type = std::make_unique<TypeDescriptor>(TypeDescriptor::create_array_type(TYPE_BIGINT_DESC));
+    {
+        auto elements = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+        elements->append_datum(Datum(int64_t{1}));
+        elements->append_nulls(1);
+        elements->append_datum(Datum(int64_t{3}));
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(2);
+        offsets->append(3);
+        node.typed_value_column = NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)),
+                                                         NullColumn::create(2, 0));
+    }
+    node.array_element_value_column = make_value_array({0, 2, 3});
+
+    auto batch = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_TRUE(batch.ok()) << batch.status().to_string();
+    const Column* elements = array_elements_of(batch.value().get());
+    ASSERT_EQ(3, elements->size());
+    EXPECT_EQ("1", nullable_variant_json_at(elements, 0));
+    EXPECT_EQ(R"("x")", nullable_variant_json_at(elements, 1));
+    EXPECT_EQ("3", nullable_variant_json_at(elements, 2));
+
+    // Same number of elements but different offsets: element.value would land on other elements.
+    node.array_element_value_column = make_value_array({0, 1, 3});
+    auto misaligned = VariantColumnReader::build_array_binding_column(node, row_metadata);
+    ASSERT_FALSE(misaligned.ok());
+    EXPECT_TRUE(misaligned.status().is_internal_error()) << misaligned.status().to_string();
 }
 
 } // namespace starrocks::parquet

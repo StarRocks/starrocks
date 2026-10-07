@@ -310,18 +310,24 @@ struct ShreddedFieldNode {
 
 enum class VariantScalarMaterializeMode : uint8_t {
     KEEP_SCALAR = 0,
-    DEMOTE_VARIANT = 1,
+    // Keep the scalar typed column and carry the values that do not fit it in a fallback column.
+    KEEP_SCALAR_WITH_FALLBACK = 1,
     DROP = 2,
 };
 
 struct TopBinding {
-    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1 };
+    // SCALAR: typed scalar column. VARIANT: VariantColumn rebuilt per row. ARRAY: ARRAY<VARIANT> whose elements are
+    // a VariantColumn built from the array node's element children (see build_array_variant_column).
+    enum class Kind : uint8_t { SCALAR = 0, VARIANT = 1, ARRAY = 2 };
     Kind kind = Kind::SCALAR;
     std::string path;
     TypeDescriptor type;
     const ShreddedFieldNode* node = nullptr;
     // Cached parsed form of `path` to avoid re-parsing on every row.
     VariantPath parsed_path;
+    // SCALAR only: some rows hold a value in the field's `value` column instead of `typed_value`; they go to the
+    // VariantColumn fallback column of this path.
+    bool with_fallback = false;
 };
 
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
@@ -363,6 +369,16 @@ public:
 
     static Status append_variant_binding_row(size_t row, const TopBinding& binding, std::string_view raw_metadata,
                                              const VariantRowRef& full_row, Column* dst);
+
+    // Builds the ARRAY<VARIANT> batch column of a structured array node (TopBinding::Kind::ARRAY) from the node's
+    // read columns. `row_metadata` holds the variant metadata of each row.
+    static StatusOr<ColumnPtr> build_array_binding_column(const ShreddedFieldNode& node,
+                                                          const std::vector<Slice>& row_metadata);
+
+    // Appends row `row` of an ARRAY binding: the array to `dst`, or, when the row's value is not an array, the
+    // node's `value` bytes to `fallback_dst`.
+    static void append_array_binding_row(size_t row, const TopBinding& binding, const Column& batch_array_column,
+                                         Column* dst, Column* fallback_dst);
 
     // Constructor that accepts pre-built ScalarColumnReader objects and optional shredded paths.
     // parsed_shredded_paths: exact leaf or array-boundary paths to expose as typed_columns.
