@@ -889,7 +889,11 @@ showCatalogsStatement
     ;
 
 alterCatalogStatement
-    : ALTER CATALOG catalogName=identifierOrString modifyPropertiesClause
+    : ALTER CATALOG catalogName=identifierOrString (modifyPropertiesClause | unsetCatalogPropertiesClause)
+    ;
+
+unsetCatalogPropertiesClause
+    : UNSET stringList
     ;
 
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
