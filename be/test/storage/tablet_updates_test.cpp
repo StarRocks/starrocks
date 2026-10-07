@@ -16,20 +16,7 @@
 
 #include <random>
 
-<<<<<<< HEAD
-=======
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/sync_point.h"
-#include "column/chunk_factory.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_scan_io_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "data_workflows/consistency/engine_checksum_task.h"
-#include "fs/fs_factory.h"
 #include "rapidjson/document.h"
-#include "runtime/runtime_state.h"
->>>>>>> 2bee403 ([BugFix] Fix BE crash in PK tablet get_compaction_status while a compaction waits for apply (#80167))
 #include "script/script.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
