@@ -1284,7 +1284,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The interval between two consecutive Hive metadata cache refreshes.
+- Description: The interval between two consecutive background refreshes of cached external catalog metadata. A background task on each FE uses this interval to refresh cached metadata for Hive, Iceberg, Delta Lake, Paimon, and MaxCompute catalogs, so that StarRocks can perceive data changes in the external data source. This is an FE-level setting that applies to all such catalogs. The interval cannot be set per catalog. The refresh is enabled by `enable_background_refresh_connector_metadata`. For Hive, Iceberg, Delta Lake, and Paimon, a table that has not been accessed for longer than `background_refresh_metadata_time_secs_since_last_access_secs` is no longer refreshed.
 - Introduced in: v2.5.5
 
 ### `background_refresh_metadata_time_secs_since_last_access_secs`
@@ -1293,7 +1293,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata.
+- Description: How long StarRocks keeps refreshing a table after that table was last accessed. StarRocks applies this cutoff to each table. For a Hive, Iceberg, Delta Lake, or Paimon table that has been accessed, if it has not been accessed for longer than this value, StarRocks stops refreshing its cached metadata. A table that has not been accessed is not refreshed. MaxCompute catalogs that use the same background refresh do not apply this cutoff.
 - Introduced in: v2.5.5
 
 ### `bdbje_cleaner_threads`
@@ -1482,7 +1482,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it.
+- Description: Whether to enable the periodic background refresh of cached external catalog metadata. After it is enabled, a background task on each FE refreshes cached metadata for Hive, Iceberg, Delta Lake, Paimon, and MaxCompute catalogs so that StarRocks can perceive data changes. Hive metadata is read from Hive Metastore or AWS Glue. Iceberg catalogs, including Iceberg REST catalogs, are read from the configured catalog service (Hive Metastore, AWS Glue, REST, Hadoop, or JDBC). The refresh reloads table metadata and, when that metadata changes, the cached manifests and data files. `true` enables the refresh, and `false` disables it.
 - Introduced in: v2.5.5
 
 ### `refresh_other_fe_dispatch_executor_thread_num`
