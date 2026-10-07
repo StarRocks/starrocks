@@ -26,10 +26,10 @@
 #include <string>
 #include <string_view>
 
-#include "base/auth/credential_mask.h"
 #include "common/configbase_impl.h"
 #include "common/status.h"
 #include "fmt/format.h"
+#include "util/credential_mask.h"
 
 namespace starrocks::config {
 
