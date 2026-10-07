@@ -18,22 +18,12 @@
 
 #include <filesystem>
 
-<<<<<<< HEAD:be/test/fs/fs_hdfs_test.cpp
+#include "common/config.h"
 #include "fs/fs_util.h"
+#include "fs/hdfs/hdfs_fs_cache.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/util.h"
 #include "util/defer_op.h"
-=======
-#include "base/bthreads/util.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_hdfs_fwd.h"
-#include "fs/fs_registry.h"
-#include "fs/fs_util.h"
-#include "fs_ext/hdfs/fs_hdfs.h"
-#include "fs_ext/hdfs/hdfs_fs_cache.h"
-#include "fs_ext/hdfs/hdfs_util.h"
-#include "runtime/java/java_env.h"
->>>>>>> 80e10a4 ([BugFix] Keep the filesystem connected on cache eviction (#80087)):be/test/fs_ext/hdfs_filesystem_test.cpp
 
 namespace starrocks {
 
@@ -62,10 +52,6 @@ public:
 };
 
 void HdfsFileSystemTest::writable_file_survives_cache_eviction(WriterRelease release) {
-    if (release == WriterRelease::kCloseFromBthread && JavaEnv::GetInstance()->jvm_call_pool() == nullptr) {
-        auto st = JavaEnv::GetInstance()->init();
-        ASSERT_TRUE(st.ok()) << st;
-    }
     const auto old_capacity = config::hdfs_client_max_cache_size;
     DeferOp restore_capacity([&] { config::hdfs_client_max_cache_size = old_capacity; });
     config::hdfs_client_max_cache_size = 1;
