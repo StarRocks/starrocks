@@ -82,6 +82,34 @@ public class KuduTableTest {
         org.junit.jupiter.api.Assertions.assertEquals(tTableDescriptor.getTableType(), TTableType.KUDU_TABLE);
     }
 
+    @Test
+    public void testSetMasterAddresses() {
+        List<ColumnSchema> columns = Arrays.asList(
+                genColumnSchema("a", org.apache.kudu.Type.INT32),
+                genColumnSchema("b", org.apache.kudu.Type.STRING)
+        );
+        List<Column> fullSchema = new ArrayList<>(columns.size());
+        for (ColumnSchema column : columns) {
+            Type fieldType = ColumnTypeConverter.fromKuduType(column);
+            Column convertedColumn = new Column(column.getName(), fieldType, true);
+            fullSchema.add(convertedColumn);
+        }
+
+        // Create KuduTable without masterAddresses (simulating HMS scenario)
+        KuduTable kuduTable = new KuduTable(null, "testCatalog", "testDB", "testTable",
+                "testKuduTable", fullSchema, new ArrayList<>());
+
+        // Verify initial state
+        org.junit.jupiter.api.Assertions.assertNull(kuduTable.getMasterAddresses());
+
+        // Set masterAddresses
+        String masterAddresses = "localhost:7051,localhost:7052,localhost:7053";
+        kuduTable.setMasterAddresses(masterAddresses);
+
+        // Verify masterAddresses was set correctly
+        org.junit.jupiter.api.Assertions.assertEquals(masterAddresses, kuduTable.getMasterAddresses());
+    }
+
     public static ColumnSchema genColumnSchema(String name, org.apache.kudu.Type type) {
         return new ColumnSchema.ColumnSchemaBuilder(name, type).build();
     }

@@ -212,7 +212,11 @@ public class KuduMetadata implements ConnectorMetadata {
         // Calls the kudu client, which has no FE-owned wrapper to guard further down.
         BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         if (metastore.isPresent()) {
-            return metastore.get().getTable(dbName, tblName);
+            Table table = metastore.get().getTable(dbName, tblName);
+            if (table instanceof KuduTable) {
+                ((KuduTable) table).setMasterAddresses(masterAddresses);
+            }
+            return table;
         }
         String fullTableName = getKuduFullTableName(dbName, tblName);
         try {
