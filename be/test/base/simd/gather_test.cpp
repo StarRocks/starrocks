@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <random>
@@ -28,7 +29,7 @@ namespace starrocks {
 
 namespace {
 
-constexpr size_t kPoolSize = 100003;
+constexpr size_t kPoolSize = 200003;
 // Written past the end of every destination to catch out-of-bounds stores.
 constexpr size_t kGuard = 64;
 
@@ -58,6 +59,47 @@ std::vector<IndexType> make_indexes(size_t n, uint32_t seed) {
     return indexes;
 }
 
+enum class FilterPattern {
+    ModuloMix,
+    Alternating,
+    Random,
+    AllZeros,
+    AllOnes,
+};
+
+template <typename CondType = uint8_t>
+std::vector<CondType> make_filter(size_t num_rows, FilterPattern pattern, uint32_t seed = 777) {
+    std::vector<CondType> is_filtered(num_rows);
+    switch (pattern) {
+    case FilterPattern::ModuloMix:
+        for (size_t i = 0; i < num_rows; ++i) {
+            const size_t pick = (i * 7 + num_rows) % 5;
+            is_filtered[i] = static_cast<CondType>(pick == 0 ? 1 : (pick == 1 ? 2 : 0));
+        }
+        break;
+    case FilterPattern::Alternating:
+        for (size_t i = 0; i < num_rows; ++i) {
+            is_filtered[i] = static_cast<CondType>(i % 2);
+        }
+        break;
+    case FilterPattern::Random: {
+        std::mt19937 rng(seed + num_rows);
+        std::bernoulli_distribution dist(0.5);
+        for (size_t i = 0; i < num_rows; ++i) {
+            is_filtered[i] = static_cast<CondType>(dist(rng) ? 1 : 0);
+        }
+        break;
+    }
+    case FilterPattern::AllZeros:
+        std::fill(is_filtered.begin(), is_filtered.end(), static_cast<CondType>(0));
+        break;
+    case FilterPattern::AllOnes:
+        std::fill(is_filtered.begin(), is_filtered.end(), static_cast<CondType>(1));
+        break;
+    }
+    return is_filtered;
+}
+
 template <typename T, typename IndexType>
 void check_gather(size_t num_rows) {
     const std::vector<T> src = make_source<T>();
@@ -75,16 +117,11 @@ void check_gather(size_t num_rows) {
     }
 }
 
-template <typename T, typename IndexType>
-void check_filtered(size_t num_rows) {
+template <typename T, typename IndexType, typename CondType = uint8_t>
+void check_filtered(size_t num_rows, FilterPattern pattern = FilterPattern::ModuloMix) {
     const std::vector<T> src = make_source<T>();
     const std::vector<IndexType> indexes = make_indexes<IndexType>(num_rows, 777 + num_rows);
-    // Mix of 0, 1 and other non-zero values: every non-zero byte means "filtered".
-    std::vector<uint8_t> is_filtered(num_rows);
-    for (size_t i = 0; i < num_rows; ++i) {
-        const size_t pick = (i * 7 + num_rows) % 5;
-        is_filtered[i] = pick == 0 ? 1 : (pick == 1 ? 2 : 0);
-    }
+    const std::vector<CondType> is_filtered = make_filter<CondType>(num_rows, pattern, 777 + num_rows);
     const T sentinel = make_value<T>(999983);
 
     std::vector<T> dest(num_rows + kGuard, sentinel);
@@ -92,7 +129,8 @@ void check_filtered(size_t num_rows) {
 
     for (size_t i = 0; i < num_rows; ++i) {
         const T expected = is_filtered[i] == 0 ? src[indexes[i]] : T(0);
-        ASSERT_EQ(expected, dest[i]) << "num_rows=" << num_rows << " i=" << i;
+        ASSERT_EQ(expected, dest[i]) << "num_rows=" << num_rows << " i=" << i
+                                     << " pattern=" << static_cast<int>(pattern);
     }
     for (size_t i = num_rows; i < dest.size(); ++i) {
         ASSERT_EQ(sentinel, dest[i]) << "write past the end, num_rows=" << num_rows << " i=" << i;
@@ -127,15 +165,16 @@ void check_int16_buckets(size_t buckets, size_t num_rows) {
 
 // Row counts straddling the vector width, the 8192-row boundary and large batches.
 std::vector<size_t> boundary_row_counts() {
-    return {0,    1,    7,    8,    9,    15,   16,   17,   24,   25,    31,    32,    33,    100,
-            8185, 8190, 8191, 8192, 8193, 8194, 8199, 8200, 8201, 8207,  8208,  8209,  8215,  8216,
-            8217, 8223, 8224, 8225, 8231, 8232, 8233, 8256, 8257, 16384, 16391, 65536, 100001};
+    return {0,    1,    7,    8,    9,    15,   16,   17,    24,    25,    31,    32,    33,    100,    8185,
+            8190, 8191, 8192, 8193, 8194, 8199, 8200, 8201,  8207,  8208,  8209,  8215,  8216,  8217,   8223,
+            8224, 8225, 8231, 8232, 8233, 8256, 8257, 16384, 16391, 65535, 65536, 65537, 65550, 100001, 131072};
 }
 
 } // namespace
 
 PARALLEL_TEST(GatherTest, boundary_rows) {
     for (size_t n : boundary_row_counts()) {
+        check_gather<uint32_t, uint32_t>(n);
         check_gather<int32_t, uint32_t>(n);
         check_gather<int32_t, int32_t>(n);
         check_gather<int64_t, uint32_t>(n);
@@ -147,10 +186,25 @@ PARALLEL_TEST(GatherTest, boundary_rows) {
 
 PARALLEL_TEST(GatherTest, filtered_variant_zero_default) {
     for (size_t n : boundary_row_counts()) {
+        check_filtered<uint32_t, uint32_t, uint8_t>(n);
         check_filtered<int32_t, uint32_t>(n);
         check_filtered<int32_t, int32_t>(n);
         check_filtered<int64_t, uint32_t>(n);
         check_filtered<int64_t, int32_t>(n);
+    }
+}
+
+PARALLEL_TEST(GatherTest, filtered_patterns_production_types) {
+    const std::vector<size_t> test_sizes = {0,    1,     7,     8,     15,    16,    31,     32,    100,
+                                            8192, 16384, 65535, 65536, 65537, 65550, 100001, 131072};
+    const std::vector<FilterPattern> patterns = {
+            FilterPattern::AllZeros, FilterPattern::AllOnes,   FilterPattern::Alternating,
+            FilterPattern::Random,   FilterPattern::ModuloMix,
+    };
+    for (FilterPattern pattern : patterns) {
+        for (size_t n : test_sizes) {
+            check_filtered<uint32_t, uint32_t, uint8_t>(n, pattern);
+        }
     }
 }
 
