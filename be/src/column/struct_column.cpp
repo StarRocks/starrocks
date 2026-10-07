@@ -107,32 +107,6 @@ void StructColumn::resize(size_t n) {
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
-StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
-    for (auto& column : _fields) {
-        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!ret.ok()) {
-            return ret;
-        }
-        if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return nullptr;
-}
-
-StatusOr<MutableColumnPtr> StructColumn::downgrade() {
-    for (auto& column : _fields) {
-        StatusOr<MutableColumnPtr> status = downgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!status.ok()) {
-            return status;
-        }
-        if (status.value() != nullptr) {
-            column = std::move(status.value());
-        }
-    }
-    return nullptr;
-}
-
 bool StructColumn::has_large_column() const {
     bool res = false;
     for (const auto& column : _fields) {

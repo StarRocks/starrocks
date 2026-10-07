@@ -123,10 +123,6 @@ public:
         return *this;
     }
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
     bool has_large_column() const override;
 
     // Whether the byte payload size and offset payload byte size fit the size

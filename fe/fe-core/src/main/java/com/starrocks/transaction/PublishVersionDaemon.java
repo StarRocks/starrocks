@@ -101,7 +101,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
-    private static final long RETRY_INTERVAL_MS = 1000;
     // At most one "fail to publish" line per partition per interval, on either publish path.
     private static final long PUBLISH_ERROR_LOG_INTERVAL_MS = 10000;
     private static final int PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
@@ -990,7 +989,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     // Cheap pre-pass over a batch's commit infos: can any partition publish this round? A
     // partition cannot if every transaction's commit info for it is already published, or if its
-    // most recent attempt failed less than RETRY_INTERVAL_MS ago.
+    // most recent attempt failed less than lake_publish_version_retry_interval_ms ago.
     @VisibleForTesting
     static boolean batchHasPublishablePartition(List<TransactionState> states, long now) {
         Map<Long, Long> lastFailureByPartition = new HashMap<>();
@@ -1023,7 +1022,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
         for (Long partitionId : unpublished) {
             Long failedAt = lastFailureByPartition.get(partitionId);
-            if (failedAt == null || now >= failedAt + RETRY_INTERVAL_MS) {
+            if (failedAt == null || now >= failedAt + publishRetryIntervalMs()) {
                 return true;
             }
         }
@@ -1054,7 +1053,15 @@ public class PublishVersionDaemon extends LeaderDaemon {
         for (PartitionCommitInfo commitInfo : commitInfos) {
             lastFailure = Math.max(lastFailure, commitInfo.getLastPublishFailureTime());
         }
-        return lastFailure > 0 && now < lastFailure + RETRY_INTERVAL_MS;
+        return lastFailure > 0 && now < lastFailure + publishRetryIntervalMs();
+    }
+
+    // The back-off window after a failed publish attempt. Read on every check rather than cached, because
+    // the config is mutable and an operator changing it during an incident should take effect on the next
+    // tick. Clamped because a negative value would make every comparison fall through and silently disable
+    // the back-off, whereas 0 disables it in a way that reads as deliberate.
+    private static long publishRetryIntervalMs() {
+        return Math.max(0, Config.lake_publish_version_retry_interval_ms);
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
@@ -1113,7 +1120,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // A partition that already published is deliberately NOT skipped here. Skipping it
             // would also skip publishPartitionBatch, the only place that records this partition's
             // txn logs on the batch for deletion once the batch finishes, and the batch is rebuilt
-            // from scratch every cycle. Its republish is bounded to once per RETRY_INTERVAL_MS by
+            // from scratch every cycle. Its republish is bounded to once per lake_publish_version_retry_interval_ms by
             // the check above, which is the amplification that actually mattered.
             List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
             if (retryTooSoon(commitInfos, submitTime)) {
@@ -1124,7 +1131,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 BatchPublishResult result = publishPartitionBatch(db, publishVersionData.getTableId(),
                         publishVersionData, txnStateBatch);
                 // A partition merely waiting for its predecessor keeps its previous stamp, so the
-                // back-off does not add up to RETRY_INTERVAL_MS to every ordinary version-ordering
+                // back-off does not add up to lake_publish_version_retry_interval_ms to every ordinary version-ordering
                 // wait; only a real failure arms it.
                 if (result != BatchPublishResult.NOT_READY) {
                     long now = System.currentTimeMillis();
@@ -1196,7 +1203,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(true);
         }
         long lastFailure = partitionCommitInfo.getLastPublishFailureTime();
-        if (lastFailure > 0 && System.currentTimeMillis() < lastFailure + RETRY_INTERVAL_MS) {
+        if (lastFailure > 0 && System.currentTimeMillis() < lastFailure + publishRetryIntervalMs()) {
             return CompletableFuture.completedFuture(false);
         }
 
@@ -1342,7 +1349,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // Prevent excessive logging. The previous form compared the wrong way round: it skipped
             // the log when the last failure was more than 10s ago and kept logging while the partition
             // failed continuously, which is exactly backwards for a path that retries every
-            // RETRY_INTERVAL_MS.
+            // lake_publish_version_retry_interval_ms.
             if (partitionCommitInfo.shouldLogPublishError(System.currentTimeMillis(), PUBLISH_ERROR_LOG_INTERVAL_MS)) {
                 LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                         txnId, e.getMessage());

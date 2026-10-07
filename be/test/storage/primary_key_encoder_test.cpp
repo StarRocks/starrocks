@@ -29,6 +29,7 @@
 #include "common/config_local_io_fwd.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 
@@ -323,12 +324,7 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
 
     auto sticky_large = BinaryColumn::create();
     sticky_large->append_strings(strings.data(), strings.size());
-    AdaptiveOffsets::Large large_offsets;
-    large_offsets.resize(sticky_large->get_offset().size());
-    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
-        large_offsets[i] = sticky_large->get_offset()[i];
-    }
-    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
+    ColumnTestHelper::force_large_offsets(sticky_large.get());
     ASSERT_TRUE(sticky_large->get_offset().is_large());
     ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*sticky_large).ok());
 

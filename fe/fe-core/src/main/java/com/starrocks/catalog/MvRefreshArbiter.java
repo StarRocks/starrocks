@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.catalog.mv.MVTimelinessListPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
@@ -256,5 +257,26 @@ public class MvRefreshArbiter {
         }
 
         return false;
+    }
+
+    /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
+    public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
+        return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
+    }
+
+    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
+    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
+            MaterializedView mv, Table table) {
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (table.isNativeTableOrMaterializedView()) {
+            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
+        }
+        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
+        // hand back another table's version map.
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(context::getBaseTableRefreshInfo)
+                .orElseGet(Maps::newHashMap);
     }
 }

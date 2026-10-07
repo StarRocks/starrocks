@@ -227,6 +227,10 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
     }
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
+    if (ctx->buffer == nullptr) {
+        // no data is received, e.g. the body is empty
+        ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(0));
+    }
     ctx->buffer->flip_to_read();
     return _batch_write_mgr->append_data(ctx);
 }
@@ -311,6 +315,17 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         }
     }
 
+    if (http_req->header(HTTP_FORMAT_KEY).empty()) {
+        ctx->format = TFileFormatType::FORMAT_CSV_PLAIN;
+    } else {
+        ctx->format = parse_format(http_req->header(HTTP_FORMAT_KEY));
+        if (ctx->format == TFileFormatType::FORMAT_UNKNOWN) {
+            std::stringstream ss;
+            ss << "unknown data format, format=" << http_req->header(HTTP_FORMAT_KEY);
+            return Status::InternalError(ss.str());
+        }
+    }
+
     // check content length
     ctx->body_bytes = 0;
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
@@ -328,42 +343,21 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         }
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
-            // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
-            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-            ASSIGN_OR_RETURN(ctx->buffer,
-                             ByteBuffer::allocate_with_tracker(ctx->body_bytes, simdjson::SIMDJSON_PADDING));
-        } else if (ctx->enable_batch_write) {
-            // batch write does not support parsing data in stream mode
-            ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(ctx->body_bytes));
+            size_t max_batch_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
+            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
+            if (!ignore_json_size && ctx->body_bytes > max_batch_bytes) {
+                std::stringstream ss;
+                ss << "The size of this batch exceed the max size [" << max_batch_bytes << "]  of json type data "
+                   << " data [ " << ctx->body_bytes
+                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
+                return Status::InternalError(ss.str());
+            }
         }
     } else {
 #ifndef BE_TEST
         evhttp_connection_set_max_body_size(evhttp_request_get_connection(http_req->get_evhttp_request()),
                                             max_body_bytes);
 #endif
-    }
-    // get format of this put
-    if (http_req->header(HTTP_FORMAT_KEY).empty()) {
-        ctx->format = TFileFormatType::FORMAT_CSV_PLAIN;
-    } else {
-        ctx->format = parse_format(http_req->header(HTTP_FORMAT_KEY));
-        if (ctx->format == TFileFormatType::FORMAT_UNKNOWN) {
-            std::stringstream ss;
-            ss << "unknown data format, format=" << http_req->header(HTTP_FORMAT_KEY);
-            return Status::InternalError(ss.str());
-        }
-
-        if (ctx->format == TFileFormatType::FORMAT_JSON) {
-            size_t max_body_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
-            if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
-                std::stringstream ss;
-                ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes
-                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
-                return Status::InternalError(ss.str());
-            }
-        }
     }
 
     if (!http_req->header(HTTP_TIMEOUT).empty()) {
@@ -413,10 +407,19 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
-                    ctx->status, ctx->buffer,
-                    ByteBuffer::allocate_with_tracker(processInBatchMode ? std::max(len, ctx->kDefaultBufferSize)
-                                                                         : len));
+            if (processInBatchMode && ctx->body_bytes > 0) {
+                // For json format or batch write, the data cannot be parsed in stream mode, so allocate the whole
+                // body at once. For efficiency reasons, simdjson requires a string with a few bytes
+                // (simdjson::SIMDJSON_PADDING) at the end.
+                size_t padding = ctx->format == TFileFormatType::FORMAT_JSON ? simdjson::SIMDJSON_PADDING : 0;
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(ctx->status, ctx->buffer,
+                                                         ByteBuffer::allocate_with_tracker(ctx->body_bytes, padding));
+            } else {
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(processInBatchMode ? std::max(len, ctx->kDefaultBufferSize)
+                                                                             : len));
+            }
         } else if (ctx->buffer->remaining() < len) {
             if (processInBatchMode) {
                 // For json format or batch write, we need build a complete data before we push the buffer to the pipe.

@@ -188,12 +188,6 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
-    // access the item, so we should use 2^32 as the limit
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
     bool has_large_column() const override { return false; }
 
     uint32_t serialize(size_t idx, uint8_t* pos) const override;

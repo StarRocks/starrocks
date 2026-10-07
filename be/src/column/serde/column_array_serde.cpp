@@ -24,6 +24,7 @@
 
 #include "base/coding.h"
 #include "base/compression/compression_headers.h"
+#include "base/simd/simd.h"
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/array_column.h"
@@ -31,6 +32,7 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column.h"
 #include "column/geo_column.h"
 #include "column/json_column.h"
@@ -46,6 +48,21 @@
 #include "types/percentile_value.h"
 
 namespace starrocks::serde {
+
+bool is_all_null_column(const Column& column) {
+    if (!column.is_nullable()) {
+        return false;
+    }
+    const auto& nullable = down_cast<const NullableColumn&>(column);
+    // The row count is stored as uint32_t, matching how the other serdes size their payloads.
+    if (nullable.size() == 0 || nullable.size() > std::numeric_limits<uint32_t>::max() || !nullable.has_null()) {
+        return false;
+    }
+    // Stop at the first non-NULL row instead of counting every NULL. On an ordinary load almost no
+    // column is entirely NULL and most bail on row 0, so this costs a memchr that returns at once;
+    // null_count() would SIMD-scan the whole null column every time.
+    return !SIMD::contain_zero(nullable.immutable_null_column_data());
+}
 
 static Status check_remaining_size(const uint8_t* current, const uint8_t* end, size_t expected_remains) {
     if (expected_remains > static_cast<size_t>(end - current)) {
@@ -518,6 +535,14 @@ private:
             size += serde::ColumnArraySerde::max_serialized_size(*column.remain_value_column(), 0);
         }
 
+        // fallback_columns: one has_fallback flag per typed path, then the nullable binary column
+        for (size_t i = 0; i < column.typed_columns().size(); ++i) {
+            size += sizeof(uint8_t); // has_fallback
+            if (const Column* fallback = column.fallback_column_by_index(i); fallback != nullptr) {
+                size += serde::ColumnArraySerde::max_serialized_size(*fallback, 0);
+            }
+        }
+
         return size;
     }
 
@@ -598,6 +623,20 @@ private:
                 return buff;
             }
             buff = result.value();
+        }
+
+        // fallback_columns
+        for (size_t i = 0; i < column.typed_columns().size(); ++i) {
+            const Column* fallback = column.fallback_column_by_index(i);
+            buff = write_little_endian_8(fallback != nullptr ? 1 : 0, buff);
+            if (fallback != nullptr) {
+                auto result = serde::ColumnArraySerde::serialize(*fallback, buff, false, 0);
+                if (!result.ok()) {
+                    LOG(WARNING) << "Failed to serialize fallback column: " << result.status();
+                    return buff;
+                }
+                buff = result.value();
+            }
         }
 
         return buff;
@@ -712,8 +751,23 @@ private:
             ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, remain_col.get(), false, 0));
         }
 
-        column->set_shredded_columns(std::move(paths), std::move(types), std::move(typed_cols), std::move(metadata_col),
-                                     std::move(remain_col));
+        // fallback_columns
+        MutableColumns fallback_cols;
+        fallback_cols.reserve(num_paths);
+        for (uint32_t i = 0; i < num_paths; ++i) {
+            uint8_t has_fallback = 0;
+            ASSIGN_OR_RETURN(buff, read_little_endian_8(buff, end, &has_fallback));
+            if (has_fallback == 0) {
+                fallback_cols.emplace_back(nullptr);
+                continue;
+            }
+            MutableColumnPtr fallback = VariantColumn::create_fallback_column();
+            ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::deserialize(buff, end, fallback.get(), false, 0));
+            fallback_cols.emplace_back(std::move(fallback));
+        }
+
+        column->set_shredded_columns(std::move(paths), std::move(types), std::move(typed_cols),
+                                     std::move(fallback_cols), std::move(metadata_col), std::move(remain_col));
 
         return buff;
     }
@@ -850,11 +904,7 @@ private:
     static constexpr int64_t kTagSize = sizeof(uint8_t);
     static constexpr int64_t kRowCountSize = sizeof(uint32_t);
 
-    static bool _is_all_null(const NullableColumn& column) {
-        // The row count is stored as uint32_t, matching how the other serdes size their payloads.
-        return column.size() > 0 && column.size() <= std::numeric_limits<uint32_t>::max() &&
-               column.null_count() == column.size();
-    }
+    static bool _is_all_null(const NullableColumn& column) { return serde::is_all_null_column(column); }
 };
 
 class ArrayColumnSerde {
@@ -931,6 +981,34 @@ public:
     }
 };
 
+// FILE has a fixed field layout, so the fields are written back to back without any schema.
+class FileColumnSerde {
+public:
+    using Serde = serde::ColumnArraySerde;
+    static int64_t max_serialized_size(const FileColumn& column, const int encode_level) {
+        int64_t size = 0;
+        for (const ColumnPtr& field : column.fields()) {
+            size += Serde::max_serialized_size(*field, encode_level);
+        }
+        return size;
+    }
+
+    static StatusOr<uint8_t*> serialize(const FileColumn& column, uint8_t* buff, const int encode_level) {
+        for (const ColumnPtr& field : column.fields()) {
+            ASSIGN_OR_RETURN(buff, Serde::serialize(*field, buff, false, encode_level));
+        }
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, FileColumn* column,
+                                                const int encode_level) {
+        for (const ColumnPtr& field : column->fields()) {
+            ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, field->as_mutable_raw_ptr(), false, encode_level));
+        }
+        return buff;
+    }
+};
+
 class ConstColumnSerde {
 public:
     using Serde = serde::ColumnArraySerde;
@@ -982,6 +1060,11 @@ public:
 
     Status do_visit(const StructColumn& column) {
         _size += StructColumnSerde::max_serialized_size(column, _encode_level);
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
+        _size += FileColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
@@ -1055,6 +1138,11 @@ public:
 
     Status do_visit(const StructColumn& column) {
         ASSIGN_OR_RETURN(_cur, StructColumnSerde::serialize(column, _cur, _encode_level));
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
+        ASSIGN_OR_RETURN(_cur, FileColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
 
@@ -1141,6 +1229,11 @@ public:
 
     Status do_visit(StructColumn* column) {
         ASSIGN_OR_RETURN(_cur, StructColumnSerde::deserialize(_cur, _end, column, _encode_level));
+        return Status::OK();
+    }
+
+    Status do_visit(FileColumn* column) {
+        ASSIGN_OR_RETURN(_cur, FileColumnSerde::deserialize(_cur, _end, column, _encode_level));
         return Status::OK();
     }
 

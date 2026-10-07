@@ -42,6 +42,15 @@ public class VariantPathRewriteTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testIsVariantNull() throws Exception {
+        String plan = getFragmentPlan("select is_variant_null(variant_query(v, '$.a')) from " + VARIANT_TABLE);
+        assertContains(plan, "is_variant_null");
+        // is_variant_null returns false for SQL NULL, so a NULL argument must not be folded into a NULL result.
+        plan = getFragmentPlan("select is_variant_null(NULL) from " + VARIANT_TABLE);
+        assertContains(plan, "is_variant_null");
+    }
+
+    @Test
     public void testRewriteDisabled() throws Exception {
         connectContext.getSessionVariable().setEnableVariantPathRewrite(false);
         String sql = "select get_variant_int(v, '$.a.b') from " + VARIANT_TABLE;

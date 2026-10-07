@@ -1,16 +1,18 @@
 ---
 displayed_sidebar: docs
-description: "ネイティブ GEOGRAPHY 値を WKB としてシリアライズします。"
+description: "ネイティブ GEOMETRY または GEOGRAPHY 値を WKB としてシリアライズします。"
 ---
 
 # ST_AsBinary, ST_AsWKB
 
-ネイティブ `GEOGRAPHY` 値を Well-Known Binary（WKB）としてシリアライズします。`ST_AsWKB` は `ST_AsBinary` のエイリアスです。
+ネイティブ `GEOMETRY` または `GEOGRAPHY` 値を Well-Known Binary（WKB）としてシリアライズします。`ST_AsWKB` は `ST_AsBinary` のエイリアスです。
 
 ## 構文
 
 ```Haskell
+VARBINARY ST_AsBinary(GEOMETRY geometry)
 VARBINARY ST_AsBinary(GEOGRAPHY geography)
+VARBINARY ST_AsWKB(GEOMETRY geometry)
 VARBINARY ST_AsWKB(GEOGRAPHY geography)
 ```
 
@@ -26,6 +28,12 @@ SELECT hex(ST_AsBinary(ST_GeogFromText('POINT (1 2)')));
 0101000000000000000000F03F0000000000000040
 ```
 
+同じシリアライザ名でネイティブ `GEOMETRY` 値も処理できます。
+
+```SQL
+SELECT hex(ST_AsBinary(ST_GeomFromText('POINT (1 2)', 'EPSG:3857')));
+```
+
 ## キーワード
 
-ST_ASBINARY, ST_ASWKB, GEOGRAPHY, WKB
+ST_ASBINARY, ST_ASWKB, GEOMETRY, GEOGRAPHY, WKB

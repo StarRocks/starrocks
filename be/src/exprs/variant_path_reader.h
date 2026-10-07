@@ -51,7 +51,7 @@ public:
     void prepare(const VariantColumn* col, const VariantPath* path, size_t seg_offset = 0);
 
     // Returns true when the query path maps exactly to a typed shredded column with
-    // no remaining suffix.  In this case typed_type(), typed_type_desc(), and
+    // no remaining suffix and no fallback values.  In this case typed_type(), typed_type_desc(), and
     // typed_column() are valid and callers can take the bulk columnar fast-path.
     bool is_typed_exact() const;
 
@@ -78,8 +78,8 @@ private:
     // of any typed column path.
     void _try_match_typed(const VariantPath* path);
 
-    // Layer 1: read from the matched typed shredded column.
-    // Returns kNull (null cell) or kValue; never falls back to remain.
+    // Layer 1: read from the matched typed shredded column, or from its fallback column when the typed cell is null.
+    // Returns kNull (null cell, no fallback value) or kValue; never falls back to remain.
     VariantReadResult _read_typed_row(size_t row);
 
     // Layer 2: seek the requested path inside the base remain payload.

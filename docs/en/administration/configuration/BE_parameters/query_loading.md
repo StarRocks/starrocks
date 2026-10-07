@@ -40,6 +40,47 @@ This topic introduces the following types of BE configurations:
 
 ## Query
 
+### H3 resource limits
+
+These mutable positive BE settings limit one H3 function row. Exceeding a setting returns an error, not a partial result. See [H3 functions](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) for signatures and the center-fill model.
+
+#### h3_max_cells_per_row
+
+- Default: 100000
+- Is mutable: Yes
+- Limit: cells / pre-deduplication expansion slots.
+
+#### h3_max_grid_disk_k
+
+- Default: 128
+- Is mutable: Yes
+- Limit: grid steps.
+
+#### h3_max_polygon_vertices
+
+- Default: 10000
+- Is mutable: Yes
+- Limit: coordinate positions including ring closure.
+
+#### h3_max_polygon_components
+
+- Default: 256
+- Is mutable: Yes
+- Limit: polygon components including empty components.
+
+#### h3_max_working_bytes
+
+- Default: 67108864
+- Is mutable: Yes
+- Limit: bytes of per-worker preparation and temporary buffers.
+
+#### h3_max_estimated_work_per_row
+
+- Default: 10000000
+- Is mutable: Yes
+- Limit: sum of estimated slots times (component positions + 1).
+
+
 ### ai_function_request_timeout_ms
 
 - Default: 600000
@@ -1300,6 +1341,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
 - Introduced in: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether this BE takes part in the compact encoding of all-NULL columns on the tablet sink RPC, the hop on which a load routes rows to the BE that holds the target tablet. When enabled, a receiving BE advertises support for the encoding in its tablet writer open response, and a sending BE that sees the advertisement sends a row count in place of the payload of any column whose rows are all NULL, rather than a null flag and an offset for every row. This mainly helps wide tables in which most columns hold no data, and reduces both the bytes sent on this hop and the serialization work on either end. The encoding is used only when both ends of the RPC agree on it, so a mixed-version cluster or a downgrade falls back to the original layout automatically. Set this to `false` on either the sending or the receiving BE to turn the encoding off for loads that pass through that node. This item is not dynamically configurable: a receiving BE uses it both to advertise support and to decide whether to apply the encoding a sender declares, and changing it at runtime would leave those two decisions inconsistent.
+- Introduced in: v4.2.0
 
 ### enable_load_diagnose
 

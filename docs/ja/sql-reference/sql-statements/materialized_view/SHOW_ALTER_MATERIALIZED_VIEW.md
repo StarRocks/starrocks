@@ -19,6 +19,7 @@ description: "同期マテリアライズドビューの構築状況を表示し
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
+[WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
 ```
 
 角括弧 [] 内のパラメータはオプションです。
@@ -28,6 +29,7 @@ SHOW ALTER MATERIALIZED VIEW [ { FROM | IN } db_name]
 | **パラメータ** | **必須** | **説明**                                                      |
 | -------------- | -------- | ------------------------------------------------------------ |
 | db_name        | いいえ   | マテリアライズドビューが存在するデータベースの名前。このパラメータが指定されていない場合、デフォルトで現在のデータベースが使用されます。 |
+| WHERE、ORDER BY、LIMIT | いいえ | 返されるジョブを絞り込み、並べ替え、件数を制限します。指定できる列は `TableName`、`CreateTime`、`FinishedTime`、`State` です。`FinishTime` は `FinishedTime` の別名として受け付けます。 |
 
 ## 戻り値
 

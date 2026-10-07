@@ -32,6 +32,7 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -506,6 +507,10 @@ public:
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(
                     check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(check_and_recover(
@@ -754,6 +759,7 @@ private:
 
         RETURN_IF_ERROR(prepare_primary_index());
 
+        bool applied_rowsets = false;
         // Process each subtask's OpCompaction
         for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
             const auto& subtask_op = op_parallel.subtask_compactions(i);
@@ -776,6 +782,7 @@ private:
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
+            applied_rowsets = true;
         }
 
         // Apply unified SST compaction results (if any)
@@ -808,6 +815,10 @@ private:
             added->set_version(_new_version);
         }
 
+        if (applied_rowsets && op_parallel.base_compaction_time() > 0) {
+            _metadata->set_last_base_compaction_time(
+                    std::max(_metadata->last_base_compaction_time(), op_parallel.base_compaction_time()));
+        }
         return Status::OK();
     }
 
@@ -1072,9 +1083,18 @@ public:
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction()));
+            if (log.op_parallel_compaction().subtask_compactions_size() > 0 &&
+                log.op_parallel_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(std::max(_metadata->last_base_compaction_time(),
+                                                                  log.op_parallel_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -1208,16 +1228,12 @@ public:
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
 
-        // Validate bundle file offsets consistency across all TxnLogs.
-        // All TxnLogs must consistently either have or lack bundle_file_offsets.
-        // Mixing bundled and non-bundled rowsets is an error because downstream readers
-        // require offsets to locate segments within bundle files. Silently dropping offsets
-        // would leave bundled segment paths without positional info, causing data corruption.
+        // Each statement of a multi-statement transaction writes its own log, bundled if the statement's
+        // share of this tablet was one segment at end of stream and standalone if it flushed mid-load, so
+        // the logs routinely disagree. Keep the offsets of the bundled ones (dropping them would lose the
+        // slice positions) and give the standalone segments offset 0, which names the same bytes.
         if (has_bundle_offsets && has_segments_without_bundle_offsets) {
-            return Status::InternalError(
-                    fmt::format("Inconsistent bundle_file_offsets across txn logs for tablet {}: "
-                                "some logs have offsets, some don't. Cannot safely merge rowsets.",
-                                _tablet.id()));
+            give_standalone_segments_a_bundle_offset(merged_rowset);
         }
 
         // Set rowset ID and update next_rowset_id

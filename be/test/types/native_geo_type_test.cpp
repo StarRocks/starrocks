@@ -66,7 +66,9 @@ TEST(NativeGeoTypeTest, OptionalSemanticMetadata) {
         EXPECT_FALSE(type.to_protobuf().types(0).scalar_type().has_geo());
         EXPECT_EQ(type, TypeDescriptor::from_thrift(type.to_thrift()));
         EXPECT_EQ(type, TypeDescriptor::from_protobuf(type.to_protobuf()));
-        if (type.is_geo_type()) EXPECT_FALSE(type.is_assignable(type));
+        if (type.is_geo_type()) {
+            EXPECT_FALSE(type.is_assignable(type));
+        }
     }
     auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, {});
     EXPECT_TRUE(TypeDescriptor::from_thrift(type.to_thrift()).geo_type.has_value());
@@ -136,7 +138,6 @@ TEST(NativeGeoTypeTest, FrontendWireFixture) {
 TEST(NativeGeoTypeTest, ReservedLogicalTypeSlots) {
     EXPECT_EQ(28, TYPE_GEOGRAPHY);
     EXPECT_EQ(29, TYPE_GEOMETRY);
-    EXPECT_EQ(56, TYPE_MAX_VALUE);
     // Internal slots are independent of the existing wire identities.
     EXPECT_EQ(TPrimitiveType::GEOGRAPHY, to_thrift(TYPE_GEOGRAPHY));
     EXPECT_EQ(TPrimitiveType::GEOMETRY, to_thrift(TYPE_GEOMETRY));

@@ -28,6 +28,7 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
+#include "column/file_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
@@ -610,6 +611,17 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const FileColumn& column) {
+        auto rhs_column = column.clone_empty();
+        rhs_column->append_datum(_rhs_value);
+        auto cmp = [&](int lhs_index) {
+            return column.compare_at(lhs_index, 0, *rhs_column, _null_first) * _sort_order;
+        };
+        _equal_count = compare_column_helper(_cmp_vector, cmp);
+
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(const BinaryColumnBase<T>& column) {
         const auto lhs_datas = column.immutable_data();
@@ -776,6 +788,7 @@ public:
     Status do_visit(const ArrayColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const MapColumn& column) { return Status::NotSupported("Not support"); }
     Status do_visit(const StructColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const FileColumn& column) { return Status::NotSupported("Not support"); }
 
     template <typename T>
     Status do_visit(const ObjectColumn<T>& column) {

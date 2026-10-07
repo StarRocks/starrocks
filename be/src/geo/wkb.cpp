@@ -14,6 +14,7 @@
 
 #include "geo/wkb.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstring>
@@ -408,7 +409,10 @@ private:
 
 class WkbReader {
 public:
-    explicit WkbReader(const Slice& input) : _data(reinterpret_cast<const uint8_t*>(input.data)), _size(input.size) {}
+    explicit WkbReader(const Slice& input, size_t max_elements = kMaxElements)
+            : _data(reinterpret_cast<const uint8_t*>(input.data)),
+              _size(input.size),
+              _max_elements(std::min<size_t>(max_elements, kMaxElements)) {}
 
     Status parse(WkbGeometry* output) {
         if (_size > kMaxInputBytes) {
@@ -571,7 +575,7 @@ private:
     }
 
     Status consume_declared_children(size_t count) {
-        if (count > kMaxElements - _declared_children) {
+        if (count > _max_elements - _declared_children) {
             return invalid_wkb("geometry exceeds child allocation safety limit");
         }
         _declared_children += count;
@@ -579,7 +583,7 @@ private:
     }
 
     Status check_elements(size_t count) const {
-        if (count > kMaxElements - _elements) {
+        if (count > _max_elements - _elements) {
             return invalid_wkb("geometry exceeds element safety limit");
         }
         return Status::OK();
@@ -587,7 +591,7 @@ private:
 
     Status read_count(bool little_endian, uint32_t* output) {
         RETURN_IF_ERROR(read_uint32(little_endian, output));
-        if (*output > kMaxElements) {
+        if (*output > _max_elements) {
             return invalid_wkb("element count exceeds safety limit");
         }
         return Status::OK();
@@ -641,6 +645,7 @@ private:
     size_t _position = 0;
     size_t _elements = 0;
     size_t _declared_children = 0;
+    size_t _max_elements;
 };
 
 Status consume_validation_elements(size_t count, size_t* elements) {
@@ -651,7 +656,8 @@ Status consume_validation_elements(size_t count, size_t* elements) {
     return Status::OK();
 }
 
-Status validate_geometry(const WkbGeometry& geometry, size_t depth, size_t* elements) {
+Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics semantics, size_t depth,
+                         size_t* elements) {
     if (depth > kMaxNestingDepth) {
         return Status::InvalidArgument("geometry nesting is too deep");
     }
@@ -663,11 +669,14 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth, size_t* elem
         return Status::OK();
     }
 
-    auto validate_coordinates = [elements](const std::vector<WkbCoordinate>& coordinates) -> Status {
+    auto validate_coordinates = [elements, semantics](const std::vector<WkbCoordinate>& coordinates) -> Status {
         RETURN_IF_ERROR(consume_validation_elements(coordinates.size(), elements));
         for (const auto& coordinate : coordinates) {
-            if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y) || coordinate.x < -180 ||
-                coordinate.x > 180 || coordinate.y < -90 || coordinate.y > 90) {
+            if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y)) {
+                return Status::InvalidArgument("coordinates must be finite");
+            }
+            if (semantics == WkbCoordinateSemantics::GEOGRAPHY_CRS84 &&
+                (coordinate.x < -180 || coordinate.x > 180 || coordinate.y < -90 || coordinate.y > 90)) {
                 return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
             }
         }
@@ -714,16 +723,16 @@ Status validate_geometry(const WkbGeometry& geometry, size_t depth, size_t* elem
             if (geometry.type == WkbGeometryType::MULTIPOLYGON && child.type != WkbGeometryType::POLYGON) {
                 return Status::InvalidArgument("MULTIPOLYGON child is not a POLYGON");
             }
-            RETURN_IF_ERROR(validate_geometry(child, depth + 1, elements));
+            RETURN_IF_ERROR(validate_geometry(child, semantics, depth + 1, elements));
         }
         return Status::OK();
     }
     return Status::InvalidArgument("unknown geometry type");
 }
 
-Status validate_geometry(const WkbGeometry& geometry) {
+Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics semantics) {
     size_t elements = 0;
-    return validate_geometry(geometry, 0, &elements);
+    return validate_geometry(geometry, semantics, 0, &elements);
 }
 
 void append_uint32(uint32_t value, std::string* output) {
@@ -892,17 +901,22 @@ Status write_wkt(const WkbGeometry& geometry, std::string* output) {
 
 } // namespace
 
-Status WkbCodec::parse_wkt(std::string_view input, WkbGeometry* output) {
+Status WkbCodec::parse_wkt(std::string_view input, WkbGeometry* output, WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKT output must not be null");
     }
     *output = WkbGeometry();
     WktParser parser(input);
     RETURN_IF_ERROR(parser.parse(output));
-    return validate_geometry(*output);
+    return validate_geometry(*output, semantics);
 }
 
-Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output) {
+Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output, WkbCoordinateSemantics semantics) {
+    return parse_wkb_bounded(input, output, kMaxElements, semantics);
+}
+
+Status WkbCodec::parse_wkb_bounded(const Slice& input, WkbGeometry* output, size_t max_elements,
+                                   WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKB output must not be null");
     }
@@ -910,25 +924,25 @@ Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output) {
         return invalid_wkb("input is empty");
     }
     *output = WkbGeometry();
-    WkbReader reader(input);
+    WkbReader reader(input, max_elements);
     RETURN_IF_ERROR(reader.parse(output));
-    return validate_geometry(*output);
+    return validate_geometry(*output, semantics);
 }
 
-Status WkbCodec::to_wkb(const WkbGeometry& geometry, std::string* output) {
+Status WkbCodec::to_wkb(const WkbGeometry& geometry, std::string* output, WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKB output must not be null");
     }
-    RETURN_IF_ERROR(validate_geometry(geometry));
+    RETURN_IF_ERROR(validate_geometry(geometry, semantics));
     output->clear();
     return write_wkb(geometry, output);
 }
 
-Status WkbCodec::to_wkt(const WkbGeometry& geometry, std::string* output) {
+Status WkbCodec::to_wkt(const WkbGeometry& geometry, std::string* output, WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKT output must not be null");
     }
-    RETURN_IF_ERROR(validate_geometry(geometry));
+    RETURN_IF_ERROR(validate_geometry(geometry, semantics));
     output->clear();
     return write_wkt(geometry, output);
 }

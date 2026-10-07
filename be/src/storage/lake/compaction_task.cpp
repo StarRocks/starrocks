@@ -15,6 +15,7 @@
 #include "storage/lake/compaction_task.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -122,6 +123,9 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
 }
 
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {
+    if (_context->is_base_compaction) {
+        op_compaction->set_base_compaction_time(time(nullptr));
+    }
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }

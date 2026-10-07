@@ -179,6 +179,8 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const bool force_base_compaction;
     const bool skip_write_txnlog;
     const bool is_unshare;
+    bool allow_base_compaction = true;
+    bool is_base_compaction = false;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     // Monotonic timestamps for adding the elapsed part of the current attempt

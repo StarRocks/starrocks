@@ -690,17 +690,17 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
     {
         if (column.slot_type().type == LogicalType::TYPE_VARIANT && schema_node != nullptr &&
-            schema_node->type == ColumnType::STRUCT) {
+            schema_node->type == ColumnType::VARIANT) {
             // Physical VARIANT columns use _get_variant_shredded_hints; this path
             // is for non-virtual VARIANT columns that appear directly in the SELECT list.
-            VariantShreddedReadHints hints =
-                    build_variant_shredded_hints(&_param.scan_ctx->column_access_paths, column.slot_desc->col_name());
+            // The full variant column is output, so extended access paths of its virtual subfields must not
+            // narrow it.
+            VariantShreddedReadHints hints = build_variant_shredded_hints(&_param.scan_ctx->column_access_paths,
+                                                                          column.slot_desc->col_name(), false);
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
-        } else if (column.t_lake_schema_field == nullptr) {
-            ASSIGN_OR_RETURN(column_reader,
-                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type()));
         } else {
+            // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
             ASSIGN_OR_RETURN(column_reader,
                              ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
                                                          column.t_lake_schema_field));

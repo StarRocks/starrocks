@@ -53,6 +53,7 @@ public final class PreSplitProfile {
     public static final String ESTIMATED_INPUT_BYTES = "EstimatedInputBytes";
     public static final String TARGET_PARTITIONS = "TargetPartitions";
     public static final String BOUNDARIES_PLANNED = "BoundariesPlanned";
+    public static final String META_TIER_FALLBACK_REASONS = "MetaTierFallbackReasons";
 
     private static final int MAX_INFO_VALUES = 20;
     private static final Scope NOOP_SCOPE = () -> { };
@@ -97,6 +98,8 @@ public final class PreSplitProfile {
     private final Set<String> loadKinds = new LinkedHashSet<>();
     private final Set<String> tables = new LinkedHashSet<>();
     private final Set<String> sourceTiers = new LinkedHashSet<>();
+    private final Set<String> metaTierFallbackReasons = new LinkedHashSet<>();
+    private final Set<String> dataTierFileSelections = new LinkedHashSet<>();
     private final Set<String> outcomes = new LinkedHashSet<>();
     private final Set<String> sampleQueryIds = new LinkedHashSet<>();
     private final Set<String> reshardJobIds = new LinkedHashSet<>();
@@ -177,6 +180,21 @@ public final class PreSplitProfile {
 
     static void recordSourceTier(String sourceTier) {
         currentProfile(profile -> profile.addInfoValue(profile.sourceTiers, sourceTier));
+    }
+
+    static void recordMetaTierFallbackReason(Throwable failure) {
+        if (failure == null) {
+            return;
+        }
+        String message = failure.getMessage();
+        String diagnostic = failure.getClass().getSimpleName()
+                + (message == null || message.isEmpty() ? "" : ": " + message);
+        currentProfile(profile -> profile.addInfoValue(profile.metaTierFallbackReasons, diagnostic));
+    }
+
+    /** Records how a data-tier FILES sample chose its files, e.g. {@code "subset 3/10 files 3/10 bytes"}. */
+    static void recordDataTierFileSelection(String summary) {
+        currentProfile(profile -> profile.addInfoValue(profile.dataTierFileSelections, summary));
     }
 
     static void recordOutcome(PreSplitOutcome outcome) {
@@ -301,6 +319,8 @@ public final class PreSplitProfile {
         addInfoString(profile, "LoadKinds", loadKinds);
         addInfoString(profile, "Tables", tables);
         addInfoString(profile, "SourceTiers", sourceTiers);
+        addInfoString(profile, META_TIER_FALLBACK_REASONS, metaTierFallbackReasons);
+        addInfoString(profile, "DataTierFileSelection", dataTierFileSelections);
         addInfoString(profile, "Outcomes", outcomes);
         addInfoString(profile, "SampleQueryIds", sampleQueryIds);
         addInfoString(profile, "ReshardJobIds", reshardJobIds);

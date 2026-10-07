@@ -283,7 +283,6 @@ StatusOr<pipeline::OpFactories> AIProjectNode::decompose_to_pipeline(pipeline::P
 
     context->inherit_upstream_source_properties(source.get(), upstream_source);
     source->set_skewed(upstream_source->is_skewed());
-    source->set_bucket_properties(upstream_source->get_bucket_properties());
 
     upstream_operators.emplace_back(std::move(sink));
     context->add_pipeline(upstream_operators);
