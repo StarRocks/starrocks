@@ -496,7 +496,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                             gsFileStoreInfo.getServiceAccountPrivateKey());
                 }
                 if (!Strings.isNullOrEmpty(gsFileStoreInfo.getImpersonation())) {
-                    params.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT,
+                    params.put(CloudConfigurationConstants.GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT,
                             gsFileStoreInfo.getImpersonation());
                 }
                 return params;

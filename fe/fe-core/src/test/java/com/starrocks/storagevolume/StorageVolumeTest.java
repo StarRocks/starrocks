@@ -45,6 +45,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -606,6 +608,33 @@ public class StorageVolumeTest {
         Assertions.assertEquals(CloudType.HDFS, sv.getCloudConfiguration().getCloudType());
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testGSImpersonationRoundTrip(boolean useComputeEngine) throws Exception {
+        Map<String, String> params = new HashMap<>();
+        params.put(GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, Boolean.toString(useComputeEngine));
+        params.put(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT, "target@example.com");
+        if (!useComputeEngine) {
+            params.put(GCP_GCS_SERVICE_ACCOUNT_EMAIL, "base@example.com");
+            params.put(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID, "test-key-id");
+            params.put(GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, "test-private-key");
+        }
+        StorageVolume original = new StorageVolume("1", "gs_impersonation", "GS",
+                Collections.singletonList("gs://bucket"), params, true, "");
+        FileStoreInfo persisted = original.toFileStoreInfo();
+        Map<String, String> restoredParams = StorageVolume.getParamsFromFileStoreInfo(persisted);
+        params.forEach((key, value) -> Assertions.assertEquals(value, restoredParams.get(key), key));
+
+        StorageVolume restored = StorageVolume.fromFileStoreInfo(persisted);
+        Assertions.assertEquals(CloudType.GCP, restored.getCloudConfiguration().getCloudType());
+        Assertions.assertEquals(persisted.getGsFsInfo(), restored.toFileStoreInfo().getGsFsInfo());
+        Configuration configuration = new Configuration(false);
+        restored.getCloudConfiguration().applyToConfiguration(configuration);
+        Assertions.assertEquals("target@example.com", configuration.get("fs.gs.auth.impersonation.service.account"));
+        Assertions.assertEquals(useComputeEngine ? "COMPUTE_ENGINE" : "SERVICE_ACCOUNT_JSON_KEYFILE",
+                configuration.get("fs.gs.auth.type"));
+    }
+
     @Test
     public void testGetParamsFromFileStoreInfo() {
         AwsCredentialInfo.Builder awsCredBuilder = AwsCredentialInfo.newBuilder();
@@ -691,6 +720,7 @@ public class StorageVolumeTest {
             Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
             Assertions.assertEquals("http://gs_endpointnt_1", params.get(CloudConfigurationConstants.GCP_GCS_ENDPOINT));
             Assertions.assertEquals("true", params.get(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
+            Assertions.assertFalse(params.containsKey(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
@@ -708,6 +738,7 @@ public class StorageVolumeTest {
             Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
             Assertions.assertEquals("http://gs_endpointnt_2", params.get(CloudConfigurationConstants.GCP_GCS_ENDPOINT));
             Assertions.assertEquals("false", params.get(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
+            Assertions.assertFalse(params.containsKey(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT));
             Assertions.assertEquals("test_email@example.com",
                     params.get(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL));
             Assertions.assertEquals("test_key_id",
@@ -716,20 +747,18 @@ public class StorageVolumeTest {
                     params.get(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
         }
 
-        // Case 3: With Impersonation (overrides useComputeEngineServiceAccount setting for the specific key)
+        // Case 3: Impersonation preserves the Compute Engine base credential.
         gsFsInfoBuilder.getGsFsInfoBuilder()
                 .setEndpoint("http://gs_endpointnt_3")
-                .setUseComputeEngineServiceAccount(true) // This will be overridden by impersonation for the key
+                .setUseComputeEngineServiceAccount(true)
                 .setImpersonation("impersonation_account@example.com");
         {
             FileStoreInfo fs = gsFsInfoBuilder.build();
             Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
             Assertions.assertEquals("http://gs_endpointnt_3", params.get(CloudConfigurationConstants.GCP_GCS_ENDPOINT));
-            // The GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT key is set to the impersonation string
+            Assertions.assertEquals("true", params.get(GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
             Assertions.assertEquals("impersonation_account@example.com",
-                    params.get(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
-            // Other service account keys should not be present if impersonation is used,
-            // even if useComputeEngineServiceAccount was false initially.
+                    params.get(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID));
             Assertions.assertFalse(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
@@ -739,7 +768,7 @@ public class StorageVolumeTest {
         gsFsInfoBuilder.getGsFsInfoBuilder()
                 .setEndpoint("http://gs_endpointnt_4")
                 .setUseComputeEngineServiceAccount(false)
-                .setServiceAccountEmail("original_email@example.com") // These should be ignored
+                .setServiceAccountEmail("original_email@example.com")
                 .setServiceAccountPrivateKeyId("original_key_id")
                 .setServiceAccountPrivateKey("original_private_key")
                 .setImpersonation("another_impersonation@example.com");
@@ -747,10 +776,10 @@ public class StorageVolumeTest {
             FileStoreInfo fs = gsFsInfoBuilder.build();
             Map<String, String> params = StorageVolume.getParamsFromFileStoreInfo(fs);
             Assertions.assertEquals("http://gs_endpointnt_4", params.get(CloudConfigurationConstants.GCP_GCS_ENDPOINT));
-            // The GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT key is set to the impersonation string
+            Assertions.assertEquals("false", params.get(GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
             Assertions.assertEquals("another_impersonation@example.com",
-                    params.get(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT));
-            // Specific service account keys should NOT be present because impersonation takes precedence.
+                    params.get(GCP_GCS_IMPERSONATION_SERVICE_ACCOUNT));
+            // Service account credentials remain the base credential for impersonation.
             Assertions.assertTrue(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL));
             Assertions.assertTrue(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID));
             Assertions.assertTrue(params.containsKey(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY));
