@@ -265,6 +265,7 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
+        ./io/dir_manager_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
         ./storage/data_dir_test.cpp

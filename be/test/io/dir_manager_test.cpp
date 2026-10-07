@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/spill/dir_manager.h"
+#include "exec/spill/dir_manager.h"
 
 #include <gtest/gtest.h>
 
 #include <string>
 
-#include "base/testutil/assert.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_storage_fwd.h"
+#include "common/config.h"
 #include "fs/fs.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks::spill {
 
@@ -38,18 +37,18 @@ TEST(DirManagerTest, spill_dir_on_storage_disk_is_capped_by_ratio) {
     DeferOp cleanup([&]() { (void)fs->delete_dir_recursive(dir_path); });
 
     DirManager dir_mgr;
-    ASSERT_OK(dir_mgr.init(dir_path, {config::storage_root_path}));
+    ASSERT_OK(dir_mgr.init(dir_path));
     auto space_info = fs->space(dir_path);
     ASSERT_OK(space_info.status());
 
-    auto dirs = dir_mgr.dirs();
-    ASSERT_EQ(1, dirs.size());
     int64_t expected_max_size = space_info->capacity * 0.5;
     ASSERT_GT(expected_max_size, 0);
-    EXPECT_EQ(expected_max_size, dirs[0]->get_max_size());
-
-    EXPECT_TRUE(dirs[0]->inc_size(expected_max_size));
-    EXPECT_FALSE(dirs[0]->inc_size(1));
+    AcquireDirOptions opts;
+    opts.data_size = expected_max_size;
+    auto dir = dir_mgr.acquire_writable_dir(opts);
+    ASSERT_OK(dir.status());
+    EXPECT_EQ(expected_max_size, (*dir)->get_max_size());
+    EXPECT_FALSE((*dir)->inc_size(1));
 }
 
 } // namespace starrocks::spill
