@@ -27,6 +27,8 @@
 #include <string>
 #include <string_view>
 
+#include "base/auth/credential_mask.h"
+
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
 #undef __IN_CONFIGBASE_CPP__
@@ -278,7 +280,7 @@ bool is_sensitive_config(std::string_view name) {
 // An empty value stays empty, so the output still tells an unset credential from a set one.
 static std::string mask_if_sensitive(std::string_view name, std::string value) {
     if (is_sensitive_config(name) && !value.empty()) {
-        return std::string(kSensitiveConfigMask);
+        return std::string(kCredentialMask);
     }
     return value;
 }
