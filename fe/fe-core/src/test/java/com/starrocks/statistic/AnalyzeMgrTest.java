@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
@@ -324,6 +326,58 @@ public class AnalyzeMgrTest {
                 requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
         transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
+    }
+
+    @Test
+    public void testUpdateLoadRowsWithZeroRowCommits() throws Exception {
+        final String dbName = "db_zero_row_commits";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1')");
+        Database db = starRocksAssert.getDb(dbName);
+        OlapTable table = (OlapTable) starRocksAssert.getTable(dbName, "t1");
+        // Simulate a TabletStatMgr pass that saw 1000 rows
+        for (Partition partition : table.getPartitions()) {
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
+        }
+        Assertions.assertEquals(1000, table.getRowCount());
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(), Lists.newArrayList("c1"),
+                StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), new HashMap<>(), 1000);
+        analyzeMgr.addBasicStatsMeta(basicStatsMeta);
+
+        // INSERT ... SELECT that writes no rows, committed four times: the row count must stay the same
+        for (int i = 0; i < 4; i++) {
+            analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                    TransactionState.LoadJobSourceType.FRONTEND, 0));
+        }
+        Assertions.assertEquals(1000, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(0, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        // A non-empty insert still adds its loaded rows
+        analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                TransactionState.LoadJobSourceType.FRONTEND, 5));
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(5, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        // A push-delete doesn't report its row count: count the table as changed, but don't grow the total
+        analyzeMgr.updateLoadRows(newTransactionState(db.getId(), table.getId(),
+                TransactionState.LoadJobSourceType.DELETE, 0));
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getTotalRows());
+        Assertions.assertEquals(1005, analyzeMgr.getTableBasicStatsMeta(table.getId()).getDeltaRows());
+
+        starRocksAssert.dropDatabase(dbName);
+    }
+
+    private static TransactionState newTransactionState(long dbId, long tableId,
+                                                        TransactionState.LoadJobSourceType sourceType,
+                                                        long loadedRows) {
+        TUniqueId requestId = UUIDUtil.genTUniqueId();
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, sourceType, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(loadedRows));
+        return transactionState;
     }
 
     @Test

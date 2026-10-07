@@ -1023,12 +1023,18 @@ public class AnalyzeMgr implements Writable {
             if (!transactionState.getTableIdList().isEmpty()) {
                 long tableId = transactionState.getTableIdList().get(0);
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
-                if (loadRows == 0) {
+                if (loadRows == 0 && transactionState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+                    // A push-delete job doesn't report how many rows it removed. Treat the whole table as changed
+                    // for the health check, but don't add it to the total row count used by the optimizer.
                     OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
-                    loadRows = table != null ? table.getRowCount() : 0;
+                    BasicStatsMeta basicStatsMeta = getTableBasicStatsMeta(tableId);
+                    if (table != null && basicStatsMeta != null) {
+                        basicStatsMeta.increaseChangedRows(table.getRowCount());
+                    }
+                } else {
+                    updateBasicStatsMeta(db.getId(), tableId, loadRows);
                 }
-                updateBasicStatsMeta(db.getId(), tableId, loadRows);
             }
         }
     }
