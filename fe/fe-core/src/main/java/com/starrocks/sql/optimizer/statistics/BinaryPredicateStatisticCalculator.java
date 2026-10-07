@@ -155,8 +155,7 @@ public class BinaryPredicateStatisticCalculator {
 
     public static Optional<Histogram> updateHistWithEqual(ColumnStatistic columnStatistic,
                                                           Optional<ConstantOperator> constant) {
-        if (constant.isEmpty() || columnStatistic.getHistogram() == null
-                || hasOnlyNonFiniteBuckets(columnStatistic.getHistogram())) {
+        if (constant.isEmpty() || columnStatistic.getHistogram() == null) {
             return Optional.empty();
         }
 
