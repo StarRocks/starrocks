@@ -20,15 +20,6 @@
 #include <exception>
 #include <utility>
 
-<<<<<<< HEAD:be/src/fs/hdfs/fs_hdfs.cpp
-=======
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "common/config_hdfs_fwd.h"
-#include "common/runtime_profile.h"
-#include "common/system/backend_options.h"
->>>>>>> 80e10a4 ([BugFix] Keep the filesystem connected on cache eviction (#80087)):be/src/fs_ext/hdfs/fs_hdfs.cpp
 #include "fs/encrypt_file.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
@@ -37,6 +28,7 @@
 #include "service/backend_options.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
+#include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/hdfs_util.h"
 
@@ -372,15 +364,11 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     FileSystem::on_file_write_close(this);
-<<<<<<< HEAD:be/src/fs/hdfs/fs_hdfs.cpp
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-=======
-    Status st = JavaEnv::GetInstance()->call_function_in_pthread([this]() {
         // Drop our client reference on this pthread, after hdfsCloseFile(). If the cache has already evicted
         // the client, this is the last owner and ~HdfsFsClient() calls hdfsDisconnect(), a JNI call that must
         // not run on a bthread (see the TODO above ~HdfsInputStream).
         DeferOp release_client([this] { _hdfs_client.reset(); });
->>>>>>> 80e10a4 ([BugFix] Keep the filesystem connected on cache eviction (#80087)):be/src/fs_ext/hdfs/fs_hdfs.cpp
         FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
         // No hdfsHSync() here. hdfsCloseFile() already flushes the remaining
         // packets, waits for the acks of every DataNode in the pipeline and
