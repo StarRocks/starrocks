@@ -19,16 +19,10 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
+#include "base/auth/credential_mask.h"
 #include "common/config.h"
 #include "runtime/exec_env.h"
 #include "util/defer_op.h"
-=======
-#include "base/auth/credential_mask.h"
-#include "base/utility/defer_op.h"
-#include "common/config_object_storage_fwd.h"
-#include "exec/exec_env.h"
->>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 
 namespace starrocks {
 

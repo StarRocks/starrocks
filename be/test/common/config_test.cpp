@@ -28,12 +28,7 @@
 #include <streambuf>
 #include <thread>
 
-<<<<<<< HEAD
-=======
 #include "base/auth/credential_mask.h"
-#include "common/config_update_registry.h"
-#include "common/glog_init.h"
->>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 #include "common/status.h"
 #include "gutil/strings/join.h"
 

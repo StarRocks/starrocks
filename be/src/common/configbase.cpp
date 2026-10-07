@@ -27,17 +27,14 @@
 #include <string>
 #include <string_view>
 
-<<<<<<< HEAD
+#include "base/auth/credential_mask.h"
+
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
 #undef __IN_CONFIGBASE_CPP__
 
 #include <fmt/format.h>
 
-=======
-#include "base/auth/credential_mask.h"
-#include "common/configbase_impl.h"
->>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204))
 #include "common/status.h"
 
 namespace starrocks::config {

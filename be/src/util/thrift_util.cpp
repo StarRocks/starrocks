@@ -40,15 +40,6 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
-<<<<<<< HEAD:be/src/util/thrift_util.cpp
-=======
-#include "base/auth/credential_mask.h"
-#include "base/time/monotime.h"
-#include "common/config_thrift_server_fwd.h"
-#include "common/util/thrift_server.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/QueryPlanExtra_types.h"
->>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204)):be/src/common/util/thrift_util.cpp
 #include "gen_cpp/Types_types.h"
 #include "util/hash_util.hpp"
 #include "util/monotime.h"
@@ -66,62 +57,6 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD:be/src/util/thrift_util.cpp
-=======
-namespace {
-
-void redact_plan_credentials(TPlanNode& node) {
-    if (!node.__isset.ai_project_node) {
-        return;
-    }
-    for (auto& [id, config] : node.ai_project_node.ai_model_configs) {
-        if (config.__isset.chat && config.chat.__isset.api_key) {
-            config.chat.__set_api_key(std::string(kCredentialMask));
-        }
-        if (config.__isset.embedding && config.embedding.__isset.api_key) {
-            config.embedding.__set_api_key(std::string(kCredentialMask));
-        }
-    }
-}
-
-void redact_plan_credentials(TPlanFragment& fragment) {
-    for (auto& node : fragment.plan.nodes) {
-        redact_plan_credentials(node);
-    }
-}
-
-} // namespace
-
-std::string thrift_plan_debug_string(const TPlanNode& node) {
-    auto copy = node;
-    redact_plan_credentials(copy);
-    return apache::thrift::ThriftDebugString(copy);
-}
-
-std::string thrift_plan_debug_string(const TPlanFragment& fragment) {
-    auto copy = fragment;
-    redact_plan_credentials(copy);
-    return apache::thrift::ThriftDebugString(copy);
-}
-
-std::string thrift_plan_debug_string(const TExecPlanFragmentParams& request) {
-    auto copy = request;
-    redact_plan_credentials(copy.fragment);
-    return apache::thrift::ThriftDebugString(copy);
-}
-
-std::string thrift_plan_debug_string(const TQueryPlanInfo& info) {
-    auto copy = info;
-    redact_plan_credentials(copy.plan_fragment);
-    return apache::thrift::ThriftDebugString(copy);
-}
-
-std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration() {
-    return std::make_shared<apache::thrift::TConfiguration>(
-            config::thrift_max_message_size, config::thrift_max_frame_size, config::thrift_max_recursion_depth);
-}
-
->>>>>>> 12e9ba8 ([Refactor] Share one credential mask constant in the BE (#80204)):be/src/common/util/thrift_util.cpp
 ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
         : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(
                   initial_buffer_size, std::make_shared<apache::thrift::TConfiguration>(
