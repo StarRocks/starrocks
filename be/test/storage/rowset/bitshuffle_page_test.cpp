@@ -671,7 +671,13 @@ struct ReadByRowidsPage {
     void build(size_t rows) {
         src.resize(rows);
         for (size_t i = 0; i < rows; i++) {
-            src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
+            if constexpr (Type == TYPE_INT256 || Type == TYPE_DECIMAL256) {
+                int128_t hi = static_cast<int128_t>(i) * 0x123456789ABCDEF0LL ^ 0x5555555555555555LL;
+                uint128_t lo = static_cast<uint128_t>(i) * 0x0FEDCBA987654321ULL ^ 0xAAAAAAAAAAAAAAAAULL;
+                src[i] = int256_t(hi, lo);
+            } else {
+                src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
+            }
         }
         PageBuilderOptions options;
         options.data_page_size = 1024 * 1024;
@@ -712,6 +718,195 @@ void check_non_nullable_stride(size_t rows, size_t stride) {
     }
 }
 
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_empty_column() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 1003;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < kRows; i += 7) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    if (rowids.back() != kRows - 1) {
+        rowids.push_back(static_cast<rowid_t>(kRows - 1));
+    }
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+    ASSERT_EQ(0, column->size());
+
+    size_t count = rowids.size();
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids.data(), &count, column.get()).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, column->size());
+
+    const auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < count; i++) {
+        ASSERT_EQ(0, memcmp(&page.src[rowids[i]], &values[i], sizeof(CppType)))
+                << "storage_type=" << StorageType << " decimal_type=" << DecimalType << " at index=" << i;
+        EXPECT_EQ(page.src[rowids[i]], values[i])
+                << "storage_type=" << StorageType << " decimal_type=" << DecimalType << " at index=" << i;
+    }
+
+    // Verify non-zero first ordinal in page
+    {
+        constexpr ordinal_t kFirst = 500;
+        const rowid_t first_rowids[] = {500, 510, 520, 599};
+        auto col = ChunkFactory::column_from_field_type(DecimalType, false);
+        size_t n = 4;
+        ASSERT_TRUE(page.decoder->read_by_rowids(kFirst, first_rowids, &n, col.get()).ok());
+        ASSERT_EQ(4, n);
+        ASSERT_EQ(4, col->size());
+        const auto v = GetStorageContainer<DecimalType>::get_data(col);
+        EXPECT_EQ(page.src[0], v[0]);
+        EXPECT_EQ(page.src[10], v[1]);
+        EXPECT_EQ(page.src[20], v[2]);
+        EXPECT_EQ(page.src[99], v[3]);
+    }
+}
+
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_truncation_and_reread() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 200;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+
+    // 1. Initial read into empty column
+    const rowid_t first_rowids[] = {1, 5, 20, 50, 99};
+    size_t count = 5;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, first_rowids, &count, column.get()).ok());
+    ASSERT_EQ(5, count);
+    ASSERT_EQ(5, column->size());
+    auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(page.src[first_rowids[i]], values[i]);
+    }
+
+    // 2. Truncate / resize column down to 2 elements and re-read
+    column->resize(2);
+    ASSERT_EQ(2, column->size());
+
+    const rowid_t second_rowids[] = {10, 30, 70};
+    count = 3;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, second_rowids, &count, column.get()).ok());
+    ASSERT_EQ(3, count);
+    ASSERT_EQ(5, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    EXPECT_EQ(page.src[first_rowids[0]], values[0]);
+    EXPECT_EQ(page.src[first_rowids[1]], values[1]);
+    for (size_t i = 0; i < 3; i++) {
+        EXPECT_EQ(page.src[second_rowids[i]], values[2 + i]);
+    }
+
+    // 3. Clear / truncate to 0 elements and re-read
+    column->resize(0);
+    ASSERT_EQ(0, column->size());
+
+    const rowid_t third_rowids[] = {0, 42, 100, 199};
+    count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, third_rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(4, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[third_rowids[i]], values[i]);
+    }
+
+    // 4. Out-of-bounds rowids triggering decoder-level truncation
+    const rowid_t out_of_bounds_rowids[] = {15, 25, static_cast<rowid_t>(kRows), static_cast<rowid_t>(kRows + 10)};
+    count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, out_of_bounds_rowids, &count, column.get()).ok());
+    ASSERT_EQ(2, count);
+    ASSERT_EQ(6, column->size());
+    values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[third_rowids[i]], values[i]);
+    }
+    EXPECT_EQ(page.src[15], values[4]);
+    EXPECT_EQ(page.src[25], values[5]);
+}
+
+template <LogicalType StorageType, LogicalType DecimalType>
+void check_delegated_appends_to_populated_column() {
+    using CppType = StorageCppType<StorageType>;
+    static_assert(std::is_same_v<CppType, StorageCppType<DecimalType>>);
+
+    constexpr size_t kRows = 1000;
+    ReadByRowidsPage<StorageType> page;
+    page.build(kRows);
+    ASSERT_NE(nullptr, page.decoder);
+
+    auto column = ChunkFactory::column_from_field_type(DecimalType, false);
+    std::vector<CppType> existing(5);
+    for (size_t i = 0; i < 5; i++) {
+        if constexpr (StorageType == TYPE_INT256) {
+            existing[i] = int256_t(~static_cast<int128_t>(i), static_cast<uint128_t>(i) + 100);
+        } else {
+            existing[i] = static_cast<CppType>(-(static_cast<int64_t>(i) + 1));
+        }
+    }
+    ASSERT_EQ(5, column->append_numbers(existing.data(), existing.size() * sizeof(CppType)));
+    ASSERT_EQ(5, column->size());
+
+    const rowid_t rowids[] = {3, 10, 500, 999};
+    size_t count = 4;
+    ASSERT_TRUE(page.decoder->read_by_rowids(0, rowids, &count, column.get()).ok());
+    ASSERT_EQ(4, count);
+    ASSERT_EQ(9, column->size());
+
+    const auto values = GetStorageContainer<DecimalType>::get_data(column);
+    for (size_t i = 0; i < 5; i++) {
+        EXPECT_EQ(existing[i], values[i])
+                << "existing mismatch storage_type=" << StorageType << " decimal_type=" << DecimalType << " at " << i;
+    }
+    for (size_t i = 0; i < 4; i++) {
+        EXPECT_EQ(page.src[rowids[i]], values[5 + i])
+                << "appended mismatch storage_type=" << StorageType << " decimal_type=" << DecimalType << " at " << i;
+    }
+
+    // Verify destination backed by shared resource
+    {
+        std::vector<CppType> shared_vec(4);
+        for (size_t i = 0; i < 4; i++) {
+            if constexpr (StorageType == TYPE_INT256) {
+                shared_vec[i] = int256_t(static_cast<int128_t>(i) + 1, static_cast<uint128_t>(i) + 100);
+            } else {
+                shared_vec[i] = static_cast<CppType>((i + 1) * 11);
+            }
+        }
+        auto shared = std::make_shared<std::vector<CppType>>(shared_vec);
+        const std::vector<CppType> shared_before = *shared;
+        auto shared_col = ChunkFactory::column_from_field_type(DecimalType, false);
+        ContainerResource resource(shared, shared->data(), shared->size() * sizeof(CppType));
+        ASSERT_EQ(4, shared_col->append_numbers(resource));
+
+        const rowid_t shared_rowids[] = {0, 1, 2, 998, 999};
+        size_t shared_count = 5;
+        ASSERT_TRUE(page.decoder->read_by_rowids(0, shared_rowids, &shared_count, shared_col.get()).ok());
+        ASSERT_EQ(5, shared_count);
+        ASSERT_EQ(9, shared_col->size());
+
+        const auto shared_vals = GetStorageContainer<DecimalType>::get_data(shared_col);
+        for (size_t i = 0; i < 4; i++) {
+            EXPECT_EQ(shared_before[i], shared_vals[i]);
+        }
+        for (size_t i = 0; i < 5; i++) {
+            EXPECT_EQ(page.src[shared_rowids[i]], shared_vals[4 + i]);
+        }
+        EXPECT_EQ(shared_before, *shared) << "shared backing storage was modified";
+    }
+}
+
 } // namespace
 
 TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
@@ -729,6 +924,29 @@ TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
     check_non_nullable_stride<TYPE_DECIMAL32>(kRows, kStride);
     check_non_nullable_stride<TYPE_DECIMAL64>(kRows, kStride);
     check_non_nullable_stride<TYPE_DECIMAL128>(kRows, kStride);
+    check_non_nullable_stride<TYPE_INT256>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL256>(kRows, kStride);
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_empty_column) {
+    check_delegated_empty_column<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_empty_column<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_empty_column<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_empty_column<TYPE_INT256, TYPE_DECIMAL256>();
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_truncation_and_reread) {
+    check_delegated_truncation_and_reread<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_truncation_and_reread<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_truncation_and_reread<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_truncation_and_reread<TYPE_INT256, TYPE_DECIMAL256>();
+}
+
+TEST_F(BitShufflePageTest, delegated_decimal_appends_to_populated_column) {
+    check_delegated_appends_to_populated_column<TYPE_INT, TYPE_DECIMAL32>();
+    check_delegated_appends_to_populated_column<TYPE_BIGINT, TYPE_DECIMAL64>();
+    check_delegated_appends_to_populated_column<TYPE_LARGEINT, TYPE_DECIMAL128>();
+    check_delegated_appends_to_populated_column<TYPE_INT256, TYPE_DECIMAL256>();
 }
 
 // Review focus 2: output appends and never overwrites rows already in the column.
