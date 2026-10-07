@@ -86,6 +86,30 @@ TEST(PlatformHttpTest, RequestHeaderLookupIsCaseInsensitive) {
     EXPECT_TRUE(req.param("missing").empty());
 }
 
+TEST(PlatformHttpTest, DebugStringMasksCredentialHeaders) {
+    HttpRequest req(nullptr);
+    std::string encoded;
+    base64_encode("root:FakePwd123", &encoded);
+    req.set_header(HttpHeaders::AUTHORIZATION, "Basic " + encoded);
+    // Header names are case-insensitive, so a lower-case name must be masked too.
+    req.set_header("proxy-authorization", "Basic cHJveHk6cHJveHlQd2Q=");
+    req.set_header(HttpHeaders::COOKIE, "session_id=FakeSessionCookie");
+    req.set_header(HttpHeaders::CONTENT_TYPE, "application/json");
+    req.add_param("label", "load_1");
+
+    const std::string s = req.debug_string();
+    EXPECT_EQ(std::string::npos, s.find(encoded));
+    EXPECT_EQ(std::string::npos, s.find("cHJveHk6cHJveHlQd2Q="));
+    EXPECT_EQ(std::string::npos, s.find("FakeSessionCookie"));
+    const std::string mask(HttpRequest::kMaskedHeaderValue);
+    EXPECT_NE(std::string::npos, s.find("key=Authorization, value=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, s.find("key=proxy-authorization, value=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, s.find("key=Cookie, value=" + mask + "\n"));
+    // Everything else is printed as is.
+    EXPECT_NE(std::string::npos, s.find("key=Content-Type, value=application/json\n"));
+    EXPECT_NE(std::string::npos, s.find("key=label, value=load_1\n"));
+}
+
 TEST(PlatformHttpTest, BasicAuthParsesValidAuthorization) {
     HttpRequest req(nullptr);
     auto auth = encode_basic_auth("starrocks", "passwd");

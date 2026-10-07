@@ -70,7 +70,11 @@ public:
 
     void add_output_header(const char* key, const char* value);
 
+    // For logging. Credential headers (Authorization, Proxy-Authorization, Cookie) are printed as
+    // kMaskedHeaderValue, so a request logged with this never puts the caller's password into the log.
     std::string debug_string() const;
+
+    static constexpr const char* kMaskedHeaderValue = "******";
 
     void set_handler(HttpHandler* handler) { _handler = handler; }
     HttpHandler* handler() const { return _handler; }
