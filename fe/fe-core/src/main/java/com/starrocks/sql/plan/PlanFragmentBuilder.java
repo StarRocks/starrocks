@@ -222,6 +222,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -4302,8 +4303,16 @@ public class PlanFragmentBuilder {
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
 
+            // Several consume columns can map to one produced column, e.g. when the CTE outputs a column under
+            // two names and is force-reused. The project node would then put one column object into several
+            // slots, and the consume predicate below filters a chunk in place, once per slot. Clone every
+            // repeated reference so each slot owns its column.
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-            projectMap.putAll(consume.getCteOutputColumnRefMap());
+            Set<ColumnRefOperator> projected = Sets.newHashSet();
+            consume.getCteOutputColumnRefMap().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparingInt(ColumnRefOperator::getId)))
+                    .forEach(e -> projectMap.put(e.getKey(),
+                            projected.add(e.getValue()) ? e.getValue() : new CloneOperator(e.getValue())));
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
             consumeFragment.setQueryGlobalDictExprs(getGlobalDictsExprs(consume.getGlobalDictsExpr(), context));
