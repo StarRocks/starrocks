@@ -1250,6 +1250,36 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testFusionReuse() throws Exception {
+        String plan = getPlanFragment("query_dump/fusion_reuse_case", TExplainLevel.NORMAL);
+        // the four pieces differ only by an org_id IS NOT NULL on a group-by key, so the fused aggregate stays
+        // plain and that one piece applies the conjunct on its consumer
+        PlanTestBase.assertContains(plan, "MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 05\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 30\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 56\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 82\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  3:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(964: amount)\n" +
+                "  |  group by: 977: io_id, 984: org_id");
+        PlanTestBase.assertContains(plan, "32:SELECT\n" +
+                "  |  predicates: 339: org_id IS NOT NULL");
+        PlanTestBase.assertNotContains(plan, "row_hit");
+    }
+
+    @Test
+>>>>>>> 431bd1555ba... [Enhancement] Keep fused aggregates plain when CTE-fused pieces differ only by shared or group-key conjuncts (#63875)
     public void testNestCTERewriteWithGLM() throws Exception {
         try {
             String plan = getPlanFragment("query_dump/nest_cte_reuse", TExplainLevel.NORMAL);
