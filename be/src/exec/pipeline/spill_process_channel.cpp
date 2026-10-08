@@ -48,6 +48,7 @@ bool SpillProcessChannel::_add_last_task_locked(SpillProcessTask&& task) {
     DCHECK(!_is_finishing.load());
     _is_working.store(true);
     _task_count.fetch_add(1);
+    task.mark_final();
     if (!_spill_tasks.put(std::move(task))) {
         _task_count.fetch_sub(1);
         return false;
@@ -99,6 +100,7 @@ bool SpillProcessChannel::add_last_task(SpillProcessTask&& task) {
 
 void SpillProcessTask::reset() {
     _task = {};
+    _is_final = false;
 }
 
 SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequence) {
@@ -175,9 +177,12 @@ void SpillProcessChannel::close() {
             }
         }
 
-        // Run the last task only on the orderly finishing path; on a cancel close there is no terminal
-        // handoff to perform.
-        if (_is_finishing && task) {
+        // Run the last task only if it is the terminal handoff (add_last_task / execute()). _is_finishing
+        // alone is not enough: a cancelled sink still calls set_finishing() without enqueuing a final task,
+        // leaving a data task (e.g. the sorter's chunk iterator) at the tail. Such a task reads state owned
+        // by the sink, which may already be closed and freed at this point; running it is a use-after-free,
+        // and its output would be discarded anyway.
+        if (_is_finishing && task && task.is_final()) {
             (void)task();
         }
         // Account for any task still pinned in _current_task as well; the

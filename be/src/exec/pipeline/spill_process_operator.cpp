@@ -33,7 +33,7 @@ Status SpillProcessOperator::prepare(RuntimeState* state) {
     if (_channel->spiller() != nullptr) {
         _channel->spiller()->observable().subscribe_source(state, observer());
     }
-    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator) for the whole
+    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator / sort context) for the whole
     // spill-processing lifetime, so async spill tasks (which reference context-owned state such as the
     // build chunks / hash map) never dereference it after the owning operators free it on cancel/close.
     if (auto* context = _channel->guarded_context(); context != nullptr) {
