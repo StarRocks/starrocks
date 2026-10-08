@@ -21,23 +21,10 @@
 #include <mutex>
 #include <string_view>
 
-<<<<<<< HEAD
 #include "common/config.h"
-=======
-#include "base/testutil/sync_point.h"
-#include "base/time/time.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "common/brpc/brpc_stub_cache.h"
-#include "common/brpc_helper.h"
-#include "common/config_exec_flow_fwd.h"
-#include "exec/exec_env.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_context_cancel.h"
-#include "exec/pipeline/query_context.h"
->>>>>>> c0b8544 ([BugFix] Notify sink observers when the last sender leaves a finishing SinkBuffer (#80155))
 #include "fmt/core.h"
 #include "runtime/exec_env.h"
+#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/time.h"
