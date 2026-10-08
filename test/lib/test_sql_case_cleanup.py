@@ -27,7 +27,7 @@ from unittest.mock import Mock, patch
 
 import nose.case
 
-from lib import choose_cases
+from lib import choose_cases, sr_sql_lib
 
 
 CASE = '''-- name: cleanup_regression
@@ -88,6 +88,7 @@ class CleanupTest(unittest.TestCase):
             ('function: remove_fixture("%s", "%s")' % tuple(ids), -1, False),
             ('function: remove_fixture("%s")' % ids[1], -1, False),
         ])
+        self.assertEqual([call.kwargs for call in calls[-2:]], [{"strict": True}, {"strict": True}])
         # The parsed statements remain reusable and retain their original placeholders.
         self.assertIn("${uuid0}", self.case.sql[0])
 
@@ -152,6 +153,50 @@ class CleanupTest(unittest.TestCase):
                 self.runner.tearDown()
         self.runner.save_r_into_db.assert_not_called()
         self.runner.close_starrocks.assert_called_once()
+
+    def prepare_real_statement_runner(self):
+        self.runner.cleanup_regression()
+        self.runner.res_log = []
+        self.runner.execute_single_statement = sr_sql_lib.StarrocksSQLApiLib.execute_single_statement.__get__(self.runner)
+        self.runner.remove_fixture = Mock()
+
+    def test_sql_and_shell_cleanup_failures_are_reported(self):
+        self.prepare_real_statement_runner()
+        failures = [
+            ("DROP CATALOG missing", "execute_sql", {"status": False, "msg": "permission denied"}),
+            ("trino: DROP TABLE missing", "trino_execute_sql", {"status": False, "msg": "permission denied"}),
+            ("spark: DROP TABLE missing", "spark_execute_sql", {"status": False, "msg": "permission denied"}),
+            ("hive: DROP TABLE missing", "hive_execute_sql", {"status": False, "msg": "permission denied"}),
+            ("shell: false", "execute_shell", [1, "permission denied"]),
+        ]
+        for statement, method, response in failures:
+            with self.subTest(statement=statement), patch.object(self.runner, method, return_value=response):
+                self.runner.case_info.cleanup = [statement, 'function: remove_fixture()']
+                self.runner.remove_fixture.reset_mock()
+                result = unittest.TestResult()
+                nose.case.FunctionTestCase(lambda: None, tearDown=self.runner.tearDown).run(result)
+                self.assertFalse(result.wasSuccessful())
+                self.assertEqual(len(result.errors), 1)
+                self.assertIn("permission denied", result.errors[0][1])
+                self.runner.remove_fixture.assert_called_once()
+
+    def test_normal_statements_still_return_expected_errors(self):
+        self.prepare_real_statement_runner()
+        with patch.object(self.runner, "execute_sql", return_value={"status": False, "msg": "expected error"}):
+            result = self.runner.execute_single_statement("SELECT missing", 0, False)
+            self.assertEqual(result[0], "E: expected error")
+        with patch.object(self.runner, "execute_shell", return_value=[1, "expected error"]):
+            result = self.runner.execute_single_statement("shell: false", 0, False)
+            self.assertEqual(result[0], [1, "expected error"])
+
+    def test_successful_cleanup_does_not_treat_output_as_status(self):
+        self.prepare_real_statement_runner()
+        self.runner.case_info.cleanup = ["SELECT 'E: ordinary data'", "shell: echo message"]
+        with patch.object(self.runner, "execute_sql", return_value={"status": True, "result": "E: ordinary data"}), \
+                patch.object(self.runner, "execute_shell", return_value=[0, "permission denied"]):
+            result = unittest.TestResult()
+            nose.case.FunctionTestCase(lambda: None, tearDown=self.runner.tearDown).run(result)
+            self.assertTrue(result.wasSuccessful(), result.errors)
 
 
 if __name__ == "__main__":
