@@ -94,7 +94,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // caching off.
     const bool reuse_via_shared_cache = !_hold_input_segments;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                  .buffer_size = _stream_buffer_size,
                                   .fill_metadata_cache = reuse_via_shared_cache,
                                   .hold_segments = _hold_input_segments};
     reader_params.column_access_paths = &_column_access_paths;
@@ -289,6 +289,13 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+    // The single read pass opens one buffered stream per column for every input source, all at once.
+    int64_t total_input_segs = 0;
+    for (const auto& rowset : _input_rowsets) {
+        total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+    }
+    const int64_t num_streams = total_input_segs * static_cast<int64_t>(_tablet_schema->num_columns());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -296,12 +303,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     }
 
     int64_t total_num_rows = 0;
-    int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
     int64_t held_segments_bytes = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
-        total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
         // This pass only touches segment footers and column indexes, never column data, so the
         // data cache stays off. With hold_segments the read pass in execute() reuses the Segment
         // objects held on the Rowset instance, so the shared metadata cache is not filled — that
@@ -312,7 +317,7 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         // same reasoning as in execute().
         const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .buffer_size = _stream_buffer_size,
                                    .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
@@ -344,7 +349,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     // The held input set stays resident for the whole task, so it comes out of the same per-worker
     // budget the read buffers are sized from; charging it is what keeps the chunk sizing honest.
     // When holding would starve that budget the task stops holding instead -- see there.
-    return chunk_size_with_held_segments(held_segments_bytes, total_num_rows, total_mem_footprint, total_input_segs);
+    return chunk_size_with_held_segments(held_segments_bytes, total_num_rows, total_mem_footprint, total_input_segs,
+                                         num_streams * _stream_buffer_size);
 }
 
 } // namespace starrocks::lake
