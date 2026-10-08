@@ -66,6 +66,13 @@ TEST(CRC, Values) {
     ASSERT_NE(Value("a", 1), Value("foo", 3));
 }
 
+TEST(CRC, NullAndZeroLength) {
+    ASSERT_EQ(0U, Value(nullptr, 0));
+    ASSERT_EQ(0x12345678U, Extend(0x12345678U, nullptr, 0));
+    char dummy = 'x';
+    ASSERT_EQ(0x12345678U, Extend(0x12345678U, &dummy, 0));
+}
+
 TEST(CRC, Extend) {
     ASSERT_EQ(Value("hello world", 11), Extend(Value("hello ", 6), "world", 5));
 
@@ -249,6 +256,28 @@ TEST(CRC32C, EquivalenceAcrossBoundaries) {
     }
 }
 
+TEST(CRC32C, EnvVarParsingRobustness) {
+    // Unset or empty -> false (not disabled)
+    {
+        ScopedEnv env("STARROCKS_DISABLE_PMULL", nullptr);
+        EXPECT_FALSE(IsPmullDisabledByEnvForTesting());
+    }
+    {
+        ScopedEnv env("STARROCKS_DISABLE_PMULL", "");
+        EXPECT_FALSE(IsPmullDisabledByEnvForTesting());
+    }
+    // Falsy values (e.g. K8s ConfigMaps, Helm charts, systemd defaults) -> false (not disabled)
+    for (const char* val : {"0", "false", "False", "FALSE", "off", "Off", "OFF", "no", "No", "NO"}) {
+        ScopedEnv env("STARROCKS_DISABLE_PMULL", val);
+        EXPECT_FALSE(IsPmullDisabledByEnvForTesting()) << "Failed for falsy val: " << val;
+    }
+    // Truthy values -> true (disabled)
+    for (const char* val : {"1", "true", "True", "TRUE", "on", "On", "ON", "yes", "Yes", "YES", "disable"}) {
+        ScopedEnv env("STARROCKS_DISABLE_PMULL", val);
+        EXPECT_TRUE(IsPmullDisabledByEnvForTesting()) << "Failed for truthy val: " << val;
+    }
+}
+
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 TEST(CRC32C, DirectArmPmullSimd) {
     if (!HasArmPmull()) {
@@ -258,7 +287,7 @@ TEST(CRC32C, DirectArmPmullSimd) {
     for (size_t i = 0; i < buffer.size(); ++i) {
         buffer[i] = static_cast<char>((i * 131) ^ (i >> 3));
     }
-    const size_t simd_sizes[] = {64, 128, 192, 256, 512, 1024, 2048, 4096};
+    const size_t simd_sizes[] = {64, 80, 96, 112, 128, 144, 192, 208, 256, 512, 1024, 2048, 4096};
     for (size_t size : simd_sizes) {
         uint32_t pmull_crc = ~crc32c_pmull_simd(~0U, buffer.data(), size);
         uint32_t fallback_crc = ValueFallback(buffer.data(), size);
