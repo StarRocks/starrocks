@@ -187,6 +187,10 @@ Usage: $0 <options>
                         build ARM64 Backend without CRC32 instructions
      --with-arm-crc32
                         build ARM64 Backend with CRC32 instructions
+     --without-arm-pmull
+                        build ARM64 Backend without PMULL instructions
+     --with-arm-pmull
+                        build ARM64 Backend with PMULL instructions
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
      --output           specify the output directory (default: $STARROCKS_HOME/output)
