@@ -527,7 +527,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径（P2-a）计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留样本数最多的分区、丢弃样本数最少的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

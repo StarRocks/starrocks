@@ -47,10 +47,13 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -79,7 +82,8 @@ import java.util.TreeMap;
  * {@link AddPartitionClause} is ever built for such a target, so nothing is pre-created.
  *
  * <p>The result is capped at {@link Config#tablet_pre_split_max_partitions_per_load}.
- * Excess partitions (those with the lowest sample count) are dropped and the
+ * Excess partitions (the lightest: fewest input bytes when the sample carries exact per-partition
+ * sizes, otherwise fewest sampled rows) are dropped and the
  * {@code tablet_pre_split_partitions_capped} bvar is incremented per drop.
  */
 public final class PartitionSampleGrouper {
@@ -98,8 +102,9 @@ public final class PartitionSampleGrouper {
      * @param dbId            db id for the intensive lock scope
      * @param totalFileBytes  total bytes of the load's input (per {@code Estimates});
      *                        used to apportion {@code estimatedBytes} across groups
-     * @return list of {@link PartitionSamples} sorted by sample-count descending
-     *         (heaviest first), capped at
+     * @return list of {@link PartitionSamples} sorted heaviest first (by exact
+     *         input bytes when the sample carries them, otherwise by sample
+     *         count), capped at
      *         {@link Config#tablet_pre_split_max_partitions_per_load}; possibly
      *         empty
      */
@@ -259,7 +264,11 @@ public final class PartitionSampleGrouper {
         // Cap phase (no lock): rank merged groups heaviest-first and trim to the
         // per-load cap BEFORE the catalog lock so both analyzer (already done) and
         // catalog work are bounded for high-cardinality loads.
-        mergedGroups.sort((left, right) -> Integer.compare(right.rows.size(), left.rows.size()));
+        // Heaviest means the most input bytes when the sample knows them exactly, else the most sampled rows.
+        Map<MergedGroup, Long> exactBytes = exactPartitionBytes(samples, mergedGroups, formatters, table);
+        mergedGroups.sort(exactBytes == null
+                ? (left, right) -> Integer.compare(right.rows.size(), left.rows.size())
+                : (left, right) -> Long.compare(exactBytes.get(right), exactBytes.get(left)));
         int cap = Config.tablet_pre_split_max_partitions_per_load;
         if (cap > 0 && mergedGroups.size() > cap) {
             for (int i = cap; i < mergedGroups.size(); i++) {
@@ -277,7 +286,7 @@ public final class PartitionSampleGrouper {
         try (AutoCloseableLock ignored = new AutoCloseableLock(
                 new Locker(), dbId, Lists.newArrayList(table.getId()), LockType.READ)) {
             for (MergedGroup group : mergedGroups) {
-                long estimatedBytes = sampleRowCount == 0 ? 0L :
+                long estimatedBytes = exactBytes != null ? exactBytes.get(group) : sampleRowCount == 0 ? 0L :
                         Math.round((double) group.rows.size() / sampleRowCount * totalFileBytes);
 
                 // Resolved by the scope phase above for an explicit target; an unrestricted load
@@ -497,6 +506,48 @@ public final class PartitionSampleGrouper {
             merged.rows.addAll(rawGroup.rows);
         }
         return new ArrayList<>(byPartitionName.values());
+    }
+
+    /**
+     * Each group's exact input bytes when the sample carries them per partition-source tuple
+     * ({@link Estimates#partitionSourceBytes}), or {@code null} when it does not or a sampled tuple has no
+     * entry. The data tier carries them when it scanned a subset of the files and read the partition
+     * source from each file's path: every file's partition is then known, while the sample's share of rows
+     * per partition is skewed by the per-partition file quotas. A group's bytes are the sum over the
+     * distinct tuples of its rows, so a partition that several path values map into counts all of them.
+     */
+    private static Map<MergedGroup, Long> exactPartitionBytes(
+            SampleSet samples, List<MergedGroup> groups, PartitionValueFormatter[] formatters, OlapTable table) {
+        List<Estimates.PartitionSourceBytes> partitionSourceBytes = samples.getEstimates().partitionSourceBytes();
+        if (partitionSourceBytes.isEmpty()) {
+            return null;
+        }
+        Map<List<String>, Long> bytesByTuple = new HashMap<>();
+        for (Estimates.PartitionSourceBytes entry : partitionSourceBytes) {
+            List<String> formatted = formatPartitionTuple(entry.values(), formatters);
+            if (formatted != null) {
+                bytesByTuple.merge(formatted, entry.bytes(), Long::sum);
+            }
+        }
+        Map<MergedGroup, Long> bytesByGroup = new HashMap<>();
+        for (MergedGroup group : groups) {
+            Set<List<String>> tuples = new HashSet<>();
+            for (SampleRow row : group.rows) {
+                tuples.add(formatPartitionTuple(row.partitionSourceTuple(), formatters));
+            }
+            long bytes = 0L;
+            for (List<String> tuple : tuples) {
+                Long tupleBytes = bytesByTuple.get(tuple);
+                if (tupleBytes == null) {
+                    LOG.info("Pre-split: a sampled partition value of table {} has no exact input size; "
+                            + "sizing every partition from its share of the sample", table.getName());
+                    return null;
+                }
+                bytes += tupleBytes;
+            }
+            bytesByGroup.put(group, bytes);
+        }
+        return bytesByGroup;
     }
 
     private static List<String> formatPartitionTuple(List<Variant> partitionSourceTuple,

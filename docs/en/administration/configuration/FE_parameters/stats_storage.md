@@ -727,6 +727,30 @@ This topic introduces the following types of FE configurations:
 - Description: Soft byte cap on the FE-side accumulation buffer of the data-tier reservoir sampler used by Sample-Based Tablet Pre-Split. The sampler stops reading once accumulated values exceed this limit. The first row is always admitted so an oversize row still produces a non-empty sample.
 - Introduced in: v4.1.0
 
+### `tablet_pre_split_data_tier_scan_byte_limit`
+
+- Default: 4294967296 (4 GiB)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Soft limit on the source-file bytes the data tier of Sample-Based Tablet Pre-Split scans for a Broker Load or `INSERT INTO ... SELECT FROM FILES()` load. When the input is larger, the sample reads a subset of the files instead of every file, so sampling time no longer grows with the input. The exception is a partition column read from the file data rather than from the path, or path and literal partition columns mixed: every file is then still scanned, because a subset could miss whole partitions. Files are sorted by path and picked at even byte intervals, which favors larger files. When the partition column comes from the file path (`COLUMNS FROM PATH` or `columns_from_path`), each partition gets a share of the limit in proportion to its bytes and at least one file (unless the load has more partitions than `tablet_pre_split_data_tier_max_scan_files`), and each partition's size is taken from the bytes of all of its files. Files are taken whole, so the scan can exceed the limit, for example when a single file is larger than it. The tablet count is still sized from the whole input. Set to `0` to scan every file.
+
+### `tablet_pre_split_data_tier_min_scan_files`
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum number of files the data tier of Sample-Based Tablet Pre-Split scans once it samples a subset of a load's files (see `tablet_pre_split_data_tier_scan_byte_limit`), so that the sample spans enough independent files even when each file is large or holds only a narrow range of the sort key. When the partition column comes from the file path, the minimum is split across partitions in proportion to their bytes. Meeting it can take the scan above `tablet_pre_split_data_tier_scan_byte_limit`, but no files are added for it once the scan reaches four times that limit, so large files do not multiply the scan time. A positive `tablet_pre_split_data_tier_max_scan_files` takes precedence over this minimum.
+
+### `tablet_pre_split_data_tier_max_scan_files`
+
+- Default: 512
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of files the data tier of Sample-Based Tablet Pre-Split scans once it samples a subset of a load's files (see `tablet_pre_split_data_tier_scan_byte_limit`). Every file in the subset costs one metadata lookup before any data is read, so without a cap a subset of many small files could spend minutes on lookups alone. When the partition column comes from the file path, the cap is split across partitions in proportion to their bytes; every partition still keeps at least one file, so the cap can be exceeded by up to one file per partition. When there are more partitions than the cap, only the heaviest partitions are sampled, one file each. The cap takes precedence over `tablet_pre_split_data_tier_min_scan_files`. Set to `0` or a negative value to remove the cap.
+
 ### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - Default: 0.3
@@ -751,7 +775,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (those with the lowest sample count) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
+- Description: Maximum number of predicted target partitions a single Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions (the lightest ones: fewest input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise fewest sampled rows) are dropped and fall back to runtime auto-create with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to zero or a negative value to disable the cap.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_target_size`
