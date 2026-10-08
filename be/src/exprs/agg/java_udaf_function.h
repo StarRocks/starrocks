@@ -307,8 +307,19 @@ public:
             return;
         }
 
+<<<<<<< HEAD
         auto buffer_array = helper.batch_create_bytebuf(serialized_bytes.data(), offsets.data(), start, start + size);
         RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+=======
+        const auto& offsets_buf = offsets.small_storage();
+        auto buffer_array_or =
+                helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
+        if (!buffer_array_or.ok()) {
+            ctx->set_error(std::string(buffer_array_or.status().message()).c_str());
+            return;
+        }
+        jobject buffer_array = buffer_array_or.value();
+>>>>>>> 9e75667 ([BugFix] Fail a Java UDAF merge that cannot wrap its states instead of returning NULL (#80098))
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         // batch call merge
         caller(state_array, buffer_array);
