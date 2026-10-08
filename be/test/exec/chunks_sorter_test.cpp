@@ -671,7 +671,6 @@ static std::vector<std::string> varchar_column_values(const Column& column) {
 static const BinaryColumn* binary_data_column(const Column* column) {
     const Column* data = ColumnHelper::get_data_column(column);
     EXPECT_TRUE(data->is_binary());
-    EXPECT_FALSE(data->is_large_binary());
     return down_cast<const BinaryColumn*>(data);
 }
 

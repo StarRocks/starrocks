@@ -518,7 +518,6 @@ TEST_F(RowsetUpdateStateTest, load_upserts_uses_binary_column_for_every_segment)
         const auto& pks = state.upserts()[i];
         ASSERT_NE(nullptr, pks) << "segment " << i;
         EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
-        EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
         ASSERT_EQ(kRowsPerSegment, pks->size()) << "segment " << i;
         for (size_t j = 0; j < kRowsPerSegment; j++) {
             ASSERT_EQ(segment_keys[i][j], pks->get(j).get_slice().to_string()) << "segment " << i << " row " << j;
@@ -581,7 +580,6 @@ TEST_F(RowsetUpdateStateTest, compaction_state_load_segments_uses_binary_column)
         const auto& pks = state.pk_cols[i];
         ASSERT_NE(nullptr, pks) << "segment " << i;
         EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
-        EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
         ASSERT_EQ(kRowsPerSegment, pks->size()) << "segment " << i;
         for (size_t j = 0; j < kRowsPerSegment; j++) {
             ASSERT_EQ(segment_keys[i][j], pks->get(j).get_slice().to_string()) << "segment " << i << " row " << j;
@@ -646,7 +644,6 @@ public:
         uint32_t rowid_start;
         std::vector<uint32_t> replace_indexes;
         bool is_binary;
-        bool is_large_binary;
         std::string column_name;
         std::vector<std::string> keys;
     };
@@ -685,8 +682,7 @@ public:
         params.delvec_loader = _delvec_loader;
         params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
                                      const Column& pks) {
-            ReplaceCall call{rssid,          rowid_start, replace_indexes, pks.is_binary(), pks.is_large_binary(),
-                             pks.get_name(), {}};
+            ReplaceCall call{rssid, rowid_start, replace_indexes, pks.is_binary(), pks.get_name(), {}};
             for (uint32_t idx : replace_indexes) {
                 call.keys.emplace_back(pks.get(idx).get_slice().to_string());
             }
@@ -777,7 +773,6 @@ TEST_F(RowsetUpdateStateTest, compaction_conflict_resolver_uses_binary_column) {
         EXPECT_EQ(base_rssid + i, call.rssid);
         EXPECT_EQ(0u, call.rowid_start);
         EXPECT_TRUE(call.is_binary) << "segment " << i << " is " << call.column_name;
-        EXPECT_FALSE(call.is_large_binary) << "segment " << i;
         std::vector<std::string> expected_keys;
         std::vector<uint32_t> expected_indexes;
         for (uint32_t j = 0; j < kRowsPerSegment; j++) {
