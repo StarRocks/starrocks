@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "http/action/update_config_action.h"
-
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <glog/logging.h>
@@ -24,6 +22,7 @@
 #include <string>
 
 #include "common/config_update_registry.h"
+#include "http/action/update_config_action.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_request.h"
 #include "platform/http/http_status.h"
