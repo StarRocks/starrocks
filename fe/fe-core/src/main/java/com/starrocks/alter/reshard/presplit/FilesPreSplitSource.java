@@ -99,21 +99,25 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         if (resolved == null) {
             return null;
         }
-        // ATTRIBUTED: a sampled column that NOTHING feeds -- neither a source column nor a literal.
-        // Uses the same firstUnfedColumn the sampleable gates below are written in terms of, so the
-        // reason can never disagree with the decision.
+        // ATTRIBUTED: a sampled column the sampler cannot reproduce. The resolver distinguishes
+        // a projected expression from an omitted source mapping, so each gets its own reason.
         Column unfed = InsertSelectSourceColumns.firstUnfedColumn(sortKeyColumns, resolved);
         if (unfed == null) {
             unfed = InsertSelectSourceColumns.firstUnfedColumn(partitionColumns, resolved);
         }
         if (unfed != null) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN);
-            LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" is fed by neither a source "
-                    + "column nor a literal, so the sampler cannot project it; skipping pre-split",
-                    target.getName(), unfed.getName());
+            if (resolved.unsupportedProjectionTargets().contains(unfed.getName().toLowerCase())) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION);
+                LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" has a projection the "
+                        + "sampler cannot reproduce; skipping pre-split", target.getName(), unfed.getName());
+            } else {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN);
+                LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" has no FILES source "
+                        + "column or literal projection; skipping pre-split", target.getName(), unfed.getName());
+            }
             return null;
         }
-        // UNATTRIBUTED, deliberately: every column IS fed, but an all-literal sort key has one value
+        // UNATTRIBUTED, deliberately: every column IS sampleable, but an all-literal sort key has one value
         // for every row, so no cut can separate them. That is a degenerate key, not a missing column --
         // labelling it SOURCE_MISSING_SAMPLED_COLUMN would send an operator looking for a column that
         // is not the problem. Only the sort key can still fail here: the partition columns were proven

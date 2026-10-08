@@ -90,10 +90,12 @@ final class InsertSelectSourceColumns {
     /**
      * The resolved projection: {@code targetToSource} maps each directly projected target column
      * (lower-cased name) to its source column name; {@code targetToConstantSql} maps each target
-     * column the SELECT feeds with a non-NULL literal to that literal's SQL. The two key sets are
-     * disjoint.
+     * column the SELECT feeds with a non-NULL literal to that literal's SQL.
+     * {@code unsupportedProjectionTargets} names outputs supplied by another expression (including
+     * NULL). Those outputs are distinct from target columns omitted from the SELECT entirely.
      */
-    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql) {
+    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
+                    Set<String> unsupportedProjectionTargets) {
     }
 
     /**
@@ -166,6 +168,7 @@ final class InsertSelectSourceColumns {
         boolean isStar = items.size() == 1 && items.get(0).isStar();
         Map<String, String> targetToSource = new HashMap<>();
         Map<String, String> targetToConstantSql = new HashMap<>();
+        Set<String> unsupportedProjectionTargets = new HashSet<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
             boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
@@ -260,6 +263,8 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     } else if (output[2] != null) {
                         targetToConstantSql.put(targetName, output[2]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
                 // EXACT: output names must be exactly the target's own columns.
@@ -284,6 +289,8 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     } else if (output[2] != null) {
                         targetToConstantSql.put(targetName, output[2]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
             }
@@ -291,7 +298,8 @@ final class InsertSelectSourceColumns {
 
         // The executors derive every projection from the two maps at sample time (see projections),
         // so only the presence gates matter here.
-        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql));
+        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql),
+                Set.copyOf(unsupportedProjectionTargets));
     }
 
     /**
@@ -319,12 +327,14 @@ final class InsertSelectSourceColumns {
     }
 
     /**
-     * The first column that NOTHING feeds -- neither a source column nor a literal -- or {@code null}
-     * when every one is fed. The single definition of "fed" in this class: {@link #sortKeySampleable}
+     * The first column the sampler cannot project -- neither a direct source column nor a supported
+     * literal -- or {@code null} when every one is sampleable. An unsupported expression may still
+     * feed that column in the INSERT; see {@link Resolved#unsupportedProjectionTargets()}.
+     * The single definition of "sampleable" in this class: {@link #sortKeySampleable}
      * and {@link #partitionColumnsSampleable} are both expressed in terms of it, so a caller that
      * needs to NAME the offending column for a skip reason cannot drift from the gates that decide.
      *
-     * <p>A literal-fed column counts as fed. It is projected as {@code CAST(<literal> AS <type>)} and
+     * <p>A literal-fed column counts as sampleable. It is projected as {@code CAST(<literal> AS <type>)} and
      * never read from the source, so "no source column behind it" is not a defect there -- declining
      * such a statement as a missing column is exactly the misattribution this helper exists to avoid.
      */
