@@ -210,6 +210,8 @@ option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
 option(USE_ARM_CRC32 "Build with ARM CRC32 instruction" ON)
 
+option(USE_ARM_PMULL "Build with ARM PMULL instruction" ON)
+
 option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
@@ -219,6 +221,10 @@ option(WITH_RELATIVE_SRC_PATH "Build source file with relative path" ON)
 
 if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
+endif()
+
+if (${USE_ARM_PMULL})
+    add_definitions(-DUSE_ARM_PMULL)
 endif()
 
 # The StarRocks module enables dynamic linking. This is a developer option.
@@ -1050,6 +1056,9 @@ ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
 add_subdirectory(${SRC_DIR}/base)
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64" AND ${USE_ARM_PMULL})
+    set_source_files_properties(${SRC_DIR}/base/hash/crc32c_arm_simd.cpp DIRECTORY ${SRC_DIR}/base PROPERTIES COMPILE_FLAGS "-march=armv8-a+crypto")
+endif()
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/column)
 add_subdirectory(${SRC_DIR}/formats)
