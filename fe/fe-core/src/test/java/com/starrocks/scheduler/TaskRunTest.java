@@ -16,14 +16,18 @@ package com.starrocks.scheduler;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 
 public class TaskRunTest {
@@ -39,6 +43,34 @@ public class TaskRunTest {
     public void testDefaultTimeout() {
         taskRun.setProperties(null);
         assertEquals(Config.task_runs_timeout_second, taskRun.getExecuteTimeoutS());
+    }
+
+    @Test
+    public void testLegacyMvPostRunIsNotExecuted() throws Exception {
+        String legacyAnalyze = "ANALYZE SAMPLE TABLE test_mv WITH ASYNC MODE";
+        Task task = new Task("mv-task");
+        task.setSource(Constants.TaskSource.MV);
+        TaskRun mvTaskRun = TaskRunBuilder.newBuilder(task).build();
+        PartitionBasedMvRefreshProcessor mvProcessor =
+                assertInstanceOf(PartitionBasedMvRefreshProcessor.class, mvTaskRun.getProcessor());
+
+        TaskRunContext context = new TaskRunContext();
+        context.setPostRun(legacyAnalyze);
+        AtomicInteger executedStatements = new AtomicInteger();
+        context.setCtx(new ConnectContext() {
+            @Override
+            public StmtExecutor executeSql(String sql) {
+                assertEquals(legacyAnalyze, sql);
+                executedStatements.incrementAndGet();
+                return null;
+            }
+        });
+
+        mvProcessor.postTaskRun(context);
+        assertEquals(0, executedStatements.get());
+
+        new SqlTaskRunProcessor().postTaskRun(context);
+        assertEquals(1, executedStatements.get());
     }
 
     @Test
