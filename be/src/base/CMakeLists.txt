@@ -14,6 +14,10 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/base")
 
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64" AND ${USE_ARM_PMULL})
+    set_source_files_properties(hash/crc32c_arm_simd.cpp PROPERTIES COMPILE_FLAGS "-march=armv8-a+crypto")
+endif()
+
 ADD_BE_LIB(Base
   bthreads/future_impl.cpp
   bit/frame_of_reference_coding.cpp

@@ -246,6 +246,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-avx2' \
   -l 'without-arm-crc32' \
   -l 'with-arm-crc32' \
+  -l 'without-arm-pmull' \
+  -l 'with-arm-pmull' \
   -l 'with-maven-batch-mode:' \
   -l 'output:' \
   -l 'help' \
@@ -323,6 +325,9 @@ if [[ -z ${USE_BMI_2} ]]; then
 fi
 if [[ -z ${USE_ARM_CRC32} ]]; then
     USE_ARM_CRC32=ON
+fi
+if [[ -z ${USE_ARM_PMULL} ]]; then
+    USE_ARM_PMULL=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
@@ -416,6 +421,8 @@ else
             --without-avx2) USE_AVX2=OFF; shift ;;
             --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
             --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
+            --without-arm-pmull) USE_ARM_PMULL=OFF; shift ;;
+            --with-arm-pmull) USE_ARM_PMULL=ON; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
@@ -490,6 +497,7 @@ echo "Get params:
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
     USE_ARM_CRC32               -- $USE_ARM_CRC32
+    USE_ARM_PMULL               -- $USE_ARM_PMULL
     PARALLEL                    -- $PARALLEL
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
@@ -628,6 +636,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
                   -DUSE_ARM_CRC32=$USE_ARM_CRC32                       \
+                  -DUSE_ARM_PMULL=$USE_ARM_PMULL                       \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
