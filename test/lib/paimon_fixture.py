@@ -115,7 +115,7 @@ class PaimonFixtureMixin:
         root = Path(self.paimon_fixture_root)
         # Full integrity validation runs during case discovery, before any uploads.
         manifest = json.loads((root / "MANIFEST.json").read_text())
-        names = tables.split(",")
+        names = [name.strip() for name in tables.split(",")]
         if not names or any(name not in manifest["tables"] for name in names):
             raise ValueError("unknown fixture table in %s" % tables)
         warehouse = self._paimon_warehouse(run_id)
