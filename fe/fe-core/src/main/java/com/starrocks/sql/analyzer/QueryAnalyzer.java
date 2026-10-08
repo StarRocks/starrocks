@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -624,6 +625,13 @@ public class QueryAnalyzer {
                 String catalogName = resolveTableName.getCatalog();
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                }
+                // A resource-mapping Iceberg table is one object shared by every query, and it is planned without
+                // the meta lock (IcebergTable.isMetaLockTarget). Planning writes to the table it works on, so it
+                // works on a private copy.
+                if (table instanceof IcebergTable icebergTable
+                        && CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(icebergTable.getCatalogName())) {
+                    table = icebergTable.copyForQuery();
                 }
                 Relation r;
                 if (table instanceof View) {

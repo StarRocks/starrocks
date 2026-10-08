@@ -280,9 +280,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      *   <li>an internal view is neither native nor an FE transaction participant, yet AlterJobMgr.alterView
      *       rewrites its definition, schema and security in place under this very lock;</li>
      *   <li>a resource-mapping table (ENGINE=HIVE/ICEBERG/HUDI created from a resource) reports a
-     *       resource-mapping catalog name, yet HiveTable.modifyTableSchema clears and refills its fullSchema
-     *       inside lockDatabase(WRITE), and LocalMetastore.replayModifyHiveTableColumn does the same on
-     *       replay.</li>
+     *       resource-mapping catalog name, yet lives in an internal database and used to have its schema
+     *       rewritten in place by a refresh.</li>
      * </ul>
      * So the default predicate is "does it live in an internal database", expressed as
      * {@code !isExternalCatalog}. That is deliberately not {@code isInternalCatalog}: the two differ exactly on
