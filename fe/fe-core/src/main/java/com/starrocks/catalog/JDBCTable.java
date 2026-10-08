@@ -294,6 +294,18 @@ public class JDBCTable extends Table {
         return tTableDescriptor;
     }
 
+    /**
+     * Not a lock target, also when it lives in an internal database (ENGINE=JDBC from a resource; a JDBC catalog
+     * table is not one anyway). Nothing writes to a published JDBCTable: its fields are only set while it is
+     * constructed, ALTER TABLE rejects it, the resource is read afresh by name rather than cached, and the
+     * pushdown rules that rewrite a table do so on their own copy ({@link #JDBCTable(JDBCTable)}). Planning does
+     * not open a JDBC connection either. So the reference a query resolves is already a consistent snapshot.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;

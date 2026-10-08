@@ -47,6 +47,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -85,10 +86,12 @@ public class EsPartitionsProcDir implements ProcDirInterface {
         locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
+            // Read once: a sync swaps it at any time, and it is null until one succeeds and after one fails.
+            EsTablePartitions esTablePartitions = esTable.getEsTablePartitions();
             Map<String, EsShardPartitions> unPartitionedIndices =
-                    esTable.getEsTablePartitions().getUnPartitionedIndexStates();
+                    esTablePartitions == null ? Map.of() : esTablePartitions.getUnPartitionedIndexStates();
             Map<String, EsShardPartitions> partitionedIndices =
-                    esTable.getEsTablePartitions().getPartitionedIndexStates();
+                    esTablePartitions == null ? Map.of() : esTablePartitions.getPartitionedIndexStates();
             for (EsShardPartitions esShardPartitions : unPartitionedIndices.values()) {
                 List<Comparable> partitionInfo = new ArrayList<Comparable>();
                 partitionInfo.add(esShardPartitions.getIndexName());
@@ -101,8 +104,8 @@ public class EsPartitionsProcDir implements ProcDirInterface {
             }
 
             RangePartitionInfo rangePartitionInfo = null;
-            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                rangePartitionInfo = (RangePartitionInfo) esTable.getEsTablePartitions().getPartitionInfo();
+            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE && esTablePartitions != null) {
+                rangePartitionInfo = (RangePartitionInfo) esTablePartitions.getPartitionInfo();
             }
             if (rangePartitionInfo != null) {
                 for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
