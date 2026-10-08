@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
@@ -407,4 +408,70 @@ public class AnalyzeMgrTest {
         AnalyzeStatusSystemTable.query(request);
     }
 
+    @Test
+    public void testClearStalePartitionStatsWithoutPartitionIds() throws Exception {
+        final String dbName = "db_clear_stale_partition_stats";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName)
+                .withTable("create table t_empty (k1 date, v1 int) partition by range(k1) () " +
+                        "distributed by hash(v1) buckets 1 properties('replication_num'='1')");
+        Database db = starRocksAssert.getDb(dbName);
+        Table table = starRocksAssert.getTable(dbName, "t_empty");
+        // a range partitioned table created without any partition
+        Assertions.assertTrue(table.getPartitions().isEmpty());
+
+        List<String> executedSQLs = Lists.newArrayList();
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
+                                                               List<Long> pids) {
+                // build the sql as the real method does, it checks the ids are not empty
+                executedSQLs.add(StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids));
+                return true;
+            }
+        };
+
+        AnalyzeMgr analyzeMgr = new AnalyzeMgr();
+        LocalDateTime lastCleanTime = LocalDateTime.now().minusDays(1);
+
+        // case 1: no table needs to be cleaned
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertTrue(executedSQLs.isEmpty());
+        Assertions.assertTrue(((LocalDateTime) Deencapsulation.getField(analyzeMgr, "lastCleanTime"))
+                .isAfter(lastCleanTime));
+
+        // case 2: the analyzed table has no partition, so there is no partition id to keep
+        NativeAnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(100, db.getId(), table.getId(),
+                ImmutableList.of("k1", "v1"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus.setEndTime(LocalDateTime.now());
+        analyzeMgr.getAnalyzeStatusMap().put(analyzeStatus.getId(), analyzeStatus);
+
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertTrue(executedSQLs.isEmpty());
+        Assertions.assertTrue(((LocalDateTime) Deencapsulation.getField(analyzeMgr, "lastCleanTime"))
+                .isAfter(lastCleanTime));
+
+        // case 3: the analyzed table has partitions, the stale partition stats are cleaned
+        starRocksAssert.withTable("create table t1 (c1 int, c2 int) properties('replication_num'='1')");
+        Table table1 = starRocksAssert.getTable(dbName, "t1");
+        NativeAnalyzeStatus analyzeStatus1 = new NativeAnalyzeStatus(101, db.getId(), table1.getId(),
+                ImmutableList.of("c1", "c2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+        analyzeStatus1.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus1.setEndTime(LocalDateTime.now());
+        analyzeMgr.getAnalyzeStatusMap().remove(analyzeStatus.getId());
+        analyzeMgr.getAnalyzeStatusMap().put(analyzeStatus1.getId(), analyzeStatus1);
+
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", lastCleanTime);
+        Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats");
+        Assertions.assertEquals(1, executedSQLs.size());
+        Assertions.assertTrue(executedSQLs.get(0).contains("TABLE_ID IN (" + table1.getId() + ")"),
+                executedSQLs.get(0));
+
+        starRocksAssert.dropDatabase(dbName);
+    }
 }
