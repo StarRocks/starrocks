@@ -14,6 +14,14 @@
 
 #pragma once
 
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <map>
+#include <string>
+#include <type_traits>
+#include <utility>
+
 #include "base/stats/ndv_estimator.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -102,12 +110,60 @@ struct Bucket {
 
 template <LogicalType LT>
 struct HistogramState {
-    HistogramState() {
-        auto data = RunTimeColumnType<LT>::create();
-        column = NullableColumn::create(std::move(data), NullColumn::create());
+    using ValueType = AggDataValueType<LT>;
+    using Traits = AggDataTypeTraits<LT>;
+
+    struct ValueLess
+    {
+        bool operator()(const ValueType& lhs, const ValueType& rhs) const
+        {
+            if constexpr (std::is_same_v<typename Traits::RefType, Slice>)
+            {
+                return Slice(lhs.data(), lhs.size()).compare(Slice(rhs.data(), rhs.size())) < 0;
+            }
+            else if constexpr (lt_is_float<LT>)
+            {
+                const bool lhs_is_nan = std::isnan(lhs);
+                const bool rhs_is_nan = std::isnan(rhs);
+                return lhs_is_nan ? false : (rhs_is_nan || lhs < rhs);
+            }
+            else
+            {
+                return TypeComparator<LT>::cmp(&lhs, &rhs) < 0;
+            }
+        }
+    };
+
+    void add(const typename Traits::RefType& value, int64_t count = 1)
+    {
+        CHECK_GT(count, 0);
+        CHECK_LE(count, std::numeric_limits<int64_t>::max() - non_null_row_count);
+        ValueType value_copy;
+        Traits::assign_value(value_copy, value);
+        if constexpr (lt_is_float<LT>)
+        {
+            // Equivalent keys must have the same representation regardless of merge order.
+            if (std::isnan(value_copy))
+            {
+                value_copy = std::numeric_limits<ValueType>::quiet_NaN();
+            }
+            else if (value_copy == 0)
+            {
+                value_copy = 0;
+            }
+        }
+        auto it = value_frequencies.try_emplace(std::move(value_copy), 0).first;
+        CHECK_LE(count, std::numeric_limits<int64_t>::max() - it->second);
+        it->second += count;
+        non_null_row_count += count;
     }
 
-    ColumnPtr column;
+    // Own every distinct non-NULL value and its exact frequency; buckets are built only at finalize.
+    std::map<ValueType, int64_t, ValueLess> value_frequencies;
+    // Preserve the original bucket threshold, which includes NULL input rows.
+    int64_t row_count = 0;
+    // Number of non-NULL input rows; equals the sum of frequencies in value_frequencies.
+    int64_t non_null_row_count = 0;
 };
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>>
@@ -117,37 +173,159 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
-        CHECK(false);
+                size_t row_num) const override
+    {
+        ColumnViewer<LT> viewer(columns[0]->get_ptr());
+        auto& histogram_state = this->data(state);
+        CHECK_LT(histogram_state.row_count, std::numeric_limits<int64_t>::max());
+        ++histogram_state.row_count;
+        if (!viewer.is_null(row_num)) {
+            histogram_state.add(viewer.value(row_num));
+        }
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
-        this->data(state).column->as_mutable_raw_ptr()->append(*columns[0], 0, chunk_size);
+                                   AggDataPtr __restrict state) const override
+    {
+        ColumnViewer<LT> viewer(columns[0]->get_ptr());
+        auto& histogram_state = this->data(state);
+        CHECK_LE(chunk_size, std::numeric_limits<int64_t>::max() - histogram_state.row_count);
+        histogram_state.row_count += static_cast<int64_t>(chunk_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            if (!viewer.is_null(i)) {
+                histogram_state.add(viewer.value(i));
+            }
+        }
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        //Histogram aggregation function only support one stage Agg
+        // Windowed histogram aggregation is not supported.
         CHECK(false);
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        //Histogram aggregation function only support one stage Agg
-        CHECK(false);
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override
+    {
+        ColumnViewer<TYPE_VARCHAR> serialized_viewer(column->get_ptr());
+        if (serialized_viewer.is_null(row_num))
+        {
+            ctx->set_error("Invalid histogram intermediate state: NULL payload", false);
+            return;
+        }
+        const Slice serialized = serialized_viewer.value(row_num);
+        constexpr size_t header_size = sizeof(uint8_t) + 2 * sizeof(int64_t) + sizeof(uint64_t);
+        if (serialized.size < header_size)
+        {
+            ctx->set_error("Invalid histogram intermediate state: truncated header", false);
+            return;
+        }
+        const uint8_t* pos = reinterpret_cast<const uint8_t*>(serialized.data);
+        const uint8_t* end = pos + serialized.size;
+        uint8_t version;
+        int64_t serialized_row_count;
+        int64_t serialized_non_null_row_count;
+        uint64_t value_count;
+        auto& target = this->data(state);
+        if (!read_binary_value(&pos, end, &version) || version != kSerializationVersion ||
+            !read_binary_value(&pos, end, &serialized_row_count) ||
+            !read_binary_value(&pos, end, &serialized_non_null_row_count) ||
+            !read_binary_value(&pos, end, &value_count) || serialized_non_null_row_count < 0 ||
+            serialized_row_count < serialized_non_null_row_count ||
+            value_count > static_cast<uint64_t>(serialized_non_null_row_count) ||
+            serialized_row_count > std::numeric_limits<int64_t>::max() - target.row_count ||
+            serialized_non_null_row_count > std::numeric_limits<int64_t>::max() - target.non_null_row_count)
+        {
+            ctx->set_error("Invalid histogram intermediate state: invalid header", false);
+            return;
+        }
+
+        auto value_column = ColumnType::create();
+        int64_t merged_non_null_row_count = 0;
+        for (uint64_t i = 0; i < value_count; ++i)
+        {
+            int64_t count;
+            uint32_t value_size;
+            if (!read_binary_value(&pos, end, &count) || !read_binary_value(&pos, end, &value_size) || count <= 0 ||
+                count > serialized_non_null_row_count - merged_non_null_row_count ||
+                static_cast<size_t>(end - pos) < value_size)
+            {
+                ctx->set_error("Invalid histogram intermediate state: invalid frequency or value size", false);
+                return;
+            }
+            // Column deserializers assume valid input. Check the encoded length before calling them.
+            if constexpr (std::is_same_v<AggDataRefType<LT>, Slice>)
+            {
+                const uint8_t* string_pos = pos;
+                uint32_t string_size;
+                if (!read_binary_value(&string_pos, pos + value_size, &string_size) ||
+                    string_size != value_size - sizeof(uint32_t))
+                {
+                    ctx->set_error("Invalid histogram intermediate state: invalid string length", false);
+                    return;
+                }
+            }
+            else if (value_size != sizeof(T))
+            {
+                ctx->set_error("Invalid histogram intermediate state: invalid fixed value length", false);
+                return;
+            }
+
+            value_column->resize(0);
+            const uint8_t* value_end = value_column->deserialize_and_append(pos);
+            DCHECK_EQ(value_end, pos + value_size);
+            ColumnViewer<LT> viewer(value_column->get_ptr());
+            target.add(viewer.value(0), count);
+            merged_non_null_row_count += count;
+            pos = value_end;
+        }
+        if (pos != end || merged_non_null_row_count != serialized_non_null_row_count)
+        {
+            ctx->set_error("Invalid histogram intermediate state: inconsistent non-NULL count or trailing bytes",
+                           false);
+            return;
+        }
+        target.row_count += serialized_row_count;
     }
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
-                             Column* to) const override {
-        //Histogram aggregation function only support one stage Agg
-        CHECK(false);
+                             Column* to) const override
+    {
+        std::string serialized;
+        const auto& histogram_state = this->data(state);
+        const uint64_t value_count = histogram_state.value_frequencies.size();
+        // Version, all input rows, non-NULL rows, distinct values, then (frequency, size, encoded value).
+        append_binary_value(&serialized, kSerializationVersion);
+        append_binary_value(&serialized, histogram_state.row_count);
+        append_binary_value(&serialized, histogram_state.non_null_row_count);
+        append_binary_value(&serialized, value_count);
+
+        auto value_column = ColumnType::create();
+        for (const auto& [value, count] : histogram_state.value_frequencies)
+        {
+            append_binary_value(&serialized, count);
+            value_column->resize(0);
+            value_column->append_datum(Datum(AggDataTypeTraits<LT>::get_ref(value)));
+            const size_t serialized_value_size = value_column->serialize_size(0);
+            CHECK_LE(serialized_value_size, std::numeric_limits<uint32_t>::max());
+            const uint32_t value_size = static_cast<uint32_t>(serialized_value_size);
+            append_binary_value(&serialized, value_size);
+            const size_t old_size = serialized.size();
+            serialized.resize(old_size + value_size);
+            value_column->serialize(0, reinterpret_cast<uint8_t*>(serialized.data() + old_size));
+        }
+        to->append_datum(Slice(serialized.data(), serialized.size()));
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     MutableColumnPtr& dst) const override {
-        //Histogram aggregation function only support one stage Agg
-        CHECK(false);
+                                     MutableColumnPtr& dst) const override
+    {
+        const Column* input_columns[] = {src[0].get()};
+        for (size_t i = 0; i < chunk_size; ++i) {
+            HistogramState<LT> row_state;
+            update(ctx, input_columns, reinterpret_cast<AggDataPtr>(&row_state), i);
+            serialize_to_column(ctx, reinterpret_cast<ConstAggDataPtr>(&row_state), dst.get());
+        }
     }
 
     std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
@@ -164,9 +342,12 @@ public:
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
-        if (ctx->get_num_args() == 4) {
+        if (ctx->get_num_args() == 4)
+        {
             finalize_to_column_with_ndv(ctx, state, to);
-        } else {
+        }
+        else
+        {
             finalize_to_column_without_ndv(ctx, state, to);
         }
     }
@@ -174,6 +355,27 @@ public:
     std::string get_name() const override { return "histogram"; }
 
 private:
+    static constexpr uint8_t kSerializationVersion = 1;
+
+    template <typename Value>
+    static void append_binary_value(std::string* dst, const Value& value)
+    {
+        static_assert(std::is_trivially_copyable_v<Value>);
+        dst->append(reinterpret_cast<const char*>(&value), sizeof(Value));
+    }
+
+    template <typename Value>
+    static bool read_binary_value(const uint8_t** pos, const uint8_t* end, Value* value)
+    {
+        static_assert(std::is_trivially_copyable_v<Value>);
+        if (static_cast<size_t>(end - *pos) < sizeof(Value)) {
+            return false;
+        }
+        memcpy(value, *pos, sizeof(Value));
+        *pos += sizeof(Value);
+        return true;
+    }
+
     void finalize_to_column_without_ndv(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                                         Column* to) const {
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
@@ -182,36 +384,33 @@ private:
         // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
         // analysis, so by the time we get here it is always positive. Assert the invariant.
         DCHECK_GT(bucket_num, 0);
-        int bucket_size = this->data(state).column->size() / bucket_num;
+        const auto& histogram_state = this->data(state);
+        const int64_t bucket_size = histogram_state.row_count / bucket_num;
 
-        // Build bucket
+        // Consume a complete equal-value run at once so duplicates never straddle bucket boundaries.
         std::vector<Bucket<LT>> buckets;
-        ColumnViewer<LT> viewer(this->data(state).column);
-        for (size_t i = 0; i < viewer.size(); ++i) {
-            auto v = viewer.value(i);
-            if (viewer.is_null(i)) {
-                continue;
-            }
-            if (buckets.empty()) {
-                Bucket<LT> bucket(v, v, 1, 1);
+        for (const auto& [v, count] : histogram_state.value_frequencies) {
+            const auto value = AggDataTypeTraits<LT>::get_ref(v);
+            if (buckets.empty())
+            {
+                Bucket<LT> bucket(value, value, count, count);
+                bucket.count_in_bucket = count;
                 buckets.emplace_back(bucket);
-            } else {
+            }
+            else
+            {
                 Bucket<LT>* last_bucket = &buckets.back();
 
-                if (last_bucket->is_equals_to_upper(v)) {
-                    last_bucket->count++;
-                    last_bucket->count_in_bucket++;
-                    last_bucket->upper_repeats++;
+                if (last_bucket->count_in_bucket >= bucket_size)
+                {
+                    Bucket<LT> bucket(value, value, last_bucket->count + count, count);
+                    bucket.count_in_bucket = count;
+                    buckets.emplace_back(bucket);
                 } else {
-                    if (last_bucket->count_in_bucket >= bucket_size) {
-                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
-                    } else {
-                        last_bucket->update_upper(v);
-                        last_bucket->count++;
-                        last_bucket->count_in_bucket++;
-                        last_bucket->upper_repeats = 1;
-                    }
+                    last_bucket->update_upper(value);
+                    last_bucket->count += count;
+                    last_bucket->count_in_bucket += count;
+                    last_bucket->upper_repeats = count;
                 }
             }
         }
@@ -248,57 +447,47 @@ private:
         // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
         // analysis, so by the time we get here it is always positive. Assert the invariant.
         DCHECK_GT(bucket_num, 0);
-        int bucket_size = this->data(state).column->size() / bucket_num;
+        const auto& histogram_state = this->data(state);
+        const int64_t bucket_size = histogram_state.row_count / bucket_num;
 
         // prepare ndv estimation
         auto ndv_estimator = NDVEstimatorBuilder::build(ndv_estimator_name);
         int64_t sample_distinct = 0;
         int64_t count_once = 0;
-        bool new_upper = false;
-
         // Build bucket
         std::vector<Bucket<LT>> buckets;
-        ColumnViewer<LT> viewer(this->data(state).column);
-        for (size_t i = 0; i < viewer.size(); ++i) {
-            auto v = viewer.value(i);
-            if (viewer.is_null(i)) {
-                continue;
-            }
-            if (buckets.empty()) {
-                Bucket<LT> bucket(v, v, 1, 1);
+        for (const auto& [v, count] : histogram_state.value_frequencies)
+        {
+            const auto value = AggDataTypeTraits<LT>::get_ref(v);
+            if (buckets.empty())
+            {
+                Bucket<LT> bucket(value, value, count, count);
+                bucket.count_in_bucket = count;
                 buckets.emplace_back(bucket);
                 sample_distinct = 1;
-                count_once = 1;
-                new_upper = true;
-            } else {
+                count_once = count == 1;
+            }
+            else
+            {
                 Bucket<LT>* last_bucket = &buckets.back();
 
-                if (last_bucket->is_equals_to_upper(v)) {
-                    last_bucket->count++;
-                    last_bucket->count_in_bucket++;
-                    last_bucket->upper_repeats++;
-                    if (new_upper) {
-                        count_once--;
-                        new_upper = false;
-                    }
+                if (last_bucket->count_in_bucket >= bucket_size)
+                {
+                    int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
+                                                               count_once, sample_ratio);
+                    last_bucket->distinct_count = last_ndv;
+                    Bucket<LT> bucket(value, value, last_bucket->count + count, count);
+                    bucket.count_in_bucket = count;
+                    buckets.emplace_back(bucket);
+                    sample_distinct = 1;
+                    count_once = count == 1;
                 } else {
-                    new_upper = true;
-                    if (last_bucket->count_in_bucket >= bucket_size) {
-                        int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
-                                                                   count_once, sample_ratio);
-                        last_bucket->distinct_count = last_ndv;
-                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
-                        buckets.emplace_back(bucket);
-                        sample_distinct = 1;
-                        count_once = 1;
-                    } else {
-                        last_bucket->update_upper(v);
-                        last_bucket->count++;
-                        last_bucket->count_in_bucket++;
-                        last_bucket->upper_repeats = 1;
-                        sample_distinct++;
-                        count_once++;
-                    }
+                    last_bucket->update_upper(value);
+                    last_bucket->count += count;
+                    last_bucket->count_in_bucket += count;
+                    last_bucket->upper_repeats = count;
+                    sample_distinct++;
+                    count_once += count == 1;
                 }
             }
         }
