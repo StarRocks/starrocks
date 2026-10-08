@@ -355,9 +355,15 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("reason",
                     () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
                             MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_DATA_TIER_FILE_SELECTION =
+            new MetricWithLabelGroup<>("mode",
+                    () -> new LongCounterMetric("tablet_pre_split_data_tier_file_selection",
+                            MetricUnit.REQUESTS,
+                            "total data-tier FILES samples by how their scanned files were chosen"));
     public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT;
 
     public static Histogram HISTO_QUERY_LATENCY;
 
@@ -1127,6 +1133,8 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "data_tier_scanned_bytes", "percent"));
         // Compaction score (rounded to the nearest integer) of the most recent partition that
         // triggered a lake compaction. The trigger picks partitions by *max* tablet score, so we
         // expose the max (not the average) — keeps the metric aligned with the scheduler's

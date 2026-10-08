@@ -18,13 +18,16 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
@@ -124,7 +127,7 @@ class InsertFromTableSampleSubqueryExecutorTest {
         OlapTable sourceTable = mockOlapTable(0L);
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, "`iceberg`.`db`.`src`", List.of("k"), List.of(), "`tenant_id` = 't1'",
+                sourceTable, "`iceberg`.`db`.`src`", Map.of("k", "k"), "`tenant_id` = 't1'",
                 computeResource, 128_000_000L, 1_000L);
         SampleRequest request = new SampleRequest(
                 scanContext, List.of(bigintColumn("k")), List.of(), Long.MAX_VALUE, 0L);
@@ -183,6 +186,58 @@ class InsertFromTableSampleSubqueryExecutorTest {
         Assertions.assertEquals("20", rows.get(0).partitionSourceTuple().get(0).getStringValue());
     }
 
+    @Test
+    void projectsALiteralFedPartitionColumnAsTheLiteralCastToTheColumnType() throws Exception {
+        // INSERT INTO t SELECT k, v, '20260917' AS dt FROM src: no source column backs dt, so the
+        // sample projects the literal, cast the way the load casts it, and decodes the DATE the
+        // load routes on into the partition tuple.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"10\", \"2026-09-17\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(bigintColumn("k")), List.of(new Column("dt", DateType.DATE)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `k`, CAST('20260917' AS date) FROM"),
+                "the literal stands in for the partition column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("2026-09-17", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void literalFedSortKeyColumnIsProjectedAndDecodedIntoTheSortKeyTuple() throws Exception {
+        // ORDER BY (dt, k) with '20260917' AS dt: the boundary tuple must carry the DATE the rows have.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", \"10\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(new Column("dt", DateType.DATE), bigintColumn("k")), List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT CAST('20260917' AS date), `k` FROM"),
+                "the literal stands in for the sort-key column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals("2026-09-17", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(1).getStringValue());
+    }
+
     // ---------------------------------------------------------------------------
     // Error-path tests
     // ---------------------------------------------------------------------------
@@ -211,6 +266,28 @@ class InsertFromTableSampleSubqueryExecutorTest {
     }
 
     // ---------------------------------------------------------------------------
+    // Source-name remap tests
+    // ---------------------------------------------------------------------------
+
+    @Test
+    void baseSortKeyProjectedBySourceNameFromMap() throws Exception {
+        // target column "k" maps to source column "src_k"; projection must use the source name.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(tableRequest(sourceTable, "`db`.`src`", List.of("src_k"), List.of(), /*where=*/ null,
+                List.of(bigintColumn("k")), List.of()));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `src_k` FROM"),
+                "base sort key must be projected by its mapped source name: " + capturedSql);
+    }
+
+    // ---------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------
 
@@ -229,11 +306,20 @@ class InsertFromTableSampleSubqueryExecutorTest {
             List<Column> sortKeyColumns,
             List<Column> partitionSourceColumns) {
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
+        // Build the target->source map from the paired lists (both sort-key and partition columns):
+        // sortKeyColumns[i].name -> sortKeySourceColumnNames[i], partitionSourceColumns[i].name -> ...[i].
+        Map<String, String> targetToSource = new HashMap<>();
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            targetToSource.put(sortKeyColumns.get(i).getName().toLowerCase(), sortKeySourceColumnNames.get(i));
+        }
+        for (int i = 0; i < partitionSourceColumns.size(); i++) {
+            targetToSource.put(partitionSourceColumns.get(i).getName().toLowerCase(), partitionSourceColumnNames.get(i));
+        }
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, sourceFromSql, sortKeySourceColumnNames, partitionSourceColumnNames,
-                wherePredicateSql, computeResource);
+                sourceTable, sourceFromSql, targetToSource, wherePredicateSql, computeResource);
         return new SampleRequest(
                 scanContext, sortKeyColumns, partitionSourceColumns,
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
     }
+
 }

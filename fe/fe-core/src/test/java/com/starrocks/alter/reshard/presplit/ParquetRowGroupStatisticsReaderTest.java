@@ -22,6 +22,7 @@ import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.parquet.format.ColumnOrder;
 import org.apache.parquet.format.TypeDefinedOrder;
@@ -45,6 +46,21 @@ class ParquetRowGroupStatisticsReaderTest {
 
     @TempDir
     java.nio.file.Path tempDirectory;
+
+    @Test
+    void footerIoFailureSignalsDataTierFallback() {
+        Path missingPath = new Path(tempDirectory.resolve("missing.parquet").toUri());
+        FileStatus missingFile = new FileStatus(
+                1L, false, 0, 0L, 0L, missingPath);
+
+        MetaTierUnavailableException failure = Assertions.assertThrows(MetaTierUnavailableException.class,
+                () -> ParquetRowGroupStatisticsReader.read(
+                        missingFile, new Configuration(),
+                        List.of(new Column("sort_key", IntegerType.BIGINT)), null));
+
+        Assertions.assertTrue(failure.getMessage().contains("failed to read Parquet footer"));
+        Assertions.assertInstanceOf(IOException.class, failure.getCause());
+    }
 
     @Test
     void readsBigintStatisticsAcrossWholeFile() throws Exception {
@@ -716,6 +732,66 @@ class ParquetRowGroupStatisticsReaderTest {
                 ParquetRowGroupStatisticsReader.read(
                         PresplitTestSupport.statusOf(parquetPath), new Configuration(),
                         List.of(new Column("event_ts", IntegerType.BIGINT)), null));
+    }
+
+    @Test
+    void readsDatetimeStatisticsForUtf8StringColumn() throws Exception {
+        // Some Parquet exports store timestamps as UTF8 strings. The footer min/max are the
+        // lexicographically min/max strings; for canonical ISO-8601 text ("yyyy-MM-dd HH:mm:ss")
+        // that equals chronological order, so a BINARY(UTF8) column backs a DATETIME sort key.
+        // toVariant coerces each bound with the same Variant.of the data tier applies to a
+        // projected string, rendering the canonical datetime boundary text.
+        Path parquetPath = writeParquet(
+                "message schema { required binary event_ts (UTF8); }",
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("event_ts", String.format("2025-%02d-01 12:30:00", rowIndex + 1)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                List.of(new Column("event_ts", DateType.DATETIME)), null);
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertFalse(stats.get(0).isTruncated());
+        Assertions.assertEquals("2025-01-01 12:30:00",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("2025-03-01 12:30:00",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void readsDateStatisticsForUtf8StringColumn() throws Exception {
+        // Same string-backed footer path into a StarRocks DATE sort key: the lexicographic
+        // "yyyy-MM-dd" min/max render as canonical date boundaries.
+        Path parquetPath = writeParquet(
+                "message schema { required binary event_day (UTF8); }",
+                /*rowCount=*/ 3,
+                (group, rowIndex) -> group.append("event_day", String.format("2025-%02d-01", rowIndex + 1)));
+
+        List<RowGroupStatistics> stats = ParquetRowGroupStatisticsReader.read(
+                PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                List.of(new Column("event_day", DateType.DATE)), null);
+
+        Assertions.assertEquals(1, stats.size());
+        Assertions.assertEquals("2025-01-01",
+                stats.get(0).getMinTuple().getValues().get(0).getStringValue());
+        Assertions.assertEquals("2025-03-01",
+                stats.get(0).getMaxTuple().getValues().get(0).getStringValue());
+    }
+
+    @Test
+    void unparseableStringForDatetimeSortKeyFallsBackToDataTier() throws Exception {
+        // A UTF8 string that is not a parseable datetime: DateVariant's parseStrictDateTime throws
+        // IllegalArgumentException, which convertBlock wraps as MetaTierUnavailableException so the
+        // pipeline falls back to the exact data tier (which coerces the same value at query time).
+        Path parquetPath = writeParquet(
+                "message schema { required binary event_ts (UTF8); }",
+                /*rowCount=*/ 2,
+                (group, rowIndex) -> group.append("event_ts", "not-a-datetime-" + rowIndex));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () ->
+                ParquetRowGroupStatisticsReader.read(
+                        PresplitTestSupport.statusOf(parquetPath), new Configuration(),
+                        List.of(new Column("event_ts", DateType.DATETIME)), null));
     }
 
     @Test

@@ -21,6 +21,19 @@ description: "Alphabetical t - z"
 - 単位: バイト
 - 説明: タブレットメタデータが使用するメモリ。
 
+## `tablet_pre_split_data_tier_file_selection`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `mode` — `subset`（一部のファイルだけをスキャン。スキャン量は `tablet_pre_split_data_tier_scan_byte_limit` で決まる）、`under_limit`（入力が上限以内のため全ファイルをスキャン）、`disabled`（上限が `0` のため全ファイルをスキャン）、`all_selected`（入力は上限を超えたが、ファイル単位の選択、パーティションごとの最低 1 ファイル、最少ファイル数の下限により、結果的に全ファイルが選ばれた）、`partition_from_file_data`（入力は上限を超えたが、パーティション列がパスではなくファイルのデータから取られる、またはパス由来と定数由来のパーティション列が混在するため、サブセットではパーティション全体を取りこぼすおそれがあり、全ファイルをスキャン）、`path_not_expressible`（`INSERT INTO ... SELECT FROM FILES()` のみ。選ばれたファイルのパスに FILES がそのままのパスとして扱えない文字（`,`、`*`、`?`、`[`、`{`、`\`、ホスト以降のパス中の `:`、先頭・末尾の空白）を含むため、ステートメント自身の `path` で全ファイルをスキャン）。
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みにおける data tier サンプリングの累計回数を、スキャン対象ファイルの選び方別に集計したもの。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 単位: -
+- タイプ: ヒストグラム
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みで、data tier の各サンプリングがスキャンしたバイト数の入力全体に対する割合（パーセント、整数に切り捨て）。したがって `100` はすべてのファイルをスキャンしたことを表します。
+
 ## `tablet_schema_mem_bytes`
 
 - 単位: バイト
