@@ -68,7 +68,7 @@ inline uint32_t ValueFallback(const char* data, size_t n) {
     return ExtendFallback(0, data, n);
 }
 
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 

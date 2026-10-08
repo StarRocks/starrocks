@@ -249,7 +249,7 @@ TEST(CRC32C, EquivalenceAcrossBoundaries) {
     }
 }
 
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 TEST(CRC32C, DirectArmPmullSimd) {
     if (!HasArmPmull()) {
         GTEST_SKIP() << "ARM PMULL is not supported or is disabled on this host.";

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 
 #include <arm_neon.h>
 
@@ -122,7 +122,7 @@ TARGET_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t l
     }
 
     x2 = clmul_01(x1, x0);
-    const uint32_t mask_data[4] = {0xffffffff, 0, 0xffffffff, 0};
+    static const uint32_t __attribute__((aligned(16))) mask_data[4] = {0xffffffff, 0, 0xffffffff, 0};
     x3 = vreinterpretq_u8_u32(vld1q_u32(mask_data));
     x1 = vextq_u8(x1, vdupq_n_u8(0), 8);
     x1 = veorq_u8(x1, x2);
@@ -145,4 +145,4 @@ TARGET_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t l
 
 } // namespace starrocks::crc32c
 
-#endif // defined(__ARM_NEON) && defined(__aarch64__)
+#endif // defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
