@@ -524,7 +524,8 @@ CLEANUP {
 
 * Notes:
 * The framework's built-in cleanup (dropping parsed DATABASE/RESOURCE) still runs; CLEANUP is an addition for fine-grained or external cleanup.
-* Results in CLEANUP are not validated; failures will be logged but do not block other cleanup steps.
+* CLEANUP does not compare result contents. SQL errors, nonzero shell exit codes, and exceptions from Python helpers mark the case as failed. Helpers must raise an exception to report failure.
+* Cleanup failures are logged and collected while the remaining cleanup statements continue. Recorded results are not saved if cleanup fails. Normal statements outside CLEANUP can still validate expected errors.
 
 ### 11. SET_VAR
 
