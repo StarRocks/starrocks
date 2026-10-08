@@ -47,15 +47,9 @@
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
-<<<<<<< HEAD
         <arrow.version>17.0.0</arrow.version>
-        <jackson.version>2.21.4</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.4 version released -->
-=======
-        <arrow.version>18.0.0</arrow.version>
         <jackson.version>2.21.7</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.7 version released -->
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
