@@ -917,6 +917,144 @@ public class UDFHelper {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void batchUpdateState(Object o, Method method, Object[] column)
+            throws Throwable {
+        Object[][] inputs = (Object[][]) column;
+        boolean isVarArgs = method.isVarArgs();
+        int numRows = inputs[0].length;
+        
+        try {
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < numRows; ++i) {
+                    Object[] varargsParam = new Object[numVarArgs];
+                    for (int j = 0; j < numVarArgs; ++j) {
+                        varargsParam[j] = inputs[j][i];
+                    }
+                    method.invoke(o, (Object) varargsParam);
+                }
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length];
+                for (int i = 0; i < numRows; ++i) {
+                    for (int j = 0; j < column.length; ++j) {
+                        parameter[j] = inputs[j][i];
+                    }
+                    method.invoke(o, parameter);
+                }
+            }
+        } catch (InvocationTargetException e) {
+            throw e.getTargetException();
+        }
+    }
+
+    public static void batchUpdateIfNotNull(Object o, Method method, FunctionStates ctx, int[] states, Object[] column)
+            throws Throwable {
+        Object[][] inputs = (Object[][]) column;
+        boolean isVarArgs = method.isVarArgs();
+        int numRows = states.length;
+        
+        try {
+            if (isVarArgs) {
+                // For varargs methods, collect all input columns into a single varargs array parameter
+                int numVarArgs = inputs.length;
+                for (int i = 0; i < numRows; ++i) {
+                    if (states[i] != -1) {
+                        Object state = ctx.get(states[i]);
+                        Object[] varargsParam = new Object[numVarArgs];
+                        for (int j = 0; j < numVarArgs; ++j) {
+                            varargsParam[j] = inputs[j][i];
+                        }
+                        method.invoke(o, state, varargsParam);
+                    }
+                }
+            } else {
+                // Original logic for non-varargs methods
+                Object[] parameter = new Object[inputs.length + 1];
+                for (int i = 0; i < numRows; ++i) {
+                    if (states[i] != -1) {
+                        parameter[0] = ctx.get(states[i]);
+                        for (int j = 0; j < column.length; ++j) {
+                            parameter[j + 1] = inputs[j][i];
+                        }
+                        method.invoke(o, parameter);
+                    }
+                }
+            }
+        } catch (InvocationTargetException e) {
+            throw e.getTargetException();
+        }
+    }
+
+    static final class DirectByteBufferFactory {
+        private final Constructor<?> constructor;
+        private final boolean longCapacity;
+
+        // Makes it executable on any JDK
+        DirectByteBufferFactory(Constructor<?> constructor, boolean longCapacity) {
+            this.constructor = constructor;
+            this.longCapacity = longCapacity;
+        }
+
+        // Resolve the DirectByteBuffer constructor, probing the legacy (long, int) signature
+        // first and falling back to the JDK 21+ (long, long) signature (JDK-8303083). The
+        // capacity type of the resolved constructor determines how newBuffer boxes it.
+        static DirectByteBufferFactory resolve() {
+            Class<?> directByteBufferClass;
+            try {
+                directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
+            } catch (ClassNotFoundException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+            Constructor<?> constructor = getConstructorOrNull(directByteBufferClass, int.class);
+            boolean longCapacity = constructor == null;
+            if (longCapacity) {
+                // JDK 21+
+                constructor = getConstructorOrNull(directByteBufferClass, long.class);
+            }
+            if (constructor == null) {
+                throw new ExceptionInInitializerError("no compatible java.nio.DirectByteBuffer constructor");
+            }
+            try {
+                constructor.setAccessible(true);
+            } catch (RuntimeException e) {
+                // InaccessibleObjectException since JDK 9. Later calls only see "Could not initialize class",
+                // with this message as the cause, so name the fix here.
+                throw new ExceptionInInitializerError("Java UDAF merge needs "
+                        + "--add-opens=java.base/java.nio=ALL-UNNAMED in the BE JVM options (JAVA_OPTS in be.conf): "
+                        + e.getMessage());
+            }
+            return new DirectByteBufferFactory(constructor, longCapacity);
+        }
+
+        static Constructor<?> getConstructorOrNull(Class<?> clazz, Class<?> capacityType) {
+            try {
+                return clazz.getDeclaredConstructor(long.class, capacityType);
+            } catch (NoSuchMethodException e) {
+                return null;
+            }
+        }
+
+        boolean usesLongCapacity() {
+            return longCapacity;
+        }
+
+        Object newBuffer(long address, int capacity) throws ReflectiveOperationException {
+            // Box the capacity to match the resolved constructor's second parameter type.
+            Object capacityArg = longCapacity ? (Object) (long) capacity : (Object) capacity;
+            return constructor.newInstance(address, capacityArg);
+        }
+    }
+
+    // Lazy load
+    private static final class DirectByteBufferFactoryHolder {
+        static final DirectByteBufferFactory INSTANCE = DirectByteBufferFactory.resolve();
+    }
+
+>>>>>>> 9e75667 ([BugFix] Fail a Java UDAF merge that cannot wrap its states instead of returning NULL (#80098))
     public static Object[] batchCreateDirectBuffer(long data, int[] offsets, int size) throws Exception {
         Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
         Constructor<?> constructor = directByteBufferClass.getDeclaredConstructor(long.class, int.class);
