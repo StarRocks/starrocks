@@ -36,6 +36,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
@@ -80,6 +81,8 @@ public class ExecuteExceptionHandler {
             handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
         } else if (e instanceof LakeMetaVersionNotFoundException) {
             handleLakeMetaVersionNotFound((LakeMetaVersionNotFoundException) e, context);
+        } else if (e instanceof RangeColocateUnalignedException) {
+            handleRangeColocateUnaligned((RangeColocateUnalignedException) e, context);
         } else {
             throw e;
         }
@@ -354,6 +357,21 @@ public class ExecuteExceptionHandler {
 
     private static String describe(OptionalLong value) {
         return value.isPresent() ? String.valueOf(value.getAsLong()) : "unknown";
+    }
+
+    /**
+     * A range-colocate scan's tablet-to-bucket assignment went stale between planning and scheduling (a tablet split
+     * or merge published in between). The attempt failed before anything was deployed; a new plan uses the current
+     * tablets, or a shuffle while the group is realigned. If the layout is still unaligned when the statement is
+     * re-planned, the retries fail with the same error.
+     */
+    private static void handleRangeColocateUnaligned(RangeColocateUnalignedException e, RetryContext context)
+            throws Exception {
+        rebuildExecPlan(e, context);
+        LOG.warn("Range colocate bucket assignment is stale, replanned. queryId={}, attempt={}, error={}",
+                DebugUtil.printId(context.connectContext.getExecutionId()), context.retryTime + 1, e.getMessage());
+        Tracers.record(Tracers.Module.SCHEDULER, "RangeColocate.REPLAN",
+                String.format("attempt=%d, error=%s", context.retryTime + 1, e.getMessage()));
     }
 
     private static void handleRpcException(RpcException e, RetryContext context) throws Exception {

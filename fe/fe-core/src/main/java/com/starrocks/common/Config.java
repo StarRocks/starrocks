@@ -1386,6 +1386,18 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    /**
+     * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
+     * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch
+     * publish path.
+     * Only a partition that actually failed waits. A partition that publishes on its first attempt is never
+     * delayed, and one that is merely waiting for an earlier version to become visible is not treated as a
+     * failure. Set it to 0 to retry on every daemon tick, which is the behaviour from before the backoff
+     * existed. A negative value is clamped to 0.
+     */
+    @ConfField(mutable = true)
+    public static long lake_publish_version_retry_interval_ms = 1000;
+
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
@@ -2501,13 +2513,33 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int authentication_ldap_simple_server_port = 389;
 
+    @ConfField(mutable = true, comment = "TCP connect timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple. Without it the bind falls back to the OS TCP timeout, which can pin " +
+            "the request thread for minutes when the directory is unreachable. Matches the default of the other " +
+            "LDAP paths (group provider, enterprise ldap integration).")
+    public static int authentication_ldap_simple_conn_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "Socket read timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple.")
+    public static int authentication_ldap_simple_conn_read_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "How long (seconds) a rejected credential is remembered so that a " +
+            "client retrying the same wrong password does not produce one LDAP bind per attempt. The cache key " +
+            "includes a hash of the credential, so fixing the password takes effect immediately. 0 disables it.")
+    public static int authentication_failure_cache_ttl_second = 10;
+
+    @ConfField(mutable = true, comment = "Maximum number of rejected credentials remembered by " +
+            "authentication_failure_cache_ttl_second. Bounds the memory a client (or an attacker) cycling " +
+            "usernames can occupy.")
+    public static int authentication_failure_cache_capacity = 1024;
+
     @ConfField(mutable = true, comment = "false to enable ssl connection")
     public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
 
     @ConfField(mutable = true, comment = "ldap ssl trust store file path, supports perm and jks formats")
     public static String authentication_ldap_simple_ssl_conn_trust_store_path = "";
 
-    @ConfField(mutable = true, comment = "LDAP SSL trust store file password; " +
+    @ConfField(mutable = true, sensitive = true, comment = "LDAP SSL trust store file password; " +
             "no password is required for files in PEM format.")
     public static String authentication_ldap_simple_ssl_conn_trust_store_pwd = "";
 
@@ -2532,7 +2564,7 @@ public class Config extends ConfigBase {
     /**
      * the root DN password to search users for authentication_ldap_simple
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, sensitive = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
@@ -2547,6 +2579,44 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
+     * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
+     * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
+     * A security integration property of the same name overrides this value.
+     * This is a policy switch rather than a per-server setting, so a cluster-wide default is useful:
+     * turning memberOf on everywhere is a single ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true, comment = "where the groups of an LDAP authenticated user come from: " +
+            "group_provider (default) | memberof | both")
+    public static String authentication_ldap_simple_group_source = "group_provider";
+
+    /**
+     * Name of the attribute on the user entry that carries its group membership.
+     * "memberOf" fits Active Directory and OpenLDAP with the memberof overlay;
+     * Sun/Oracle Directory Server and 389-DS use "isMemberOf".
+     */
+    @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
+            "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
+    public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
+     * Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case.
+     * <p>
+     * When true, a login whose name differs only in case from a user created with
+     * AUTHENTICATION_LDAP_SIMPLE still resolves to that user, so its per-user DN and the roles
+     * granted to it apply; and a login authenticated by an LDAP security integration takes its
+     * session identity from the name the directory holds rather than the one the client typed.
+     * <p>
+     * This both widens which stored user a login may resolve to and changes the value reported by
+     * current_user() and SHOW PROCESSLIST, so it is opt-in. Native-password, JWT and OAuth2 users
+     * are never affected. Group names are matched without regard to case independently of this.
+     */
+    @ConfField(mutable = true, comment = "Whether to relax LDAP/AD user name matching to be " +
+            "case-insensitive on the StarRocks side. Affects native users whose auth plugin is " +
+            "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
+            "Does not affect native-password, JWT or OAuth2 users.")
+    public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -2556,7 +2626,7 @@ public class Config extends ConfigBase {
     /**
      * Cluster token used for internal authentication.
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String auth_token = "";
 
     /**
@@ -3600,7 +3670,7 @@ public class Config extends ConfigBase {
      * set this to enable Transparent Data Encryption(TDE)
      * once set, should not be changed, or the data depending on this key cannot be read anymore
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String default_master_key = "";
 
     /**
@@ -3688,9 +3758,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean aws_s3_use_instance_profile = false;
 
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_access_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_secret_key = "";
 
     @ConfField
@@ -3707,9 +3777,9 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_sas_token = "";
 
     // azure adls2
@@ -3717,9 +3787,9 @@ public class Config extends ConfigBase {
     public static String azure_adls2_endpoint = "";
     @ConfField
     public static String azure_adls2_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_sas_token = "";
     @ConfField
     public static boolean azure_adls2_oauth2_use_managed_identity = false;
@@ -3727,7 +3797,7 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_tenant_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_id = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_oauth2_client_secret = "";
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
@@ -3742,11 +3812,11 @@ public class Config extends ConfigBase {
     public static String gcp_gcs_path = "";
     @ConfField
     public static String gcp_gcs_use_compute_engine_service_account = "true";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_email = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key_id = "";
     @ConfField
     public static String gcp_gcs_impersonation_service_account = "";
@@ -4166,6 +4236,16 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+     * Upper bound, in bytes, of the off-heap buffers FE keeps for compressing query profiles and other payloads.
+     * Compressing between off-heap buffers keeps java.util.zip out of JNI critical sections, which otherwise hold
+     * the JVM's GC locker and can make allocations fail with a false OutOfMemoryError. A request that does not fit
+     * within this bound is compressed on-heap as before. Set to 0 to turn off-heap compression off: everything is then
+     * compressed on-heap, in short chunks, and buffers already allocated are dropped as they are returned.
+     */
+    @ConfField(mutable = true)
+    public static long offheap_deflate_buffer_pool_max_bytes = 128L * 1024 * 1024;
+
+    /**
      * Deprecated
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
@@ -4230,13 +4310,13 @@ public class Config extends ConfigBase {
     /**
      * the password of keystore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_keystore_password = "";
 
     /**
      * the password of private key
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_key_password = "";
 
     /**
@@ -4248,7 +4328,7 @@ public class Config extends ConfigBase {
     /**
      * the password of truststore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
 
     /**
@@ -4921,7 +5001,7 @@ public class Config extends ConfigBase {
     /**
      * The secret used to authorize StarRocks client with the authorization server.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String oauth2_client_secret = "";
 
     /**
@@ -4977,6 +5057,26 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
+
+    /**
+     * Connect timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s)
+     * URL. Must be positive.
+     * <p>
+     * Without a bound the fetch can hang forever on a server that accepts the connection and never
+     * answers - and it runs not only on the statement's own session but on the journal replay thread,
+     * where it would stop the FE from applying this and every later metadata operation, and from becoming
+     * ready at all during a restart.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_connect_timeout_ms = 5000;
+
+    /**
+     * Read timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s) URL.
+     * Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see
+     * `group_provider_http_connect_timeout_ms` for why the fetch must be bounded at all.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_read_timeout_ms = 30000;
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
@@ -5175,10 +5275,11 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
-            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
-            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
-            + "enable_tablet_pre_split must also be true for pre-split to run.")
+            + "INSERT INTO ... SELECT FROM <table> loads whose source is an internal OLAP table or a "
+            + "table in an external catalog (views excluded), including explicit real/temp partitions "
+            + "and static/dynamic overwrite. Default on as of v4.1.0 after the GA gate. Set to false "
+            + "to disable cluster-wide. The session variable enable_tablet_pre_split must also be "
+            + "true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
@@ -5221,6 +5322,34 @@ public class Config extends ConfigBase {
             + "so an oversize row still produces a non-empty sample.")
     public static long tablet_pre_split_sample_byte_limit = 16L * 1024L * 1024L;
 
+    @ConfField(mutable = true, comment = "Soft limit on the source-file bytes the Sample-Based Tablet Pre-Split "
+            + "data tier scans for a Broker Load or INSERT-from-FILES load. A larger input is sampled from a "
+            + "subset of its files, so sampling time no longer grows with the input, while the tablet count is "
+            + "still sized from every file. Files are sorted by path and picked at even byte intervals, which "
+            + "favors larger files; each path partition (COLUMNS FROM PATH / columns_from_path) gets a share in "
+            + "proportion to its bytes and at least one file. Files are taken whole, so a scan can exceed the "
+            + "limit. The exception is a partition column read from the file data rather than from the path, or "
+            + "path and literal partition columns mixed: every file is then still scanned, because a subset "
+            + "could miss whole partitions. 0 scans every file.")
+    public static long tablet_pre_split_data_tier_scan_byte_limit = 4L * 1024L * 1024L * 1024L;
+
+    @ConfField(mutable = true, comment = "Fewest files the Sample-Based Tablet Pre-Split data tier scans "
+            + "once it samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit), "
+            + "so the sample spans enough independent files even when each file is large or holds only a narrow "
+            + "range of the sort key. Split across path partitions by bytes. This floor can take the scan above the "
+            + "byte limit, but adds no files once the scan reaches four times that limit. A positive "
+            + "tablet_pre_split_data_tier_max_scan_files takes precedence.")
+    public static int tablet_pre_split_data_tier_min_scan_files = 64;
+
+    @ConfField(mutable = true, comment = "Most files the Sample-Based Tablet Pre-Split data tier scans once it "
+            + "samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit). Every file in "
+            + "a subset costs FILES one metadata lookup before it reads anything, so a subset of many small "
+            + "files would otherwise stall on thousands of lookups. Split across path partitions by bytes; every "
+            + "partition keeps at least one file, so the cap can be exceeded by up to one file per partition; "
+            + "with more partitions than the cap, only the heaviest are sampled, one file each. 0 or a negative "
+            + "value removes the cap.")
+    public static int tablet_pre_split_data_tier_max_scan_files = 512;
+
     @ConfField(mutable = true, comment = "Maximum overlap fraction tolerated when Sample-Based "
             + "Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. "
             + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
@@ -5237,7 +5366,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
             + "Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions "
-            + "(those with the lowest sample count) are dropped and fall back to runtime auto-create "
+            + "(the lightest: fewest input bytes when the data tier knows them per partition, otherwise fewest "
+            + "sampled rows) are dropped and fall back to runtime auto-create "
             + "with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to "
             + "zero or a negative value to disable the cap.")
     public static int tablet_pre_split_max_partitions_per_load = 32;

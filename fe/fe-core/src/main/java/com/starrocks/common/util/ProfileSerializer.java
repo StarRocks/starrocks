@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 /**
  * Compact binary serialisation for {@link RuntimeProfile} trees.
@@ -120,7 +119,7 @@ final class ProfileSerializer {
         ProfileRawNode root = buildNode(profile, localBaseIdx, localCount);
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-        try (DataOutputStream dos = new DataOutputStream(new GZIPOutputStream(baos))) {
+        try (DataOutputStream dos = new DataOutputStream(baos)) {
             dos.writeInt(MAGIC);
             dos.writeByte(VERSION);
             dos.writeShort(ProfileKeyDictionary.STATIC_SIZE); // GLOBAL_COUNT = S
@@ -130,7 +129,9 @@ final class ProfileSerializer {
             }
             writeNode(dos, root, localBaseIdx, localCount);
         }
-        return baos.toByteArray();
+        // Compressed in one go and off-heap, instead of streaming through GZIPOutputStream: every small write there
+        // is a Deflater call that holds the GC locker. The result is the same gzip format, read back as before.
+        return OffHeapDeflate.gzip(baos.toByteArray());
     }
 
     /**

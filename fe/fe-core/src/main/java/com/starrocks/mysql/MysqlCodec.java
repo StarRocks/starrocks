@@ -360,7 +360,7 @@ public class MysqlCodec {
         } else {
             return switch (type.getPrimitiveType()) {
                 // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
-                case CHAR, VARCHAR, HLL, BITMAP, LARGEINT, JSON -> CHARSET_UTF8;
+                case CHAR, VARCHAR, HLL, BITMAP, LARGEINT, JSON, FILE -> CHARSET_UTF8;
                 default -> CHARSET_BINARY;
             };
         }

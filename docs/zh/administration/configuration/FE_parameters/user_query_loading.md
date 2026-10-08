@@ -579,6 +579,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用 UDF。
 - 引入版本: -
 
+### `enable_virtual_columns`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在内表上提供 `_tablet_id_` 等虚拟列。虚拟列是在查询时计算生成的只读元数据列，不会存储。当该参数设置为 `false` 时，查询中引用虚拟列会因无法解析该列而报错。更多信息，参见 [虚拟列](../../../table_design/virtual_columns.md)。
+- 引入版本: -
+
 ### `expr_children_limit`
 
 - 默认值: 10000

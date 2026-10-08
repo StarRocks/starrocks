@@ -72,6 +72,9 @@ public:
     virtual const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
     void set_partition_exprs(const std::vector<ExprContext*>& partition_exprs) { _partition_exprs = partition_exprs; }
     virtual const std::vector<TBucketProperty>& get_bucket_properties() const { return _bucket_properties; }
+    void set_bucket_properties(const std::vector<TBucketProperty>& bucket_properties) {
+        _bucket_properties = bucket_properties;
+    }
 
     /// The pipelines of a fragment instance are organized by groups.
     /// - The operator tree is broken into several groups by CollectStatsSourceOperator (CsSource)

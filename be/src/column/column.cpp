@@ -68,28 +68,6 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-StatusOr<Column::MutablePtr> Column::downgrade_helper_func(Column* col) {
-    auto ret = col->downgrade();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() == nullptr) {
-        return nullptr;
-    } else {
-        return std::move(ret.value());
-    }
-}
-
-StatusOr<Column::MutablePtr> Column::upgrade_helper_func(Column* col) {
-    auto ret = col->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret;
-    } else if (ret.value() == nullptr) {
-        return nullptr;
-    } else {
-        return std::move(ret.value());
-    }
-}
-
 bool Column::empty_null_in_complex_column(const ImmBuffer<uint8_t>& null_data, const ImmBuffer<uint32_t>& offsets) {
     DCHECK_EQ(null_data.size(), this->size());
     if (!is_array() && !is_map()) {

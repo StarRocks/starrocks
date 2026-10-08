@@ -41,6 +41,47 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
+### H3 リソース制限
+
+以下の変更可能な正の BE 設定は H3 関数の 1 行を制限します。超過時は部分結果ではなくエラーになります。関数と中心フィルについては [H3 関数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) を参照してください。
+
+#### h3_max_cells_per_row
+
+- Default: 100000
+- Is mutable: Yes
+- Limit: cells / pre-deduplication expansion slots.
+
+#### h3_max_grid_disk_k
+
+- Default: 128
+- Is mutable: Yes
+- Limit: grid steps.
+
+#### h3_max_polygon_vertices
+
+- Default: 10000
+- Is mutable: Yes
+- Limit: coordinate positions including ring closure.
+
+#### h3_max_polygon_components
+
+- Default: 256
+- Is mutable: Yes
+- Limit: polygon components including empty components.
+
+#### h3_max_working_bytes
+
+- Default: 67108864
+- Is mutable: Yes
+- Limit: bytes of per-worker preparation and temporary buffers.
+
+#### h3_max_estimated_work_per_row
+
+- Default: 10000000
+- Is mutable: Yes
+- Limit: sum of estimated slots times (component positions + 1).
+
+
 ### ai_function_request_timeout_ms
 
 - デフォルト: 600000
@@ -768,6 +809,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: ストレージエンジンが並行ストレージボリュームスキャンに使用するスレッドの数。すべてのスレッドはスレッドプールで管理されます。
 - 導入バージョン: -
 
+### spill_max_dir_bytes_ratio
+
+- デフォルト: 0.5
+- タイプ: Double
+- 単位: -
+- 変更可能: はい
+- 説明: スピルディレクトリ（`spill_local_storage_dir`）がストレージパス（`storage_root_path`）と同じディスク上にある場合に、中間結果のスピルが使用できるディスク容量の最大割合。デフォルト値 `0.5` は、スピルがそのディスク容量の最大 50% まで使用できることを意味します。別のディスク上にあるスピルディレクトリには、この制限は適用されません。この値は BE の起動時に読み込まれるため、変更は再起動後に有効になります。
+- 導入バージョン: v3.2.0
+
 ### string_prefix_zonemap_prefix_len
 
 - デフォルト: 16
@@ -1230,6 +1280,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 有効にすると、ロードチャネルオープンRPC（例: `PTabletWriterOpen`）の処理がBRPCワーカーから専用のスレッドプールにオフロードされます。リクエストハンドラは`ChannelOpenTask`を作成し、`LoadChannelMgr::_open`をインラインで実行する代わりに、内部の`_async_rpc_pool`に送信します。これにより、BRPCスレッド内の作業とブロッキングが減少し、`load_channel_rpc_thread_pool_num`と`load_channel_rpc_thread_pool_queue_size`を介して同時実行性を調整できます。スレッドプールの送信が失敗した場合（プールが満杯またはシャットダウンされている場合）、リクエストはキャンセルされ、エラー状態が返されます。プールは`LoadChannelMgr::close()`でシャットダウンされるため、この機能を有効にする場合は、リクエストの拒否や処理の遅延を避けるために、容量とライフサイクルを考慮してください。
 - 導入バージョン: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: いいえ
+- 説明: この BE が、ロード時に行を対象 tablet を保持する BE へルーティングするホップ（tablet sink RPC）において、全行が NULL である列のコンパクトなエンコーディングに参加するかどうかを制御します。有効にすると、受信側の BE は tablet writer の open レスポンスでこのエンコーディングへの対応を通知し、その通知を受け取った送信側の BE は、全行が NULL の列について、行ごとの NULL フラグとオフセットの代わりに行数のみを送信します。列数が多く、その大半にデータが入っていないワイドテーブルで特に効果が大きく、このホップの転送バイト数と送受信両側のシリアライズ処理がいずれも削減されます。このエンコーディングは RPC の両端が対応している場合にのみ使用されるため、バージョンが混在するクラスタやダウングレード後は自動的に従来のレイアウトにフォールバックします。送信側または受信側のいずれかの BE でこの項目を `false` に設定すると、そのノードを経由するロードではエンコーディングが無効になります。この項目は動的に変更できません。受信側の BE はこの値を、対応の通知と、送信側が宣言したエンコーディングを適用するかどうかの判断の両方に使用するため、実行中に変更すると両者が一致しなくなります。
+- 導入バージョン: v4.2.0
 
 ### enable_load_diagnose
 

@@ -23,6 +23,7 @@
 #include <iosfwd>
 #include <ostream>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -146,6 +147,12 @@ Status set_config(const std::string& field, const std::string& value);
 
 Status rollback_config(const std::string& field);
 
+// Whether `name` is a config whose value is a credential.
+bool is_sensitive_config(std::string_view name);
+
+// Lists every config, aliases included. This is what /varz and information_schema.be_configs show, so
+// a credential config's value and default are reported as kCredentialMask when non-empty; read the
+// config variable itself for the real value.
 std::vector<ConfigInfo> list_configs();
 
 void TEST_clear_configs();

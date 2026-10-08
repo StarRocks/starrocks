@@ -29,6 +29,7 @@ description: "StarRocks Connector for Apache Flink のリリースノート・�
 
 | コネクタ   | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降       | 8    | 2.11,2.12 |
@@ -41,6 +42,26 @@ description: "StarRocks Connector for Apache Flink のリリースノート・�
 ## リリースノート
 
 ### 1.2
+
+#### 1.2.16
+
+リリース日: 2026年9月24日
+
+##### 機能
+
+- Flink スキーマから `json` の columns ヘッダーを導出します。 [#510](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/510)
+
+##### 改善点
+
+- マルチテーブルトランザクション: 冗長な小規模ロードを削減するため、バッチチャンクを切り替えます。 [#506](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/506)
+- ロード URL が 1 つだけ設定されている場合、ホストプローブをスキップします。 [#502](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/502)
+
+##### バグ修正
+
+- マルチテーブルトランザクション: `txnEnd` 前にフラッシュできないバイトデータによって writer が停止したままにならないようにします。 [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- マルチテーブルトランザクション: コミット応答が失われた場合にハングまたは失敗するのではなく、リカバリします。 [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
+- マルチテーブルトランザクション: `flushQ` のリージョンラベルを、稼働中の共有ラベルと整合させます。 [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
+- クエリプランビジターにおける共有状態の競合を修正します。 [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
 
 #### 1.2.15
 

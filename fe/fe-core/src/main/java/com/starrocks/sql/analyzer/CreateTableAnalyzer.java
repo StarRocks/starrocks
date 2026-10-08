@@ -105,15 +105,21 @@ public class CreateTableAnalyzer {
         final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        // A CTAS into an external catalog had both answers fetched before the meta lock; see
+        // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
+        PreResolvedWriteTargets.CreateTarget preResolved = context.getPreResolvedWriteTargets()
+                .takeCreateTarget(com.starrocks.catalog.TableName.fromTableRef(tableRef));
+        Database dbObj = preResolved != null ? preResolved.db()
+                : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
         if (dbObj == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
-            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
+            boolean tableExists = preResolved != null ? preResolved.tableExists()
+                    : GlobalStateMgr.getCurrentState().getMetadataMgr().tableExists(context, catalogName, db, tableName);
+            if (tableExists && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }

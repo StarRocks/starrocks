@@ -580,6 +580,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable UDF.
 - Introduced in: -
 
+### `enable_virtual_columns`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to expose virtual columns such as `_tablet_id_` on native tables. Virtual columns are read-only metadata columns that are computed at query time and are not stored. When this parameter is set to `false`, a query that references a virtual column fails because the column cannot be resolved. For more information, see [Virtual columns](../../../table_design/virtual_columns.md).
+- Introduced in: -
+
 ### `expr_children_limit`
 
 - Default: 10000

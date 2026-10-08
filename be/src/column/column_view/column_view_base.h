@@ -40,10 +40,6 @@ public:
     using LocationType = uint32_t;
     using Locations = std::vector<LocationType>;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; };
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
     bool has_large_column() const override { return false; }
 
     size_t size() const override { return _num_rows; }
@@ -113,7 +109,7 @@ public:
     std::string get_name() const override { NOT_SUPPORT(); }
     Datum get(size_t n) const override { NOT_SUPPORT(); }
     void swap_column(Column& rhs) override { NOT_SUPPORT(); }
-    Status capacity_limit_reached() const override { NOT_SUPPORT(); }
+    Status capacity_limit_reached() const override;
     void check_or_die() const override {}
     Status accept(ColumnVisitor* visitor) const override { NOT_SUPPORT(); }
     Status accept_mutable(ColumnVisitorMutable* visitor) override { NOT_SUPPORT(); }

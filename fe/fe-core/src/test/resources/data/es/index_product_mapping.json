@@ -1,0 +1,14 @@
+{
+  "index_product": {
+    "mappings": {
+      "properties": {
+        "product_id": {
+          "type": "long"
+        },
+        "product_name": {
+          "type": "text"
+        }
+      }
+    }
+  }
+}

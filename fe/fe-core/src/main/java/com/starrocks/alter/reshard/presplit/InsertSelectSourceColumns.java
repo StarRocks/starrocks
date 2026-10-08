@@ -19,10 +19,14 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.util.SqlUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.Subquery;
 
@@ -36,10 +40,20 @@ import java.util.Set;
 /**
  * Resolves the target-&gt;source column-name map (lower-cased target name -&gt; source column
  * name) for directly mapped outputs of a parsed
- * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
- * the map to project any index's sort key (base or rollup) and the partition columns by their
- * source-table column names. Non-key target columns may be expressions over the source relation
- * and are omitted from the map.
+ * {@code INSERT INTO <range-dist target> SELECT ... FROM <single source relation>}, where the
+ * source is one OLAP / Iceberg table or one {@code FILES(...)} call. The sampler uses the map to
+ * project any index's sort key (base or rollup) and the partition columns by their source column
+ * names. Non-key target columns may be expressions over the source relation and are omitted from
+ * the map. A column fed by a literal ({@code '20260917' AS dt}) is recorded separately, as the
+ * literal's SQL: the sampler projects the literal itself in place of a source column, for a
+ * partition column and for a sort-key column alike. A caller whose sampler can evaluate expressions
+ * may also admit a safe computed projection ({@code date_trunc('day', ts) AS dt}); it is recorded
+ * as the expression's SQL, which the sampler evaluates over the source rows.
+ *
+ * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
+ * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
+ * names. A column the list omits simply never enters the map, which makes it a skip when it is a
+ * sort-key or partition column and a no-op otherwise.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
@@ -50,27 +64,106 @@ final class InsertSelectSourceColumns {
     }
 
     /**
+     * How closely the source's own column set has to mirror the target's for a {@code SELECT *}
+     * (or a {@code BY NAME} projection) to be mappable.
+     */
+    enum SchemaPairing {
+        /**
+         * The two schemas must be images of each other: same column set under {@code BY NAME},
+         * same name at every ordinal under by-position. Right for a table source, where a column
+         * on one side and not the other is a statement {@code InsertAnalyzer} rejects outright, so
+         * pre-split would be resharding for a load that never runs.
+         */
+        EXACT,
+        /**
+         * Pair up whatever columns correspond and leave the target columns the source does not
+         * supply alone. Right for a {@code FILES(...)} source, where a file NARROWER than the
+         * target is ordinary: the columns it omits are defaulted, which says nothing about the
+         * columns that ARE paired, and an unpaired sort-key or partition column is still caught by
+         * this method's final presence gate.
+         *
+         * <p>It is not a licence to admit anything the analyzer would reject. Under {@code BY NAME}
+         * the query's output names BECOME the target column names, so an output the target does not
+         * have -- a field of a file wider than the target, or an alias naming no target column --
+         * still fails analysis, and pre-split must not reshard for a load that never runs.
+         */
+        PER_COLUMN
+    }
+
+    /**
+     * The resolved projection: {@code targetToSource} maps each directly projected target column
+     * (lower-cased name) to its source column name; {@code targetToConstantSql} maps each target
+     * column the SELECT feeds with a non-NULL literal, or with a column-free expression that folds
+     * to one, to that constant's SQL; {@code targetToExpressionSql} maps each target column fed by
+     * an admitted computed expression over source columns to the expression's SQL, with its
+     * plan-time constants already folded. {@code unsupportedProjectionTargets} names outputs supplied
+     * by any other expression (including NULL). Those outputs are distinct from target columns
+     * omitted from the SELECT entirely. The four key sets are disjoint.
+     */
+    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
+                    Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets) {
+    }
+
+    /**
      * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
      *
      * @param insertStmt          the parsed INSERT statement
      * @param selectRelation      the SELECT body of the INSERT
-     * @param targetTable         the INSERT target (range-distributed)
-     * @param sourceTable         the single OLAP source table
+     * @param targetTable         the INSERT target (range-distributed); the effective target
+     *                            columns are derived from it by {@link #effectiveTargetColumns}
+     * @param sourceTable         the single source table (OLAP, Iceberg, or the inferred
+     *                            {@code TableFunctionTable} of a {@code FILES(...)} call)
      * @param normalizedSourceName fully-qualified source name (catalog/db/tbl) for qualifier matching
      * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
      * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
      * @param partitionColumns    partition columns of the target
-     * @return the target-&gt;source column-name map, or {@code null} when the projection is
-     *         ambiguous or unsafe
+     * @param pairing             how closely the source schema must mirror the target's
+     * @return the resolved projection, or {@code null} when the projection is ambiguous or unsafe
      */
-    static Map<String, String> resolve(
+    static Resolved resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
             OlapTable targetTable, Table sourceTable,
             TableName normalizedSourceName, String sourceAlias,
-            List<Column> sortKeyColumns, List<Column> partitionColumns) {
+            List<Column> sortKeyColumns, List<Column> partitionColumns,
+            SchemaPairing pairing) {
+        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, sourceTable,
+                normalizedSourceName, sourceAlias, pairing, /*computedProjectionContext*/ null);
+        if (resolved == null) {
+            return null;
+        }
+        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
+            return null;
+        }
+        return resolved;
+    }
+
+    /**
+     * {@link #resolve} without its final presence gates: the projection mapping alone, or {@code null}
+     * for a projection SHAPE problem (duplicate output name, by-position arity mismatch, a
+     * foreign-qualified slot, ...).
+     *
+     * <p>Split out so a caller that wants to ATTRIBUTE a presence failure can apply the gates itself
+     * and name the offending column via {@link #firstUnfedColumn}. Folding the two together, as
+     * {@link #resolve} does for callers that do not care, makes an unfed sampled column
+     * indistinguishable from the shape rejections.
+     *
+     * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
+     *                                  evaluate a computed projection: such a projection is admitted
+     *                                  when {@link #foldedComputedProjection} accepts it, with its
+     *                                  plan-time constants folded in this context. {@code null}
+     *                                  admits none, so every computed output stays unsupported.
+     */
+    static Resolved resolveUngated(
+            InsertStmt insertStmt, SelectRelation selectRelation,
+            OlapTable targetTable, Table sourceTable,
+            TableName normalizedSourceName, String sourceAlias,
+            SchemaPairing pairing, ConnectContext computedProjectionContext) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
-        List<Column> targetCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
+        if (targetCols == null) {
+            return null;
+        }
         // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
         List<Column> sourceCols = sourceTable instanceof OlapTable olapTable
                 ? olapTable.getVisibleColumnsWithoutGeneratedColumn()
@@ -86,6 +179,9 @@ final class InsertSelectSourceColumns {
 
         boolean isStar = items.size() == 1 && items.get(0).isStar();
         Map<String, String> targetToSource = new HashMap<>();
+        Map<String, String> targetToConstantSql = new HashMap<>();
+        Map<String, String> targetToExpressionSql = new HashMap<>();
+        Set<String> unsupportedProjectionTargets = new HashSet<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
             boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
@@ -95,20 +191,42 @@ final class InsertSelectSourceColumns {
                 return null;
             }
             if (byName) {
-                // Exact-set match: reject source columns absent from the target, and vice versa.
-                if (!sourceColumnMap.keySet().equals(targetNames(targetCols))) {
+                // EXACT: reject source columns absent from the target, and vice versa.
+                if (pairing == SchemaPairing.EXACT && !sourceColumnMap.keySet().equals(targetNames(targetCols))) {
+                    return null;
+                }
+                // PER_COLUMN still may not admit a file WIDER than the target. Under BY NAME
+                // InsertAnalyzer sets the target column names to the query's OUTPUT names, and a
+                // `SELECT *` over FILES outputs every file column, so a field the target does not
+                // have fails analysis with "Unknown column '<f>' in '<t>'". Only
+                // enable_push_down_schema trims `*` down to the target names first
+                // (expandStarColumns); that flag is parsed in analyzeProperties, which runs AFTER
+                // this hook, so it always reads false here and the default mode is the one to
+                // assume. A file NARROWER than the target stays fine -- the columns it does not
+                // supply are simply defaulted.
+                if (pairing == SchemaPairing.PER_COLUMN
+                        && !targetNames(targetCols).containsAll(sourceColumnMap.keySet())) {
                     return null;
                 }
                 for (Column targetCol : targetCols) {
                     String targetName = targetCol.getName().toLowerCase();
-                    targetToSource.put(targetName, sourceColumnMap.get(targetName));
+                    String sourceName = sourceColumnMap.get(targetName);
+                    // Under EXACT the set check above already proved every target name is present;
+                    // under PER_COLUMN a target column the source never supplies stays unmapped.
+                    if (sourceName != null) {
+                        targetToSource.put(targetName, sourceName);
+                    }
                 }
             } else {
                 if (sourceCols.size() != targetCols.size()) {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    if (!targetCols.get(i).getName().equalsIgnoreCase(sourceCols.get(i).getName())) {
+                    // By position the load writes source column i into target column i whatever the
+                    // two are called, so the ordinal IS the mapping. EXACT additionally demands the
+                    // names agree; PER_COLUMN records the pairing the ordinals already establish.
+                    if (pairing == SchemaPairing.EXACT
+                            && !targetCols.get(i).getName().equalsIgnoreCase(sourceCols.get(i).getName())) {
                         return null;
                     }
                     targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceCols.get(i).getName());
@@ -122,6 +240,8 @@ final class InsertSelectSourceColumns {
                 }
                 String outputName = item.getAlias();
                 String sourceName = null;
+                String constantSql = null;
+                String expressionSql = null;
                 if (item.getExpr() instanceof SlotRef slotRef) {
                     if (slotRef.getTblName() != null
                             && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
@@ -142,8 +262,18 @@ final class InsertSelectSourceColumns {
                     if (!referencesOnlySource(item.getExpr(), sourceColumnMap, normalizedSourceName, sourceAlias)) {
                         return null;
                     }
+                    constantSql = constantSqlOf(item.getExpr());
+                    if (constantSql == null && computedProjectionContext != null) {
+                        Expr folded = foldedComputedProjection(item.getExpr(), computedProjectionContext,
+                                normalizedSourceName, sourceAlias);
+                        if (folded != null && folded.containsSubclass(SlotRef.class)) {
+                            expressionSql = SamplingPredicateGate.toSql(folded);
+                        } else if (folded != null) {
+                            constantSql = SamplingPredicateGate.toSql(folded);
+                        }
+                    }
                 }
-                outputs.add(new String[] {outputName, sourceName});
+                outputs.add(new String[] {outputName, sourceName, constantSql, expressionSql});
             }
             if (byName) {
                 Set<String> outputNames = new HashSet<>();
@@ -154,10 +284,23 @@ final class InsertSelectSourceColumns {
                     }
                     if (output[1] != null) {
                         targetToSource.put(targetName, output[1]);
+                    } else if (output[2] != null) {
+                        targetToConstantSql.put(targetName, output[2]);
+                    } else if (output[3] != null) {
+                        targetToExpressionSql.put(targetName, output[3]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
-                // Exact-set match: output names must be exactly the target non-generated columns.
-                if (!outputNames.equals(targetNames(targetCols))) {
+                // EXACT: output names must be exactly the target's own columns.
+                if (pairing == SchemaPairing.EXACT && !outputNames.equals(targetNames(targetCols))) {
+                    return null;
+                }
+                // PER_COLUMN accepts a PARTIAL output set -- a target column no output names is
+                // simply defaulted -- but every output name must still BE a target column. BY NAME turns
+                // each output name into a target column name, so one that names nothing on the
+                // target fails analysis the same way a wide `SELECT *` does.
+                if (pairing == SchemaPairing.PER_COLUMN && !targetNames(targetCols).containsAll(outputNames)) {
                     return null;
                 }
             } else {
@@ -165,21 +308,197 @@ final class InsertSelectSourceColumns {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    String sourceName = outputs.get(i)[1];
-                    if (sourceName != null) {
-                        targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceName);
+                    String targetName = targetCols.get(i).getName().toLowerCase();
+                    String[] output = outputs.get(i);
+                    if (output[1] != null) {
+                        targetToSource.put(targetName, output[1]);
+                    } else if (output[2] != null) {
+                        targetToConstantSql.put(targetName, output[2]);
+                    } else if (output[3] != null) {
+                        targetToExpressionSql.put(targetName, output[3]);
+                    } else {
+                        unsupportedProjectionTargets.add(targetName);
                     }
                 }
             }
         }
 
-        // A sort-key or partition column with no source mapping cannot be sampled -> skip pre-split.
-        // The executor derives both projections from the map at sample time (see mapToSource), so
-        // only the presence gate matters here.
-        if (lookup(sortKeyColumns, targetToSource) == null || lookup(partitionColumns, targetToSource) == null) {
+        // The executors derive every projection from these maps at sample time (see projections),
+        // so only the presence gates matter here.
+        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql),
+                Map.copyOf(targetToExpressionSql), Set.copyOf(unsupportedProjectionTargets));
+    }
+
+    /**
+     * Whether a sort key (the base index's or a rollup's) can be sampled: every column is backed by
+     * a source column or fed by a literal or an admitted computed expression, and at least one is
+     * backed by a source column or computed from one. A literal column is fine anywhere in the key --
+     * every sampled tuple carries the same value there, and the cuts come from the columns that
+     * vary -- but a key made only of literals is degenerate: every row has the same key, so no cut
+     * can separate them.
+     */
+    static boolean sortKeySampleable(List<Column> sortKey, Resolved resolved) {
+        if (firstUnfedColumn(sortKey, resolved) != null) {
+            return false;
+        }
+        // Every column is fed; the key is still degenerate if NONE of them varies.
+        return sortKey.isEmpty() || anySourceBacked(sortKey, resolved);
+    }
+
+    private static boolean anySourceBacked(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
+            String targetName = column.getName().toLowerCase();
+            if (resolved.targetToSource().containsKey(targetName)
+                    || resolved.targetToExpressionSql().containsKey(targetName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The first column the sampler cannot project -- neither a direct source column, a supported
+     * literal, nor an admitted computed expression -- or {@code null} when every one is sampleable.
+     * An unsupported expression may still feed that column in the INSERT; see
+     * {@link Resolved#unsupportedProjectionTargets()}.
+     * The single definition of "sampleable" in this class: {@link #sortKeySampleable}
+     * and {@link #partitionColumnsSampleable} are both expressed in terms of it, so a caller that
+     * needs to NAME the offending column for a skip reason cannot drift from the gates that decide.
+     *
+     * <p>A literal-fed column counts as sampleable. It is projected as {@code CAST(<literal> AS <type>)} and
+     * never read from the source, so "no source column behind it" is not a defect there -- declining
+     * such a statement as a missing column is exactly the misattribution this helper exists to avoid.
+     */
+    static Column firstUnfedColumn(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
+            String targetName = column.getName().toLowerCase();
+            if (!resolved.targetToSource().containsKey(targetName)
+                    && !resolved.targetToConstantSql().containsKey(targetName)
+                    && !resolved.targetToExpressionSql().containsKey(targetName)) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether every partition column is backed by a source column or fed by a literal. A literal
+     * partition column sends every row to the one partition that literal names.
+     */
+    static boolean partitionColumnsSampleable(List<Column> partitionColumns, Resolved resolved) {
+        return firstUnfedColumn(partitionColumns, resolved) == null;
+    }
+
+    /**
+     * The SQL of a non-NULL literal projection, or {@code null} for any other expression. Only a
+     * literal qualifies: its value is fixed at plan time, so the sampler reproduces it exactly, which
+     * a non-deterministic call ({@code now()}) or an expression over source columns would not. NULL is
+     * left out: which partition a NULL key routes to is the partition scheme's business, not a value
+     * the sampler can hand the grouper, and a NULL key column is not worth the special case.
+     */
+    private static String constantSqlOf(Expr expr) {
+        if (!(expr instanceof LiteralExpr) || expr instanceof NullLiteral) {
             return null;
         }
-        return Map.copyOf(targetToSource);
+        return SamplingPredicateGate.toSql(expr);
+    }
+
+    /**
+     * A computed projection the sampler can evaluate to the value the INSERT writes, with its
+     * plan-time constants folded in the INSERT user's {@code context}, or {@code null} when it has
+     * none. The sampling sub-query runs as ROOT in its own session, so the projection is held to the
+     * rule {@link SamplingPredicateGate} applies to the WHERE clause: after folding, only source
+     * columns, literals, operators, CAST, and {@code SamplingPredicateGate}'s row-level functions
+     * remain. That rejects a UDF, a subquery, a variable, a clock, user or session-time-zone
+     * function over a column, and any per-row non-deterministic call. A column-free projection folds
+     * to a constant as a whole; one folding to NULL is rejected for the same reason
+     * {@link #constantSqlOf} rejects a NULL literal. The caller has already proved every slot names a
+     * source column.
+     */
+    private static Expr foldedComputedProjection(Expr expr, ConnectContext context,
+                                              TableName normalizedSourceName, String sourceAlias) {
+        Expr folded = SamplingPredicateGate.foldProjection(expr, context);
+        if (folded == null || !SamplingPredicateGate.isDeterministicAndSafe(folded, normalizedSourceName, sourceAlias)) {
+            return null;
+        }
+        return folded;
+    }
+
+    /**
+     * The SQL each target column (sort key or partition) is projected by in a sampling sub-query: the
+     * backing source column's quoted identifier, or -- for a column the SELECT feeds with a literal --
+     * that literal cast to the TARGET column type. The cast makes the sampled value the one the load
+     * writes: the load casts the literal to the column type before routing the row (a STRING
+     * {@code '20260917'} becomes the DATE 2026-09-17), so the grouper pre-creates exactly that
+     * partition and a boundary carries the key value the rows really have. Returns {@code null} when
+     * any column is backed by neither.
+     */
+    static List<String> projections(
+            List<Column> columns, Map<String, String> targetToSource,
+            Map<String, String> targetToConstantSql) {
+        return projections(columns, targetToSource, targetToConstantSql, Map.of());
+    }
+
+    /**
+     * {@link #projections(List, Map, Map)} for a sampler that also evaluates computed projections. A
+     * computed column is projected as its expression cast to the TARGET column type, for the same
+     * reason a literal is: {@code date_trunc('day', ts)} is a DATETIME, and the load writes it into a
+     * DATE column as the DATE the cast yields.
+     */
+    static List<String> projections(
+            List<Column> columns, Map<String, String> targetToSource,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql) {
+        List<String> projections = new ArrayList<>(columns.size());
+        for (Column column : columns) {
+            String targetName = column.getName().toLowerCase();
+            String sourceName = targetToSource.get(targetName);
+            String constantSql = targetToConstantSql.get(targetName);
+            String expressionSql = targetToExpressionSql.get(targetName);
+            if (sourceName != null) {
+                projections.add(SqlUtils.getIdentSql(sourceName));
+            } else if (constantSql != null) {
+                projections.add("CAST(" + constantSql + " AS " + column.getType().toSql() + ")");
+            } else if (expressionSql != null) {
+                projections.add("CAST(" + expressionSql + " AS " + column.getType().toSql() + ")");
+            } else {
+                return null;
+            }
+        }
+        return projections;
+    }
+
+    /**
+     * The target columns the statement actually writes: the explicit target column list in the
+     * order it was written, or the whole base (non-generated) schema when there is no list. Both
+     * the by-position pairing and the BY NAME exact-set match are against these, so a partial or
+     * reordered list maps its outputs onto the columns it names instead of onto the schema.
+     *
+     * <p>Only resolves names, it does not validate the list: whether the list is admissible at all
+     * (no duplicate / unknown / generated name, every omitted column fillable, every visible
+     * index's sort key present) is {@link InsertPreSplitHook#targetColumnListIsPreSplitSafe}'s
+     * single job, and it has already run for every statement that reaches here. The {@code null}
+     * return below is therefore unreachable in practice and exists so that a name this method
+     * cannot resolve skips pre-split rather than NPEs.
+     */
+    private static List<Column> effectiveTargetColumns(InsertStmt insertStmt, OlapTable targetTable) {
+        List<Column> baseCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return baseCols;
+        }
+        Map<String, Column> baseByName = new HashMap<>();
+        for (Column column : baseCols) {
+            baseByName.put(column.getName().toLowerCase(), column);
+        }
+        List<Column> effective = new ArrayList<>(targetColumnNames.size());
+        for (String name : targetColumnNames) {
+            Column column = baseByName.get(name.toLowerCase());
+            if (column == null) {
+                return null;
+            }
+            effective.add(column);
+        }
+        return effective;
     }
 
     /**
@@ -195,7 +514,8 @@ final class InsertSelectSourceColumns {
      *
      * <p>Function calls themselves stay allowed: the sampler never evaluates a non-key projection,
      * it only projects the mapped source columns, so the expression's own semantics cannot skew the
-     * sampled row set.
+     * sampled row set. A computed key projection the sampler does evaluate must also pass
+     * {@link #foldedComputedProjection}.
      */
     private static boolean referencesOnlySource(
             Expr expr, Map<String, String> sourceColumnMap,

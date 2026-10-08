@@ -23,8 +23,7 @@ insert into t1 select x, concat('cherry_', x) from table(generate_series(201, 30
 
 -- ADD NGRAMBF via fast path. gram_num=3 + fpp=0.05 are defaults but pinned
 -- explicitly so the test is stable across default changes.
-ALTER TABLE t1 ADD INDEX idx_v1_ngbf (v1) USING NGRAMBF("gram_num"="3","bloom_filter_fpp"="0.05");
-function: wait_alter_table_finish()
+function: alter_and_wait('ALTER TABLE t1 ADD INDEX idx_v1_ngbf (v1) USING NGRAMBF("gram_num"="3","bloom_filter_fpp"="0.05")')
 
 -- Sanity: query returns the expected rows.
 select count(*) from t1 where v1 like '%apple%';
@@ -48,8 +47,7 @@ select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilte
     where line like '%- BloomFilterFilter:%';
 
 -- DROP via fast path (metadata-only tombstone) and re-check correctness.
-ALTER TABLE t1 DROP INDEX idx_v1_ngbf;
-function: wait_alter_table_finish()
+function: alter_and_wait('ALTER TABLE t1 DROP INDEX idx_v1_ngbf')
 
 select count(*) from t1 where v1 like '%apple%';
 select count(*) from t1 where v1 like '%cherry%';
