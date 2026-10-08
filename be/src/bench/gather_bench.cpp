@@ -16,6 +16,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <map>
+#include <new>
 #include <random>
 #include <vector>
 
@@ -37,6 +40,17 @@ std::vector<T> make_source(size_t pool_size) {
         src[i] = static_cast<T>(i * 17 + 1);
     }
     return src;
+}
+
+// Pools are immutable and identical for a given (type, size); build each once per process.
+template <typename T>
+const std::vector<T>& cached_source(size_t pool_size) {
+    static std::map<size_t, std::vector<T>> cache;
+    auto it = cache.find(pool_size);
+    if (it == cache.end()) {
+        it = cache.emplace(pool_size, make_source<T>(pool_size)).first;
+    }
+    return it->second;
 }
 
 // Verifies dest[i] == src[indexes[i]] once, outside the timed loop.
@@ -77,7 +91,17 @@ template <typename T>
 static void BM_Gather_Random(benchmark::State& state) {
     const size_t num_rows = state.range(0);
     const size_t pool_size = state.range(1);
-    std::vector<T> src = make_source<T>(pool_size);
+    if (pool_size == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("pool size out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    try {
+        src = &cached_source<T>(pool_size);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building source pool");
+        return;
+    }
 
     std::mt19937 rng(12345);
     std::uniform_int_distribution<uint32_t> dist(0, static_cast<uint32_t>(pool_size - 1));
@@ -85,20 +109,30 @@ static void BM_Gather_Random(benchmark::State& state) {
     for (size_t i = 0; i < num_rows; ++i) {
         indexes[i] = dist(rng);
     }
-    run_gather<T>(state, src, indexes);
+    run_gather<T>(state, *src, indexes);
 }
 
 template <typename T>
 static void BM_Gather_Strided(benchmark::State& state) {
     const size_t num_rows = state.range(0);
     const size_t pool_size = state.range(1);
-    std::vector<T> src = make_source<T>(pool_size);
+    if (pool_size == 0 || pool_size - 1 > std::numeric_limits<uint32_t>::max()) {
+        state.SkipWithError("pool size out of range for uint32 indexes");
+        return;
+    }
+    const std::vector<T>* src;
+    try {
+        src = &cached_source<T>(pool_size);
+    } catch (const std::bad_alloc&) {
+        state.SkipWithError("out of memory building source pool");
+        return;
+    }
 
     std::vector<uint32_t> indexes(num_rows);
     for (size_t i = 0; i < num_rows; ++i) {
         indexes[i] = static_cast<uint32_t>((i * 13) % pool_size);
     }
-    run_gather<T>(state, src, indexes);
+    run_gather<T>(state, *src, indexes);
 }
 
 // Args are {num_rows, pool_size}.
