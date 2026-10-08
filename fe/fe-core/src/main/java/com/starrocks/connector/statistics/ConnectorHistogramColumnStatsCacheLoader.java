@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.HistogramUtils;
@@ -51,6 +52,11 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
     CompletableFuture<Optional<Histogram>> asyncLoad(@NonNull ConnectorTableColumnKey cacheKey,
                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
+            if (!GlobalStateMgr.getCurrentState().isReady()) {
+                // Not loaded is not "no histogram": a null value is not cached, so the next access loads again.
+                LOG.debug("Skip loading connector histogram before catalog ready: {}", cacheKey);
+                return null;
+            }
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
                 connectContext.setThreadLocalInfo();
@@ -83,6 +89,11 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
             if (!keys.iterator().hasNext()) {
                 return result;
             }
+            if (!GlobalStateMgr.getCurrentState().isReady()) {
+                // Keys absent from a bulk result are not cached, so they are loaded again once ready.
+                LOG.debug("Skip loading connector histograms before catalog ready");
+                return result;
+            }
             for (ConnectorTableColumnKey key : keys) {
                 tableUUID = key.tableUUID;
                 columns.add(key.column);
@@ -102,8 +113,9 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
 
                 return result;
             } catch (RuntimeException e) {
+                // A failed load is not "no statistics": do not cache it, so the next access loads again.
                 LOG.error(e);
-                return result;
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -116,6 +128,10 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
     public CompletableFuture<Optional<Histogram>> asyncReload(
             @NonNull ConnectorTableColumnKey key, @NonNull Optional<Histogram> oldValue,
             @NonNull Executor executor) {
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            // Keep the old value: a null reload result would evict it.
+            return CompletableFuture.completedFuture(oldValue);
+        }
         return asyncLoad(key, executor);
     }
 

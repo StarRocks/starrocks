@@ -50,8 +50,9 @@ public class ConnectorColumnStatsCacheLoader implements
                                                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             if (!GlobalStateMgr.getCurrentState().isReady()) {
+                // Not loaded is not "no statistics": a null value is not cached, so the next access loads again.
                 LOG.debug("Skip loading connector column stats before catalog ready: {}", cacheKey);
-                return Optional.empty();
+                return null;
             }
             try {
                 ConnectContext connectContext = StatisticUtils.buildConnectContext();
@@ -64,8 +65,9 @@ public class ConnectorColumnStatsCacheLoader implements
                     return Optional.empty();
                 }
             } catch (RuntimeException e) {
+                // A failed load is not "no statistics": do not cache it, so the next access loads again.
                 LOG.error(e);
-                return Optional.empty();
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
@@ -79,15 +81,17 @@ public class ConnectorColumnStatsCacheLoader implements
             @NonNull Iterable<? extends @NonNull ConnectorTableColumnKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = Maps.newHashMap();
+            if (!GlobalStateMgr.getCurrentState().isReady()) {
+                // Keys absent from a bulk result are not cached, so they are loaded again once ready.
+                // Pre-filling them with Optional.empty() would cache them as "no statistics" until expiry.
+                LOG.debug("Skip loading connector column stats before catalog ready");
+                return result;
+            }
+
             // There may be no statistics for the column in BE
             // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
             for (ConnectorTableColumnKey cacheKey : keys) {
                 result.put(cacheKey, Optional.empty());
-            }
-
-            if (!GlobalStateMgr.getCurrentState().isReady()) {
-                LOG.debug("Skip loading connector column stats before catalog ready, size: {}", result.size());
-                return result;
             }
 
             try {
@@ -123,6 +127,10 @@ public class ConnectorColumnStatsCacheLoader implements
     public CompletableFuture<Optional<ConnectorTableColumnStats>> asyncReload(
             @NonNull ConnectorTableColumnKey key, @NonNull Optional<ConnectorTableColumnStats> oldValue,
             @NonNull Executor executor) {
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            // Keep the old value: a null reload result would evict it.
+            return CompletableFuture.completedFuture(oldValue);
+        }
         return asyncLoad(key, executor);
     }
 
