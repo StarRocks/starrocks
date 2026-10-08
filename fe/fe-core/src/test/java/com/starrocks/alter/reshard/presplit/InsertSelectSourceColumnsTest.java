@@ -167,9 +167,10 @@ public class InsertSelectSourceColumnsTest {
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
         return InsertSelectSourceColumns.resolve(
-                stmt, rel, target, source,
-                normalizedSourceName, sourceAlias, sortKeyColumns, partitionColumns,
-                InsertSelectSourceColumns.SchemaPairing.EXACT);
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(source, normalizedSourceName, sourceAlias,
+                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
+                sortKeyColumns, partitionColumns);
     }
 
     /** The FILES call: whatever columns correspond are paired, extras on either side are fine. */
@@ -190,8 +191,10 @@ public class InsertSelectSourceColumnsTest {
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
         return InsertSelectSourceColumns.resolve(
-                stmt, rel, target, source, SRC_NAME, null, sortKeyColumns, partitionColumns,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(source, SRC_NAME, null,
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null),
+                sortKeyColumns, partitionColumns);
     }
 
     private static Map<String, String> sourceMapOf(InsertSelectSourceColumns.Resolved resolved) {
@@ -1288,8 +1291,9 @@ public class InsertSelectSourceColumnsTest {
                 SqlModeHelper.MODE_DEFAULT);
         SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         return InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, olapTable(targetCols, targetCols, false), filesTable(sourceCols), SRC_NAME, null,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
+                stmt, rel, olapTable(targetCols, targetCols, false),
+                new InsertSelectSourceColumns.ResolutionContext(filesTable(sourceCols), SRC_NAME, null,
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context));
     }
 
     private static ConnectContext computedProjectionContext() {

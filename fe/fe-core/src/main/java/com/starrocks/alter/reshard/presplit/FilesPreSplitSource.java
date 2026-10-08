@@ -96,9 +96,9 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         // The data tier evaluates its projections over the same FILES() rows, so a safe computed key
         // is admitted, folded in the user's context like the WHERE clause above.
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
-                insertStmt, selectRelation, target, sourceTable,
-                filesRelation.getName(), /*sourceAlias*/ null,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
+                insertStmt, selectRelation, target,
+                new InsertSelectSourceColumns.ResolutionContext(sourceTable, filesRelation.getName(),
+                        /*sourceAlias*/ null, InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context));
         if (resolved == null) {
             return null;
         }
