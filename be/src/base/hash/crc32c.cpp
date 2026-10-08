@@ -255,13 +255,13 @@ uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #if defined(__ARM_NEON) && defined(__aarch64__)
 namespace {
 #if defined(USE_ARM_PMULL)
-static std::atomic<int8_t> s_has_pmull{-1};
+std::atomic<int8_t> s_has_pmull{-1};
 #endif
 
 inline bool has_arm_pmull() {
 #if defined(USE_ARM_PMULL)
     int8_t val = s_has_pmull.load(std::memory_order_relaxed);
-    if (val != -1) {
+    if (__builtin_expect(val != -1, 1)) {
         return val != 0;
     }
 
@@ -294,7 +294,9 @@ bool HasArmPmull() {
     return has_arm_pmull();
 }
 
+#if defined(USE_ARM_PMULL)
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
 #else
 void ResetArmPmullForTesting() {}
 
@@ -319,6 +321,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
         buf += chunk_size;
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(USE_ARM_PMULL)
     constexpr size_t CRC32C_CHUNKSIZE_MASK = ((1 << 4) - 1);
     constexpr size_t CRC32C_MINIMUM_LENGTH = (1 << 6);
     if (size >= CRC32C_MINIMUM_LENGTH && has_arm_pmull()) {
@@ -328,6 +331,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
         if (!size) return crc;
         buf += chunk_size;
     }
+#endif
 #endif
 
     return ExtendFallback(crc, buf, size);
