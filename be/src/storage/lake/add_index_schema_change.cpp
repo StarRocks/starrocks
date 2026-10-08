@@ -81,7 +81,7 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
                               size_t char_pad_len = 0) {
     if (run_len == 0) return Status::OK();
 
-    // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
+    // Binary: sidestep the raw_data flow entirely; we need a
     // Slice array anchored at start_row.
     std::vector<Slice> slice_buf;
     // Backing store for CHAR re-padding; must outlive the writer->add_values()
