@@ -56,6 +56,10 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
 // hardware lacks HWCAP_PMULL, or when STARROCKS_DISABLE_PMULL is set.
 bool HasArmPmull();
 
+// Resets cached ARM PMULL availability status for testing purposes.
+// On non-ARM platforms or when USE_ARM_PMULL is not defined, this is a no-op.
+void ResetArmPmullForTesting();
+
 // Return the crc32c using the fallback implementation (ExtendImpl<Fast_CRC32>),
 // bypassing SIMD acceleration paths. Used for verification and equivalence testing.
 uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);

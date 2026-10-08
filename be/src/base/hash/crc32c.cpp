@@ -25,6 +25,8 @@
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
+#include <atomic>
+#include <cstdint>
 #include <cstdlib>
 
 #if defined(__linux__)
@@ -252,8 +254,17 @@ uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 
 #if defined(__ARM_NEON) && defined(__aarch64__)
 namespace {
+#if defined(USE_ARM_PMULL)
+static std::atomic<int8_t> s_has_pmull{-1};
+#endif
+
 inline bool has_arm_pmull() {
 #if defined(USE_ARM_PMULL)
+    int8_t val = s_has_pmull.load(std::memory_order_relaxed);
+    if (val != -1) {
+        return val != 0;
+    }
+
     static const bool s_hw_has_pmull = []() {
 #if defined(__APPLE__)
         return true;
@@ -263,15 +274,21 @@ inline bool has_arm_pmull() {
         return false;
 #endif
     }();
-    if (!s_hw_has_pmull) {
-        return false;
-    }
-    return getenv("STARROCKS_DISABLE_PMULL") == nullptr;
+
+    bool enabled = s_hw_has_pmull && (getenv("STARROCKS_DISABLE_PMULL") == nullptr);
+    s_has_pmull.store(enabled ? 1 : 0, std::memory_order_relaxed);
+    return enabled;
 #else
     return false;
 #endif
 }
 } // namespace
+
+void ResetArmPmullForTesting() {
+#if defined(USE_ARM_PMULL)
+    s_has_pmull.store(-1, std::memory_order_relaxed);
+#endif
+}
 
 bool HasArmPmull() {
     return has_arm_pmull();
@@ -279,6 +296,8 @@ bool HasArmPmull() {
 
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
 #else
+void ResetArmPmullForTesting() {}
+
 bool HasArmPmull() {
     return false;
 }
