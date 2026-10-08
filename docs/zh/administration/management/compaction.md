@@ -326,7 +326,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 ### 慢查询
 
-如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。
+如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `PhySegmentsCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。这里不要使用 `SegmentsReadCount`：它统计的是 segment 的读取次数，同一个 segment 被几个 split 读取就计几次，Tablet 内并行扫描时会随之变大。
 
 ### 集群最大 Compaction Score 很高
 

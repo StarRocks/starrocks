@@ -253,6 +253,8 @@ private:
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
+    RuntimeProfile::Counter* _phy_rowsets_count = nullptr;
+    RuntimeProfile::Counter* _phy_segments_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
     RuntimeProfile::Counter* _read_pk_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_prepared_rowsets_counter = nullptr;

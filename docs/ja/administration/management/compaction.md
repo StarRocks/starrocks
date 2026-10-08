@@ -336,7 +336,7 @@ Compaction はクエリパフォーマンスにとって重要であるため、
 
 ### クエリの遅延
 
-タイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイル内で `SegmentsReadCount` を `TabletCount` で割った値を確認します。これが 10 以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
+タイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイル内で `PhySegmentsCount` を `TabletCount` で割った値を確認します。これが 10 以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。この確認には `SegmentsReadCount` を使用しないでください。`SegmentsReadCount` はセグメントを読み取った split ごとに 1 回カウントするため、Tablet 内並列スキャンでも増加します。
 
 ### クラスタ内の高い Max Compaction スコア
 

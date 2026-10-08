@@ -1103,6 +1103,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "TabletCount");
         appendMetric(uniqueMetrics, nodeInfo, "SegmentsReadCount");
         appendMetric(uniqueMetrics, nodeInfo, "RowsetsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PhySegmentsCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PhyRowsetsCount");
         appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
         appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
         appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
@@ -1773,8 +1775,17 @@ public class ExplainAnalyzer {
                 "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
+<<<<<<< HEAD
                 "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
                 "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+=======
+                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "PhySegmentsCount", "PhyRowsetsCount",
+                "TotalColumnsDataPageCount",
+                "SegmentInit", "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
+                "SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
+                "DelVectorApply", "SegmentInitFinalize",
+                "RewritePredicates", "InitContext", "SegmentZoneMapFilter",
+>>>>>>> 3b8ce463752... [BugFix] Report physical segment and rowset counts for split lake scans (#64138)
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",

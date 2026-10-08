@@ -46,6 +46,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/rowid_types.h"
@@ -1677,6 +1678,9 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
         ASSERT_OK(seed->prepare());
         ASSERT_OK(seed->open(params));
         seed->get_split_tasks(&queue);
+        // The seed stands for the whole tablet, so it alone counts the tablet's single rowset.
+        EXPECT_EQ(1, seed->stats().phy_rowsets_count);
+        EXPECT_EQ(0, seed->stats().segments_read_count);
         seed->close();
     }
     ASSERT_GT(queue.size(), 0u);
@@ -1686,6 +1690,9 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
     std::multiset<Row> actual;
     int64_t refined_segments = 0;
     int64_t refined_scan_rows = 0;
+    int64_t segments_read = 0;
+    int64_t phy_segments = 0;
+    int64_t phy_rowsets = 0;
     int guard = 0;
     for (size_t head = 0; head < queue.size(); ++head) {
         ASSERT_LT(guard++, 10000) << "runaway split loop";
@@ -1711,6 +1718,9 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
         // single segment it owns. Accumulate across children to confirm the counters track refine.
         refined_segments += child->stats().lake_prepared_segments;
         refined_scan_rows += child->stats().lake_prepared_scan_rows;
+        segments_read += child->stats().segments_read_count;
+        phy_segments += child->stats().phy_segments_count;
+        phy_rowsets += child->stats().phy_rowsets_count;
 
         std::vector<pipeline::ScanSplitContextPtr> refined;
         child->get_split_tasks(&refined);
@@ -1726,6 +1736,105 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
     // so the per-segment scan-row counter sums to the full row count.
     EXPECT_EQ(4, refined_segments);
     EXPECT_EQ(static_cast<int64_t>(expected.size()), refined_scan_rows);
+    // Every child opens its segment, but each of the 4 segments is counted once as a physical segment.
+    EXPECT_GT(queue.size(), 4u);
+    EXPECT_GT(segments_read, 4);
+    EXPECT_EQ(4, phy_segments);
+    EXPECT_EQ(0, phy_rowsets);
+}
+
+// A split tablet opens its segments once per split child: SegmentsReadCount / RowsetsReadCount count those
+// opens, while PhySegmentsCount / PhyRowsetsCount must still match the unsplit scan.
+TEST_F(LakeTabletReaderSpit, test_split_counts_reads_and_phy_segments) {
+    constexpr int64_t kNumRowsets = 2;
+    constexpr int64_t kNumSegments = 3;
+    write_two_rowsets_with_three_segments();
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams{}));
+        EXPECT_EQ(kNumRowsets, reader->stats().rowsets_read_count);
+        EXPECT_EQ(kNumSegments, reader->stats().segments_read_count);
+        EXPECT_EQ(kNumRowsets, reader->stats().phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, reader->stats().phy_segments_count);
+        reader->close();
+    }
+
+    auto get_split_tasks = [&](bool physical, std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, physical);
+        auto params = generate_tablet_reader_params(&scan_range);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        reader->get_split_tasks(split_tasks);
+        // The planning reader stands for the whole tablet and opens no segment itself.
+        EXPECT_EQ(kNumRowsets, reader->stats().phy_rowsets_count);
+        EXPECT_EQ(0, reader->stats().rowsets_read_count);
+        EXPECT_EQ(0, reader->stats().segments_read_count);
+        reader->close();
+    };
+    auto read_split = [&](bool physical, const RowidRangeOptionPtr& rowid_range,
+                          const ShortKeyRangesOptionPtr& short_key_ranges, OlapReaderStatistics* total) {
+        auto child = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                    /*need_split=*/false, physical);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.rowid_range_option = rowid_range;
+        params.short_key_ranges_option = short_key_ranges;
+        ASSERT_OK(child->prepare());
+        ASSERT_OK(child->open(params));
+        total->rowsets_read_count += child->stats().rowsets_read_count;
+        total->segments_read_count += child->stats().segments_read_count;
+        total->phy_rowsets_count += child->stats().phy_rowsets_count;
+        total->phy_segments_count += child->stats().phy_segments_count;
+        child->close();
+    };
+
+    // Physical split: several children per segment, each opening only the segments its rowid range covers.
+    {
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        get_split_tasks(/*physical=*/true, &split_tasks);
+        ASSERT_GT(split_tasks.size(), static_cast<size_t>(kNumSegments));
+        OlapReaderStatistics total;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            read_split(/*physical=*/true, ctx->rowid_range, nullptr, &total);
+        }
+        EXPECT_GE(total.rowsets_read_count, static_cast<int64_t>(split_tasks.size()));
+        EXPECT_GE(total.segments_read_count, static_cast<int64_t>(split_tasks.size()));
+        EXPECT_EQ(0, total.phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, total.phy_segments_count);
+    }
+
+    // Logical split: every child opens every segment. These segments share one short key, so the queue
+    // hands out a single split; a copy that is not the tablet's first split stands in for its siblings.
+    {
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        get_split_tasks(/*physical=*/false, &split_tasks);
+        ASSERT_GE(split_tasks.size(), 1u);
+        OlapReaderStatistics total;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            ASSERT_NE(nullptr, ctx->short_key_range);
+            read_split(/*physical=*/false, nullptr, ctx->short_key_range, &total);
+        }
+        auto* first = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+        auto sibling_ranges = first->short_key_range->short_key_ranges;
+        auto sibling = std::make_shared<ShortKeyRangesOption>(std::move(sibling_ranges),
+                                                              /*is_first_split_of_tablet=*/false);
+        read_split(/*physical=*/false, nullptr, sibling, &total);
+        const auto num_children = static_cast<int64_t>(split_tasks.size() + 1);
+        EXPECT_EQ(kNumRowsets * num_children, total.rowsets_read_count);
+        EXPECT_EQ(kNumSegments * num_children, total.segments_read_count);
+        EXPECT_EQ(0, total.phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, total.phy_segments_count);
+    }
 }
 
 // parse_seek_range() is parsed once and cached in _cached_seek_ranges, then reused on every subsequent

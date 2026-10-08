@@ -334,7 +334,7 @@ Since Compaction is crucial for query performance, it is recommended to regularl
 
 ### Slow queries
 
-To identify slow queries caused by untimely Compaction, you can check, in the SQL Profile, the value of `SegmentsReadCount` divided by `TabletCount` within a single Fragment. If it is an large value, such as tens or more, untimely Compaction may be the cause of the slow query.
+To identify slow queries caused by untimely Compaction, you can check, in the SQL Profile, the value of `PhySegmentsCount` divided by `TabletCount` within a single Fragment. If it is an large value, such as tens or more, untimely Compaction may be the cause of the slow query. Do not use `SegmentsReadCount` for this check: it counts a segment once for every split that reads it, so it also grows when a tablet is scanned with intra-tablet parallelism.
 
 ### High Max Compaction Score in the cluster
 

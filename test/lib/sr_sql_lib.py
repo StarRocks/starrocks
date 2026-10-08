@@ -3572,13 +3572,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         scan_table_sql = (
             f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
+        # PhySegmentsCount counts each segment once; SegmentsReadCount counts it once per split that reads
+        # it, and is the only one a shared-nothing or older build reports.
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
             )
-            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
-            from profile 
-            where line like "%- SegmentsReadCount%"
+            select coalesce(
+                max(if(line like "%- PhySegmentsCount%",
+                       regexp_extract(line, ".*- PhySegmentsCount: (?:.*\\()?(\\d+)\\)?", 1), null)),
+                max(if(line like "%- SegmentsReadCount%",
+                       regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1), null))) as value
+            from profile
+            where line like "%- PhySegmentsCount%" or line like "%- SegmentsReadCount%"
         """
 
         while timeout > 0:
