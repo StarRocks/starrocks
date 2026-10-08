@@ -3069,6 +3069,125 @@ TEST_F(VectorizedCastExprTest, variant_array_cast_has_linear_payload_size) {
     }
 }
 
+// Regression test: casting a VARIANT to a STRUCT whose field name is not a "simple key"
+// (anything outside [a-zA-Z0-9_]) must not abort the BE. CastVariantToStruct used to format
+// each field name into a "$.<name>" path string and re-parse it; the variant path parser
+// rejects such names, so the constructor threw "Failed to parse variant path: $.$currency"
+// and crashed the backend (before #75355; afterwards a factory precheck rejected the cast as
+// NotSupported instead).
+// Repro SQL:
+//   SELECT CAST(CAST(PARSE_JSON('{"$currency": "USD"}') AS VARIANT) AS STRUCT<`$currency` STRING>);
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_with_special_char_field_name) {
+    constexpr size_t kInputSize = 3;
+    {
+        // Field name starting with '$' (the exact case from the bug report).
+        auto const_variant = make_const_variant_column_from_json(R"({"$currency":"USD"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"$currency"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{$currency:'USD'}");
+    }
+    {
+        // Field name containing '.' is likewise not a simple key; it must be treated as a
+        // single top-level object key rather than a nested "a -> b" path.
+        auto const_variant = make_const_variant_column_from_json(R"({"a.b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a.b"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{a.b:'v'}");
+    }
+}
+
+// Further non-simple struct field names: space, brackets, quote, multibyte. With the old
+// "$.<name>" + reparse approach, space/quote failed to parse (aborting the BE before #75355,
+// NotSupported after it) and brackets silently mis-resolved as an array index.
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_more_special_field_names) {
+    constexpr size_t kInputSize = 2;
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a b"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a b:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a[0]":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a[0]"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a[0]:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a'b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a'b"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a'b:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"名前":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"名前"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{名前:'v'}");
+    }
+}
+
+// Parity with the JSON->struct edge cases: a field absent from the variant object, and a
+// field whose value is JSON null, both yield NULL (no error).
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_missing_and_null_fields) {
+    constexpr size_t kInputSize = 2;
+    {
+        // 'missing' is not present in the object.
+        auto cv = make_const_variant_column_from_json(R"({"x":1})", kInputSize);
+        auto result = cast_from_variant(
+                gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::INT}, {"x", "missing"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{x:1,missing:NULL}");
+    }
+    {
+        // 'x' is present but its value is JSON null.
+        auto cv = make_const_variant_column_from_json(R"({"x":null})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{x:NULL}");
+    }
+}
+
+// A variant whose root is not an object (array or scalar) cast to a struct yields a NULL row.
+TEST_F(VectorizedCastExprTest, variant_cast_non_object_to_struct_returns_null) {
+    constexpr size_t kInputSize = 3;
+    for (const std::string& json : {std::string(R"([1,2])"), std::string("5")}) {
+        auto cv = make_const_variant_column_from_json(json, kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), cv);
+        ASSERT_TRUE(result->size() == 1 || result->size() == kInputSize);
+        for (size_t i = 0; i < result->size(); ++i) {
+            EXPECT_TRUE(result->is_null(i)) << "json: " << json << " row " << i;
+        }
+    }
+}
+
+// A non-constant, non-nullable variant column mixing object and non-object rows. CAST(... AS VARIANT)
+// returns such a column whenever a chunk has no NULL, so the NULL rows produced by the cast itself
+// must still be marked NULL on the result, aligned with the object rows around them.
+TEST_F(VectorizedCastExprTest, variant_cast_mixed_rows_non_nullable_input_to_struct) {
+    auto variant_column = VariantColumn::create();
+    for (const std::string& json :
+         {std::string(R"({"x":1})"), std::string(R"([1,2])"), std::string(R"({"x":3})"), std::string("5")}) {
+        variant_column->append(make_variant_row_from_json(json));
+    }
+    ColumnPtr input = std::move(variant_column);
+    ASSERT_FALSE(input->is_nullable());
+    ASSERT_FALSE(input->is_constant());
+
+    auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), input);
+    ASSERT_EQ(4, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_EQ("{x:1}", result->debug_item(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ("{x:3}", result->debug_item(2));
+    EXPECT_TRUE(result->is_null(3));
+}
+
+// Recursion: a nested struct field with a non-simple ('$') field name must work at every
+// level. Each nested CastVariantToStruct builds its own single-key path independently.
+TEST_F(VectorizedCastExprTest, variant_cast_to_nested_struct_with_special_field_name) {
+    constexpr size_t kInputSize = 2;
+    auto cv = make_const_variant_column_from_json(R"({"inner":{"$x":5}})", kInputSize);
+    TypeDescriptor inner = TypeDescriptor::create_struct_type({"$x"}, {TypeDescriptor(TYPE_INT)});
+    TypeDescriptor outer = TypeDescriptor::create_struct_type({"inner"}, {inner});
+    auto result = cast_from_variant(outer.to_thrift(), cv);
+    assert_const_or_expanded_result(result, kInputSize, "{inner:{$x:5}}");
+}
+
 // Verifies root typed-only scalar variant uses fast path for same-type cast and preserves null behavior.
 TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
@@ -3161,6 +3280,46 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
     ASSERT_EQ(1, result->size());
     ASSERT_TRUE(result->is_null(0));
+}
+
+// A row that exists only in typed shredded columns has no stored row ref: the cast rebuilds it into a
+// local buffer. The value must be read while that buffer is alive. The string is longer than the SSO
+// limit so a dangling read lands on freed heap memory (caught by ASAN).
+static ColumnPtr make_object_typed_only_variant_column(const std::vector<std::string>& values) {
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    for (const auto& v : values) {
+        typed->append_datum(Datum(Slice(v)));
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    auto variant = VariantColumn::create();
+    variant->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_string_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'x');
+    auto variant_col = make_object_typed_only_variant_column({long_value, "short"});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::VARCHAR), variant_col);
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    EXPECT_EQ(R"({"a":")" + long_value + R"("})", result->get(0).get_slice().to_string());
+    EXPECT_EQ(R"({"a":"short"})", result->get(1).get_slice().to_string());
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_json_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'y');
+    auto variant_col = make_object_typed_only_variant_column({long_value});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    const JsonValue* json = result->get(0).get_json();
+    ASSERT_NE(nullptr, json);
+    auto field = json->get_obj("a");
+    ASSERT_TRUE(field.ok());
+    auto str = field->get_string();
+    ASSERT_TRUE(str.ok());
+    EXPECT_EQ(long_value, str->to_string());
 }
 
 } // namespace starrocks

@@ -1,0 +1,14 @@
+{
+  "index_user": {
+    "mappings": {
+      "properties": {
+        "user_id": {
+          "type": "long"
+        },
+        "user_name": {
+          "type": "keyword"
+        }
+      }
+    }
+  }
+}

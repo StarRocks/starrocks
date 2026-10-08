@@ -279,19 +279,13 @@ spill::SpillStrategy SpillableHashJoinBuildOperator::spill_strategy() const {
 }
 
 StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_convert_hash_map_to_chunk() {
-    _build_chunks.clear();
-    _hash_table_iterate_idx = 0;
-
     // Snapshot the build chunks up front as shared_ptr, so iteration below never touches the
     // JoinHashTables again (which the join builder may free on cancel/close while this iterator runs
     // asynchronously on the spill executor).
+    std::vector<ChunkPtr> build_chunks;
     _join_builder->hash_join_builder()->visitHt(
-            [this](JoinHashTable* ht) { _build_chunks.push_back(ht->get_build_chunk()); });
-
-    for (auto& build_chunk : _build_chunks) {
-        DCHECK_GT(build_chunk->num_rows(), 0);
-        RETURN_IF_ERROR(build_chunk->upgrade_if_overflow());
-    }
+            [&build_chunks](JoinHashTable* ht) { build_chunks.push_back(ht->get_build_chunk()); });
+    RETURN_IF_ERROR(_build_chunk_slicer.reset(std::move(build_chunks)));
 
     // The build chunks are now snapshotted as shared_ptr, so neither the async spill iterator below
     // nor any later push_chunk needs the JoinHashTables anymore. Reset the builder HERE --
@@ -302,31 +296,9 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
     // The snapshot keeps the build_chunk data alive across the reset via shared_ptr refcount.
     _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
 
-    _hash_table_build_chunk_slice.reset(_build_chunks[_hash_table_iterate_idx]);
-    _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
-
     return [this]() -> StatusOr<ChunkPtr> {
-        if (_hash_table_build_chunk_slice.empty()) {
-            _hash_table_iterate_idx++;
-            for (; _hash_table_iterate_idx < _build_chunks.size(); _hash_table_iterate_idx++) {
-                const auto& build_chunk = _build_chunks[_hash_table_iterate_idx];
-                // Every build chunk has a dummy row at index 0. Skip partitions that have no real build rows.
-                if (build_chunk->num_rows() > kHashJoinKeyColumnOffset) {
-                    _hash_table_build_chunk_slice.reset(build_chunk);
-                    _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
-                    break;
-                }
-            }
-            if (_hash_table_build_chunk_slice.empty()) {
-                // Done spilling: drop our snapshot so the chunks can be reclaimed. The builder was
-                // already reset synchronously in the prologue above (see _convert_hash_map_to_chunk).
-                _build_chunks.clear();
-                return Status::EndOfFile("eos");
-            }
-        }
-
-        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(get_factory()->runtime_state()->chunk_size());
-        RETURN_IF_ERROR(chunk->downgrade());
+        // The slicer drops its snapshot at EndOfFile so the chunks can be reclaimed.
+        ASSIGN_OR_RETURN(ChunkPtr chunk, _build_chunk_slicer.next(get_factory()->runtime_state()->chunk_size()));
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());
         return chunk;

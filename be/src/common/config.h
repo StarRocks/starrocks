@@ -472,6 +472,8 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B
@@ -1486,6 +1488,13 @@ CONF_Int64(max_load_dop, "16");
 
 CONF_Bool(enable_load_colocate_mv, "true");
 
+// Whether this BE takes part in the ENCODE_ALL_NULL layout on the tablet sink RPC: as a receiver it
+// advertises the bit in the tablet-writer open result, and as a sender it asks for it. Turning it off on
+// either end of a load falls back to the unencoded layout for that load. Deliberately immutable: the
+// receiver decides from this flag both what to advertise and whether to honor the levels a sender sends,
+// and a mid-process flip would desynchronize those two decisions.
+CONF_Bool(enable_load_chunk_all_null_encoding, "true");
+
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
 
@@ -1847,7 +1856,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.5"); // 50%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
@@ -2589,4 +2598,12 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
+// Limits for one H3 function row/worker; all values must be positive.
+CONF_mInt64(h3_max_cells_per_row, "100000");
+CONF_mInt32(h3_max_grid_disk_k, "128");
+CONF_mInt64(h3_max_polygon_vertices, "10000");
+CONF_mInt32(h3_max_polygon_components, "256");
+CONF_mInt64(h3_max_working_bytes, "67108864");
+CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
+
 } // namespace starrocks::config

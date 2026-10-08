@@ -921,10 +921,12 @@ SHOW ALTER TABLE COLUMN FROM test_db WHERE TableName = "test_tbl";
 
 ### 禁止 Base Compaction
 
-`base_compaction_forbidden_time_ranges`：禁止对表进行 Base Compaction 的时间范围。设置此属性后，系统仅在指定时间范围之外对符合条件的 Tablet 执行 Base Compaction。此属性从 v3.2.13 开始支持。
+`base_compaction_forbidden_time_ranges`：限制表执行 Base Compaction 的时间范围。具体效果取决于表架构和 Compaction 策略，如下所述。此属性从 v3.2.13 开始支持。
+
+对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，系统在发起自动 Compaction 时检查该时段；禁止时段内仍可执行 Cumulative Compaction。对于使用 Size Tiered 策略的非主键表，此时段仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件；正常的层级选择仍可能在禁止时段选中最旧的层级。BE/CN 参数 `base_compaction_interval_seconds_since_last_operation` 在最小间隔未到期时施加相同限制。手动 `ALTER TABLE ... COMPACT` 可覆盖这些限制。
 
 :::note
-请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
+对于存算一体表，请确保在禁止 Base Compaction 期间，向表中加载的数据量不超过 500。
 :::
 
 `base_compaction_forbidden_time_ranges` 的值遵循 [Quartz cron 语法](https://productresources.collibra.com/docs/collibra/latest/Content/Cron/co_quartz-cron-syntax.htm)，并且只支持这些字段：`<minute> <hour> <day-of-the-month> <month> <day-of-the-week>`，其中 `<minute>` 必须是 `*`。

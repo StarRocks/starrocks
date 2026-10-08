@@ -1206,7 +1206,17 @@ jobs:
           git config --global user.name "wanpengfei-git";
           git config --global user.email "wanpengfei91@163.com";
           git checkout $BRANCH;
-          git reset ${BASE_VERSION} --hard || true;
+          # BASE_VERSION comes from the build job. When it is empty this used to
+          # be `git reset --hard || true` -- a no-op reset to the branch tip,
+          # silently swallowed -- so the suite ran against "latest main + PR"
+          # while the run still reported a base-version build. A transient
+          # GitHub API error in the build was enough to trigger it, and the
+          # resulting failures looked like they belonged to the PR.
+          if [[ -z "${BASE_VERSION}" ]]; then
+            echo "::error::BASE_VERSION is empty; the build job did not resolve a base version. Refusing to test against the branch tip.";
+            exit 1;
+          fi
+          git reset "${BASE_VERSION}" --hard;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;

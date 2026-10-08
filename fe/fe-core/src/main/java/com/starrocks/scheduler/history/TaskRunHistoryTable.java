@@ -202,6 +202,15 @@ public class TaskRunHistoryTable {
         return "'" + SqlUtils.escapeSqlString(value) + "'";
     }
 
+    /**
+     * The database name inside history_content_json. Rows written by older versions carry the default_cluster
+     * prefix and stay until their partition expires, so both forms are matched.
+     */
+    private static String dbNamePredicate(String dbName) {
+        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(dbName) + ", "
+                + quoteLiteral(ClusterNamespace.getFullName(dbName)) + ")";
+    }
+
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
         if (params == null) {
             return Lists.newArrayList();
@@ -209,8 +218,7 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(params.getDb())));
+            predicates.add(dbNamePredicate(params.getDb()));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
             predicates.add(" task_name = " + quoteLiteral(params.getTask_name()));
@@ -239,8 +247,7 @@ public class TaskRunHistoryTable {
     public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
@@ -278,8 +285,7 @@ public class TaskRunHistoryTable {
 
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));

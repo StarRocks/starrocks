@@ -541,17 +541,21 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // the aggregate ratio -- diluted by many mostly-live rowsets -- crosses the ratio threshold.
     // Otherwise run the normal size-tiered cumulative selection. When base compaction finds nothing
     // to reclaim (no delete-bearing rowsets), fall through to cumulative so a forced compaction
-    // still merges small files.
-    const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
-    // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
-    // under a forced base compaction: there is nothing for base compaction to reclaim, so skip the
-    // second rowset walk in pick_base_rowsets and go straight to cumulative selection.
-    if (del_stats.total_dels > 0 &&
-        (_force_base_compaction || del_stats.ratio() >= config::lake_pk_compaction_base_delete_ratio_threshold ||
-         del_stats.total_dels >= config::lake_pk_compaction_base_delete_rows_threshold)) {
-        ASSIGN_OR_RETURN(auto base_rowsets, pick_base_rowsets(tablet_metadata, has_dels));
-        if (!base_rowsets.empty()) {
-            return base_rowsets;
+    // still merges small files. Skip collecting delete stats when automatic base compaction is
+    // forbidden: for rowsets without num_dels, this reads the delete vector of every segment.
+    if (base_compaction_allowed()) {
+        const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
+        // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
+        // under a forced base compaction: there is nothing for base compaction to reclaim, so skip
+        // the second rowset walk in pick_base_rowsets and go straight to cumulative selection.
+        if (del_stats.total_dels > 0 &&
+            (_force_base_compaction || del_stats.ratio() >= config::lake_pk_compaction_base_delete_ratio_threshold ||
+             del_stats.total_dels >= config::lake_pk_compaction_base_delete_rows_threshold)) {
+            ASSIGN_OR_RETURN(auto base_rowsets, pick_base_rowsets(tablet_metadata, has_dels));
+            if (!base_rowsets.empty()) {
+                _picked_base_compaction = true;
+                return base_rowsets;
+            }
         }
     }
 

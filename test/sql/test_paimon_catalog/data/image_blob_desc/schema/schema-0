@@ -1,0 +1,25 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT"
+  }, {
+    "id" : 1,
+    "name" : "image",
+    "type" : "BLOB",
+    "description" : "reference to t_blob"
+  } ],
+  "highestFieldId" : 1,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ ],
+  "options" : {
+    "data-evolution.enabled" : "true",
+    "owner" : "smith",
+    "blob-descriptor-field" : "image",
+    "blob-as-descriptor" : "true",
+    "row-tracking.enabled" : "true"
+  },
+  "timeMillis" : 1789874950065
+}

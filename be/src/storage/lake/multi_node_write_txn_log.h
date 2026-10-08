@@ -31,6 +31,8 @@ namespace starrocks::lake {
 // The fold is a flat concatenation, mirroring TabletWriter::merge_other_writer (which does the same
 // thing for the multi-threaded spill merge inside one node):
 //   - segment_metas are appended and renumbered, so a segment's position IS its rowset-local index;
+//     once any of them is a bundled slice, each standalone one gets bundle_file_offset 0, because a
+//     node that bundled and a node that flushed mid-load leave logs of both kinds for one tablet;
 //   - ssts / sst_ranges / seg_delvecs are appended alongside them and stay positionally aligned,
 //     which is what publish relies on (update_manager indexes op_write.ssts() by segment id and
 //     stamps the resulting sstable's rssid from that position, so no rssid rewriting is needed);

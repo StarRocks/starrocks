@@ -116,8 +116,7 @@ bool has_binary_storage(const Column& input) {
             column = nullable->data_column_raw_ptr();
         }
     }
-    return dynamic_cast<const BinaryColumn*>(column) != nullptr ||
-           dynamic_cast<const LargeBinaryColumn*>(column) != nullptr;
+    return dynamic_cast<const BinaryColumn*>(column) != nullptr;
 }
 
 bool is_untyped_map(const TypeDescriptor& type) {
@@ -139,13 +138,6 @@ StatusOr<std::string> read_map_key(const Column& input, size_t row) {
         return invalid_options();
     }
     if (const auto* binary = checked_column<BinaryColumn>(*unwrapped); binary != nullptr) {
-        const Slice value = binary->get_slice(unwrapped->row);
-        if (!validate_utf8(value.data, value.size)) {
-            return invalid_options();
-        }
-        return std::string(value.data, value.size);
-    }
-    if (const auto* binary = checked_column<LargeBinaryColumn>(*unwrapped); binary != nullptr) {
         const Slice value = binary->get_slice(unwrapped->row);
         if (!validate_utf8(value.data, value.size)) {
             return invalid_options();
@@ -339,10 +331,6 @@ Status write_value(const Column& input, const TypeDescriptor& type, size_t row, 
             *root_type = rapidjson::kStringType;
         }
         if (const auto* column = checked_column<BinaryColumn>(*unwrapped); column != nullptr) {
-            const Slice value = column->get_slice(unwrapped->row);
-            return require_json_write(writer->String(value.data, value.size));
-        }
-        if (const auto* column = checked_column<LargeBinaryColumn>(*unwrapped); column != nullptr) {
             const Slice value = column->get_slice(unwrapped->row);
             return require_json_write(writer->String(value.data, value.size));
         }

@@ -466,6 +466,15 @@ public class ListPartitionPruner implements PartitionPruner {
 
             @Override
             public ScalarOperator visitInPredicate(InPredicateOperator operator, Void context) {
+                // The deduced conjunct may only widen the rows it keeps: c1 IN (a, b) implies
+                // f(c1) IN (f(a), f(b)), but c1 NOT IN (a, b) does not imply f(c1) NOT IN (f(a), f(b))
+                // unless f is one-to-one. With f = date_trunc('day', c1), '2024-01-02 13:00' is not in
+                // ('2024-01-02 12:00'), yet its partition value is, and that partition would be pruned
+                // with the row still in it. NOT EQUAL is refused for the same reason in
+                // normalizeNonStrictMonotonic().
+                if (operator.isNotIn()) {
+                    return null;
+                }
                 ScalarOperator result = operator.clone();
                 result.setChild(0, generatedColumn);
                 for (int i = 1; i < operator.getChildren().size(); i++) {

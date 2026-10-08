@@ -42,12 +42,30 @@ import java.util.stream.Collectors;
  */
 abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExecutor {
 
-    /** Subclass-supplied FILES sub-query inputs. */
+    /**
+     * Subclass-supplied FILES sub-query inputs.
+     *
+     * <p>{@code wherePredicateSqlOrNull} is copied verbatim into the sampling sub-query, and
+     * {@code targetToSourceColumnNames} re-points each projected target column at the FILES column
+     * that backs it. An EMPTY map means the file's columns already carry the target's names.
+     * {@code targetToConstantSql} carries the key columns the load feeds with a literal rather
+     * than a FILES column, and {@code targetToExpressionSql} those it computes from FILES columns.
+     * {@code scannedFileBytes} is how much of {@code totalFileBytes} the
+     * sample scans, and {@code partitionSourceBytes} the exact per-path-partition breakdown when a
+     * file subset is sampled.
+     */
     protected record Source(
-            Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource) {
+            Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource,
+            String wherePredicateSqlOrNull, Map<String, String> targetToSourceColumnNames,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql,
+            long scannedFileBytes, List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
         public Source {
             Objects.requireNonNull(filesProperties, "filesProperties");
             Objects.requireNonNull(computeResource, "computeResource");
+            Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
+            Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+            Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+            Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
             if (totalFileBytes < 0) {
                 throw new IllegalArgumentException("totalFileBytes must be non-negative, was " + totalFileBytes);
             }
@@ -77,10 +95,53 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
         String fromClauseSql = "FILES(" + buildPropertiesClause(source.filesProperties()) + ")";
         List<Column> sortKeyColumns = request.getSortKey();
         List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
-        return new SampleSpec(fromClauseSql, /*whereClauseSqlOrNull=*/ null,
+        Map<String, String> targetToSource = source.targetToSourceColumnNames();
+        Map<String, String> targetToConstantSql = source.targetToConstantSql();
+        Map<String, String> targetToExpressionSql = source.targetToExpressionSql();
+        return new SampleSpec(fromClauseSql, source.wherePredicateSqlOrNull(),
                 source.totalFileBytes(), source.computeResource(),
-                columnIdentsOf(sortKeyColumns), columnIdentsOf(partitionSourceColumns),
-                sortKeyColumns, partitionSourceColumns);
+                filesProjections(sortKeyColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
+                filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
+                sortKeyColumns, partitionSourceColumns, 0L, false,
+                source.scannedFileBytes(), source.partitionSourceBytes());
+    }
+
+    /**
+     * Like {@link #filesProjectionIdents}, except that a column the load feeds with a literal or
+     * computes from FILES columns is projected as that literal or expression cast to the column type.
+     */
+    static List<String> filesProjections(
+            List<Column> columns, Map<String, String> targetToSourceColumnNames,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql)
+            throws StarRocksException {
+        if (targetToConstantSql.isEmpty() && targetToExpressionSql.isEmpty()) {
+            return filesProjectionIdents(columns, targetToSourceColumnNames);
+        }
+        List<String> projections = InsertSelectSourceColumns.projections(
+                columns, targetToSourceColumnNames, targetToConstantSql, targetToExpressionSql);
+        if (projections == null) {
+            throw new StarRocksException("a projected column has no FILES column, constant, or expression");
+        }
+        return projections;
+    }
+
+    /**
+     * Projects each target column by the FILES column that backs it, or by its own name when the
+     * mapping is empty (the projection is name-identity). Throws -&gt; the sample fails -&gt; the
+     * load proceeds without pre-split, rather than letting a boundary be computed from the wrong
+     * FILES column; the admitting gate in {@code FilesPreSplitSource#prepare} already proved every
+     * projected column is mapped, so this remains a fail-safe.
+     */
+    static List<String> filesProjectionIdents(List<Column> columns, Map<String, String> targetToSourceColumnNames)
+            throws StarRocksException {
+        if (targetToSourceColumnNames.isEmpty()) {
+            return columnIdentsOf(columns);
+        }
+        List<String> sourceNames = InsertSelectSourceColumns.lookup(columns, targetToSourceColumnNames);
+        if (sourceNames == null) {
+            throw new StarRocksException("a projected column has no FILES column mapping");
+        }
+        return identsOf(sourceNames);
     }
 
     /**

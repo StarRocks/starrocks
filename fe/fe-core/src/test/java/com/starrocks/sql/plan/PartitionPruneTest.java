@@ -495,6 +495,33 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsNotIn() throws Exception {
+        // date_trunc() maps many source values onto one partition value, so NOT IN on the source column
+        // says nothing about the partition value: '2024-01-02 13:00:00' is not in the list below, yet
+        // its partition value '2024-01-02' is the image of a listed value. Deducing c2 NOT IN (...)
+        // pruned p0102 and p0103 with matching rows still in them. A single-value NOT IN is rewritten
+        // to NOT EQUAL, which was never deduced, so it takes two values to reach the IN branch.
+        starRocksAssert.withTable("CREATE TABLE t_gen_not_in (" +
+                " c1 datetime NOT NULL," +
+                " c2 datetime NULL AS date_trunc('day', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0101 VALUES IN ('2024-01-01 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0102 VALUES IN ('2024-01-02 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0103 VALUES IN ('2024-01-03 00:00:00')");
+
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 not in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=3/3");
+        // IN still maps through the function and prunes
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=2/3");
+    }
+
+    @Test
     public void testGeneratedColumnPruneSkipsCaseWhen() throws Exception {
         // A guard, not a regression test: nothing here is known to be broken today.
         //

@@ -131,6 +131,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_JSON:
+        case TYPE_VARIANT:
             break;
 
         default:

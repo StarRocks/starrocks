@@ -1,0 +1,31 @@
+-- name: test_agg_state_const_arg
+-- The _state combinator hands an aggregate function its constant arguments unchanged -- deliberately,
+-- to avoid materialising N copies of a constant -- while passing columns[0]->size(), the replicated
+-- row count, as chunk_size. convert_to_serialize_format hoisted the unwrapped container and indexed
+-- it by the row, so every row after the first read past its single element: ASan reported a
+-- heap-buffer-overflow in murmur_hash64A and the BE died. update() never had the problem because it
+-- takes the row-indexed GetContainer overload.
+CREATE TABLE t0 (
+    k INT NULL,
+    s SMALLINT NULL
+)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t0 SELECT generate_series, generate_series % 100 FROM TABLE(generate_series(1, 4096));
+
+-- Merged rather than unioned, so what is recorded is the estimate and not a sketch blob: the raw
+-- state is kilobytes of binary whose bytes are not a contract, while the count is what the query
+-- means. One constant value has to come back as exactly one distinct value -- the answer matters
+-- here, not just that the BE survives.
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(CAST(1 AS SMALLINT))) FROM t0;
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(CAST('a' AS VARCHAR))) FROM t0;
+-- a real column, which was never broken, as the control
+SELECT ds_theta_count_distinct_merge(ds_theta_count_distinct_state(s)) FROM t0;
+
+-- ds_hll and ndv read their input the same way and had the same defect. The column controls use s,
+-- whose 100 distinct values every sketch counts exactly, so no approximation is pinned in the R.
+SELECT ds_hll_count_distinct_merge(ds_hll_count_distinct_state(CAST(1 AS INT))) FROM t0;
+SELECT ds_hll_count_distinct_merge(ds_hll_count_distinct_state(s)) FROM t0;
+SELECT ndv_merge(ndv_state(CAST(1 AS INT))) FROM t0;
+SELECT ndv_merge(ndv_state(s)) FROM t0;

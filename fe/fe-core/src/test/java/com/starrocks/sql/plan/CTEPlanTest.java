@@ -30,6 +30,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 public class CTEPlanTest extends PlanTestBase {
     private static class TestStorage extends EmptyStatisticStorage {
         @Override
@@ -1380,5 +1385,53 @@ public class CTEPlanTest extends PlanTestBase {
                         "select 1 union all select a + 1 from cte where a < 10) [not_materialized] " +
                         "select * from cte"),
                 "[materialized]/[not_materialized] hints are not allowed on recursive CTEs");
+    }
+
+    // A project right above a CTE consume exchange must not put one column into two slots: the consume
+    // predicate filters the chunk in place and would filter that shared column twice.
+    private static final Pattern CONSUME_PROJECT =
+            Pattern.compile("\\n  \\d+:Project\\n((?:  \\|  [^\\n]*\\n)+)  \\d+:EXCHANGE");
+    private static final Pattern PLAIN_SLOT = Pattern.compile("<slot \\d+> : (\\d+): \\w+$");
+
+    private static void assertConsumeProjectsOwnTheirColumns(String plan) {
+        Matcher project = CONSUME_PROJECT.matcher(plan);
+        while (project.find()) {
+            Set<String> referenced = new HashSet<>();
+            for (String line : project.group(1).split("\\n")) {
+                Matcher slot = PLAIN_SLOT.matcher(line.trim());
+                if (slot.find()) {
+                    Assertions.assertTrue(referenced.add(slot.group(1)), "column shared by two slots:\n" + plan);
+                }
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testConsumeOfColumnOutputTwice(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "with c(k, x, x2) as (select v1, v2, v2 from t0) " +
+                "select * from c where k > 1 union all select * from c where k < 0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
+        assertConsumeProjectsOwnTheirColumns(plan);
+        if (forceReuseNodeCount > 0) {
+            assertContains(plan, "clone(2: v2)");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    public void testConsumeOfAggregateWrittenTwice(int forceReuseNodeCount) throws Exception {
+        connectContext.getSessionVariable().setCboCTEForceReuseNodeCount(forceReuseNodeCount);
+        String sql = "with c(k, mn, mn2, mx, mx2) as " +
+                "(select v1, min(v2), min(v2), max(v3), max(v3) from t0 group by v1) " +
+                "select * from c where k > 1 union all select * from c where k < 0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "MultiCastDataSinks");
+        assertConsumeProjectsOwnTheirColumns(plan);
+        if (forceReuseNodeCount > 0) {
+            assertContains(plan, "clone(");
+        }
     }
 }

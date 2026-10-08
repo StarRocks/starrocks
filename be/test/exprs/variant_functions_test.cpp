@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "column/array_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -1562,6 +1563,288 @@ TEST_F(VariantFunctionsTest, variant_path_reader_full_materialize_excludes_unrel
     EXPECT_NE(std::string::npos, json_str.find("42")) << "missing a.b.c=42 in: " << json_str;
     // x.y.z value 999 must NOT appear in the a.b subtree result
     EXPECT_EQ(std::string::npos, json_str.find("999")) << "unrelated x.y.z=999 leaked into: " << json_str;
+}
+
+// ---------------------------------------------------------------------------
+// Typed path with fallback values (value does not fit the typed column type)
+// ---------------------------------------------------------------------------
+
+// Typed BIGINT path "a" plus its fallback column. Rows: {"a":1} (typed), {"a":"x"} and {"a":{"k":1}} (fallback,
+// decoded with the row metadata), {"b":2} (no "a").
+static MutableColumnPtr build_bigint_path_with_fallback_rows() {
+    const std::vector<std::string> rows_json = {R"({"a":1})", R"({"a":"x"})", R"({"a":{"k":1}})", R"({"b":2})"};
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto fallback = VariantColumn::create_fallback_column();
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    CHECK(path_a.ok());
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    for (const auto& json : rows_json) {
+        VariantRowValue row = create_variant_from_json_text(json);
+        std::string_view metadata_raw = row.get_metadata().raw();
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        auto field = VariantPath::seek_view(row.as_ref(), path_a.value());
+        if (!field.ok() || field->is_null()) {
+            std::string_view value_raw = row.get_value().raw();
+            remain->append(Slice(value_raw.data(), value_raw.size()));
+            typed->append_nulls(1);
+            fallback->append_nulls(1);
+            continue;
+        }
+        remain->append(Slice(empty_object));
+        auto as_int = field->get_value().get_int8();
+        if (as_int.ok()) {
+            typed->append_datum(Datum(static_cast<int64_t>(as_int.value())));
+            fallback->append_nulls(1);
+        } else {
+            typed->append_nulls(1);
+            std::string_view field_raw = field->get_value().raw();
+            fallback->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+        }
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    MutableColumns fallback_columns;
+    fallback_columns.emplace_back(std::move(fallback));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
+                              std::move(fallback_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+static Columns const_path_columns(const ColumnPtr& variant_column, const std::string& path, FunctionContext* ctx) {
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+    path_builder.append(path);
+    Columns columns{variant_column, path_builder.build(true)};
+    ctx->set_constant_columns(columns);
+    auto st = VariantFunctions::variant_segments_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    CHECK(st.ok()) << st.to_string();
+    return columns;
+}
+
+TEST_F(VariantFunctionsTest, typed_path_with_fallback_is_not_typed_exact) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    auto path = VariantPathParser::parse(std::string("$.a"));
+    ASSERT_TRUE(path.ok());
+    VariantPathReader reader;
+    reader.prepare(down_cast<const VariantColumn*>(col.get()), &path.value());
+    EXPECT_FALSE(reader.is_typed_exact());
+    auto read = reader.read_row(1);
+    ASSERT_EQ(VariantReadState::kValue, read.state);
+    EXPECT_EQ(R"("x")", read.value.to_json().value());
+    EXPECT_EQ(VariantReadState::kNull, reader.read_row(3).state);
+}
+
+TEST_F(VariantFunctionsTest, get_variant_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, result.value()->get(0).get_int64());
+        EXPECT_TRUE(result.value()->is_null(1)); // "x" does not cast to BIGINT
+        EXPECT_TRUE(result.value()->is_null(2)); // object does not cast to BIGINT
+        EXPECT_TRUE(result.value()->is_null(3)); // missing
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::get_variant_string(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ("1", result.value()->get(0).get_slice().to_string());
+        EXPECT_EQ("x", result.value()->get(1).get_slice().to_string());
+        EXPECT_TRUE(result.value()->is_null(3));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+}
+
+TEST_F(VariantFunctionsTest, variant_query_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::variant_query(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ("1", variant_result_to_json(result.value(), 0).value());
+        EXPECT_EQ(R"("x")", variant_result_to_json(result.value(), 1).value());
+        EXPECT_EQ(R"({"k":1})", variant_result_to_json(result.value(), 2).value());
+        EXPECT_TRUE(result.value()->is_null(3));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        // A path below the typed path is read from the fallback value.
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a.k", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_TRUE(result.value()->is_null(0));
+        EXPECT_TRUE(result.value()->is_null(1));
+        EXPECT_EQ(1, result.value()->get(2).get_int64());
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+}
+
+TEST_F(VariantFunctionsTest, variant_typeof_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns{col};
+    auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_EQ("Object", result.value()->get(i).get_slice().to_string()) << "row " << i;
+    }
+}
+
+// is_variant_null is TRUE only for a VARIANT null: a JSON null at a path is told apart from a missing path, and a
+// SQL NULL input is FALSE.
+TEST_F(VariantFunctionsTest, is_variant_null) {
+    auto variant_column = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    for (const char* json : {R"({"a":null})", R"({"a":1})", R"({"b":2})", "null"}) {
+        auto row = VariantEncoder::encode_json_text_to_variant(json);
+        ASSERT_TRUE(row.ok()) << row.status().to_string();
+        variant_column->append_datum(Datum(&row.value()));
+    }
+    variant_column->append_nulls(1);
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // The rows themselves: only the top-level JSON null is a VARIANT null; SQL NULL is FALSE, not NULL.
+    {
+        Columns columns{variant_column};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_FALSE(result.value()->is_nullable());
+        const std::vector<uint8_t> expected = {0, 0, 0, 1, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // On '$.a': JSON null -> TRUE, value -> FALSE, missing path / null input -> FALSE.
+    {
+        auto path = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("$.a"), variant_column->size());
+        Columns query_columns{variant_column, path};
+        ctx->set_constant_columns(query_columns);
+        auto prepared = VariantFunctions::variant_segments_prepare(ctx.get(),
+                                                                   FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepared.ok()) << prepared.to_string();
+        auto queried = VariantFunctions::variant_query(ctx.get(), query_columns);
+        ASSERT_TRUE(queried.ok()) << queried.status().to_string();
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Columns columns{queried.value()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        const std::vector<uint8_t> expected = {1, 0, 0, 0, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // Only-null and constant inputs.
+    {
+        Columns columns{ColumnHelper::create_const_null_column(3)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_EQ(3, result.value()->size());
+        EXPECT_EQ(0, result.value()->get(2).get_uint8());
+    }
+    {
+        auto null_row = VariantEncoder::encode_json_text_to_variant("null");
+        ASSERT_TRUE(null_row.ok());
+        auto data = VariantColumn::create();
+        data->append_datum(Datum(&null_row.value()));
+        Columns columns{ConstColumn::create(std::move(data), 4)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_TRUE(result.value()->is_constant());
+        ASSERT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, result.value()->get(3).get_uint8());
+    }
+
+    // Shredded rows with typed or fallback values are objects.
+    {
+        Columns columns{build_bigint_path_with_fallback_rows()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(0, result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+}
+
+// An ARRAY<VARIANT> typed path (a shredded array) whose elements are a shredded VariantColumn, with a fallback
+// value in another row: the path is not typed-exact, so rows are read one by one and the array cell must be
+// encoded from the columns (a Datum cannot read the element VariantColumn).
+TEST_F(VariantFunctionsTest, variant_query_array_of_variant_path_with_fallback) {
+    // Elements: [{"k":1},{"k":2}] for row 0, as a typed-only element VariantColumn with typed path "k".
+    MutableColumns element_typed;
+    element_typed.emplace_back(build_nullable_int64_column({1, 2}, {0, 0}));
+    auto element_column = VariantColumn::create();
+    element_column->set_shredded_columns({"k"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(element_typed), nullptr,
+                                         nullptr);
+    auto elements = NullableColumn::create(std::move(element_column), NullColumn::create(2, 0));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    offsets->append(2);
+    auto nulls = NullColumn::create(2, 0);
+    nulls->get_data()[1] = 1;
+    MutableColumns typed;
+    typed.emplace_back(
+            NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)), std::move(nulls)));
+
+    // Row 1: "items" is the string "x", kept in the fallback column.
+    VariantRowValue string_value = create_variant_from_json_text(R"("x")");
+    auto string_raw = string_value.get_value().raw();
+    MutableColumns fallback;
+    auto fallback_column = VariantColumn::create_fallback_column();
+    fallback_column->append_nulls(1);
+    fallback_column->append_datum(Datum(Slice(string_raw.data(), string_raw.size())));
+    fallback.emplace_back(std::move(fallback_column));
+
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    auto metadata_raw = string_value.get_metadata().raw();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (int i = 0; i < 2; ++i) {
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(empty_object));
+    }
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"items"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT))},
+                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+    ColumnPtr variant_column = std::move(col);
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items", ctx.get());
+        auto result = VariantFunctions::variant_query(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(R"([{"k":1},{"k":2}])", variant_result_to_json(result.value(), 0).value());
+        EXPECT_EQ(R"("x")", variant_result_to_json(result.value(), 1).value());
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items[1].k", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(2, result.value()->get(0).get_int64());
+        EXPECT_TRUE(result.value()->is_null(1));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
 }
 
 } // namespace starrocks

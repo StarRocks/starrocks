@@ -112,6 +112,39 @@ public class LDAPGroupProviderCaseInsensitiveTest {
     }
 
     @Test
+    public void testGetGroupWithEquivalentDistinguishedNameSpellings() throws DdlException {
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+        // No LDAP_USER_SEARCH_ATTR, so the cache is keyed by the distinguished name.
+
+        String groupName = "ldap_group_provider_dn_spelling";
+        authenticationMgr.replayCreateGroupProvider(groupName, properties);
+        Config.group_provider = new String[] {groupName};
+        LDAPGroupProvider ldapGroupProvider = (LDAPGroupProvider) authenticationMgr.getGroupProvider(groupName);
+
+        Map<String, Set<String>> groups = new HashMap<>();
+        groups.put(LDAPAuthProvider.canonicalDn("uid=Allen,OU=People,DC=example,DC=com"), Set.of("group1", "group2"));
+        ldapGroupProvider.setUserToGroupCache(groups);
+
+        // Same DN, spelled the way different LDAP entries happen to spell it: whitespace after or
+        // around the separators, and a different case for the attribute types and values.
+        String[] equivalentDNs = {
+                "uid=Allen,OU=People,DC=example,DC=com",
+                "uid=allen, ou=people, dc=example, dc=com",
+                "UID=ALLEN , OU=PEOPLE , DC=EXAMPLE , DC=COM",
+        };
+
+        UserIdentity userIdentity = UserIdentity.createEphemeralUserIdent("test", "%");
+        for (String dn : equivalentDNs) {
+            Assertions.assertEquals(Set.of("group1", "group2"), ldapGroupProvider.getGroup(userIdentity, dn),
+                    "DN '" + dn + "' denotes the same entry and must hit the same cache entry");
+        }
+    }
+
+    @Test
     public void testRefreshGroupsNormalizesUsernames() throws DdlException {
         AuthenticationMgr authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);

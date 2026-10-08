@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <algorithm>
+#include <ctime>
 #include <sstream>
 #include <utility>
 
@@ -341,7 +342,8 @@ TabletParallelCompactionManager::TabletParallelCompactionManager(TabletManager* 
 TabletParallelCompactionManager::~TabletParallelCompactionManager() = default;
 
 StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_for_compaction(
-        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction, bool is_unshare) {
+        int64_t tablet_id, int64_t txn_id, int64_t version, bool force_base_compaction, bool is_unshare,
+        bool allow_base_compaction, bool* is_base_compaction) {
     // Get tablet metadata
     ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(tablet_id, version));
     const auto& metadata = tablet.metadata();
@@ -362,7 +364,8 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
             << " first_10_rowset_ids=[" << JoinInts(first_rowset_ids, ",") << "]";
 
     // Get all rowsets to compact using standard pick_rowsets()
-    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction, is_unshare));
+    ASSIGN_OR_RETURN(auto policy, CompactionPolicy::create(_tablet_mgr, metadata, force_base_compaction, is_unshare,
+                                                           allow_base_compaction));
     auto all_rowsets_or = policy->pick_rowsets();
     if (!all_rowsets_or.ok() || all_rowsets_or.value().empty()) {
         return Status::NotFound(strings::Substitute(
@@ -372,6 +375,7 @@ StatusOr<std::vector<RowsetPtr>> TabletParallelCompactionManager::pick_rowsets_f
                 all_rowsets_or.ok() ? "OK(empty)" : all_rowsets_or.status().to_string()));
     }
 
+    *is_base_compaction = policy->picked_base_compaction();
     return std::move(all_rowsets_or.value());
 }
 
@@ -643,7 +647,8 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
         int64_t tablet_id, int64_t txn_id, int64_t version, const TabletParallelConfig& config,
         std::shared_ptr<CompactionTaskCallback> callback, bool force_base_compaction, ThreadPool* thread_pool,
         const AcquireTokenFunc& acquire_token, const ReleaseTokenFunc& release_token, bool is_unshare,
-        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token) {
+        int64_t handoff_in_queue_time_sec, int64_t handoff_queue_wait_ns, const ReturnTokenFunc& return_token,
+        bool allow_base_compaction) {
     // Validate configuration
     // max_parallel comes from table property (via FE)
     // max_bytes comes from BE config if FE passes 0
@@ -681,8 +686,10 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     }
 
     // Step 1: Pick rowsets for compaction
+    bool is_base_compaction = false;
     ASSIGN_OR_RETURN(auto all_rowsets,
-                     pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction, is_unshare));
+                     pick_rowsets_for_compaction(tablet_id, txn_id, version, force_base_compaction, is_unshare,
+                                                 allow_base_compaction, &is_base_compaction));
     size_t total_rowsets_count = all_rowsets.size();
 
     // Use the unified grouping algorithm that supports both large rowset splitting
@@ -711,6 +718,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     ASSIGN_OR_RETURN(auto state_ptr,
                      create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel, max_bytes, is_unshare,
                                                       std::move(callback), release_token));
+    state_ptr->is_base_compaction = is_base_compaction;
     {
         // Carry over the queue wait of the caller's context, which is about to be destroyed.
         std::lock_guard<std::mutex> lock(state_ptr->mutex);
@@ -1273,7 +1281,6 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
 
         // Cache version for use outside the lock
         version = state->version;
-
         // Sort completed_subtasks by subtask_id to ensure consistent ordering
         // This is critical because rows_mapper files are merged by subtask_id order,
         // so segments must also be merged in the same order.
@@ -1705,6 +1712,17 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
                     << ", successful_subtasks=" << success_subtask_ids.size()
                     << ", subtask_compactions=" << op_parallel->subtask_compactions_size();
         } // end if (!state->is_range_split)
+
+        // A partially successful parallel Base compaction still did Base work. Stamp the
+        // interval only when at least one selected subtask with rowset inputs succeeded.
+        if (state->is_base_compaction) {
+            for (const auto& subtask : op_parallel->subtask_compactions()) {
+                if (!subtask.input_rowsets().empty()) {
+                    op_parallel->set_base_compaction_time(time(nullptr));
+                    break;
+                }
+            }
+        }
     }
     // Lock released here
 

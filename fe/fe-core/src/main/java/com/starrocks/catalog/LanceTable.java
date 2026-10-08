@@ -30,14 +30,14 @@ public class LanceTable extends Table {
     private final String dbName;
 
     public LanceTable(long id, String name, List<Column> schema, String uri) {
-        this(id, name, schema, uri, null);
+        this(id, null, name, schema, uri);
     }
 
-    public LanceTable(long id, String name, List<Column> schema, String uri, String catalogName) {
-        this(id, name, schema, uri, catalogName, "");
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
+        this(id, catalogName, name, schema, uri, "");
     }
 
-    public LanceTable(long id, String name, List<Column> schema, String uri, String catalogName, String dbName) {
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri, String dbName) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
         this.catalogName = catalogName;

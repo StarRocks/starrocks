@@ -193,6 +193,15 @@ This topic introduces the following types of FE configurations:
 - Description: The auxiliary per-scan estimated-row budget for external-table statistics collection (Iceberg). A statistics scan stops early once the estimated number of rows it has scanned reaches this budget. Because per-split row counts can only be estimated (the record count is recorded per file, not per split), this is an auxiliary soft budget rather than the primary control. The default aligns with `connector_table_query_trigger_analyze_small_table_rows`. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")`.
 - Introduced in: v4.1
 
+### `connector_table_analyze_query_timeout`
+
+- Default: 360
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
+- Introduced in: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - Default: 12 * 3600
@@ -569,6 +578,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Unit: -
 - Is mutable: No
 - Description: Whether to enable UDF.
+- Introduced in: -
+
+### `enable_virtual_columns`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to expose virtual columns such as `_tablet_id_` on native tables. Virtual columns are read-only metadata columns that are computed at query time and are not stored. When this parameter is set to `false`, a query that references a virtual column fails because the column cannot be resolved. For more information, see [Virtual columns](../../../table_design/virtual_columns.md).
 - Introduced in: -
 
 ### `expr_children_limit`

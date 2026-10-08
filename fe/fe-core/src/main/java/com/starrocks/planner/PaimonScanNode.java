@@ -159,6 +159,7 @@ public class PaimonScanNode extends ScanNode {
         if (sessionVariable.getPaimonForceJNIReader()) {
             paimonReaderMode = PaimonReaderMode.JNI;
         }
+        paimonReaderMode = resolveAutoReaderModeForFileColumns(tupleDescriptor, paimonReaderMode);
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
             if (split instanceof DataSplit dataSplit) {
@@ -321,6 +322,19 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocations.addToLocations(scanRangeLocation);
 
         scanRangeLocationsList.add(scanRangeLocations);
+    }
+
+    // Under AUTO, a scan that touches a FILE (Paimon BLOB) column goes to paimon-cpp: it is the only
+    // reader that decodes BLOB, and the split may still be raw-convertible when the column is stored
+    // as inline descriptors. Paimon also allows ARRAY<BLOB> and MAP<K, BLOB>, so look inside complex
+    // types too. An explicit JNI/NATIVE choice is left alone and the BE reports errors.
+    static PaimonReaderMode resolveAutoReaderModeForFileColumns(TupleDescriptor tupleDescriptor,
+                                                            PaimonReaderMode paimonReaderMode) {
+        if (paimonReaderMode != PaimonReaderMode.AUTO) {
+            return paimonReaderMode;
+        }
+        boolean hasFileColumn = tupleDescriptor.getSlots().stream().anyMatch(slot -> slot.getType().containsFile());
+        return hasFileColumn ? PaimonReaderMode.NATIVE : paimonReaderMode;
     }
 
     static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor) {

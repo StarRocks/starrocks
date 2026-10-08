@@ -30,6 +30,8 @@ import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.ImmutableTriple;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class StatisticsUtils {
+    private static final Logger LOG = LogManager.getLogger(StatisticsUtils.class);
+
     public static Table getTableByUUID(ConnectContext context, String tableUUID) {
         String[] splits = tableUUID.split("\\.");
 
@@ -95,13 +99,27 @@ public class StatisticsUtils {
                     getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
                             tableIdentifier.getRight().getName());
 
+            // Rows in external_column_statistics only ever reach the CBO through this method, and they are
+            // per-partition rows aggregated with no partition filter and no completeness gate (see
+            // StatisticSQLBuilder#buildQueryExternalFullStatisticsSQL). ColumnStatsMeta is what says how many
+            // partitions those rows actually cover, so without it the aggregate is an unknown fraction of the
+            // table. A collection job that dies partway can leave exactly that state behind: its rows are
+            // flushed but its metadata is never committed. Trusting them as whole-table values hands the
+            // optimizer a confident underestimate, which is worse than having no statistics at all - so treat
+            // any row set we cannot size as unknown.
             if (externalBasicStatsMeta == null) {
-                return connectorTableColumnStats;
+                LOG.warn("External statistics rows exist without any ExternalBasicStatsMeta, treating column {} of " +
+                        "table {} as unknown (a previous collection likely failed before committing metadata)",
+                        columnName, table.getName());
+                return ConnectorTableColumnStats.unknown();
             }
 
             Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
             if (!columnStatsMetaMap.containsKey(columnName)) {
-                return connectorTableColumnStats;
+                LOG.warn("External statistics rows exist without a ColumnStatsMeta, treating column {} of table {} " +
+                        "as unknown (a previous collection likely failed before committing metadata)",
+                        columnName, table.getName());
+                return ConnectorTableColumnStats.unknown();
             }
 
             ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
@@ -112,6 +130,14 @@ public class StatisticsUtils {
             // the column statistics analyze type is sample , we need to estimate the table level column statistics
             int sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
             int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
+
+            // A SAMPLE meta that covers no partition cannot scale anything (and would divide by zero).
+            if (sampledPartitionSize <= 0 || totalPartitionSize <= 0) {
+                LOG.warn("Unusable sampled partition counts in ColumnStatsMeta for column {} of table {}: " +
+                        "sampled={} total={}, treating it as unknown",
+                        columnName, table.getName(), sampledPartitionSize, totalPartitionSize);
+                return ConnectorTableColumnStats.unknown();
+            }
 
             double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
             long totalRowCount = (long) avgPartitionRowCount * totalPartitionSize;

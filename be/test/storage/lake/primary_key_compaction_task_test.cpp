@@ -2581,6 +2581,112 @@ TEST_P(LakePrimaryKeyCompactionTest, test_replace_batch_rows_correctness) {
     }
 }
 
+// lake::CompactionState::_load_segments() used to create every segment's encoded primary keys as a
+// LargeBinaryColumn. Load a three-segment rowset of a VARCHAR primary key tablet the way the non-light
+// publish_primary_compaction does, and check each segment is a BinaryColumn holding the segment's keys.
+class LakeCompactionStateTest : public TestBase {
+public:
+    LakeCompactionStateTest() : TestBase(kTestDirectory), _partition_id(next_id()) {
+        _tablet_metadata = generate_simple_tablet_metadata_v2(PRIMARY_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_compaction_state";
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override { remove_test_dir_or_die(); }
+
+    // Keys are zero-padded so that their lexicographic order matches their numeric order.
+    static std::string make_key(int k) {
+        std::string digits = std::to_string(k);
+        return "key_" + std::string(digits.size() < 6 ? 6 - digits.size() : 0, '0') + digits;
+    }
+
+    Chunk generate_chunk(int begin, int rows) {
+        auto c0 = BinaryColumn::create();
+        auto c1 = Int32Column::create();
+        for (int k = begin; k < begin + rows; k++) {
+            c0->append(make_key(k));
+            c1->append(k);
+        }
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+};
+
+TEST_F(LakeCompactionStateTest, load_segments_uses_binary_column) {
+    const int kSegments = 3;
+    const int kRowsPerSegment = 100;
+    const auto tablet_id = _tablet_metadata->id();
+    auto indexes = std::vector<uint32_t>(kRowsPerSegment);
+    for (int i = 0; i < kRowsPerSegment; i++) {
+        indexes[i] = i;
+    }
+
+    // One load with three flushes, so the rowset has three segments. Load spill would instead spill each flush into a
+    // block and merge all blocks into one segment at finish, so turn it off for this load.
+    auto load_spill_backup = config::enable_load_spill;
+    config::enable_load_spill = false;
+    DeferOp restore_load_spill([&]() { config::enable_load_spill = load_spill_backup; });
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int s = 0; s < kSegments; s++) {
+        auto chunk = generate_chunk(s * kRowsPerSegment, kRowsPerSegment);
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->flush());
+    }
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSIGN_OR_ABORT(auto metadata, publish_single_version(tablet_id, 2, txn_id));
+    ASSERT_EQ(1, metadata->rowsets_size());
+
+    Rowset rowset(_tablet_mgr.get(), tablet_id, &metadata->rowsets(0), -1, _tablet_schema);
+    ASSERT_EQ(kSegments, rowset.num_segments());
+
+    auto* tracker = _update_mgr->compaction_state_mem_tracker();
+    const auto base_consumption = tracker->consumption();
+    {
+        CompactionState state;
+        for (int i = 0; i < kSegments; i++) {
+            ASSERT_OK(state.load_segments(&rowset, _update_mgr.get(), _tablet_schema, i));
+            const auto& pks = state.pk_cols[i];
+            ASSERT_NE(nullptr, pks) << "segment " << i;
+            EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
+            EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
+            ASSERT_EQ(static_cast<size_t>(kRowsPerSegment), pks->size()) << "segment " << i;
+            for (int j = 0; j < kRowsPerSegment; j++) {
+                ASSERT_EQ(make_key(i * kRowsPerSegment + j), pks->get(j).get_slice().to_string())
+                        << "segment " << i << " row " << j;
+            }
+            EXPECT_EQ(base_consumption + static_cast<int64_t>(pks->memory_usage()), tracker->consumption());
+            state.release_segments(i);
+            EXPECT_EQ(nullptr, state.pk_cols[i]) << "segment " << i;
+            EXPECT_EQ(base_consumption, tracker->consumption());
+        }
+    }
+    EXPECT_EQ(base_consumption, tracker->consumption());
+}
+
 INSTANTIATE_TEST_SUITE_P(
         LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
         ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, true, PersistentIndexTypePB::CLOUD_NATIVE},

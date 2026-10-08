@@ -209,25 +209,28 @@ public class PaimonPredicateConverterTest {
         Assertions.assertTrue(compoundPredicate.function() instanceof Or);
         Assertions.assertEquals(2, compoundPredicate.children().size());
 
-        Assertions.assertTrue(compoundPredicate.children().get(0) instanceof CompoundPredicate);
-        CompoundPredicate child1 = (CompoundPredicate) compoundPredicate.children().get(0);
+        // Paimon 2.0 builds OR chains as a balanced binary tree split at the midpoint
+        // (PredicateBuilder.buildBinaryTree), so three literals become Or(11, Or(22, 333)).
+        Assertions.assertTrue(compoundPredicate.children().get(0) instanceof LeafPredicate);
+        LeafPredicate child1 = (LeafPredicate) compoundPredicate.children().get(0);
+        Assertions.assertTrue(child1.function() instanceof Equal);
+        Assertions.assertEquals(1, child1.literals().size());
+        Assertions.assertEquals(11, child1.literals().get(0));
 
-        Assertions.assertEquals(2, child1.children().size());
-        LeafPredicate child11 = (LeafPredicate) child1.children().get(0);
-        Assertions.assertTrue(child11.function() instanceof  Equal);
-        Assertions.assertEquals(1, child11.literals().size());
-        Assertions.assertEquals(11, child11.literals().get(0));
+        Assertions.assertTrue(compoundPredicate.children().get(1) instanceof CompoundPredicate);
+        CompoundPredicate child2 = (CompoundPredicate) compoundPredicate.children().get(1);
+        Assertions.assertTrue(child2.function() instanceof Or);
+        Assertions.assertEquals(2, child2.children().size());
 
-        LeafPredicate child12 = (LeafPredicate) child1.children().get(1);
-        Assertions.assertTrue(child12.function() instanceof  Equal);
-        Assertions.assertEquals(1, child12.literals().size());
-        Assertions.assertEquals(22, child12.literals().get(0));
+        LeafPredicate child21 = (LeafPredicate) child2.children().get(0);
+        Assertions.assertTrue(child21.function() instanceof Equal);
+        Assertions.assertEquals(1, child21.literals().size());
+        Assertions.assertEquals(22, child21.literals().get(0));
 
-        Assertions.assertTrue(compoundPredicate.children().get(1) instanceof LeafPredicate);
-        LeafPredicate child2 = (LeafPredicate) compoundPredicate.children().get(1);
-        Assertions.assertTrue(child2.function() instanceof Equal);
-        Assertions.assertEquals(1, child2.literals().size());
-        Assertions.assertEquals(333, child2.literals().get(0));
+        LeafPredicate child22 = (LeafPredicate) child2.children().get(1);
+        Assertions.assertTrue(child22.function() instanceof Equal);
+        Assertions.assertEquals(1, child22.literals().size());
+        Assertions.assertEquals(333, child22.literals().get(0));
     }
 
     @Test

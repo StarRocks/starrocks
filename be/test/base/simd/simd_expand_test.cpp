@@ -79,17 +79,13 @@ void test_expand_load() {
 
         std::vector<uint8_t> nulls;
         nulls.resize(chunk_size);
-        std::vector<uint8_t> pattern(8);
+        // Enumerate every non-zero 8-bit null pattern. Iterating the masks directly instead of using
+        // std::next_permutation avoids a GCC -Wstringop-overflow false positive on the vectorized std::reverse.
         size_t i = 0;
-        for (int k = 1; k <= 8; ++k) {
-            std::fill(pattern.begin(), pattern.end(), 0);
-            std::fill(pattern.begin(), pattern.begin() + k, 1);
-
-            do {
-                for (int j = 0; j < 8; ++j) {
-                    nulls[i++] = pattern[j];
-                }
-            } while (std::next_permutation(pattern.begin(), pattern.end()) && i + 8 < chunk_size);
+        for (uint32_t mask = 1; mask < 256 && i + 8 < chunk_size; ++mask) {
+            for (int j = 0; j < 8; ++j) {
+                nulls[i++] = (mask >> j) & 1;
+            }
         }
 
         std::vector<CppType> dsts1(chunk_size);

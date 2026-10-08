@@ -180,7 +180,10 @@ public final class BrokerLoadPreSplitHook {
             // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
             // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
             BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
-                    brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone());
+                    brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone(),
+                    // Copied, not aliased: this is the positional field layout a CSV file group with no
+                    // COLUMNS list inherits, and it must not shift under a later alter.
+                    List.copyOf(targetTable.getBaseSchema()));
             PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
                     scanContext,
                     MetaUtils.getRangeDistributionColumns(targetTable),
