@@ -52,8 +52,13 @@ SELECT max(t.NUM_ROW) * 10 < sum(t.NUM_ROW) * 8 AS no_tablet_holds_80_percent
 FROM information_schema.be_tablets t, information_schema.tables_config c
 WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = 'db_${uuid0}' AND c.TABLE_NAME = 'dst_reordered';
 
-admin set frontend config ("tablet_pre_split_target_size" = "0");
 drop table dst_reordered;
 drop table dst_partial;
 drop table src;
 drop database db_${uuid0};
+
+-- The reset lives in CLEANUP so it also runs when an assertion above fails; otherwise the lowered
+-- target size would leak into every later sequential case.
+CLEANUP {
+    admin set frontend config ("tablet_pre_split_target_size" = "0");
+} END CLEANUP
