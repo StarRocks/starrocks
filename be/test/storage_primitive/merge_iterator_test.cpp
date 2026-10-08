@@ -17,17 +17,31 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/cpu_info.h"
+#include "runtime/current_thread.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/union_iterator.h"
 #include "storage_primitive/vector_chunk_iterator.h"
 
 namespace starrocks {
+
+// The prefill / read-ahead tests exercise the compaction opt-in; everything else stays a plain merge.
+static const MergeIteratorOptions kCompactionMerge{.compaction_merge = true};
 
 template <typename T>
 static inline std::string to_string(const std::vector<T>& v) {
@@ -228,6 +242,608 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
 }
 
 // NOLINTNEXTLINE
+// The read-ahead path must be indistinguishable from the serial one: the same rows, in the same
+// order, with the same source masks, whatever the buffer depth. Children are given a small chunk
+// size so the merge runs dry on them repeatedly and exercises the refill path, not just the
+// initial prefill.
+class MergePipelineEquivalenceTest : public MergeIteratorTest {
+protected:
+    void SetUp() override {
+        MergeIteratorTest::SetUp();
+        CpuInfo::init(); // The focused test binary does not run the BE bootstrap before creating threads.
+        _saved_parallel = config::enable_compaction_parallel_merge_init;
+        _saved_buffers = config::compaction_merge_child_buffers;
+    }
+    void TearDown() override {
+        config::enable_compaction_parallel_merge_init = _saved_parallel;
+        config::compaction_merge_child_buffers = _saved_buffers;
+        MergeIteratorTest::TearDown();
+    }
+
+    // Five inputs whose key ranges overlap in different ways: fully disjoint, interleaved, and
+    // duplicated across inputs, so the merge switches between them instead of draining one.
+    std::vector<std::vector<int32_t>> inputs() const {
+        std::vector<std::vector<int32_t>> vs(5);
+        for (int i = 0; i < 200; i++) {
+            vs[0].push_back(i * 4);
+            vs[1].push_back(i * 4 + 1);
+            vs[2].push_back(i * 2);
+            vs[3].push_back(i);
+            vs[4].push_back(500 + i);
+        }
+        return vs;
+    }
+
+    struct Output {
+        std::vector<int32_t> rows;
+        std::vector<uint16_t> sources;
+    };
+
+    Output run_heap(bool parallel, int buffers) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7); // force many refills
+            subs.push_back(sub);
+        }
+        auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    Output run_mask(bool parallel, int buffers, const std::vector<uint16_t>& sources) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        std::vector<RowSourceMask> masks;
+        masks.reserve(sources.size());
+        for (uint16_t s : sources) {
+            masks.emplace_back(RowSourceMask(s, false));
+        }
+        // A fresh id per call: the buffer is backed by a file named after it, and this runs many
+        // times in one test.
+        RowSourceMaskBuffer mask_buffer(_next_mask_id++, config::storage_root_path);
+        EXPECT_TRUE(mask_buffer.write(masks).ok());
+        EXPECT_TRUE(mask_buffer.flush().ok());
+        EXPECT_TRUE(mask_buffer.flip_to_read().ok());
+
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : inputs()) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7);
+            subs.push_back(sub);
+        }
+        auto iter = new_mask_merge_iterator(subs, &mask_buffer, nullptr, kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    static Output drain(const ChunkIteratorPtr& iter) {
+        Output out;
+        std::vector<RowSourceMask> masks;
+        ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+        while (iter->get_next(chunk.get(), &masks).ok()) {
+            ColumnPtr& c = chunk->get_column_by_index(0);
+            for (size_t i = 0; i < c->size(); i++) {
+                out.rows.push_back(c->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+        for (auto& m : masks) {
+            out.sources.push_back(m.get_source_num());
+        }
+        return out;
+    }
+
+    bool _saved_parallel = false;
+    int32_t _saved_buffers = 1;
+    int64_t _next_mask_id = 1000;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergePipelineEquivalenceTest, heap_merge_read_ahead_matches_serial) {
+    const Output baseline = run_heap(false, 1);
+    ASSERT_FALSE(baseline.rows.empty());
+    ASSERT_TRUE(std::is_sorted(baseline.rows.begin(), baseline.rows.end()));
+
+    for (int buffers : {1, 2, 3, 8}) {
+        for (bool parallel : {false, true}) {
+            const Output got = run_heap(parallel, buffers);
+            EXPECT_EQ(baseline.rows, got.rows) << "parallel=" << parallel << " buffers=" << buffers;
+            EXPECT_EQ(baseline.sources, got.sources) << "parallel=" << parallel << " buffers=" << buffers;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergePipelineEquivalenceTest, mask_merge_read_ahead_matches_serial) {
+    // Vertical compaction feeds the mask merge the sources the key group produced, so build them
+    // the same way.
+    const std::vector<uint16_t> sources = run_heap(false, 1).sources;
+    ASSERT_FALSE(sources.empty());
+
+    const Output baseline = run_mask(false, 1, sources);
+    ASSERT_FALSE(baseline.rows.empty());
+
+    for (int buffers : {1, 2, 3, 8}) {
+        for (bool parallel : {false, true}) {
+            const Output got = run_mask(parallel, buffers, sources);
+            EXPECT_EQ(baseline.rows, got.rows) << "parallel=" << parallel << " buffers=" << buffers;
+        }
+    }
+}
+
+class StatisticsIterator final : public ChunkIterator {
+public:
+    StatisticsIterator(Schema schema, const std::vector<int32_t>& rows, OlapReaderStatistics* stats)
+            : ChunkIterator(schema, 4),
+              _inner(std::make_shared<VectorChunkIterator>(schema, COL_INT(rows))),
+              _stats(stats) {
+        _inner->chunk_size(4);
+    }
+
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return std::exchange(_stats, stats); }
+    OlapReaderStatistics* read_stats() const { return _stats; }
+
+    StatusOr<bool> prefetch(std::atomic<int64_t>*) override {
+        if (throw_prefetch) throw std::bad_alloc();
+        _stats->io_count += 11;
+        return false;
+    }
+
+    void close() override {
+        _stats->compressed_bytes_read_remote += 17;
+        _inner->close();
+        ++closed;
+    }
+
+    bool throw_prefetch = false;
+    bool throw_second_read = false;
+    std::atomic<int> closed{0};
+    std::atomic<int64_t> delivered{0};
+
+protected:
+    Status do_get_next(Chunk* chunk) override {
+        if (throw_second_read && ++_reads == 2) throw std::runtime_error("injected read failure");
+        auto status = _inner->get_next(chunk);
+        _stats->raw_rows_read += chunk->num_rows();
+        _stats->rows_del_filtered += 2 * chunk->num_rows();
+        _stats->flat_json_hits["$.shared"] += 3 * chunk->num_rows();
+        delivered += chunk->num_rows();
+        return status;
+    }
+
+private:
+    std::shared_ptr<VectorChunkIterator> _inner;
+    OlapReaderStatistics* _stats;
+    int _reads = 0;
+};
+
+TEST_F(MergePipelineEquivalenceTest, parallel_child_stats_preserve_progress_and_union_close) {
+    config::enable_compaction_parallel_merge_init = true;
+    for (int buffers : {1, 3}) {
+        config::compaction_merge_child_buffers = buffers;
+        OlapReaderStatistics stats;
+        stats.rows_del_filtered = 7; // counters produced before the iterator is installed survive
+        std::vector<ChunkIteratorPtr> children;
+        std::vector<std::shared_ptr<StatisticsIterator>> leaves;
+        RuntimeProfile::Counter scan_time(TUnit::TIME_NS);
+        for (int source = 0; source < 2; ++source) {
+            std::vector<int32_t> rows;
+            for (int row = 0; row < 24; ++row) rows.push_back(row * 2 + source);
+            auto empty = std::make_shared<StatisticsIterator>(_schema, std::vector<int32_t>{}, &stats);
+            auto live = std::make_shared<StatisticsIterator>(_schema, rows, &stats);
+            leaves.insert(leaves.end(), {empty, live});
+            // The empty first segment closes inside UnionIterator on a worker. Its final IO
+            // counters must stay private too, and its EOF must not discard the live segment.
+            auto child = new_union_iterator({empty, live});
+            children.push_back(timed_chunk_iterator(new_projection_iterator(_schema, child), &scan_time));
+        }
+        auto iter = new_heap_merge_iterator(children, kCompactionMerge);
+        ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        auto chunk = ChunkFactory::new_chunk(_schema, 0);
+        ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+        EXPECT_GT(stats.raw_rows_read, 0);
+        EXPECT_NE(leaves[0]->read_stats(), &stats);
+        EXPECT_EQ(leaves[0]->read_stats(), leaves[1]->read_stats());
+        EXPECT_NE(leaves[0]->read_stats(), leaves[2]->read_stats());
+        int64_t rows = chunk->num_rows();
+        Status status;
+        for (;;) {
+            chunk->reset();
+            status = iter->get_next(chunk.get());
+            if (!status.ok()) break;
+            rows += chunk->num_rows();
+        }
+        ASSERT_TRUE(status.is_end_of_file()) << status;
+        iter->close();
+        EXPECT_EQ(48, rows);
+        EXPECT_EQ(48, stats.raw_rows_read);
+        EXPECT_EQ(7 + 2 * 48, stats.rows_del_filtered);
+        EXPECT_EQ(3 * 48, stats.flat_json_hits["$.shared"]);
+        EXPECT_EQ(2 * 11, stats.io_count);
+        EXPECT_EQ(4 * 17, stats.compressed_bytes_read_remote);
+        for (const auto& leaf : leaves) EXPECT_EQ(1, leaf->closed.load());
+    }
+}
+
+TEST_F(MergePipelineEquivalenceTest, early_close_flushes_unconsumed_read_ahead_stats) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    iter->close();
+    const auto rows_read = left->delivered.load() + right->delivered.load();
+    EXPECT_EQ(rows_read, stats.raw_rows_read);
+    EXPECT_EQ(2 * rows_read, stats.rows_del_filtered);
+    EXPECT_EQ(3 * rows_read, stats.flat_json_hits["$.shared"]);
+    EXPECT_EQ(34, stats.compressed_bytes_read_remote);
+}
+
+TEST_F(MergePipelineEquivalenceTest, pump_completion_follows_tracker_cleanup) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    // The focused binary has no ExecEnv bootstrap. Enable the existing tracker test seam
+    // only when a surrounding test main has not already installed a working source.
+    const bool needs_tracker_source = CurrentThread::mem_tracker() == nullptr;
+    if (needs_tracker_source) {
+        CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
+    }
+    DeferOp reset_tracker_source([&]() {
+        if (needs_tracker_source) CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+    });
+    MemTracker task_tracker(-1, "merge-pump-test");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&task_tracker);
+    std::atomic<int> cleanups{0};
+    std::atomic<int> completions{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("MergeIterator::pump:before_tls_cleanup", [&](void*) {
+        EXPECT_EQ(&task_tracker, CurrentThread::mem_tracker());
+        tls_thread_status.mem_consume(73); // force a cached allocation that must be flushed
+        ++cleanups;
+    });
+    sync->SetCallBack("MergeIterator::pump:completed", [&](void*) {
+        EXPECT_NE(&task_tracker, CurrentThread::mem_tracker());
+        EXPECT_GE(task_tracker.consumption(), 73);
+        ++completions;
+    });
+    sync->EnableProcessing();
+    DeferOp disable([&]() {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    ASSERT_TRUE(iter->get_next(chunk.get()).ok());
+    iter->close();
+    EXPECT_GT(completions.load(), 0);
+    EXPECT_EQ(cleanups.load(), completions.load());
+}
+
+TEST_F(MergePipelineEquivalenceTest, parallel_prefetch_exception_is_an_error) {
+    config::enable_compaction_parallel_merge_init = true;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    left->throw_prefetch = true;
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    const auto status = iter->get_next(chunk.get());
+    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+    iter->close();
+    EXPECT_EQ(1, left->closed.load());
+    EXPECT_EQ(1, right->closed.load());
+}
+
+TEST_F(MergePipelineEquivalenceTest, pump_read_exception_is_an_error_and_close_finishes) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    OlapReaderStatistics stats;
+    auto left = std::make_shared<StatisticsIterator>(_schema, inputs()[0], &stats);
+    auto right = std::make_shared<StatisticsIterator>(_schema, inputs()[1], &stats);
+    left->throw_second_read = true;
+    auto iter = new_heap_merge_iterator({left, right}, kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    auto chunk = ChunkFactory::new_chunk(_schema, 0);
+    Status status;
+    do {
+        chunk->reset();
+        status = iter->get_next(chunk.get());
+    } while (status.ok());
+    EXPECT_EQ(TStatusCode::RUNTIME_ERROR, status.code()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("injected read failure"));
+    iter->close();
+    EXPECT_EQ(1, left->closed.load());
+    EXPECT_EQ(1, right->closed.load());
+}
+
+// A child whose prefetch() behavior is scripted per instance. The rows come from a wrapped
+// VectorChunkIterator, so the data path is identical to the plain children the baselines use;
+// only the IO-half contract differs:
+//   RESIDENT   -- reserve the declared bytes from the budget (refund on overdraw, like
+//                 SharedBufferedInputStream::prefetch_registered) and report the scan covered,
+//                 so the merge runs this child's reads as decode-only on its own thread;
+//   UNCOVERED  -- report not covered, keeping the pre-split behavior (full read on the pool);
+//   IO_ERROR   -- fail the prefetch with a distinctive status.
+class PrefetchModeIterator final : public ChunkIterator {
+public:
+    enum class Mode { RESIDENT, UNCOVERED, IO_ERROR };
+
+    constexpr static const char* kInjectedErrorMessage = "injected prefetch failure";
+
+    PrefetchModeIterator(Schema schema, Datums rows, Mode mode, int64_t declared_bytes = 0)
+            : ChunkIterator(schema),
+              _inner(std::make_shared<VectorChunkIterator>(std::move(schema), std::move(rows))),
+              _mode(mode),
+              _declared_bytes(declared_bytes) {}
+
+    void read_chunk_size(size_t n) { _inner->chunk_size(n); }
+
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override {
+        _prefetch_calls.fetch_add(1);
+        switch (_mode) {
+        case Mode::RESIDENT:
+            if (_declared_bytes > 0) {
+                // Reserve before "loading", refund on overdraw: the protocol
+                // SharedBufferedInputStream::prefetch_registered follows.
+                if (budget->fetch_sub(_declared_bytes) < _declared_bytes) {
+                    budget->fetch_add(_declared_bytes);
+                    return false;
+                }
+            }
+            _covered.store(true);
+            return true;
+        case Mode::UNCOVERED:
+            return false;
+        case Mode::IO_ERROR:
+            return Status::IOError(kInjectedErrorMessage);
+        }
+        return false;
+    }
+
+    int prefetch_calls() const { return _prefetch_calls.load(); }
+    bool covered() const { return _covered.load(); }
+    // How many rows get_next has handed out; zero means this child was never decoded.
+    size_t rows_delivered() const { return _inner->next_row(); }
+
+    void close() override { _inner->close(); }
+
+protected:
+    Status do_get_next(Chunk* chunk) override { return _inner->get_next(chunk); }
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override { return do_get_next(chunk); }
+
+private:
+    std::shared_ptr<VectorChunkIterator> _inner;
+    Mode _mode;
+    int64_t _declared_bytes;
+    // Written on prefill pool threads, read on the test thread after the merge drains.
+    std::atomic<int> _prefetch_calls{0};
+    std::atomic<bool> _covered{false};
+};
+
+// NOLINTNEXTLINE
+// The prefetch split must be invisible from the outside: whatever mix of covered, uncovered,
+// budget-refused, and empty children the prefill sees, the merge must emit the same rows and
+// source masks as the serial path with plain children.
+class MergePrefetchEquivalenceTest : public MergePipelineEquivalenceTest {
+protected:
+    using Mode = PrefetchModeIterator::Mode;
+
+    void SetUp() override {
+        MergePipelineEquivalenceTest::SetUp();
+        _saved_prefetch_bytes = config::compaction_parallel_merge_prefetch_bytes;
+    }
+    void TearDown() override {
+        config::compaction_parallel_merge_prefetch_bytes = _saved_prefetch_bytes;
+        MergePipelineEquivalenceTest::TearDown();
+    }
+
+    std::vector<ChunkIteratorPtr> make_prefetch_children(const std::vector<std::vector<int32_t>>& vs,
+                                                         const std::vector<Mode>& modes, int64_t declared_bytes,
+                                                         std::vector<std::shared_ptr<PrefetchModeIterator>>* typed) {
+        EXPECT_EQ(vs.size(), modes.size());
+        std::vector<ChunkIteratorPtr> subs;
+        for (size_t i = 0; i < vs.size(); i++) {
+            auto sub = std::make_shared<PrefetchModeIterator>(_schema, COL_INT(vs[i]), modes[i], declared_bytes);
+            sub->read_chunk_size(7); // force many refills, as the plain fixtures do
+            if (typed != nullptr) {
+                typed->push_back(sub);
+            }
+            subs.push_back(sub);
+        }
+        return subs;
+    }
+
+    Output run_heap_prefetch(bool parallel, int buffers, const std::vector<Mode>& modes, int64_t declared_bytes,
+                             std::vector<std::shared_ptr<PrefetchModeIterator>>* typed = nullptr) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, typed),
+                                            kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    Output run_mask_prefetch(bool parallel, int buffers, const std::vector<uint16_t>& sources,
+                             const std::vector<Mode>& modes, int64_t declared_bytes) {
+        config::enable_compaction_parallel_merge_init = parallel;
+        config::compaction_merge_child_buffers = buffers;
+
+        std::vector<RowSourceMask> masks;
+        masks.reserve(sources.size());
+        for (uint16_t s : sources) {
+            masks.emplace_back(RowSourceMask(s, false));
+        }
+        RowSourceMaskBuffer mask_buffer(_next_mask_id++, config::storage_root_path);
+        EXPECT_TRUE(mask_buffer.write(masks).ok());
+        EXPECT_TRUE(mask_buffer.flush().ok());
+        EXPECT_TRUE(mask_buffer.flip_to_read().ok());
+
+        auto iter = new_mask_merge_iterator(make_prefetch_children(inputs(), modes, declared_bytes, nullptr),
+                                            &mask_buffer, nullptr, kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    // Serial baseline over an arbitrary input set, with plain children and the read-ahead off.
+    Output run_heap_rows(const std::vector<std::vector<int32_t>>& vs) {
+        config::enable_compaction_parallel_merge_init = false;
+        config::compaction_merge_child_buffers = 1;
+
+        std::vector<ChunkIteratorPtr> subs;
+        for (const auto& v : vs) {
+            auto sub = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v));
+            sub->chunk_size(7);
+            subs.push_back(sub);
+        }
+        auto iter = new_heap_merge_iterator(subs, kCompactionMerge);
+        EXPECT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+        return drain(iter);
+    }
+
+    std::vector<Mode> all_resident() const { return std::vector<Mode>(inputs().size(), Mode::RESIDENT); }
+
+    std::vector<Mode> alternating() const {
+        std::vector<Mode> modes(inputs().size(), Mode::UNCOVERED);
+        for (size_t i = 0; i < modes.size(); i += 2) {
+            modes[i] = Mode::RESIDENT;
+        }
+        return modes;
+    }
+
+    int64_t _saved_prefetch_bytes = 0;
+};
+
+// NOLINTNEXTLINE
+TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_matches_serial) {
+    const Output baseline = run_heap(false, 1);
+    ASSERT_FALSE(baseline.rows.empty());
+    ASSERT_TRUE(std::is_sorted(baseline.rows.begin(), baseline.rows.end()));
+
+    for (int buffers : {1, 3}) {
+        for (const auto& modes : {all_resident(), alternating()}) {
+            const Output got = run_heap_prefetch(true, buffers, modes, 0);
+            EXPECT_EQ(baseline.rows, got.rows) << "buffers=" << buffers;
+            EXPECT_EQ(baseline.sources, got.sources) << "buffers=" << buffers;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(MergePrefetchEquivalenceTest, mask_merge_prefetch_matches_serial) {
+    // Vertical compaction feeds the mask merge the sources the key group produced, so build them
+    // the same way.
+    const std::vector<uint16_t> sources = run_heap(false, 1).sources;
+    ASSERT_FALSE(sources.empty());
+
+    const Output baseline = run_mask(false, 1, sources);
+    ASSERT_FALSE(baseline.rows.empty());
+
+    for (int buffers : {1, 3}) {
+        for (const auto& modes : {all_resident(), alternating()}) {
+            const Output got = run_mask_prefetch(true, buffers, sources, modes, 0);
+            EXPECT_EQ(baseline.rows, got.rows) << "buffers=" << buffers;
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+// Every child asks to be resident but the budget only fits two of them (5 x 64 bytes against a
+// 160-byte allowance); which two win the race is scheduling-dependent, the output must not be.
+TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_budget_exhaustion_matches_serial) {
+    const Output baseline = run_heap(false, 1);
+    ASSERT_FALSE(baseline.rows.empty());
+
+    config::compaction_parallel_merge_prefetch_bytes = 160;
+    for (int buffers : {1, 3}) {
+        std::vector<std::shared_ptr<PrefetchModeIterator>> children;
+        const Output got = run_heap_prefetch(true, buffers, all_resident(), 64, &children);
+        EXPECT_EQ(baseline.rows, got.rows) << "buffers=" << buffers;
+        EXPECT_EQ(baseline.sources, got.sources) << "buffers=" << buffers;
+
+        // The reserve-then-refund protocol admits exactly floor(160 / 64) = 2 children no matter
+        // how the pool threads interleave; the rest fall back to the pre-split read.
+        int covered = 0;
+        for (const auto& child : children) {
+            EXPECT_EQ(1, child->prefetch_calls());
+            covered += child->covered() ? 1 : 0;
+        }
+        EXPECT_EQ(2, covered) << "buffers=" << buffers;
+    }
+}
+
+// NOLINTNEXTLINE
+// A failing prefetch must surface through get_next with the child's own error, at the same point
+// in child order the serial path would surface a read error: children before it are committed,
+// children after it are never decoded, and nothing crashes or hangs.
+TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_error_surfaces_in_child_order) {
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+
+    auto modes = all_resident();
+    modes[2] = Mode::IO_ERROR;
+    std::vector<std::shared_ptr<PrefetchModeIterator>> children;
+    auto iter = new_heap_merge_iterator(make_prefetch_children(inputs(), modes, 0, &children), kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+
+    ChunkPtr chunk = ChunkFactory::new_chunk(iter->schema(), config::vector_chunk_size);
+    Status st = iter->get_next(chunk.get());
+    ASSERT_FALSE(st.ok());
+    ASSERT_FALSE(st.is_end_of_file());
+    ASSERT_TRUE(st.is_io_error()) << st;
+    ASSERT_TRUE(st.message().find(PrefetchModeIterator::kInjectedErrorMessage) != std::string::npos) << st;
+
+    // Every child's prefetch ran on the pool before the commits started.
+    for (const auto& child : children) {
+        EXPECT_EQ(1, child->prefetch_calls());
+    }
+    // Children before the failure were decoded and committed in child order...
+    EXPECT_GT(children[0]->rows_delivered(), 0u);
+    EXPECT_GT(children[1]->rows_delivered(), 0u);
+    // ...the failing child never produced rows, and the commit loop stopped at it, so the
+    // resident children behind it were never decoded either.
+    EXPECT_EQ(0u, children[2]->rows_delivered());
+    EXPECT_EQ(0u, children[3]->rows_delivered());
+    EXPECT_EQ(0u, children[4]->rows_delivered());
+
+    iter->close();
+}
+
+// NOLINTNEXTLINE
+// A resident child can turn out empty: its decode-only slot-0 read hits end-of-file on the merge
+// thread, and the commit must fold that into a clean child close exactly like the serial path.
+TEST_F(MergePrefetchEquivalenceTest, heap_merge_prefetch_empty_child_matches_serial) {
+    auto vs = inputs();
+    vs.insert(vs.begin() + 2, std::vector<int32_t>{});
+
+    const Output baseline = run_heap_rows(vs);
+    ASSERT_FALSE(baseline.rows.empty());
+
+    config::enable_compaction_parallel_merge_init = true;
+    config::compaction_merge_child_buffers = 3;
+    std::vector<Mode> modes(vs.size(), Mode::RESIDENT);
+    auto iter = new_heap_merge_iterator(make_prefetch_children(vs, modes, 0, nullptr), kCompactionMerge);
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+    const Output got = drain(iter);
+
+    EXPECT_EQ(baseline.rows, got.rows);
+    EXPECT_EQ(baseline.sources, got.sources);
+}
+
 TEST_F(MergeIteratorTest, mask_merge) {
     std::vector<int32_t> v1{1, 1, 2, 3, 4, 5};
     std::vector<int32_t> v2{10, 11, 13, 15, 15, 16, 17};

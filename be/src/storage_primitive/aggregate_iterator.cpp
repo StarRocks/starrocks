@@ -57,6 +57,8 @@ public:
 
     void close() override;
 
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _child->set_read_stats(stats); }
+
     size_t merged_rows() const override { return _aggregator->merged_rows(); }
 
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {

@@ -232,7 +232,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // it clears it for the remaining passes too).
         const bool reuse_via_shared_cache = !_hold_input_segments;
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .buffer_size = read_buffer_size(),
                                    .fill_metadata_cache = reuse_via_shared_cache,
                                    .hold_segments = _hold_input_segments};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
@@ -307,9 +307,13 @@ Status VerticalCompactionTask::compact_column_group(
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
+    // Keep budgeted prefetch ranges resident in a per-segment stream while retaining the normal
+    // data-cache policy. Resident inputs decode on the merge thread; uncovered inputs read on
+    // demand through the same file without retaining their entire scan ranges.
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                  .hold_segments = _hold_input_segments};
+                                  .buffer_size = read_buffer_size(),
+                                  .hold_segments = _hold_input_segments,
+                                  .coalesce_across_columns = config::enable_compaction_parallel_merge_init};
 
     // Apply range filter to ALL column groups (key and non-key) so that segment
     // iterators produce the same row subsets. TabletReader requires start_key and
@@ -477,6 +481,17 @@ Status VerticalCompactionTask::compact_column_group(
         }
     }
     return Status::OK();
+}
+
+int64_t VerticalCompactionTask::read_buffer_size() const {
+    if (!config::enable_compaction_parallel_merge_init) {
+        return config::lake_compaction_stream_buffer_size_bytes;
+    }
+    // read_segment_count is the actual segment count; _total_input_segs collapses a
+    // non-overlapping rowset to 1 and would under-count the streams that get opened.
+    return CompactionUtils::get_read_buffer_size(_total_data_size, _context->stats->read_segment_count,
+                                                 _tablet_schema->num_columns(),
+                                                 config::lake_compaction_stream_buffer_size_bytes);
 }
 
 void VerticalCompactionTask::move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const {

@@ -1427,6 +1427,12 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
         iter_opts.read_file = read_file.get();
         iter_opts.use_page_cache = true;
         ASSERT_OK(iter->init(iter_opts));
+        // The DDict is built by the first data page read. Until then the page is reported as
+        // pending, which is what lets the compaction prefetch register it next to the data pages.
+        auto pending = iter->get_pending_dict_page_io_ranges();
+        ASSERT_EQ(1u, pending.size());
+        EXPECT_EQ(static_cast<int64_t>(meta.zstd_compression_dict_page().offset()), pending[0].first);
+        EXPECT_EQ(static_cast<int64_t>(meta.zstd_compression_dict_page().size()), pending[0].second);
         ASSERT_OK(iter->seek_to_first());
 
         MutableColumnPtr dst = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
@@ -1439,6 +1445,7 @@ TEST_F(ColumnReaderWriterTest, test_zstd_compression_dict_roundtrip) {
             total += rows;
         }
         ASSERT_EQ(static_cast<size_t>(N), dst->size());
+        EXPECT_TRUE(iter->get_pending_dict_page_io_ranges().empty());
 
         TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
         for (int i = 0; i < N; i++) {

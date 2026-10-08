@@ -438,6 +438,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
     const auto select_all_keys = _schema.num_key_fields() == _tablet_schema->num_key_columns();
     DCHECK_LE(_schema.num_key_fields(), _tablet_schema->num_key_columns());
 
+    // Only a compaction merge opts into the parallel prefill / read-ahead pump; see
+    // MergeIteratorOptions. Query merges built here stay untouched by the compaction switches.
+    const MergeIteratorOptions merge_opts{.compaction_merge = is_compaction(params.reader_type)};
     if (seg_iters.empty()) {
         _collect_iter = new_empty_iterator(_schema, params.chunk_size);
     } else if (is_compaction(params.reader_type) && keys_type == DUP_KEYS) {
@@ -450,9 +453,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         // SegmentIterator  ...    SegmentIterator
         //
         if (_is_vertical_merge && !_is_key) {
-            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+            _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, nullptr, merge_opts);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(seg_iters, merge_opts);
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
@@ -512,9 +515,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             RuntimeProfile::Counter* aggr_timer = ADD_TIMER(p, "Aggr");
 
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, nullptr, merge_opts);
             } else {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
+                _collect_iter = new_heap_merge_iterator(seg_iters, merge_opts);
             }
             _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
             if (!_is_vertical_merge) {
@@ -525,9 +528,9 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
             _collect_iter = timed_chunk_iterator(_collect_iter, aggr_timer);
         } else {
             if (_is_vertical_merge && !_is_key) {
-                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+                _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer, nullptr, merge_opts);
             } else {
-                _collect_iter = new_heap_merge_iterator(seg_iters);
+                _collect_iter = new_heap_merge_iterator(seg_iters, merge_opts);
             }
             if (!_is_vertical_merge) {
                 _collect_iter = new_aggregate_iterator(std::move(_collect_iter), 0);

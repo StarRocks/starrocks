@@ -83,6 +83,51 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群中，Compaction 任务是否在其 Rowset 实例上持有输入 Segment 对象直至任务结束，使 Vertical Compaction 的各列组趟直接复用这些对象，而不再依赖元数据缓存重新加载。关闭持有时，一旦元数据缓存装不下全部输入 Segment（`lake_metadata_cache_limit` 较小，或节点上 Tablet 较多），每一趟都会重新加载并解析全部输入 Segment；该开销为 CPU 密集且与列数成正比，可能使宽表 Compaction 慢一个数量级，或因反复超出内存限制而失败。持有期间，任务不再把输入 Segment 和 Delete Vector 填入共享元数据缓存，因为输入数据在 Compaction 完成后即被删除，缓存它们只会挤掉其他 Tablet 的条目。内存代价为每个运行中任务持有一套输入 Segment 元数据，计入该 Compaction 任务的内存跟踪并随任务释放。设为 `false` 可恢复旧行为，即 Compaction 通过共享元数据缓存复用 Segment 并向其填充输入。
 - 引入版本：v4.2
 
+### enable_compaction_parallel_merge_init
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否让 Compaction 任务的归并迭代器并行预填其输入。归并在产出第一行之前，必须先从每个输入各读取一个 Chunk；默认情况下这些首次读取逐个串行执行，因此输入较多的任务在产出任何数据之前，需要为每个输入各付出一次读取往返。开启后，这些首次读取并行发出并按原有顺序提交，归并结果与串行路径完全一致。建议在 Compaction 读取需要访问对象存储的存算分离集群中开启。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_init_threads
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：单个 Compaction 归并同一时刻允许在途的预填读取的最大数量。读取由共享的预填线程池执行（参见 `compaction_parallel_merge_init_pool_threads`）。仅在开启 `enable_compaction_parallel_merge_init` 时生效。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_init_pool_threads
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：节点上为所有并发 Compaction 任务执行并行归并预填读取的共享线程池的线程数。该值高于单任务的在途读取上限，以避免并发任务之间相互稀释；空闲线程会在 10 秒后回收，因此空闲节点不会为这部分余量付出任何开销。
+- 引入版本：v4.2
+
+### compaction_merge_child_buffers
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Compaction 期间每个归并输入保留的 Chunk 槽位数量。只有一个槽位时，某个输入耗尽后的重新填充会让归并阻塞整整一次读取往返。槽位更多时，后台读取会持续填满空闲槽位，使读取往返与归并过程重叠而不再造成停顿。每增加一个槽位，每个输入多占用一个 Chunk 的内存。仅在开启 `enable_compaction_parallel_merge_init` 时生效；取 `1` 时保持原有行为。
+- 引入版本：v4.2
+
+### compaction_parallel_merge_prefetch_bytes
+
+- 默认值：268435456
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：单个 Compaction 归并为所有输入的预取范围分配的共享缓冲区总字节数上限。共享线程池负责初始化输入，并在预算内预取已登记的范围。范围已全部预取的输入随后在 Compaction 任务线程上解码；其他输入在线程池上读取和解码，按需读取时不会将未预取的扫描范围加载到共享缓冲区。该限制不包含底层文件缓冲区、解压后的数据页和字典、Chunk 以及 Segment 元数据。设置为 `0` 会关闭范围预取；当 enable_compaction_parallel_merge_init 开启时，仍可并行读取和解码。
+- 引入版本：v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - 默认值：1048576
