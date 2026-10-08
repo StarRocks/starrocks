@@ -949,13 +949,11 @@ void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumRespo
 // The state of the bundle tablet meta, used to determine whether the bundle file can be deleted.
 // ALL_TABLETS_TO_BE_DELETED means all tablets in this bundle tablet meta are going to be deleted,
 // SOME_TABLETS_NOT_TO_BE_DELETED means some tablets in this bundle tablet meta aren't going to be deleted,
-// NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted,
-// NOT_BUNDLE_TABLET_META means this tablet meta is not the bundle tablet meta.
+// NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted.
 enum class BundleTabletMetaState {
     ALL_TABLETS_TO_BE_DELETED = 0,
     SOME_TABLETS_NOT_TO_BE_DELETED = 1,
     NO_TABLETS_TO_BE_DELETED = 2,
-    NOT_BUNDLE_TABLET_META = 3,
 };
 
 static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& state) {
@@ -964,8 +962,11 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
     return state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED;
 }
 
-static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
-        const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
+// |to_delete_tablet_ids| must be sorted. If |present_tablet_ids| is not null, the tablets of
+// |to_delete_tablet_ids| found in the bundle are added to it.
+static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(const std::string& meta_path,
+                                                                      const std::vector<int64_t>& to_delete_tablet_ids,
+                                                                      std::unordered_set<int64_t>* present_tablet_ids) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
     // Read the entire file content into a string.
     ASSIGN_OR_RETURN(auto serialized_string, TabletManager::read_bundle_metadata_file_with_meter(
@@ -975,12 +976,14 @@ static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
     bool shared_meta_contains_deleted_tablet = false;
     bool shared_meta_contains_alive_tablet = false;
     // Check if the shared metadata contains tablets that are not to be deleted.
-    std::unordered_set<int64_t> to_delete_tablet_ids_set(to_delete_tablet_ids.begin(), to_delete_tablet_ids.end());
     for (const auto& tablet_id : bundle_metadata->tablet_meta_pages()) {
-        if (to_delete_tablet_ids_set.find(tablet_id.first) == to_delete_tablet_ids_set.end()) {
+        if (!std::binary_search(to_delete_tablet_ids.begin(), to_delete_tablet_ids.end(), tablet_id.first)) {
             shared_meta_contains_alive_tablet = true;
         } else {
             shared_meta_contains_deleted_tablet = true;
+            if (present_tablet_ids != nullptr) {
+                present_tablet_ids->insert(tablet_id.first);
+            }
         }
     }
     // Determine the state of the bundle tablet meta based on the presence of deleted and alive tablets.
@@ -1048,10 +1051,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
-    std::unordered_set<int64_t> bundle_tablet_versions;
-    std::unordered_map<int64_t, std::map<int64_t, BundleTabletMetaState>> tablet_versions;
+    // Newest first, so that the first bundle recorded below is the one every tablet's walk can start in.
+    std::set<int64_t, std::greater<>> bundle_tablet_versions;
+    std::unordered_map<int64_t, std::set<int64_t>> tablet_versions;
     //                 ^^^^^^^ tablet id
-    //                                  ^^^^^^^^^ version number -> state of this tablet meta
+    //                          ^^^^^^^^^^^^^^^^^ versions of this tablet's own (non-bundle) metadata files
 
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -1109,7 +1113,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        tablet_versions[tablet_id][version] = BundleTabletMetaState::NOT_BUNDLE_TABLET_META;
+        tablet_versions[tablet_id].insert(version);
         return true;
     })));
 
@@ -1121,47 +1125,80 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     // We will check the bundle tablet meta state for each version in bundle_tablet_versions.
     // ALL_TABLETS_TO_BE_DELETED means all tablets in this bundle tablet meta are going to be deleted,
     // SOME_TABLETS_NOT_TO_BE_DELETED means some tablets in this bundle tablet meta aren't going to be deleted,
-    // NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted,
-    // NOT_BUNDLE_TABLET_META means this tablet meta is not the bundle tablet meta.
+    // NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted.
     //
-    // we will only delete the bundle segment files and bundle tablet meta when the state is ALL_TABLETS_TO_BE_DELETED
-    // and NOT_BUNDLE_TABLET_META.
+    // we will only delete the bundle segment files and bundle tablet meta when the state is ALL_TABLETS_TO_BE_DELETED.
+    // A tablet meta that is not the bundle tablet meta is deleted unless a bundle tablet meta has the same version.
     // Prefer a locally-owned tablet id as the anchor so that downstream fs ops on the URI
     // can resolve the shard from the staros worker cache instead of paying for a
     // get-shard-info RPC when the vacuum aggregator does not own tablet_ids[0]. The anchor
     // is independent of `version`, so compute it once before the loop.
     const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(tablet_ids);
+    // Bundle version -> state, for the bundles that hold a tablet being deleted. The state is the same for
+    // every tablet being deleted, so it is kept per version.
+    std::map<int64_t, BundleTabletMetaState> bundle_version_states;
+    // The tablets being deleted that the newest version in |bundle_version_states| holds.
+    std::unordered_set<int64_t> tablets_in_newest_bundle;
     for (auto version : bundle_tablet_versions) {
         // Get the path of the bundle tablet metadata file for this version.
         auto path = tablet_mgr->bundle_tablet_metadata_location(anchor_tablet_id, version);
 
         // Check the state of the bundle tablet metadata for this version
         // This tells us whether all tablets in this bundle are being deleted or not
-        ASSIGN_OR_RETURN(auto bundle_meta_state, check_bundle_tablet_meta_state(path, tablet_ids));
+        ASSIGN_OR_RETURN(
+                auto bundle_meta_state,
+                check_bundle_tablet_meta_state(path, tablet_ids,
+                                               bundle_version_states.empty() ? &tablets_in_newest_bundle : nullptr));
 
         // If there are any tablets to be deleted in this bundle (not NO_TABLETS_TO_BE_DELETED),
-        // we need to record this state for each tablet in tablet_ids
+        // record its state; it will be used later to determine if bundle files can be deleted
         if (bundle_meta_state != BundleTabletMetaState::NO_TABLETS_TO_BE_DELETED) {
-            // Record the bundle meta state for all tablets that are being deleted
-            // This information will be used later to determine if bundle files can be deleted
-            for (auto tablet_id : tablet_ids) {
-                tablet_versions[tablet_id][version] = bundle_meta_state;
-            }
+            bundle_version_states[version] = bundle_meta_state;
+        }
+    }
+    if (!bundle_version_states.empty()) {
+        // Any tablet being deleted may be in a bundle, so every one of them is walked below.
+        for (auto tablet_id : tablet_ids) {
+            tablet_versions.try_emplace(tablet_id);
         }
     }
 
-    for (auto& [tablet_id, versions_and_states] : tablet_versions) {
-        DCHECK(!versions_and_states.empty());
-        std::set<int64_t> versions_to_delete;
-        for (auto& [version, state] : versions_and_states) {
-            versions_to_delete.insert(version);
+    // Shared files may go only at a version whose bundle holds nothing but tablets being deleted. A tablet's
+    // own file at such a version follows the bundle, and a version no listing recorded (reachable only
+    // through a stale metacache entry) keeps its shared files.
+    auto can_delete_shared_files_at = [&](int64_t version) {
+        auto it = bundle_version_states.find(version);
+        return it != bundle_version_states.end() && can_bundle_meta_file_to_be_deleted(it->second);
+    };
+    int64_t newest_bundle_version = std::numeric_limits<int64_t>::min();
+    int64_t oldest_bundle_version = std::numeric_limits<int64_t>::max();
+    if (!bundle_version_states.empty()) {
+        newest_bundle_version = bundle_version_states.rbegin()->first;
+        oldest_bundle_version = bundle_version_states.begin()->first;
+    }
+
+    for (auto& [tablet_id, own_versions] : tablet_versions) {
+        DCHECK(!own_versions.empty() || !bundle_version_states.empty());
+        int64_t max_version = newest_bundle_version;
+        int64_t min_version = oldest_bundle_version;
+        if (!own_versions.empty()) {
+            max_version = std::max(max_version, *own_versions.rbegin());
+            min_version = std::min(min_version, *own_versions.begin());
+        }
+
+        // Unless the tablet has its own file at |max_version|, its walk starts in the newest bundle. A tablet
+        // a reshard replaced is no longer in that bundle, and without a cached copy the read there returns
+        // NotFound, which ends the walk before it collects anything: skip the read and the shard lookup it costs.
+        if (own_versions.count(max_version) == 0 && tablets_in_newest_bundle.count(tablet_id) == 0 &&
+            tablet_mgr->metacache()->lookup_tablet_metadata(
+                    tablet_mgr->tablet_metadata_location(tablet_id, max_version)) == nullptr) {
+            continue;
         }
 
         TabletMetadataPtr latest_metadata = nullptr;
 
         // Find metadata files that has garbage data files and delete all those files
-        for (int64_t garbage_version = *versions_to_delete.rbegin(), min_v = *versions_to_delete.begin();
-             garbage_version >= min_v;
+        for (int64_t garbage_version = max_version; garbage_version >= min_version;
              /**/) {
             auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
             if (res.status().is_not_found()) {
@@ -1182,9 +1219,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 // For range distribution tablets, always protect shared files in garbage
                 // collection. can_bundle_meta_file_to_be_deleted is unreliable after tablet
                 // split because new split tablets may still reference shared files.
-                const bool allow_delete_shared =
-                        !is_range_distribution &&
-                        can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version]);
+                const bool allow_delete_shared = !is_range_distribution && can_delete_shared_files_at(garbage_version);
                 RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
                                                       allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
                                                       &dummy_file_size, TabletRetainInfo()));
@@ -1203,8 +1238,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // split-version metadata which may have been vacuumed).
             // Data files will be cleaned up by new tablets' regular vacuum.
             if (!is_range_distribution) {
-                const bool allow_delete_shared_files =
-                        can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
+                const bool allow_delete_shared_files = can_delete_shared_files_at(latest_metadata->version());
                 for (const auto& rowset : latest_metadata->rowsets()) {
                     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
@@ -1296,21 +1330,21 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     }
 
     // Delete metadata files last.
-    for (auto& [tablet_id, versions_and_states] : tablet_versions) {
-        for (auto& [version, state] : versions_and_states) {
-            if (state == BundleTabletMetaState::NOT_BUNDLE_TABLET_META) {
+    for (auto& [tablet_id, own_versions] : tablet_versions) {
+        for (auto version : own_versions) {
+            // A version that also has a bundle file follows the bundle's state, and the tablet's own file stays.
+            if (bundle_version_states.count(version) == 0) {
                 // delete the individual tablet metadata file
                 auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
                 RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
-            } else if (state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED) {
-                // delete the bundle tablet metadata file
-                auto path = join_path(meta_dir, tablet_metadata_filename(0, version));
-                RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
-            } else if (state == BundleTabletMetaState::SOME_TABLETS_NOT_TO_BE_DELETED) {
-                // we can not delete the bundle file, so we just skip it.
-            } else {
-                // do nothing for NO_TABLETS_TO_BE_DELETED
             }
+        }
+    }
+    for (auto& [version, state] : bundle_version_states) {
+        // A bundle file can only be deleted when every tablet in it is being deleted.
+        if (state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED) {
+            auto path = join_path(meta_dir, tablet_metadata_filename(0, version));
+            RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
         }
     }
 
