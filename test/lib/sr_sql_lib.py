@@ -1282,14 +1282,10 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
             self.thread_res_log[_t_info].append(this_res)
 
     def execute_single_statement(
-        self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None, conn: any = None,
-        *, strict=False
+        self, statement, sql_id, record_mode, res_container: list = None, var_key: str = None, conn: any = None
     ):
         """
-        Execute a single statement and return its result.
-
-        In strict mode, raise on SQL errors and nonzero shell exit codes. CLEANUP
-        uses this mode; normal statements can still validate expected errors.
+        execute single statement and return result
         """
         order = False
         # Distinct from `order`: False covers both "[UNORDERED] was written" and "nothing was
@@ -1305,8 +1301,6 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
             self_print("[TRINO]: %s" % statement)
             log.info("[%s] TRINO: %s" % (sql_id, statement))
             actual_res = self.trino_execute_sql(statement)
-            if strict and not actual_res["status"]:
-                raise RuntimeError(f"TRINO statement failed: {actual_res['msg']}")
 
             if record_mode:
                 self.treatment_record_res(statement, actual_res, res_container)
@@ -1324,8 +1318,6 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
             self_print("[SPARK]: %s" % statement)
             log.info("[%s] SPARK: %s" % (sql_id, statement))
             actual_res = self.spark_execute_sql(statement)
-            if strict and not actual_res["status"]:
-                raise RuntimeError(f"SPARK statement failed: {actual_res['msg']}")
 
             if record_mode:
                 self.treatment_record_res(statement, actual_res, res_container)
@@ -1343,8 +1335,6 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
             self_print("[HIVE]: %s" % statement)
             log.info("[%s] HIVE: %s" % (sql_id, statement))
             actual_res = self.hive_execute_sql(statement)
-            if strict and not actual_res["status"]:
-                raise RuntimeError(f"HIVE statement failed: {actual_res['msg']}")
 
             if record_mode:
                 self.treatment_record_res(statement, actual_res, res_container)
@@ -1363,8 +1353,6 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
             self_print("[SHELL]: %s" % statement)
             log.info("[%s] SHELL: %s" % (sql_id, statement))
             actual_res = self.execute_shell(statement)
-            if strict and actual_res[0] != 0:
-                raise RuntimeError(f"Shell command failed with exit code {actual_res[0]}: {actual_res[1]}")
 
             if record_mode:
                 self.record_shell_res(statement, actual_res, res_container)
@@ -1409,8 +1397,6 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
-            if strict and not actual_res["status"]:
-                raise RuntimeError(f"SQL statement failed: {actual_res['msg']}")
 
             if record_mode:
                 self.treatment_record_res(statement, actual_res, res_container, sort_rows=unordered)

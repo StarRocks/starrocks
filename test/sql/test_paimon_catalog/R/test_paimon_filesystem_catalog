@@ -1,5 +1,5 @@
 -- name: test_paimon_filesystem_catalog
-function: paimon_stage("${uuid0}", "paimon_test.image_blob,paimon_test.image_blob_desc,paimon_test.image_blob_view,paimon_test.scalar_types,paimon_test.variant_basic")
+function: paimon_stage("${oss_bucket}", "${uuid0}", "paimon_test.image_blob,paimon_test.image_blob_desc,paimon_test.image_blob_view,paimon_test.scalar_types,paimon_test.variant_basic")
 -- result:
 None
 -- !result
@@ -96,6 +96,10 @@ set paimon_reader_mode = jni;
 3	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
 4	1	1	2	3	4	1.5	2.5	0.10	10.0000	42.0000000001	hello	world	StarRocks	deadbeef	9999-12-31	2038-01-19 03:14:07	2038-01-19 03:14:07
 -- !result
+function: paimon_cleanup()
+-- result:
+None
+-- !result
 CLEANUP {
-function: paimon_cleanup("paimon_filesystem_catalog_${uuid0}", "${uuid0}")
+function: paimon_cleanup()
 } END CLEANUP

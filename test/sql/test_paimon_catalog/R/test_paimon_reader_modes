@@ -1,5 +1,5 @@
 -- name: test_paimon_reader_modes
-function: paimon_stage("${uuid0}", "paimon_test.scalar_types")
+function: paimon_stage("${oss_bucket}", "${uuid0}", "paimon_test.scalar_types")
 -- result:
 None
 -- !result
@@ -53,6 +53,10 @@ function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers
 -- result:
 None
 -- !result
+function: paimon_cleanup()
+-- result:
+None
+-- !result
 CLEANUP {
-function: paimon_cleanup("paimon_readers_${uuid0}", "${uuid0}")
+function: paimon_cleanup()
 } END CLEANUP

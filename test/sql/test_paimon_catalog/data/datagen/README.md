@@ -45,5 +45,5 @@ The SQL case checks JNI, NATIVE and AUTO; AUTO must choose JNI for this merge sp
 
 File names and timestamps vary across generation runs. Reproduction guarantees the
 logical rows and merge layout, not identical bytes. The checked-in fixture is immutable:
-future changes need a new table name and corresponding manifest entry; do not overwrite
+future scenarios should use a new table name; do not overwrite
 `pk_merge_v1` with a regenerated copy.

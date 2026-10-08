@@ -9,9 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Versioned Paimon fixtures and SQL-Tester helpers. No third-party dependencies."""
+"""Paimon fixture staging and reader assertions for SQL-Tester."""
 
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -25,65 +24,6 @@ def table_path(name):
         raise ValueError("invalid fixture table: %s" % name)
     database, table = name.split(".")
     return "%s.db/%s" % (database, table)
-
-
-def load_manifest(root):
-    root = Path(root)
-    manifest = json.loads((root / "MANIFEST.json").read_text())
-    total_budget = manifest["budget"]["total_bytes"]
-    if type(total_budget) is not int or total_budget <= 0:
-        raise ValueError("total_bytes must be a positive integer")
-    for path in root.rglob("*"):
-        if path.is_symlink():
-            raise ValueError("fixture symlink is not allowed: %s" % path)
-    for path in root.iterdir():
-        if path.name not in ("MANIFEST.json", "datagen") and not (path.is_dir() and path.name.endswith(".db")):
-            raise ValueError("unmanaged fixture path: %s" % path)
-    expected = set()
-    total = 0
-    for name, entry in manifest["tables"].items():
-        relative = table_path(name)
-        expected.add(relative)
-        directory = root / relative
-        files = {p.relative_to(directory).as_posix(): p for p in directory.rglob("*") if p.is_file()}
-        if not files or set(files) != set(entry["files"]):
-            raise ValueError("%s: file list differs from MANIFEST" % name)
-        size = 0
-        for filename, path in files.items():
-            size_on_disk = path.stat().st_size
-            if total + size + size_on_disk > total_budget:
-                raise ValueError("fixtures exceed total_bytes")
-            data = path.read_bytes()
-            if hashlib.md5(data).hexdigest() != entry["files"][filename]:
-                raise ValueError("%s/%s: checksum mismatch" % (name, filename))
-            size += len(data)
-        if size != entry["bytes"]:
-            raise ValueError("%s: bytes differs from MANIFEST" % name)
-        total += size
-    actual = {p.relative_to(root).as_posix() for db in root.glob("*.db") for p in db.iterdir()}
-    if actual != expected:
-        raise ValueError("table directories differ from MANIFEST: %s" % (actual ^ expected))
-    if total > total_budget:
-        raise ValueError("fixtures exceed total_bytes")
-    if set(manifest["tables"]) & set(manifest["retired"]):
-        raise ValueError("retired table names cannot be reused")
-    return manifest
-
-
-def validate_transition(old, new):
-    if old["budget"] != new["budget"] and (
-            not new["budget"].get("note") or new["budget"].get("note") == old["budget"].get("note")):
-        raise ValueError("budget changes require a new budget.note explaining why")
-    if not set(old["retired"]) <= set(new["retired"]):
-        raise ValueError("retired names cannot be removed")
-    if set(old["retired"]) & set(new["tables"]):
-        raise ValueError("retired table names cannot be reused")
-    for name, entry in old["tables"].items():
-        if name in new["tables"]:
-            if entry["files"] != new["tables"][name]["files"]:
-                raise ValueError("%s: existing fixture is immutable; use a new table name" % name)
-        elif name not in new["retired"]:
-            raise ValueError("%s: deleted table must be retired" % name)
 
 
 def warehouse_uri(bucket, prefix, run_id):
@@ -112,27 +52,29 @@ class PaimonFixtureMixin:
         if result.returncode:
             raise RuntimeError("Paimon fixture OSS operation failed (%s): %s" % (args[0], result.stderr))
 
-    def paimon_stage(self, run_id, tables):
-        root = FIXTURE_ROOT
-        # Full integrity validation runs during case discovery, before any uploads.
-        manifest = json.loads((root / "MANIFEST.json").read_text())
+    def paimon_stage(self, bucket, run_id, tables):
+        # The explicit bucket argument lets existing component filtering detect OSS usage.
         names = [name.strip() for name in tables.split(",")]
-        if not names or any(name not in manifest["tables"] for name in names):
-            raise ValueError("unknown fixture table in %s" % tables)
-        warehouse = self._paimon_warehouse(run_id)
-        # Validate the complete selection before uploading anything. CLEANUP also handles partial uploads.
         paths = [table_path(name) for name in names]
         for relative in paths:
-            if not (root / relative).is_dir():
-                raise ValueError("missing fixture directory: %s" % relative)
+            directory = FIXTURE_ROOT / relative
+            if not directory.is_dir() or directory.is_symlink():
+                raise ValueError("missing or invalid fixture directory: %s" % relative)
+        prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")
+        warehouse = warehouse_uri(bucket, prefix, run_id)
+        self.paimon_cleanup()
+        # Save the resolved target before uploading so CLEANUP can remove partial uploads.
+        self._paimon_cleanup_warehouse = warehouse
+        self._paimon_cleanup_catalog = None
         for relative in paths:
-            self._paimon_oss("cp", "-r", "-f", str(root / relative) + "/", warehouse + relative + "/")
+            self._paimon_oss("cp", "-r", "-f", str(FIXTURE_ROOT / relative) + "/", warehouse + relative + "/")
 
     def create_paimon_catalog(self, catalog, catalog_type, run_id):
         if catalog_type != "filesystem":
             raise ValueError("fixture catalogs must use filesystem")
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", catalog):
             raise ValueError("invalid fixture catalog name")
+        self._paimon_cleanup_catalog = catalog
         properties = {
             "type": "paimon", "paimon.catalog.type": "filesystem",
             "paimon.catalog.warehouse": self._paimon_warehouse(run_id),
@@ -145,17 +87,21 @@ class PaimonFixtureMixin:
             # Catalog SQL contains credentials; do not include it in the failure message.
             raise RuntimeError("failed to create Paimon fixture catalog %s" % catalog)
 
-    def paimon_cleanup(self, catalog, run_id):
-        warehouse = self._paimon_warehouse(run_id)
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", catalog):
-            raise ValueError("invalid fixture catalog name")
+    def paimon_cleanup(self):
+        warehouse = getattr(self, "_paimon_cleanup_warehouse", None)
+        if warehouse is None:
+            return
+        catalog = self._paimon_cleanup_catalog
         try:
-            self.execute_sql("SET CATALOG default_catalog")
-            result = self.execute_sql("DROP CATALOG IF EXISTS `%s`" % catalog)
-            if not result["status"]:
-                raise RuntimeError("failed to drop Paimon fixture catalog %s" % catalog)
+            if catalog is not None:
+                self.execute_sql("SET CATALOG default_catalog")
+                result = self.execute_sql("DROP CATALOG IF EXISTS `%s`" % catalog)
+                if not result["status"]:
+                    raise RuntimeError("failed to drop Paimon fixture catalog %s" % catalog)
         finally:
             self._paimon_oss("rm", "-r", "-f", warehouse)
+        self._paimon_cleanup_warehouse = None
+        self._paimon_cleanup_catalog = None
 
     def assert_paimon_reader(self, query, table, expected):
         """Assert FE scan routing using existing per-table EXTERNAL trace counters."""

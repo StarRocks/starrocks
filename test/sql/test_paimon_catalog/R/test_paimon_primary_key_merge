@@ -1,5 +1,5 @@
 -- name: test_paimon_primary_key_merge
-function: paimon_stage("${uuid0}", "paimon_test.pk_merge_v1")
+function: paimon_stage("${oss_bucket}", "${uuid0}", "paimon_test.pk_merge_v1")
 -- result:
 None
 -- !result
@@ -101,6 +101,10 @@ function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.
 -- result:
 None
 -- !result
+function: paimon_cleanup()
+-- result:
+None
+-- !result
 CLEANUP {
-function: paimon_cleanup("paimon_pk_${uuid0}", "${uuid0}")
+function: paimon_cleanup()
 } END CLEANUP
