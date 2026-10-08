@@ -601,9 +601,8 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
             Assertions.assertNotNull(scanContext, "prepare must build a scan context for the eligible source");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames(),
-                    "scan context must carry the resolved source sort-key column");
-            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames(),
+                    "scan context must carry the full resolved target->source column map");
             Assertions.assertNull(scanContext.wherePredicateSql(),
                     "no WHERE clause must yield a null predicate SQL");
             Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
@@ -614,7 +613,7 @@ public class InsertPreSplitHookTableTest {
     @Test
     public void prepareAllowsExpressionOnNonKeyColumn() throws Exception {
         // target [k, v]; SELECT k, parse_json(v) FROM src. The sampler only needs
-        // target key k, so the value expression never has to resolve to a source column.
+        // target key k, so the value expression is intentionally absent from the map.
         try (SourceFixture fixture = sourceFixture()) {
             SelectRelation selectRelation =
                     (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
@@ -627,8 +626,7 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
             Assertions.assertNotNull(scanContext);
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
-            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k"), scanContext.targetToSourceColumnNames());
         }
     }
 
@@ -673,7 +671,7 @@ public class InsertPreSplitHookTableTest {
             Assertions.assertNotNull(scanContext, "source == target must still build a scan context");
             Assertions.assertSame(fixture.target(), scanContext.sourceTable(),
                     "scan context must carry the target table as its source when source == target");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
         }
     }
 

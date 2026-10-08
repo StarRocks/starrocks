@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -133,15 +134,32 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
         Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
-        Assertions.assertEquals(Collections.emptyList(), result.partitionSourceColumnNames());
+        Assertions.assertEquals("k", result.get("k"));
+    }
+
+    @Test
+    public void resolveExposesFullTargetToSourceMap() {
+        // source [k, v]; target [k, v]; SELECT * by position -> full map covers EVERY
+        // non-generated base column (not just the sort key), lower-cased target -> source.
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false), starRelation(),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
     }
 
     @Test
@@ -152,7 +170,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -169,7 +187,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -186,14 +204,14 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
         Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals("k", result.get("k"));
     }
 
     @Test
@@ -204,7 +222,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -221,7 +239,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -237,7 +255,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, true); // has generated column
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -256,7 +274,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("b"), bareItem("a"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("b")),
@@ -264,7 +282,7 @@ public class InsertSelectSourceColumnsTest {
 
         Assertions.assertNotNull(result);
         // target[1]=b <- output[1]="a"; sortKey b -> source "a"
-        Assertions.assertEquals(Collections.singletonList("a"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals("a", result.get("b"));
     }
 
     @Test
@@ -279,14 +297,14 @@ public class InsertSelectSourceColumnsTest {
                 bareItem("v", null, "k"),   // SELECT v AS k
                 bareItem("k", null, "v"));  // SELECT k AS v
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
         Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("v"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals("v", result.get("k"));
     }
 
     @Test
@@ -299,7 +317,7 @@ public class InsertSelectSourceColumnsTest {
         TableName otherTbl = new TableName(null, null, "other");
         SelectRelation rel = bareRelation(bareItem("k", otherTbl, null), bareItem("v", null, null));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -318,7 +336,7 @@ public class InsertSelectSourceColumnsTest {
         TableName wrongDb = new TableName(null, "db2", "src");
         SelectRelation rel = bareRelation(bareItem("k", wrongDb, null), bareItem("v", null, null));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -337,14 +355,14 @@ public class InsertSelectSourceColumnsTest {
         TableName srcTbl = new TableName(null, null, "src");
         SelectRelation rel = bareRelation(bareItem("k", srcTbl, null), bareItem("v", null, null));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
         Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals("k", result.get("k"));
     }
 
     @Test
@@ -357,7 +375,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("ghost"), bareItem("v"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -376,7 +394,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k")); // only 1 item, target has 2
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -395,7 +413,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k", null, null), bareItem("x", null, "k"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -415,7 +433,7 @@ public class InsertSelectSourceColumnsTest {
         // SELECT k, v, extra — output has "extra" not in target
         SelectRelation rel = bareRelation(bareItem("k"), bareItem("v"), bareItem("extra"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -435,7 +453,7 @@ public class InsertSelectSourceColumnsTest {
         // SELECT k, v by-name aligned but sortKey is col("z") which is absent
         SelectRelation rel = bareRelation(bareItem("k"), bareItem("v"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("z")),  // z not in target
@@ -451,15 +469,15 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.singletonList(col("dt")));
 
         Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
-        Assertions.assertEquals(Collections.singletonList("dt"), result.partitionSourceColumnNames());
+        Assertions.assertEquals("k", result.get("k"));
+        Assertions.assertEquals("dt", result.get("dt"));
     }
 
     @Test
@@ -470,7 +488,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -488,14 +506,13 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
-        Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals(Map.of("k", "k"), result);
     }
 
     @Test
@@ -506,7 +523,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(expressionItem(null), bareItem("v"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -523,7 +540,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null), bareItem("v"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -540,14 +557,13 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem("v"));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
-        Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals(Map.of("k", "k"), result);
     }
 
     @Test
@@ -558,7 +574,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -578,14 +594,13 @@ public class InsertSelectSourceColumnsTest {
                 null, sourceExpr(new SlotRef(new TableName(null, null, "src"), "v")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
 
-        Assertions.assertNotNull(result);
-        Assertions.assertEquals(Collections.singletonList("k"), result.sortKeySourceColumnNames());
+        Assertions.assertEquals(Map.of("k", "k"), result);
     }
 
     @Test
@@ -599,7 +614,7 @@ public class InsertSelectSourceColumnsTest {
                 null, sourceExpr(new SlotRef(new TableName(null, null, "other"), "v")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -618,7 +633,7 @@ public class InsertSelectSourceColumnsTest {
         SelectListItem expr = expressionItem(null, sourceExpr(new SlotRef((TableName) null, "nosuch")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -637,7 +652,7 @@ public class InsertSelectSourceColumnsTest {
         Subquery subquery = new Subquery(mock(QueryStatement.class), NodePosition.ZERO);
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null, subquery));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -656,7 +671,7 @@ public class InsertSelectSourceColumnsTest {
         Subquery subquery = new Subquery(mock(QueryStatement.class), NodePosition.ZERO);
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null, sourceExpr(subquery)));
 
-        InsertSelectSourceColumns result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),

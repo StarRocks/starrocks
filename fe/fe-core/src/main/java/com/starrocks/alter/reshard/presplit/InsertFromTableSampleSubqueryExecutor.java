@@ -15,7 +15,11 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.StarRocksException;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-table path.
@@ -45,22 +49,43 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
 
     @Override
     protected SampleSpec resolveSampleSpec(SampleRequest request) throws StarRocksException {
-        ScanContext scanContext = request.getScanContext();
-        if (!(scanContext instanceof InsertFromTableScanContext context)) {
-            throw new StarRocksException(ERROR_PREFIX + "received a "
-                    + scanContext.getClass().getSimpleName()
-                    + " — wire only the INSERT-from-table load kind here");
-        }
+        InsertFromTableScanContext context = contextOf(request);
         return new SampleSpec(
                 context.sourceFromSql(),
                 context.wherePredicateSql(),
                 context.sourceTotalBytes(),
                 context.computeResource(),
-                identsOf(context.sortKeySourceColumnNames()),
-                identsOf(context.partitionSourceColumnNames()),
+                identsOf(mapToSource(request.getSortKey(), context.targetToSourceColumnNames())),
+                identsOf(mapToSource(request.getPartitionSourceColumns(), context.targetToSourceColumnNames())),
                 request.getSortKey(),
                 request.getPartitionSourceColumns(),
                 context.sourceTotalRows(),
                 context.wherePredicateSql() != null);
+    }
+
+    private static InsertFromTableScanContext contextOf(SampleRequest request) throws StarRocksException {
+        ScanContext scanContext = request.getScanContext();
+        if (!(scanContext instanceof InsertFromTableScanContext context)) {
+            throw new StarRocksException(ERROR_PREFIX + "received a "
+                    + scanContext.getClass().getSimpleName()
+                    + " -- wire only the INSERT-from-table load kind here");
+        }
+        return context;
+    }
+
+    /**
+     * Remaps target columns (the sort key or the partition columns) to their source-table column
+     * names via {@link InsertSelectSourceColumns#lookup}. Throws (-&gt; the sample fails -&gt; the
+     * load proceeds without pre-split) if any column is unmapped, so a boundary is never computed
+     * against the wrong source column. {@code prepare} gates this at admission time; the throw
+     * remains as the fail-safe for a metadata race between prepare and sampling.
+     */
+    private static List<String> mapToSource(
+            List<Column> targetColumns, Map<String, String> targetToSourceColumnNames) throws StarRocksException {
+        List<String> sourceNames = InsertSelectSourceColumns.lookup(targetColumns, targetToSourceColumnNames);
+        if (sourceNames == null) {
+            throw new StarRocksException(ERROR_PREFIX + "a projected column has no source-table column mapping");
+        }
+        return sourceNames;
     }
 }
