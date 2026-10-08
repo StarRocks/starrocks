@@ -223,7 +223,7 @@ if (${WITH_TENANN} STREQUAL "ON")
     add_definitions(-DWITH_TENANN)
 endif()
 
-if (${USE_ARM_PMULL})
+if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64" AND ${USE_ARM_PMULL})
     add_definitions(-DUSE_ARM_PMULL)
 endif()
 

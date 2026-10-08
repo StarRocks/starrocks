@@ -60,6 +60,10 @@ bool HasArmPmull();
 // On non-ARM platforms or when USE_ARM_PMULL is not defined, this is a no-op.
 void ResetArmPmullForTesting();
 
+// Returns true if STARROCKS_DISABLE_PMULL is set to a truthy value ("1", "true", etc.),
+// or false if unset, empty, or set to a falsy value ("0", "false", "off", "no").
+bool IsPmullDisabledByEnvForTesting();
+
 // Return the crc32c using the fallback implementation (ExtendImpl<Fast_CRC32>),
 // bypassing SIMD acceleration paths. Used for verification and equivalence testing.
 uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);

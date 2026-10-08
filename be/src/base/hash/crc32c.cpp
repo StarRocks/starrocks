@@ -25,9 +25,12 @@
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
+#include <strings.h>
+
 #include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 
 #if defined(__linux__)
 #include <sys/auxv.h>
@@ -252,19 +255,30 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
+namespace {
+static bool is_pmull_disabled_by_env() {
+    const char* env = getenv("STARROCKS_DISABLE_PMULL");
+    if (env == nullptr || env[0] == '\0') {
+        return false;
+    }
+    if (strcmp(env, "0") == 0 || strcasecmp(env, "false") == 0 || strcasecmp(env, "off") == 0 ||
+        strcasecmp(env, "no") == 0) {
+        return false;
+    }
+    return true;
+}
+} // namespace
+
+bool IsPmullDisabledByEnvForTesting() {
+    return is_pmull_disabled_by_env();
+}
+
 #if defined(__ARM_NEON) && defined(__aarch64__)
 namespace {
 #if defined(USE_ARM_PMULL)
 std::atomic<int8_t> s_has_pmull{-1};
-#endif
 
-inline bool has_arm_pmull() {
-#if defined(USE_ARM_PMULL)
-    int8_t val = s_has_pmull.load(std::memory_order_relaxed);
-    if (__builtin_expect(val != -1, 1)) {
-        return val != 0;
-    }
-
+__attribute__((noinline)) static bool init_arm_pmull() {
     static const bool s_hw_has_pmull = []() {
 #if defined(__APPLE__)
         return true;
@@ -275,9 +289,19 @@ inline bool has_arm_pmull() {
 #endif
     }();
 
-    bool enabled = s_hw_has_pmull && (getenv("STARROCKS_DISABLE_PMULL") == nullptr);
+    bool enabled = s_hw_has_pmull && !is_pmull_disabled_by_env();
     s_has_pmull.store(enabled ? 1 : 0, std::memory_order_relaxed);
     return enabled;
+}
+#endif
+
+inline bool has_arm_pmull() {
+#if defined(USE_ARM_PMULL)
+    int8_t val = s_has_pmull.load(std::memory_order_relaxed);
+    if (__builtin_expect(val != -1, 1)) {
+        return val != 0;
+    }
+    return init_arm_pmull();
 #else
     return false;
 #endif
@@ -310,6 +334,10 @@ uint32_t ExtendFallback(uint32_t crc, const char* buf, size_t size) {
 }
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+    if (__builtin_expect(size == 0, 0)) {
+        return crc;
+    }
+
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
     constexpr size_t CRC32C_SSE42_MINIMUM_LENGTH = (1 << 6);

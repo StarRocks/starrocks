@@ -29,6 +29,14 @@
 
 namespace starrocks::crc32c {
 
+namespace {
+alignas(16) const uint64_t k1k2[] = {0x0740eef02ULL, 0x09e4addf8ULL};
+alignas(16) const uint64_t k3k4[] = {0x0f20c0dfeULL, 0x14cd00bd6ULL};
+alignas(16) const uint64_t k5k0[] = {0x0dd45aab8ULL, 0x105ec76f0ULL};
+alignas(16) const uint64_t poly[] = {0x105ec76f1ULL, 0x0dea713f1ULL};
+alignas(16) const uint32_t mask_data[4] = {0xffffffff, 0, 0xffffffff, 0};
+} // namespace
+
 static inline TARGET_CRYPTO uint8x16_t clmul_00(uint8x16_t a, uint8x16_t b) {
     return vreinterpretq_u8_p128(
             vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u8(a), 0), vgetq_lane_p64(vreinterpretq_p64_u8(b), 0)));
@@ -44,11 +52,6 @@ static inline TARGET_CRYPTO uint8x16_t clmul_01(uint8x16_t a, uint8x16_t b) {
 }
 
 TARGET_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len) {
-    static const uint64_t __attribute__((aligned((16)))) k1k2[] = {0x0740eef02ULL, 0x09e4addf8ULL};
-    static const uint64_t __attribute__((aligned((16)))) k3k4[] = {0x0f20c0dfeULL, 0x14cd00bd6ULL};
-    static const uint64_t __attribute__((aligned((16)))) k5k0[] = {0x0dd45aab8ULL, 0x105ec76f0ULL};
-    static const uint64_t __attribute__((aligned((16)))) poly[] = {0x105ec76f1ULL, 0x0dea713f1ULL};
-
     uint8x16_t x0, x1, x2, x3, x4, x5, x6, x7, x8, y5, y6, y7, y8;
 
     x1 = vld1q_u8(reinterpret_cast<const uint8_t*>(buf + 0x00));
@@ -122,7 +125,6 @@ TARGET_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t l
     }
 
     x2 = clmul_01(x1, x0);
-    static const uint32_t __attribute__((aligned(16))) mask_data[4] = {0xffffffff, 0, 0xffffffff, 0};
     x3 = vreinterpretq_u8_u32(vld1q_u32(mask_data));
     x1 = vextq_u8(x1, vdupq_n_u8(0), 8);
     x1 = veorq_u8(x1, x2);
