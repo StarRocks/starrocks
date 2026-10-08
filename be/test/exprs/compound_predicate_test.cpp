@@ -17,17 +17,17 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
-#include "common/bloom_filter.h"
 #include "exprs/expr_context.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
