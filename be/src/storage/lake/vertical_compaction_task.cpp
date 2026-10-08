@@ -113,6 +113,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    // Every input source opens one buffered stream per column of the group, all at once.
+    const int64_t num_streams = _total_input_segs * static_cast<int64_t>(column_group.size());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -127,8 +130,14 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+<<<<<<< HEAD
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
                                    .fill_metadata_cache = true};
+=======
+                                   .buffer_size = _stream_buffer_size,
+                                   .fill_metadata_cache = reuse_via_shared_cache,
+                                   .hold_segments = _hold_input_segments};
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
@@ -141,9 +150,20 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
         }
     }
+<<<<<<< HEAD
     return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
                                                 config::lake_compaction_chunk_size, _total_num_rows,
                                                 total_mem_footprint, _total_input_segs);
+=======
+    // The held input set stays resident across every column-group pass, so it comes out of the same
+    // per-worker budget the read buffers are sized from; charging it is what keeps the chunk sizing
+    // honest. mem_usage() covers the whole segment (all columns), which is exactly what stays
+    // resident regardless of this group's width -- and it grows as later passes touch more column
+    // indexes, so this re-decides every pass: once holding would starve the budget the task stops
+    // holding, for this pass and every later one. See there.
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs,
+                                         num_streams * _stream_buffer_size);
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
 }
 
 Status VerticalCompactionTask::compact_column_group(bool is_key, int column_group_index, size_t column_group_size,
@@ -168,8 +188,32 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+<<<<<<< HEAD
                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
+=======
+                                  .buffer_size = _stream_buffer_size,
+                                  .hold_segments = _hold_input_segments};
+
+    // Apply range filter to ALL column groups (key and non-key) so that segment
+    // iterators produce the same row subsets. TabletReader requires start_key and
+    // end_key to contain the same number of ranges, so pass both sides together;
+    // an empty OlapTuple represents an unbounded side. The key group's
+    // heap_merge_iterator records RowSourceMasks, and non-key groups replay them.
+    if (_context->has_range_split) {
+        reader_params.start_key = _context->range_start_key;
+        reader_params.end_key = _context->range_end_key;
+        reader_params.range = _context->range_lower_inclusive ? TabletReaderParams::RangeStartOperation::GE
+                                                              : TabletReaderParams::RangeStartOperation::GT;
+        reader_params.end_range = _context->range_upper_inclusive ? TabletReaderParams::RangeEndOperation::LE
+                                                                  : TabletReaderParams::RangeEndOperation::LT;
+    }
+
+    {
+        SCOPED_RAW_TIMER(&_context->stats->reader_open_ns);
+        RETURN_IF_ERROR(reader.open(reader_params));
+    }
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
 
     CompactionTaskStats prev_stats;
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
