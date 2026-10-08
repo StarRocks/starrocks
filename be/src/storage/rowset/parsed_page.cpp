@@ -381,6 +381,7 @@ public:
             auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->read_by_rowids(_first_ordinal, rowids, count, nc->data_column_raw_ptr()));
             std::vector<uint8_t> null_flags;
+            null_flags.reserve(*count);
             for (size_t i = 0; i < *count; i++) {
                 ordinal_t ord = rowids[i] - _first_ordinal;
                 DCHECK_LT(ord, _num_rows);
