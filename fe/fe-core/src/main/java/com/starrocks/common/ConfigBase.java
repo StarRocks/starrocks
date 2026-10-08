@@ -36,11 +36,7 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
-import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.CredentialMask;
->>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;

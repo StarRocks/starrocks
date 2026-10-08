@@ -18,13 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.CredentialMask;
-import com.starrocks.common.util.PropertyAnalyzer;
->>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
