@@ -57,6 +57,9 @@ struct CompactionTaskStats {
     int64_t io_ns_write_remote = 0;
     int64_t pk_sst_merge_ns = 0;
     int64_t input_file_size = 0;
+    // Read passes whose per-stream read buffer was shrunk below lake_compaction_stream_buffer_size_bytes
+    // because the input fan-in would otherwise outgrow compaction_memory_limit_per_worker.
+    int64_t stream_buffer_shrunk_passes = 0;
 
     void collect(const OlapReaderStatistics& reader_stats);
     void collect(const OlapWriterStatistics& writer_stats);

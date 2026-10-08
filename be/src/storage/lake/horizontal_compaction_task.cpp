@@ -58,8 +58,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.lake_io_opts = {.fill_data_cache = true,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+    reader_params.lake_io_opts = {.fill_data_cache = true, .buffer_size = _stream_buffer_size};
     reader_params.column_access_paths = &_column_access_paths;
     RETURN_IF_ERROR(reader.open(reader_params));
 
@@ -170,6 +169,13 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
+    // The single read pass opens one buffered stream per column for every input source, all at once.
+    int64_t total_input_segs = 0;
+    for (const auto& rowset : _input_rowsets) {
+        total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
+    }
+    const int64_t num_streams = total_input_segs * static_cast<int64_t>(_tablet_schema->num_columns());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -177,14 +183,11 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     }
 
     int64_t total_num_rows = 0;
-    int64_t total_input_segs = 0;
     int64_t total_mem_footprint = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
-        total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
-        LakeIOOptions lake_io_opts{.fill_data_cache = false,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
-                                   .fill_metadata_cache = false};
+        LakeIOOptions lake_io_opts{
+                .fill_data_cache = false, .buffer_size = _stream_buffer_size, .fill_metadata_cache = false};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
@@ -198,7 +201,8 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
         }
     }
 
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+    // The read buffers are allocated whatever the chunk size is, so they come off the budget first.
+    return CompactionUtils::get_read_chunk_size(chunk_mem_limit(num_streams * _stream_buffer_size),
                                                 config::lake_compaction_chunk_size, total_num_rows, total_mem_footprint,
                                                 total_input_segs);
 }
