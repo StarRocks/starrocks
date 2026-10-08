@@ -28,6 +28,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -223,6 +224,18 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
+    void partitionProjectionKeepsDistinctLiteralValues() {
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql(
+                "FILES(\"path\" = \"s3://bucket/*.parquet\")", /*whereClauseSqlOrNull=*/ null,
+                List.of("CAST('A' AS varchar)"), List.of("CAST('a' AS varchar)"),
+                /*samplingRate=*/ 1.0, /*rowLimit=*/ 100, /*seed=*/ 0L);
+
+        Assertions.assertTrue(sql.startsWith(
+                        "SELECT CAST('A' AS varchar), CAST('a' AS varchar) FROM FILES("),
+                "partition and sort-key literals with different values need separate result cells: " + sql);
+    }
+
+    @Test
     void buildSampleSqlScalesRateForLargeInput() {
         TableFunctionTable sourceTable = mockSourceTable(
                 Map.of("path", "s3://bucket/large/*.parquet", "format", "parquet"),
@@ -298,6 +311,39 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Assertions.assertEquals("200", rows.get(0).sortKeyTuple().get(1).getStringValue());
         Assertions.assertEquals("100", rows.get(1).sortKeyTuple().get(0).getStringValue());
         Assertions.assertEquals("300", rows.get(1).sortKeyTuple().get(1).getStringValue());
+    }
+
+    @Test
+    void overlappingPartitionAndKeyRolesProjectOnceAndDecodeEveryTuple() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://bucket/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[20260921, 11]}"));
+                });
+        Column partitionAndSortKey = bigintColumn("dt");
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(partitionAndSortKey, bigintColumn("exp_id")),
+                List.of(partitionAndSortKey),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                        "SELECT `dt`, `exp_id` FROM FILES"),
+                "the overlapping partition column must be projected only once: " + capturedSql);
+        Assertions.assertFalse(capturedSql.toString().contains("`exp_id`, `dt` FROM FILES"),
+                "the partition projection must reuse the earlier dt result: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals("20260921", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("20260921", row.partitionSourceTuple().get(0).getStringValue(),
+                "partition decoding must reuse the dt cell without changing the logical tuple contract");
     }
 
     @Test
@@ -544,8 +590,37 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         Assertions.assertTrue(capturedSql.toString().startsWith(
-                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date) FROM FILES("),
-                "the literal stands in for dt in the sort key and the partition column: " + capturedSql);
+                        "SELECT CAST('20260917' AS date), `file_key` FROM FILES("),
+                "the literal stands in for dt in the sort key, and the partition column reuses that result: "
+                        + capturedSql);
+    }
+
+    @Test
+    void distinctLiteralProjectionsKeepThePartitionValue() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/data/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"A\",11,\"a\"]}"));
+                });
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("file_key", "file_key"), /*wherePredicateSql=*/ null,
+                        Map.of("sort_literal", "'A'", "partition_literal", "'a'")),
+                List.of(new Column("sort_literal", VarcharType.VARCHAR), bigintColumn("file_key")),
+                List.of(new Column("partition_literal", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("A", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("a", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('A' AS"), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('a' AS"), capturedSql.toString());
     }
 
     @Test
