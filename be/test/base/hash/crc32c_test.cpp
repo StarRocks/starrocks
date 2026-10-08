@@ -110,6 +110,7 @@ public:
         } else {
             unsetenv(name);
         }
+        ResetArmPmullForTesting();
     }
 
     ~ScopedEnv() {
@@ -118,6 +119,7 @@ public:
         } else {
             unsetenv(_name.c_str());
         }
+        ResetArmPmullForTesting();
     }
 
     ScopedEnv(const ScopedEnv&) = delete;
@@ -154,33 +156,38 @@ void verify_standard_results() {
             0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     };
     ASSERT_EQ(0xd9963a56, Value(reinterpret_cast<char*>(data), sizeof(data)));
+
+    // Verify chunked buffer >= 64 bytes
+    char buf64[64];
+    for (int i = 0; i < 64; i++) {
+        buf64[i] = static_cast<char>((i * 7) ^ 0x5a);
+    }
+    ASSERT_EQ(Value(buf64, sizeof(buf64)), ValueFallback(buf64, sizeof(buf64)));
+
+    char buf128[128];
+    for (int i = 0; i < 128; i++) {
+        buf128[i] = static_cast<char>((i * 13) ^ 0xa5);
+    }
+    ASSERT_EQ(Value(buf128, sizeof(buf128)), ValueFallback(buf128, sizeof(buf128)));
 }
 
 } // namespace
 
 TEST(CRC32C, FallbackPathWithEnvVar) {
-    // Explicit manual setenv/unsetenv lifecycle as specified in task brief
-    setenv("STARROCKS_DISABLE_PMULL", "1", 1);
+    ScopedEnv env("STARROCKS_DISABLE_PMULL", "1");
     ASSERT_FALSE(HasArmPmull());
     verify_standard_results();
-    unsetenv("STARROCKS_DISABLE_PMULL");
 
-    // ScopedEnv safety check for exception/assertion-safe teardown
-    {
-        ScopedEnv env("STARROCKS_DISABLE_PMULL", "1");
-        ASSERT_FALSE(HasArmPmull());
+    std::vector<char> buffer(4096);
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        buffer[i] = static_cast<char>((i * 131) ^ (i >> 3));
+    }
 
-        std::vector<char> buffer(4096);
-        for (size_t i = 0; i < buffer.size(); ++i) {
-            buffer[i] = static_cast<char>((i * 131) ^ (i >> 3));
-        }
-
-        const size_t test_sizes[] = {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 63, 64, 65, 128, 256, 1024, 4096};
-        for (size_t size : test_sizes) {
-            uint32_t val = Value(buffer.data(), size);
-            uint32_t val_fallback = ValueFallback(buffer.data(), size);
-            ASSERT_EQ(val, val_fallback);
-        }
+    const size_t test_sizes[] = {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 63, 64, 65, 128, 256, 1024, 4096};
+    for (size_t size : test_sizes) {
+        uint32_t val = Value(buffer.data(), size);
+        uint32_t val_fallback = ValueFallback(buffer.data(), size);
+        ASSERT_EQ(val, val_fallback);
     }
 }
 
