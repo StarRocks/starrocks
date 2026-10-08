@@ -152,7 +152,8 @@ public class LanceMetadata implements ConnectorMetadata {
                 .getAsJsonObject();
         List<Column> columns = LanceApiConverter.fromSchema(description.getAsJsonObject("schema"));
         long id = tableIds.computeIfAbsent(name, ignored -> CONNECTOR_ID_GENERATOR.getNextId().asLong());
-        return new LanceTable(id, name, columns, description.get("location").getAsString(), catalogName, dbName);
+        return new LanceTable(id, catalogName, name,
+                columns, description.get("location").getAsString(), dbName);
     }
 
     @Override

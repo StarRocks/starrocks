@@ -807,7 +807,6 @@ TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
     EXPECT_EQ(values_ptr, column);
     EXPECT_TRUE(column->is_binary());
     EXPECT_FALSE(column->is_large_binary());
-    EXPECT_FALSE(chunk.has_large_column());
 
     // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
     // allocating them.

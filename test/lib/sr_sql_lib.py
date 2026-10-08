@@ -96,9 +96,9 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # A shared-data alter job is cancelled with this message when any transaction id is allocated,
 # anywhere in the cluster, between taking the watershed txn id and adding the shadow index
 # (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
-# cleaned up and nothing is lost, so the statement can just be submitted again.
+# cleaned up and nothing is lost, so the statement can just be submitted again -- as often as it
+# takes until the wait's deadline: on a busy cluster several attempts in a row can be cancelled.
 ALTER_RERUN_MSG = "please re-run the alter table command"
-ALTER_RERUN_MAX_RETRY = 3
 # Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
 # ALTER MATERIALIZED VIEW (RollupProcDir).
 SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
@@ -2240,7 +2240,6 @@ class StarrocksSQLApiLib(object):
             # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
             if (
                 expect_status == "FINISHED"
-                and rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
                 and should_resubmit_alter(
                     last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
@@ -2775,7 +2774,7 @@ class StarrocksSQLApiLib(object):
                 return None
 
             tools.assert_true(
-                is_watershed_cancel(state, msg) and rerun < ALTER_RERUN_MAX_RETRY,
+                is_watershed_cancel(state, msg),
                 "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
             )
             rerun += 1
@@ -2845,8 +2844,7 @@ class StarrocksSQLApiLib(object):
 
             rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
             if (
-                rerun < ALTER_RERUN_MAX_RETRY
-                and time.monotonic() < deadline
+                time.monotonic() < deadline
                 and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
             ):
                 # Wait for the resubmitted job instead.

@@ -45,6 +45,7 @@ set(COMPUTE_ENV_SPILL_TEST_FILES
     load_spill/load_chunk_spiller_test.cpp
     load_spill/load_spill_block_manager_test.cpp
     load_spill/load_spill_block_merge_executor_test.cpp
+    spill/dir_manager_test.cpp
     spill/operator_mem_resource_manager_test.cpp
     spill/query_spill_manager_test.cpp
     spill/spill_block_manager_test.cpp

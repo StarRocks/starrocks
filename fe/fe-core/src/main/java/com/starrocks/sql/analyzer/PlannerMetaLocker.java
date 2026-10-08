@@ -280,9 +280,9 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         // Only lock what the lock can protect. Same predicate AnalyzerUtils.CopyUnsafeTablesCollector uses to
         // decide who may extend the lock's lifetime, so who gets locked and who decides for how long cannot
-        // drift apart. A no-op in practice -- a table reached through the internal catalog always lives in an
-        // internal database -- so this is here as the one named statement of the invariant, and as the anchor
-        // for asserting it inside Locker later.
+        // drift apart. This is what leaves out the internal-database tables whose data lives elsewhere and
+        // whose definition is never written in place (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC,
+        // ELASTICSEARCH, ExternalOlapTable), and it is the anchor for asserting the invariant inside Locker later.
         if (!table.isMetaLockTarget()) {
             return null;
         }

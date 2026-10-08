@@ -123,8 +123,6 @@ public:
         return *this;
     }
 
-    bool has_large_column() const override;
-
     // Whether the byte payload size and offset payload byte size fit the size
     // representation used by this BinaryColumnBase instance.
     Status is_payload_size_representable() const {

@@ -60,9 +60,9 @@ public class LancePlanTest extends PlanTestBase {
 
         // 3. Setup a mock Lance metadata with db & tables
         LanceMetadata metadata = new LanceMetadata(catalogName, properties);
-        metadata.addTable("bootstrap_db", new LanceTable(20003, "nullable_rows", List.of(
+        metadata.addTable("bootstrap_db", new LanceTable(20003, catalogName, "nullable_rows", List.of(
                 new Column("id", com.starrocks.type.IntegerType.BIGINT, true),
-                new Column("label", com.starrocks.type.VarcharType.VARCHAR, true)), "s3://bucket/nullable_rows", catalogName));
+                new Column("label", com.starrocks.type.VarcharType.VARCHAR, true)), "s3://bucket/nullable_rows"));
         Database db = new Database(10001, "db1");
         metadata.addDatabase(db);
 
@@ -70,9 +70,11 @@ public class LancePlanTest extends PlanTestBase {
                 new Column("id", INT),
                 new Column("embedding", LanceApiConverter.parseType("fixed_size_list<float32, 128>"))
         );
-        LanceTable table = new LanceTable(20001, "vectors_table", columns, "s3://bucket/vectors", catalogName);
+        LanceTable table = new LanceTable(20001, catalogName, "vectors_table",
+                columns, "s3://bucket/vectors");
         metadata.addTable("db1", table);
-        metadata.addTable("db1", new LanceTable(20002, "events", columns, "s3://bucket/events", catalogName));
+        metadata.addTable("db1", new LanceTable(20002, catalogName, "events",
+                columns, "s3://bucket/events"));
 
         metadataMgr.registerMockedMetadata(catalogName, metadata);
     }

@@ -107,15 +107,6 @@ void FileColumn::resize(const size_t n) {
     }
 }
 
-bool FileColumn::has_large_column() const {
-    for (const auto& column : _fields) {
-        if (column->has_large_column()) {
-            return true;
-        }
-    }
-    return false;
-}
-
 void FileColumn::assign(const size_t n, const size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign FileColumn";
     const auto desc = this->clone_empty();

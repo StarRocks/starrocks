@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/auth/credential_mask.h"
 #include "base/utility/defer_op.h"
 #include "common/config_object_storage_fwd.h"
 #include "exec/exec_env.h"
@@ -130,7 +131,7 @@ TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials)
 
     EXPECT_EQ(std::string::npos, page.find("AKIDEXAMPLEACCESSKEY"));
     EXPECT_EQ(std::string::npos, page.find("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"));
-    const std::string mask(config::kSensitiveConfigMask);
+    const std::string mask(kCredentialMask);
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_access_key_id=" + mask + "\n"));
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_secret_access_key=" + mask + "\n"));
     // Non-credential configs are still printed as is.

@@ -75,7 +75,7 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     src->get_offset().ensure_width_for_value(kLargeOffset);
     ASSERT_TRUE(src->get_offset().is_large());
     EXPECT_TRUE(src->is_binary());
-    EXPECT_FALSE(src->has_large_column());
+    EXPECT_FALSE(src->is_large_binary());
     EXPECT_EQ(6, src->byte_size(1));
 
     auto dst = BinaryColumn::create();

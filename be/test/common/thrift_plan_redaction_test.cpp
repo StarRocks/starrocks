@@ -21,7 +21,7 @@
 namespace starrocks {
 
 TEST(ThriftPlanRedactionTest, MasksDiagnosticCopiesBeforeThriftEncoding) {
-    for (const std::string secret : {std::string("test-key"), std::string("test\n\x01\"key")}) {
+    for (const std::string& secret : {std::string("test-key"), std::string("test\n\x01\"key")}) {
         TAIEndpointConfig endpoint;
         endpoint.__set_endpoint("https://models.example.test/v1/inference");
         endpoint.__set_api_key(secret);

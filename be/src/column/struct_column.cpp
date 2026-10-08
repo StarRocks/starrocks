@@ -107,14 +107,6 @@ void StructColumn::resize(size_t n) {
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
-bool StructColumn::has_large_column() const {
-    bool res = false;
-    for (const auto& column : _fields) {
-        res = res || column->has_large_column();
-    }
-    return res;
-}
-
 void StructColumn::assign(size_t n, size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign StructColumn";
     auto desc = this->clone_empty();

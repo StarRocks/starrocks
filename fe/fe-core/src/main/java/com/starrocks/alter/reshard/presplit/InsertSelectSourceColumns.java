@@ -105,29 +105,31 @@ final class InsertSelectSourceColumns {
     }
 
     /**
+     * The source relation and projection rules used to resolve one INSERT-SELECT. A non-null
+     * {@code computedProjectionContext} admits safe computed expressions after folding their
+     * plan-time constants in the INSERT user's context; {@code null} leaves them unsupported.
+     */
+    record ResolutionContext(Table sourceTable, TableName normalizedSourceName, String sourceAlias,
+                             SchemaPairing pairing, ConnectContext computedProjectionContext) {
+    }
+
+    /**
      * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
      *
      * @param insertStmt          the parsed INSERT statement
      * @param selectRelation      the SELECT body of the INSERT
      * @param targetTable         the INSERT target (range-distributed); the effective target
      *                            columns are derived from it by {@link #effectiveTargetColumns}
-     * @param sourceTable         the single source table (OLAP, Iceberg, or the inferred
-     *                            {@code TableFunctionTable} of a {@code FILES(...)} call)
-     * @param normalizedSourceName fully-qualified source name (catalog/db/tbl) for qualifier matching
-     * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
+     * @param resolutionContext   the source relation and its projection rules
      * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
      * @param partitionColumns    partition columns of the target
-     * @param pairing             how closely the source schema must mirror the target's
      * @return the resolved projection, or {@code null} when the projection is ambiguous or unsafe
      */
     static Resolved resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, Table sourceTable,
-            TableName normalizedSourceName, String sourceAlias,
-            List<Column> sortKeyColumns, List<Column> partitionColumns,
-            SchemaPairing pairing) {
-        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, sourceTable,
-                normalizedSourceName, sourceAlias, pairing, /*computedProjectionContext*/ null);
+            OlapTable targetTable, ResolutionContext resolutionContext,
+            List<Column> sortKeyColumns, List<Column> partitionColumns) {
+        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, resolutionContext);
         if (resolved == null) {
             return null;
         }
@@ -147,17 +149,15 @@ final class InsertSelectSourceColumns {
      * {@link #resolve} does for callers that do not care, makes an unfed sampled column
      * indistinguishable from the shape rejections.
      *
-     * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
-     *                                  evaluate a computed projection: such a projection is admitted
-     *                                  when {@link #foldedComputedProjection} accepts it, with its
-     *                                  plan-time constants folded in this context. {@code null}
-     *                                  admits none, so every computed output stays unsupported.
      */
     static Resolved resolveUngated(
             InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, Table sourceTable,
-            TableName normalizedSourceName, String sourceAlias,
-            SchemaPairing pairing, ConnectContext computedProjectionContext) {
+            OlapTable targetTable, ResolutionContext resolutionContext) {
+        Table sourceTable = resolutionContext.sourceTable();
+        TableName normalizedSourceName = resolutionContext.normalizedSourceName();
+        String sourceAlias = resolutionContext.sourceAlias();
+        SchemaPairing pairing = resolutionContext.pairing();
+        ConnectContext computedProjectionContext = resolutionContext.computedProjectionContext();
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
         List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);

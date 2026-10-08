@@ -104,6 +104,7 @@ public class LanceMetadataTest {
         Assertions.assertNull(metadata.getTable(null, "datasets", "missing"));
         LanceTable users = (LanceTable) metadata.getTable(null, "datasets", "USERS");
         Assertions.assertEquals("lance_catalog", users.getCatalogName());
+        Assertions.assertFalse(users.isMetaLockTarget());
         Assertions.assertEquals("datasets", users.getCatalogDBName());
         Assertions.assertEquals("datasets", users.toThrift(List.of()).getDbName());
         Assertions.assertEquals("s3://bucket/warehouse/users.lance", users.getUri());

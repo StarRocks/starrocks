@@ -344,4 +344,22 @@ public class HiveTableTest {
         HiveTable table = newBuilder.build();
         Assertions.assertEquals(table.getResourceName(), resourceName);
     }
+
+    /**
+     * getProperties merges the resource's current metastore URIs into what it returns. It used to merge them
+     * into the table's own map, i.e. write to a shared object from a getter that queries call without the
+     * meta lock.
+     */
+    @Test
+    public void testGetPropertiesDoesNotWriteToTheTable() {
+        Map<String, String> stored = new HashMap<>();
+        HiveTable table = new HiveTable(1L, "hive_tbl", Lists.newArrayList(new Column("k", IntegerType.INT)),
+                "hive0", null, "db0", "table0", "hdfs://127.0.0.1:10000/hive", "", 0L,
+                Lists.newArrayList(), Lists.newArrayList("k"), stored, new HashMap<>(),
+                HiveStorageFormat.PARQUET, HiveTable.HiveTableType.EXTERNAL_TABLE);
+
+        Map<String, String> properties = table.getProperties();
+        Assertions.assertEquals("thrift://127.0.0.1:9083", properties.get(HiveTable.HIVE_METASTORE_URIS));
+        Assertions.assertTrue(stored.isEmpty());
+    }
 }

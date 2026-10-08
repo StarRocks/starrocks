@@ -69,9 +69,10 @@ public:
             // it can return an error. get() is noexcept and leaves `view` empty on error, so a
             // failing raw_json() cannot throw a second exception out of this catch. Pass the bounded
             // view (never view.data(), which would run strlen off the end of a non-NUL-terminated
-            // load buffer).
+            // load buffer). The error code is ignored on purpose; `view` just stays empty. GCC does not let a (void)
+            // cast silence simdjson's warn_unused_result, so keep it in an unused variable instead.
             std::string_view view;
-            (void)value.raw_json().get(view);
+            [[maybe_unused]] auto ignored = value.raw_json().get(view);
             auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view,
                                                simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);

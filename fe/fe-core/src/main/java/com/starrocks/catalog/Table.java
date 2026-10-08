@@ -288,15 +288,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      *   <li>an internal view is neither native nor an FE transaction participant, yet AlterJobMgr.alterView
      *       rewrites its definition, schema and security in place under this very lock;</li>
      *   <li>a resource-mapping table (ENGINE=HIVE/ICEBERG/HUDI created from a resource) reports a
-     *       resource-mapping catalog name, yet HiveTable.modifyTableSchema clears and refills its fullSchema
-     *       inside lockDatabase(WRITE), and LocalMetastore.replayModifyHiveTableColumn does the same on
-     *       replay.</li>
+     *       resource-mapping catalog name, yet lives in an internal database and used to have its schema
+     *       rewritten in place by a refresh.</li>
      * </ul>
-     * So the predicate is "does it live in an internal database", expressed as {@code !isExternalCatalog}.
-     * That is deliberately not {@code isInternalCatalog}: the two differ exactly on resource-mapping catalogs,
-     * which {@link CatalogMgr#isExternalCatalog} already classifies as not-external. It is also fail-closed --
-     * a table kind nobody has classified yet keeps its lock, which costs a little contention rather than
-     * silently losing mutual exclusion.
+     * So the default predicate is "does it live in an internal database", expressed as
+     * {@code !isExternalCatalog}. That is deliberately not {@code isInternalCatalog}: the two differ exactly on
+     * resource-mapping catalogs, which {@link CatalogMgr#isExternalCatalog} already classifies as not-external.
+     * It is also fail-closed -- a table kind nobody has classified yet keeps its lock, which costs a little
+     * contention rather than silently losing mutual exclusion.
+     * <p>
+     * A subclass may answer false for its internal-database instances once it guarantees that a published
+     * object is never written in place -- every definition change swaps in new state -- so that the reference a
+     * query resolved is itself a consistent snapshot. HiveTable, HudiTable, IcebergTable, FileTable, MysqlTable,
+     * JDBCTable, EsTable and ExternalOlapTable do. So do the tables built per statement and never published in a
+     * database (TableFunctionTable for FILES(), BlackHoleTable), which would otherwise count as internal.
      */
     public boolean isMetaLockTarget() {
         // Spelled out, CatalogMgr.isExternalCatalog negated is: the internal catalog, or a resource-mapping

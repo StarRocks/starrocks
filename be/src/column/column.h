@@ -134,10 +134,6 @@ public:
 
     virtual void resize(size_t n) = 0;
 
-    // Check if the column contains large column.
-    // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
-    virtual bool has_large_column() const = 0;
-
     virtual void resize_uninitialized(size_t n) { resize(n); }
 
     // Assign specified idx element to the column container content,
