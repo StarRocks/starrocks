@@ -78,4 +78,9 @@ public enum SkipReason {
      * load between the grouper snapshot and the coordinator's re-resolve.
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
+    /**
+     * INSERT from table: the source is an external-catalog table whose size cannot be estimated from
+     * its table statistics, so the tablet count cannot be chosen.
+     */
+    ESTIMATE_UNAVAILABLE,
 }
