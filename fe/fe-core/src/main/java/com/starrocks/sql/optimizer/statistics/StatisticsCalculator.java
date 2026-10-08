@@ -1768,7 +1768,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         for (Map.Entry<Pair<Integer, Integer>, List<Pair<BinaryPredicateOperator, Double>>> entry :
                 tablePairToPredicateWithSelectivity.entrySet()) {
-            entry.getValue().sort((o1, o2) -> ((int) (o2.second - o1.second)));
+            entry.getValue().sort((o1, o2) -> Double.compare(o2.second, o1.second));
             for (int index = 0; index < entry.getValue().size(); ++index) {
                 double selectivity = entry.getValue().get(index).second;
                 double sqrtNum = pow(2, index);
