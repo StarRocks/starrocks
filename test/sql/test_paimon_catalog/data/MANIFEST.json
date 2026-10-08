@@ -1,9 +1,7 @@
 {
   "budget": {
     "total_bytes": 5242880,
-    "per_table_bytes": 307200,
-    "per_change_bytes": 409600,
-    "note": "Initial budget; existing fixture bytes are preserved."
+    "note": "Limit total fixture size; individual tables and changes have no separate size limits."
   },
   "tables": {
     "paimon_test.image_blob": {
