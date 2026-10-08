@@ -14,15 +14,23 @@
 
 package com.starrocks.catalog.mv;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Deque;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -85,6 +93,38 @@ public final class PreResolvedBaseTables {
             }
         }
         return result;
+    }
+
+    /**
+     * {@link #resolve} for an MV about to be activated, plus the external base tables of every base MV the
+     * activation will reload on the way. The relationship rebuild reloads, under the MV's lock, each base MV that
+     * has not been reloaded yet ({@code MaterializedView#fixRelationship}, so that a hierarchy turns active bottom
+     * up), and that reload resolves the base MV's own base tables -- through the same lookup, so the same scope
+     * answers them as long as they are in it. The walk follows the reload: into a base MV only while it has not
+     * reloaded, down through as many levels as the reloads would go. A base MV that reloads meanwhile only leaves
+     * some entries unused; one that does not reload in between is the case this exists for.
+     */
+    public static PreResolvedBaseTables resolveForActivation(Collection<BaseTableInfo> baseTableInfos) {
+        List<BaseTableInfo> all = Lists.newArrayList(baseTableInfos);
+        Set<Long> visitedMvIds = Sets.newHashSet();
+        Deque<BaseTableInfo> pending = new ArrayDeque<>();
+        baseTableInfos.stream().filter(Objects::nonNull).forEach(pending::add);
+        while (!pending.isEmpty()) {
+            BaseTableInfo baseTableInfo = pending.poll();
+            if (!baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId());
+            if (table instanceof MaterializedView baseMV && !baseMV.hasReloaded() && visitedMvIds.add(baseMV.getId())) {
+                List<BaseTableInfo> nested = baseMV.getBaseTableInfos();
+                if (nested != null) {
+                    all.addAll(nested);
+                    nested.stream().filter(Objects::nonNull).forEach(pending::add);
+                }
+            }
+        }
+        return resolve(all);
     }
 
     /**
