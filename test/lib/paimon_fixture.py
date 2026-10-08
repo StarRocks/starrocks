@@ -113,14 +113,18 @@ class PaimonFixtureMixin:
         if self.paimon_fixture_source != "repo":
             raise ValueError("only paimon_fixture_source=repo is supported")
         root = Path(self.paimon_fixture_root)
-        manifest = load_manifest(root)
+        # Full integrity validation runs during case discovery, before any uploads.
+        manifest = json.loads((root / "MANIFEST.json").read_text())
         names = tables.split(",")
         if not names or any(name not in manifest["tables"] for name in names):
             raise ValueError("unknown fixture table in %s" % tables)
         warehouse = self._paimon_warehouse(run_id)
         # Validate the complete selection before uploading anything. CLEANUP also handles partial uploads.
-        for name in names:
-            relative = table_path(name)
+        paths = [table_path(name) for name in names]
+        for relative in paths:
+            if not (root / relative).is_dir():
+                raise ValueError("missing fixture directory: %s" % relative)
+        for relative in paths:
             self._paimon_oss("cp", "-r", "-f", str(root / relative) + "/", warehouse + relative + "/")
 
     def create_paimon_catalog(self, catalog, catalog_type, run_id):
