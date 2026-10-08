@@ -712,6 +712,7 @@ public class AnalyzeMgr implements Writable {
 
         if (tables.isEmpty()) {
             lastCleanTime = workTime;
+            return;
         }
 
         List<Long> tableIds = Lists.newArrayList();
@@ -730,6 +731,12 @@ public class AnalyzeMgr implements Writable {
             }
             tableIds.add(table.getId());
             partitionIds.addAll(pids);
+        }
+
+        // e.g. the tables have no partition (a range partitioned table created without any partition)
+        if (tableIds.isEmpty() || partitionIds.isEmpty()) {
+            lastCleanTime = workTime;
+            return;
         }
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
