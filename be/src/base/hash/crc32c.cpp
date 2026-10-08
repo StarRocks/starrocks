@@ -254,10 +254,7 @@ uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 namespace {
 inline bool has_arm_pmull() {
 #if defined(USE_ARM_PMULL)
-    static const bool s_has_pmull = []() {
-        if (getenv("STARROCKS_DISABLE_PMULL") != nullptr) {
-            return false;
-        }
+    static const bool s_hw_has_pmull = []() {
 #if defined(__APPLE__)
         return true;
 #elif defined(__linux__)
@@ -266,15 +263,30 @@ inline bool has_arm_pmull() {
         return false;
 #endif
     }();
-    return s_has_pmull;
+    if (!s_hw_has_pmull) {
+        return false;
+    }
+    return getenv("STARROCKS_DISABLE_PMULL") == nullptr;
 #else
     return false;
 #endif
 }
 } // namespace
 
+bool HasArmPmull() {
+    return has_arm_pmull();
+}
+
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#else
+bool HasArmPmull() {
+    return false;
+}
 #endif
+
+uint32_t ExtendFallback(uint32_t crc, const char* buf, size_t size) {
+    return ExtendImpl<Fast_CRC32>(crc, buf, size);
+}
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
@@ -299,7 +311,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
     }
 #endif
 
-    return ExtendImpl<Fast_CRC32>(crc, buf, size);
+    return ExtendFallback(crc, buf, size);
 }
 
 } // namespace starrocks::crc32c
