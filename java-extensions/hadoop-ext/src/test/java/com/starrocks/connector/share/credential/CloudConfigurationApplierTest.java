@@ -64,6 +64,32 @@ public class CloudConfigurationApplierTest {
     }
 
     @Test
+    public void testSseCApplied() {
+        Configuration conf = new Configuration();
+        Map<String, String> props = new HashMap<>();
+        props.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "ak");
+        props.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, "sk");
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE, "sse-c");
+        props.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, "base64-key");
+        CloudConfigurationApplier.applyCloudConfiguration(props, conf);
+
+        Assertions.assertEquals("SSE-C", conf.get("fs.s3a.encryption.algorithm"));
+        Assertions.assertEquals("base64-key", conf.get("fs.s3a.encryption.key"));
+    }
+
+    @Test
+    public void testSseCNotAppliedByDefault() {
+        Configuration conf = new Configuration();
+        Map<String, String> props = new HashMap<>();
+        props.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, "ak");
+        props.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, "sk");
+        CloudConfigurationApplier.applyCloudConfiguration(props, conf);
+
+        Assertions.assertNull(conf.get("fs.s3a.encryption.algorithm"));
+        Assertions.assertNull(conf.get("fs.s3a.encryption.key"));
+    }
+
+    @Test
     public void testUseAWSSDKDefaultBehaviorWithAssumeRole() {
         Configuration conf = new Configuration();
         Map<String, String> props = new HashMap<>();

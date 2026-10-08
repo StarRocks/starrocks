@@ -63,7 +63,7 @@ public class IcebergTableSink extends DataSink {
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();
-        this.cloudConfiguration = IcebergUtil.getVendedCloudConfiguration(catalogName, icebergTable);
+        this.cloudConfiguration = IcebergUtil.getVendedCloudConfigurationForWrite(catalogName, icebergTable);
     }
 
     public String getTargetBranch() {
