@@ -1211,4 +1211,20 @@ TEST_F(BitShufflePageTest, ParsedPageV2ReadByRowidsNullable) {
     }
 }
 
+TEST_F(BitShufflePageTest, rowid_preceding_page_ordinal_returns_corruption) {
+    ReadByRowidsPage<TYPE_INT> page;
+    page.build(100);
+
+    auto column = ChunkFactory::column_from_field_type(TYPE_INT, false);
+    column->append_datum(Datum(static_cast<int32_t>(42)));
+    size_t orig_size = column->size();
+
+    // first_ordinal_in_page is 50, but rowids[0] is 40 (< 50)
+    rowid_t rowids[] = {40, 55, 60};
+    size_t count = 3;
+    Status st = page.decoder->read_by_rowids(50, rowids, &count, column.get());
+    EXPECT_TRUE(st.is_corruption());
+    EXPECT_EQ(orig_size, column->size());
+}
+
 } // namespace starrocks
