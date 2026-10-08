@@ -50,11 +50,11 @@ under the License.
         <unboundid.ldapsdk.version>7.0.5</unboundid.ldapsdk.version>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
-        <jackson.version>2.21.6</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.6 version released -->
+        <jackson.version>2.21.7</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.7 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
-        <parquet.version>1.16.0</parquet.version>
+        <parquet.version>1.18.1</parquet.version>
         <ranger.version>2.9.0</ranger.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
@@ -109,6 +109,7 @@ under the License.
         <thrift.version>0.24.0</thrift.version>
         <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
+        <luben.zstd.jni.version>1.5.7-15</luben.zstd.jni.version>
     </properties>
 
     <profiles>
@@ -704,6 +705,12 @@ under the License.
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
                 <version>6.2.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${luben.zstd.jni.version}</version>
             </dependency>
 
             <dependency>
