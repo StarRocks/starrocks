@@ -166,6 +166,21 @@ public:
             const std::shared_ptr<FileSystem>& fs = nullptr,
             InitialMetadataOrder initial_order = InitialMetadataOrder::kPerTabletFirst);
 
+    // Same as the overload above, except that every storage access -- resolving the partition's
+    // physical directory, reading the tablet's own object, the bundle, or the shared version-1 object --
+    // goes through |anchor_tablet_id| instead of |tablet_id|. The metacache is still keyed by
+    // |tablet_id|'s own metadata path, so this read hits and fills the same entries as the overload above.
+    //
+    // On a node that handles a whole partition on behalf of every tablet in it (the file-bundling vacuum
+    // and drop-tablet aggregators), most tablets are not held locally, and resolving one through its own
+    // shard costs a StarMgr GetShard RPC each time. Passing a locally held tablet of the same partition,
+    // e.g. one returned by pick_local_anchor_tablet_id(), resolves everything from the local shard cache.
+    //
+    // Precondition: |anchor_tablet_id| belongs to the same physical partition as |tablet_id|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_via_anchor(int64_t tablet_id, int64_t version,
+                                                               int64_t anchor_tablet_id,
+                                                               const CacheOptions& cache_opts);
+
     // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
     // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
     // bundle_tablet_metadata_location(tablet_id, version). The bundle path, the
@@ -467,6 +482,22 @@ private:
     StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
                                                              const CacheOptions& cache_opts, int64_t expected_gtid,
                                                              const std::shared_ptr<FileSystem>& fs);
+    // Shared body of the get_tablet_metadata() overloads. |path| names the metadata to read and keys
+    // the metacache; storage is resolved through |anchor_tablet_id|, which every public overload
+    // except get_tablet_metadata_via_anchor() sets to the tablet id parsed from |path|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_impl(const std::string& path, int64_t anchor_tablet_id,
+                                                         const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                         const std::shared_ptr<FileSystem>& fs,
+                                                         InitialMetadataOrder initial_order);
+    // Shared body of the get_single_tablet_metadata() overloads. The metacache is keyed by |tablet_id|;
+    // the bundle is read through |anchor_tablet_id|.
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata_impl(int64_t tablet_id, int64_t version,
+                                                                int64_t anchor_tablet_id,
+                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                                const std::shared_ptr<FileSystem>& fs);
+    // Returns |metadata| with its id set to |tablet_id|, copying only when the id differs: the PB may be
+    // shared through the metacache.
+    static TabletMetadataPtr stamp_tablet_id(TabletMetadataPtr metadata, int64_t tablet_id);
     StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
     // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
     StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
