@@ -1357,7 +1357,15 @@ public class UDFHelper {
             if (constructor == null) {
                 throw new ExceptionInInitializerError("no compatible java.nio.DirectByteBuffer constructor");
             }
-            constructor.setAccessible(true);
+            try {
+                constructor.setAccessible(true);
+            } catch (RuntimeException e) {
+                // InaccessibleObjectException since JDK 9. Later calls only see "Could not initialize class",
+                // with this message as the cause, so name the fix here.
+                throw new ExceptionInInitializerError("Java UDAF merge needs "
+                        + "--add-opens=java.base/java.nio=ALL-UNNAMED in the BE JVM options (JAVA_OPTS in be.conf): "
+                        + e.getMessage());
+            }
             return new DirectByteBufferFactory(constructor, longCapacity);
         }
 
