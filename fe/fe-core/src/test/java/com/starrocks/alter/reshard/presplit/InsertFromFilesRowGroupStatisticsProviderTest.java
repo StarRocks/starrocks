@@ -17,7 +17,6 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -195,19 +194,20 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
 
     @Test
     void unreadableFileInParallelReadFallsBackToDataTier() throws Exception {
-        // A corrupt file among valid ones: the parallel footer read surfaces the per-file failure via
-        // joinFooterRead as a StarRocksException, so the pipeline falls back to the data tier.
+        // A missing file among valid ones: the parallel footer read must preserve the
+        // MetaTierUnavailableException signal so the pipeline falls back to the data tier.
         Path good = writeBigintParquet(16, 0L);
-        java.nio.file.Path corrupt = tempDirectory.resolve("corrupt.parquet");
-        Files.write(corrupt, "not a parquet file".getBytes());
+        Path missing = new Path(tempDirectory.resolve("missing.parquet").toUri());
+        TBrokerFileStatus missingStatus = new TBrokerFileStatus(
+                missing.toString(), false, 1L, true);
 
         int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
         Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
         try {
             SampleRequest request = bigintSampleRequest(
-                    List.of(brokerFileStatus(good), brokerFileStatus(new Path(corrupt.toUri()))),
+                    List.of(brokerFileStatus(good), missingStatus),
                     Long.MAX_VALUE);
-            Assertions.assertThrows(StarRocksException.class, () -> provider.fetch(request));
+            Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
         } finally {
             Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
         }
