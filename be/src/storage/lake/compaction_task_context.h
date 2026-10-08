@@ -50,6 +50,22 @@ struct CompactionTaskStats {
     int64_t io_count_local_disk = 0;
     int64_t io_count_remote = 0;
     int64_t in_queue_time_sec = 0;
+<<<<<<< HEAD
+=======
+    int64_t input_rowset_count = 0;
+    int64_t input_row_count = 0;
+    int64_t output_row_count = 0;
+    int64_t read_chunk_count = 0;
+    int64_t write_chunk_count = 0;
+    int64_t column_group_count = 0;
+    // Read passes whose per-stream read buffer was shrunk below lake_compaction_stream_buffer_size_bytes
+    // because the input fan-in would otherwise outgrow compaction_memory_limit_per_worker.
+    int64_t stream_buffer_shrunk_passes = 0;
+    // Nested wall-clock totals for vertical compaction groups. They overlap
+    // with the high-level reader/writer phases and are not part of accounting.
+    int64_t vertical_key_group_ns = 0;
+    int64_t vertical_value_group_ns = 0;
+>>>>>>> 80ca09f ([BugFix] Bound lake compaction read buffers by the per-worker memory budget (#80229))
     int64_t read_segment_count = 0;
     int64_t write_segment_count = 0;
     int64_t write_segment_bytes = 0;
