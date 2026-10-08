@@ -17,6 +17,8 @@ package com.starrocks.connector;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -27,6 +29,8 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStatisticData;
@@ -43,6 +47,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConnectorColumnStatsCacheLoaderTest {
     public static ConnectContext connectContext;
@@ -231,6 +237,180 @@ public class ConnectorColumnStatsCacheLoaderTest {
                 "hive0.partitioned_db.t1_par.1234", "c1")).get().getMcvString());
         Assertions.assertEquals("MCV: [[2022-01-27:8][2022-01-19:5][2022-01-20:4]]", result.get(new ConnectorTableColumnKey(
                 "hive0.partitioned_db.t1_par.1234", "par_date")).get().getMcvString());
+    }
+
+    private static TStatisticData regionKeyStats() {
+        TStatisticData data = new TStatisticData();
+        data.setColumnName("r_regionkey");
+        data.setRowCount(5);
+        data.setDataSize(100);
+        data.setCountDistinct(5);
+        data.setNullCount(0);
+        data.setMin("0");
+        data.setMax("4");
+        return data;
+    }
+
+    private static AtomicBoolean mockReady(boolean initial) {
+        AtomicBoolean ready = new AtomicBoolean(initial);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isReady() {
+                return ready.get();
+            }
+        };
+        return ready;
+    }
+
+    @Test
+    public void testLoadBeforeReadyIsNotCached() throws ExecutionException, InterruptedException {
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                queries.incrementAndGet();
+                return ImmutableList.of(regionKeyStats());
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "tpch", "region");
+            }
+        };
+        AtomicBoolean ready = mockReady(false);
+
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> cache =
+                Caffeine.newBuilder().buildAsync(new ConnectorColumnStatsCacheLoader());
+        ConnectorTableColumnKey regionKey = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
+        ConnectorTableColumnKey name = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_name");
+
+        // Before ready: nothing is queried, and nothing is cached as "no statistics".
+        Assertions.assertTrue(cache.getAll(ImmutableList.of(regionKey, name)).get().isEmpty());
+        Assertions.assertNull(cache.get(regionKey).get());
+        Assertions.assertEquals(0, queries.get());
+        Assertions.assertTrue(cache.synchronous().asMap().isEmpty());
+
+        // Once ready, the same keys load the real statistics; a column without any is cached as empty.
+        ready.set(true);
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result =
+                cache.getAll(ImmutableList.of(regionKey, name)).get();
+        Assertions.assertEquals(1, queries.get());
+        Assertions.assertEquals(5, result.get(regionKey).get().getRowCount());
+        Assertions.assertFalse(result.get(name).isPresent());
+        Assertions.assertEquals(2, cache.synchronous().asMap().size());
+    }
+
+    @Test
+    public void testReloadBeforeReadyKeepsOldValue() throws ExecutionException, InterruptedException {
+        mockReady(false);
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
+
+        Optional<ConnectorTableColumnStats> columnStats = Optional.of(new ConnectorTableColumnStats(
+                ColumnStatistic.builder().setDistinctValuesCount(5).build(), 5, "2024-01-01 01:00:00"));
+        Assertions.assertSame(columnStats, new ConnectorColumnStatsCacheLoader()
+                .asyncReload(key, columnStats, Runnable::run).get());
+
+        Optional<Histogram> histogram = Optional.of(new Histogram(Lists.newArrayList(), Maps.newHashMap()));
+        Assertions.assertSame(histogram, new ConnectorHistogramColumnStatsCacheLoader()
+                .asyncReload(key, histogram, Runnable::run).get());
+    }
+
+    @Test
+    public void testHistogramLoadBeforeReadyIsNotCached() throws ExecutionException, InterruptedException {
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<ConnectorHistogramColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryHistogramStatistics(ConnectContext context, String tableUUID,
+                                                                 List<String> column) {
+                queries.incrementAndGet();
+                return ImmutableList.of();
+            }
+        };
+        AtomicBoolean ready = mockReady(false);
+
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> cache =
+                Caffeine.newBuilder().buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234", "c1");
+
+        Assertions.assertTrue(cache.getAll(ImmutableList.of(key)).get().isEmpty());
+        Assertions.assertNull(cache.get(key).get());
+        Assertions.assertEquals(0, queries.get());
+        Assertions.assertTrue(cache.synchronous().asMap().isEmpty());
+
+        ready.set(true);
+        Assertions.assertFalse(cache.getAll(ImmutableList.of(key)).get().get(key).isPresent());
+        Assertions.assertEquals(1, queries.get());
+        Assertions.assertEquals(1, cache.synchronous().asMap().size());
+    }
+
+    @Test
+    public void testFailedLoadIsNotCached() throws ExecutionException, InterruptedException {
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                if (queries.incrementAndGet() == 1) {
+                    throw new RuntimeException("transient statistics query failure");
+                }
+                return ImmutableList.of(regionKeyStats());
+            }
+        };
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable(connectContext, "hive0", "tpch", "region");
+            }
+        };
+        mockReady(true);
+
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> cache =
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader());
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
+
+        // A failed load completes exceptionally and is not cached as "no statistics".
+        Assertions.assertThrows(ExecutionException.class, () -> cache.get(key).get());
+        Assertions.assertNull(cache.synchronous().getIfPresent(key));
+
+        // The next access loads again and recovers.
+        Assertions.assertEquals(5, cache.get(key).get().get().getRowCount());
+        Assertions.assertEquals(2, queries.get());
+
+        // A failed refresh keeps the old value instead of replacing it with an empty one.
+        queries.set(0);
+        cache.synchronous().refresh(key);
+        Assertions.assertEquals(1, queries.get());
+        Assertions.assertEquals(5, cache.synchronous().getIfPresent(key).get().getRowCount());
+    }
+
+    @Test
+    public void testFailedHistogramLoadAllIsNotCached() throws ExecutionException, InterruptedException {
+        AtomicInteger queries = new AtomicInteger();
+        new MockUp<ConnectorHistogramColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryHistogramStatistics(ConnectContext context, String tableUUID,
+                                                                 List<String> column) {
+                if (queries.incrementAndGet() == 1) {
+                    throw new RuntimeException("transient histogram query failure");
+                }
+                return ImmutableList.of();
+            }
+        };
+        mockReady(true);
+
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> cache =
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+        ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234", "c1");
+
+        Assertions.assertThrows(ExecutionException.class, () -> cache.getAll(ImmutableList.of(key)).get());
+        Assertions.assertNull(cache.synchronous().getIfPresent(key));
+
+        Assertions.assertFalse(cache.getAll(ImmutableList.of(key)).get().get(key).isPresent());
+        Assertions.assertEquals(2, queries.get());
     }
 
     @Test
