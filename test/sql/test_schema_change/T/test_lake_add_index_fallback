@@ -1,4 +1,5 @@
 -- name: test_lake_add_index_fallback @cloud
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 create database lake_idx_fb_${uuid0};
 use lake_idx_fb_${uuid0};
 
