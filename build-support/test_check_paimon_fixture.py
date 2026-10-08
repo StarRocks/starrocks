@@ -31,6 +31,9 @@ class FixtureTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        root_patch = patch("paimon_fixture.FIXTURE_ROOT", self.root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
         table = self.root / "basic.db" / "t"
         table.mkdir(parents=True)
         (table / "data").write_bytes(b"fixture")
@@ -135,11 +138,14 @@ class FixtureTest(unittest.TestCase):
         client = PaimonFixtureMixin()
         client.oss_bucket = "bucket"
         client.paimon_fixture_prefix = "joobin/fixtures"
-        client.paimon_fixture_source = "repo"
-        client.paimon_fixture_root = self.root
         client._paimon_oss = Mock()
         client.execute_sql = Mock(return_value={"status": True})
         return client
+
+    def test_default_warehouse_prefix(self):
+        client = self.client()
+        del client.paimon_fixture_prefix
+        self.assertEqual(client._paimon_warehouse("run-1"), "oss://bucket/paimon_ci_test/run-1/")
 
     def test_invalid_selection_uploads_nothing(self):
         self.load()
