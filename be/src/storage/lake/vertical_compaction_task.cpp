@@ -113,6 +113,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    // Every input source opens one buffered stream per column of the group, all at once.
+    const int64_t num_streams = _total_input_segs * static_cast<int64_t>(column_group.size());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -127,7 +130,7 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .buffer_size = _stream_buffer_size,
                                    .fill_metadata_cache = true};
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
         for (auto& segment : segments) {
@@ -141,7 +144,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
             }
         }
     }
-    return CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker,
+    // The read buffers are allocated whatever the chunk size is, so they come off the budget first.
+    return CompactionUtils::get_read_chunk_size(chunk_mem_limit(num_streams * _stream_buffer_size),
                                                 config::lake_compaction_chunk_size, _total_num_rows,
                                                 total_mem_footprint, _total_input_segs);
 }
@@ -168,7 +172,7 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.use_page_cache = false;
     reader_params.column_access_paths = &_column_access_paths;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
-                                  .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+                                  .buffer_size = _stream_buffer_size};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     CompactionTaskStats prev_stats;
