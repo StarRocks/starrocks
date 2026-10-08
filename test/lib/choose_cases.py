@@ -36,7 +36,6 @@ from nose import tools
 
 from lib import skip
 from lib import sr_sql_lib
-from lib import paimon_fixture
 from lib import *
 
 
@@ -216,9 +215,6 @@ class ChooseCase(object):
             # check ${} contains component info
             _case_sqls = " ".join(_case_sqls)
             _vars = re.findall(r"\${([a-zA-Z0-9._-]+)}", _case_sqls)
-            # Paimon helpers read OSS settings internally, so cases no longer contain these placeholders.
-            if re.search(r"function:\s*paimon_stage\(", _case_sqls):
-                _vars.append("oss_bucket")
             for _var in _vars:
 
                 if not is_pass:
@@ -717,10 +713,6 @@ def choose_cases(record_mode=False):
     sr_sql_lib.self_print(run_info, color=ColorEnum.GREEN, bold=False, logout=True)
 
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
-
-    # Validate once during discovery, before workers execute the selected cases.
-    if any("function: paimon_stage(" in str(case.sql) for case in cases.case_list):
-        paimon_fixture.load_manifest(paimon_fixture.FIXTURE_ROOT)
 
     # log info: case list
     sr_sql_lib.self_print("case num: %s" % len(cases.case_list))

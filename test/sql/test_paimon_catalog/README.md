@@ -12,19 +12,22 @@ The default `paimon_fixture_prefix` is `paimon_ci_test`, including when absent f
 Override it in a local config to your own prefix, such as `joobin/paimon-fixtures`.
 Do not commit credentials or local configuration. Fixtures are loaded from this repository's `data/`
 directory, located relative to the helper module rather than the working directory.
-When selected cases use `paimon_stage`, SQL-Tester validates all fixture file lists, checksums and
-sizes once during case discovery, before starting workers. Uploads only check the selected table
-names and directories. Keep fixture files unchanged during a test run.
+No additional file inventory, checksum or size checks are performed. Keep fixture files unchanged during a test run.
 
 ## Cases
 
-Declare a literal comma-separated list of logical table names with `paimon_stage`.
-Create a filesystem catalog with `create_paimon_catalog` and put `paimon_cleanup` in a `CLEANUP` block.
+Declare the OSS dependency explicitly with `paimon_stage("${oss_bucket}", "${uuid0}", "database.table")`.
+Table lists accept comma-separated names with optional surrounding whitespace.
+Create a filesystem catalog with `create_paimon_catalog`.
 Each case gets its own `${uuid0}` warehouse, including on concurrent runs.
-Cleanup is idempotent and removes partial uploads even when catalog creation fails.
-An exception from a CLEANUP command is reported as a teardown error after the remaining
-CLEANUP commands and connection cleanup. A query failure is retained separately.
-An externally killed runner still needs CI bucket lifecycle cleanup.
+
+Call `paimon_cleanup()` as the final normal statement so cleanup failures fail a successful case.
+Also call it in the existing `CLEANUP` block to attempt cleanup after a query or upload failure.
+The helper saves its resolved warehouse and catalog on the case instance; the CLEANUP block needs
+no UUID substitution. Successful cleanup clears the saved target, so the second call does nothing.
+Failed cleanup retains the target for a retry. Partial uploads are removed even if no catalog was created.
+The existing framework logs failures from the fallback CLEANUP block; this PR does not change that behavior.
+An externally killed runner still needs external cleanup, such as an OSS lifecycle policy.
 
 `test_paimon_reader_modes` compares scalar values against fixed expected results for JNI, NATIVE,
 and AUTO, and checks the existing FE reader trace counters. AUTO on this append-only scalar fixture
@@ -39,30 +42,16 @@ and predicates on deleted keys and old values. AUTO must use JNI for this layout
 profile assertion also covers this merge path. See [datagen](data/datagen/README.md) for the
 writer version, generation command and independent Paimon reader/layout checks.
 
-The SQL-Tester CLEANUP UUID regression tests run without a cluster, using the regular
-SQL-Tester Python dependencies. From `test/`, run
-`python3 -m unittest lib.test_sql_case_cleanup -v`. They exercise the real parser and runner
-through successful execution, assertion failure, and failure of individual cleanup commands.
-They also verify that cleanup failures fail the case without hiding the original query failure.
-The `SQL-Tester Unit Tests` CI job runs these tests for changes under `test/`, independently
-of cluster deployment.
+## Helper tests and data maintenance
 
-## Data changes
-
-Run `python3 build-support/check_paimon_fixture.py --base upstream/main` from the repository root.
-The checker verifies checksums, file lists, recorded table sizes, the total size limit, retired names,
-and the fixture names declared by cases. Individual tables and changes have no separate size limits.
-It does not parse arbitrary SQL references.
-The comparison uses the merge base, and includes uncommitted files so a diff can be reviewed before committing.
-
-Tables cannot change in place. Add a new table name, migrate the cases, delete the old table, and
-record its name in `retired`. Table names are never reused. Budget changes require a reason in `budget.note`.
-Keep the data, manifest, generation script, and cases together in the same change.
-New fixtures should include their generator and writer version, and validate the intended file layout
-and expected rows independently of StarRocks' record output.
+From `test/`, run `python3 -m unittest lib.test_paimon_fixture -v` for the Paimon helpers.
+No workflow changes or shared SQL-Tester execution changes are required; the API library only
+inherits the Paimon helper methods.
 
 The five initial tables were imported unchanged from existing repository fixtures. Their generators
-and writer versions were not present in the repository; the manifest records this provenance explicitly.
-The migration retains the `paimon_test` database name and preserves every binary byte.
-The new primary-key fixture records its generator, writer version, layout and expected rows.
-Remote fixture repositories and enterprise-specific manifest extensions are not implemented.
+and writer versions were not recorded. The migration retains the `paimon_test` database name and
+preserves every binary byte. The primary-key fixture includes its generator, writer version and
+independent assertions for the file layout and expected rows.
+
+Keep fixture datasets small. Add new scenarios under new table names and include the generator
+and expected results where possible. These maintenance guidelines are reviewed manually.
