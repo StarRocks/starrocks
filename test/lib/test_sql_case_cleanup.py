@@ -27,7 +27,7 @@ from unittest.mock import Mock, patch
 
 import nose.case
 
-from lib import choose_cases, sr_sql_lib
+from lib import choose_cases, paimon_fixture, sr_sql_lib
 
 
 CASE = '''-- name: cleanup_regression
@@ -197,6 +197,34 @@ class CleanupTest(unittest.TestCase):
             result = unittest.TestResult()
             nose.case.FunctionTestCase(lambda: None, tearDown=self.runner.tearDown).run(result)
             self.assertTrue(result.wasSuccessful(), result.errors)
+
+
+class FixtureSelectionTest(unittest.TestCase):
+    def select(self, statements):
+        cases = SimpleNamespace(
+            case_list=[SimpleNamespace(sql=[sql], file="case", name=str(i))
+                       for i, sql in enumerate(statements)],
+            sr_lib_obj=SimpleNamespace(paimon_fixture_root="custom/fixtures"),
+        )
+        with patch.object(choose_cases, "ChooseCase", return_value=cases), \
+                patch.object(choose_cases.sr_sql_lib, "self_print"):
+            return choose_cases.choose_cases()
+
+    def test_selected_fixtures_are_validated_once(self):
+        with patch.object(paimon_fixture, "load_manifest") as validate:
+            self.select(['function: paimon_stage("${uuid0}", "db.t")'] * 3)
+        validate.assert_called_once_with("custom/fixtures")
+
+    def test_unrelated_cases_skip_fixture_validation(self):
+        with patch.object(paimon_fixture, "load_manifest") as validate:
+            self.select(["select 1;"])
+            self.select([])
+        validate.assert_not_called()
+
+    def test_invalid_fixtures_abort_case_selection(self):
+        with patch.object(paimon_fixture, "load_manifest", side_effect=ValueError("checksum mismatch")):
+            with self.assertRaisesRegex(ValueError, "checksum mismatch"):
+                self.select(['function: paimon_stage("${uuid0}", "db.t")'])
 
 
 if __name__ == "__main__":
