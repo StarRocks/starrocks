@@ -626,6 +626,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：限制 ConnectorScanNode 可同时运行的远端扫描器（HDFS/对象存储等）数量上限。启动时会用此值裁剪估算并发，运行时调度 pending scanner 也会受其限制，用于控制线程、内存和文件句柄压力。
 - 引入版本：v3.2.0
 
+### spill_max_dir_bytes_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：落盘目录（`spill_local_storage_dir`）与存储路径（`storage_root_path`）位于同一块磁盘时，中间结果落盘最多可占用的磁盘容量比例。默认值 `0.5` 表示落盘最多使用该磁盘容量的 50%。落盘目录位于独立磁盘时不受此限制。该参数仅在 BE 启动时读取，修改后需重启 BE 才能生效。
+- 引入版本：v3.2.0
+
 ### string_prefix_zonemap_prefix_len
 
 - 默认值：16
