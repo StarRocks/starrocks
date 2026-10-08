@@ -40,8 +40,10 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatementBase.ExplainLevel;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
@@ -530,6 +532,88 @@ public class InsertPreSplitHookFilesTest {
 
         assertTrue(InsertPreSplitHook.hasSupportedProjectionShape(selectRelation));
         assertTrue(new FilesPreSplitSource().matches(mock(InsertStmt.class), selectRelation));
+    }
+
+    @Test
+    public void prepareRendersTheFoldedWherePredicate() {
+        // prepare must hand the sampler the predicate folded in the caller's context, not the
+        // parsed one: the parsed date_sub(current_date(), 7) would be evaluated as ROOT, and the
+        // gate rejects it outright because date_sub is not a ROW_LEVEL_FUNCTION. Mirrors
+        // InsertPreSplitHookTableTest#prepareRendersTheFoldedWherePredicate.
+        Expr parsed = mock(Expr.class);
+        Expr folded = mock(Expr.class);
+
+        PreSplitFlow.Prepared prepared = prepareWithStubbedGate(parsed, gate -> {
+            gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                    .thenReturn(folded);
+            gate.when(() -> SamplingPredicateGate.isDeterministicAndSafe(eq(folded), any(), any()))
+                    .thenReturn(true);
+            gate.when(() -> SamplingPredicateGate.toSql(folded)).thenReturn("`dt` >= '2026-09-17'");
+        });
+
+        Assertions.assertNotNull(prepared);
+        Assertions.assertEquals("`dt` >= '2026-09-17'",
+                ((InsertFromFilesScanContext) prepared.scanContext()).wherePredicateSql());
+    }
+
+    @Test
+    public void prepareSkipsWhenTheWherePredicateDoesNotFold() {
+        // A predicate that cannot be folded in the user's context is not safe to copy into the
+        // ROOT sampling sub-query, so pre-split declines rather than sampling a different row set.
+        Expr parsed = mock(Expr.class);
+
+        PreSplitFlow.Prepared prepared = prepareWithStubbedGate(parsed, gate ->
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(null));
+
+        Assertions.assertNull(prepared);
+    }
+
+    /**
+     * Drives {@link FilesPreSplitSource#prepare} over a one-column FILES() source whose single
+     * column is the sort key, with {@link SamplingPredicateGate} stubbed by {@code stubGate}.
+     * Everything else is the minimum that lets prepare() reach its scan context.
+     */
+    private static PreSplitFlow.Prepared prepareWithStubbedGate(
+            Expr parsedWhere, java.util.function.Consumer<MockedStatic<SamplingPredicateGate>> stubGate) {
+        Column sortKey = PresplitTestSupport.bigintColumn("k");
+
+        FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
+        TableFunctionTable filesTable = mock(TableFunctionTable.class);
+        when(filesTable.loadFileList()).thenReturn(List.of());
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(sortKey));
+        when(filesRelation.getTable()).thenReturn(filesTable);
+
+        SelectRelation selectRelation = bareStarSelectRelationOver(filesRelation);
+        when(selectRelation.getWhereClause()).thenReturn(parsedWhere);
+
+        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
+        when(stmt.isColumnMatchByName()).thenReturn(false);
+
+        OlapTable target = mock(OlapTable.class);
+        when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(sortKey));
+        when(target.getVisibleIndexMetas()).thenReturn(List.of());
+        com.starrocks.catalog.PartitionInfo partitionInfo = mock(com.starrocks.catalog.PartitionInfo.class);
+        when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
+        when(target.getPartitionInfo()).thenReturn(partitionInfo);
+
+        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
+        // InsertFromFilesScanContext rejects a null compute resource / time zone.
+        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
+        when(context.getSessionVariable().getTimeZone()).thenReturn("Asia/Shanghai");
+
+        try (MockedStatic<SamplingPredicateGate> gate =
+                     Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS);
+                MockedStatic<com.starrocks.sql.common.MetaUtils> metaUtils =
+                        Mockito.mockStatic(com.starrocks.sql.common.MetaUtils.class);
+                org.mockito.MockedConstruction<com.starrocks.sql.analyzer.QueryAnalyzer> ignoredAnalyzer =
+                        Mockito.mockConstruction(com.starrocks.sql.analyzer.QueryAnalyzer.class)) {
+            stubGate.accept(gate);
+            metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getRangeDistributionColumns(target))
+                    .thenReturn(List.of(sortKey));
+
+            return new FilesPreSplitSource().prepare(stmt, selectRelation, target, mock(Database.class), context);
+        }
     }
 
     @Test
