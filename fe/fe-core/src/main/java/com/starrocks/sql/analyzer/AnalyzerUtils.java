@@ -970,8 +970,15 @@ public class AnalyzerUtils {
      * statement gives that limit a reason to apply -- see {@link CopyUnsafeTablesCollector}; or
      * 2. it has an immutable in-memory structure, so there is nothing for the lock to protect.
      * <p>
+<<<<<<< HEAD
      * Everything else -- ENGINE=MYSQL / ELASTICSEARCH, ExternalOlapTable, and resource-mapping external
      * tables -- is copy-unsafe and does hold the lock for the whole phase.
+=======
+     * A lock target with no snapshot to plan against is copy-unsafe and does hold the lock for the whole phase.
+     * No table kind is one any more -- MYSQL, ELASTICSEARCH, resource JDBC, ExternalOlapTable and the
+     * resource-mapping tables all answer isMetaLockTarget() false -- but a kind nobody has classified yet would
+     * be, which keeps the rule fail-closed.
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
         CopyUnsafeTablesCollector collector = new CopyUnsafeTablesCollector();
@@ -1185,8 +1192,13 @@ public class AnalyzerUtils {
                 // table abstain when the statement reads one.
                 readsThroughAConnector = true;
             } else {
+<<<<<<< HEAD
                 // No snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and resource-mapping
                 // external tables. Unchanged -- the lock has to stay for the whole phase.
+=======
+                // A lock target with no snapshot to plan against, i.e. a kind nobody has classified yet (see
+                // areTablesCopySafe). The lock has to stay for the whole phase.
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
                 tables.put(targetName, target);
             }
             // Deliberately not super.visitInsertStatement: that is the blanket put this override replaces.
@@ -1204,9 +1216,31 @@ public class AnalyzerUtils {
             if (table instanceof SystemTable) {
                 return null;
             }
+<<<<<<< HEAD
             // A table planning can see through a private snapshot does not need the real lock held: OlapTable
             // and MV are shadow copied by copyOnlyForQuery, and OptimisticVersion revalidates them on the
             // lock-free path. The MV-count limit is the existing guard on that copy being cheap.
+=======
+            // A table the meta lock cannot protect has no say in how long that lock is held. Tables in an
+            // external catalog are that set, and so are the internal-database tables whose data lives elsewhere
+            // (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC, ELASTICSEARCH, ExternalOlapTable; see
+            // Table.isMetaLockTarget) -- PlannerMetaLocker.resolveTable never puts them in the lock set -- so
+            // they abstain. Letting them vote only made the planner hold the *lockable* tables' locks across
+            // connector RPCs while giving the voter itself zero protection: an external table's
+            // planning-phase stability comes from the query-scoped ConnectorMetadata
+            // (MetadataMgr.QueryMetadatas), never from the meta lock.
+            //
+            // Abstaining is not the same as being silent: the metadata behind such a table is remote, which
+            // is exactly what makes holding the lock across this statement's planning expensive, so the
+            // abstention is recorded for isCopySafe() to weigh the MV limit against.
+            if (!table.isMetaLockTarget()) {
+                readsThroughAConnector = true;
+                return null;
+            }
+            // A lock target that planning can see through a private snapshot does not need the real thing
+            // held: OlapTable and MV are shadow copied by copyOnlyForQuery, and OptimisticVersion revalidates
+            // them on the lock-free path. The MV-count limit is the existing guard on that copy being cheap.
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
@@ -1291,7 +1325,10 @@ public class AnalyzerUtils {
         }
 
         private Table copyTable(Table originalTable) {
-            if (!(originalTable instanceof OlapTable)) {
+            // An external OLAP target is already a private copy, synced from its cluster before the lock was
+            // taken (StatementPlanner.beginTransaction); a shadow copy would turn it into a plain OlapTable and
+            // lose everything that sync brought in.
+            if (!(originalTable instanceof OlapTable) || originalTable.isOlapExternalTable()) {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;

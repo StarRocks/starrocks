@@ -268,6 +268,18 @@ public class PlannerMetaLocker implements AutoCloseable {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        // Only lock what the lock can protect. Same predicate AnalyzerUtils.CopyUnsafeTablesCollector uses to
+        // decide who may extend the lock's lifetime, so who gets locked and who decides for how long cannot
+        // drift apart. This is what leaves out the internal-database tables whose data lives elsewhere and
+        // whose definition is never written in place (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC,
+        // ELASTICSEARCH, ExternalOlapTable), and it is the anchor for asserting the invariant inside Locker later.
+        if (!table.isMetaLockTarget()) {
+            return null;
+        }
+
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
         return new Pair<>(db, table);
     }
 

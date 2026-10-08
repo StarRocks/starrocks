@@ -18,10 +18,45 @@ namespace starrocks {
 
 ColumnIdToGlobalDictMap EMPTY_GLOBAL_DICTMAPS;
 
+<<<<<<< HEAD:be/src/runtime/global_dict/types.cpp
 std::ostream& operator<<(std::ostream& stream, const RGlobalDictMap& map) {
     stream << "[";
     for (const auto& [k, v] : map) {
         stream << "(" << k << "," << v << "),";
+=======
+public class LanceTable extends Table {
+
+    @SerializedName(value = "uri")
+    private final String uri;
+
+    // The Lance catalog this table belongs to. Without it the table reported the internal catalog's name, so it
+    // counted as a meta lock target although it never lives in an internal database (see isMetaLockTarget).
+    private final String catalogName;
+
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
+        super(id, name, TableType.LANCE, schema);
+        this.catalogName = catalogName;
+        this.uri = uri;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getUri() {
+        return uri;
+    }
+
+    @Override
+    public String getTableLocation() {
+        return uri;
+    }
+
+    @Override
+    public boolean isSupported() {
+        return false;
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240)):fe/fe-core/src/main/java/com/starrocks/catalog/LanceTable.java
     }
     stream << "]";
     return stream;

@@ -268,6 +268,47 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether the FE metadata lock can protect this table, i.e. whether it may be a target of
+     * {@link com.starrocks.sql.analyzer.PlannerMetaLocker} / Locker. A table for which this is false is never
+     * in the lock set, so it must not influence lock scope either -- see
+     * AnalyzerUtils.CopyUnsafeTablesCollector.
+     * <p>
+     * The question is about ownership, not engine type: is this object's in-memory metadata something the FE
+     * itself owns and rewrites in place? Answering it by listing table types is what makes it fragile, because
+     * the list keeps missing cases:
+     * <ul>
+     *   <li>an internal view is neither native nor an FE transaction participant, yet AlterJobMgr.alterView
+     *       rewrites its definition, schema and security in place under this very lock;</li>
+     *   <li>a resource-mapping table (ENGINE=HIVE/ICEBERG/HUDI created from a resource) reports a
+     *       resource-mapping catalog name, yet HiveTable.modifyTableSchema clears and refills its fullSchema
+     *       inside lockDatabase(WRITE), and LocalMetastore.replayModifyHiveTableColumn does the same on
+     *       replay.</li>
+     * </ul>
+     * So the default predicate is "does it live in an internal database", expressed as
+     * {@code !isExternalCatalog}. That is deliberately not {@code isInternalCatalog}: the two differ exactly on
+     * resource-mapping catalogs, which {@link CatalogMgr#isExternalCatalog} already classifies as not-external.
+     * It is also fail-closed -- a table kind nobody has classified yet keeps its lock, which costs a little
+     * contention rather than silently losing mutual exclusion.
+     * <p>
+     * A subclass may answer false for its internal-database instances once it guarantees that a published
+     * object is never written in place -- every definition change swaps in new state -- so that the reference a
+     * query resolved is itself a consistent snapshot. HiveTable, HudiTable, IcebergTable, FileTable, MysqlTable,
+     * JDBCTable, EsTable and ExternalOlapTable do. So do the tables built per statement and never published in a
+     * database (TableFunctionTable for FILES(), BlackHoleTable), which would otherwise count as internal.
+     */
+    public boolean isMetaLockTarget() {
+        // Spelled out, CatalogMgr.isExternalCatalog negated is: the internal catalog, or a resource-mapping
+        // pseudo-catalog (ENGINE=HIVE/ICEBERG/HUDI created from a RESOURCE -- those live in an internal
+        // database too), or no catalog name at all (ENGINE=JDBC from a RESOURCE leaves it null, as do a few
+        // other connector tables). Using it rather than open-coding those three keeps the null case handled:
+        // both isInternalCatalog and isResourceMappingCatalog throw on a null name.
+        return !CatalogMgr.isExternalCatalog(getCatalogName());
+    }
+
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
     public String getResourceName() {
         throw new NotImplementedException();
     }
