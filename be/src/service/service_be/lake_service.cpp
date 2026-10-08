@@ -52,7 +52,6 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -64,7 +63,6 @@
 #include "storage/lake/vector_index_build_task.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_index.h"
-#include "storage/tablet_schema.h"
 
 namespace starrocks {
 
@@ -735,24 +733,8 @@ static void collect_expected_metadata_tablet_ids(const AggregatePublishVersionRe
     }
 }
 
-// Build the query-only parent metadata after all child publishes have succeeded.
-// merge_tablet is also the range-tablet merge primitive, so it already provides
-// rowset-family deduplication and PK delvec union. Phase one intentionally rejects
-// DCG/IDG instead of copying incomplete metadata into a query-visible parent.
-
-// A PRIMARY KEY tablet whose ORDER BY differs from its key. Only this shape routes rows by a range in
-// primary-key space while laying its segments out in sort-key order, and it is the shape
-// tablet_splitter's can_prune_by_segment_sort_bounds refuses to prune segments for.
-static bool has_separate_sort_key_layout(const TabletMetadata& metadata) {
-    if (!metadata.has_schema()) {
-        return false;
-    }
-    // Spelled the same way tablet_splitter spells can_prune_by_segment_sort_bounds, so the two cannot
-    // drift apart on what counts as this shape.
-    const auto schema = TabletSchema::create(metadata.schema());
-    return schema->keys_type() == KeysType::PRIMARY_KEYS && schema->has_separate_sort_key();
-}
-
+// Build the query-only parent metadata after all child publishes have succeeded. Phase one
+// intentionally rejects DCG/IDG instead of copying incomplete metadata into a query-visible parent.
 static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
                                            const AggregatePublishVersionRequest& request,
                                            std::map<int64_t, TabletMetadata>* tablet_metas) {
@@ -806,17 +788,13 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             // query parent only needs an id-adjusted copy; no rowset/delvec aggregation is needed.
             parent_meta = std::make_shared<TabletMetadata>(*child_metas.front());
             parent_meta->set_id(parent_info.parent_tablet_id());
-        } else if (has_separate_sort_key_layout(*child_metas.front())) {
-            // The one shape a real merge cannot build an alias for: its range is in primary-key
-            // space while its segments are in sort-key order, so gap-delvec synthesis has no rowid
-            // window to find and the rebuild fails on every publish. That shape is also the shape
-            // tablet_splitter leaves un-pruned, which is what lets the virtual merge dedup whole
-            // rowsets by uid. Every other split keeps the real merge.
+        } else {
+            // A read alias needs rowsets and delete vectors and nothing else, which is all the
+            // virtual merge builds: no segment written, no rowset id allocated, no primary-key
+            // index rebuilt. A real merge would additionally have to decide which child still owns
+            // each row of a shared segment, which no parent view consumes.
             ASSIGN_OR_RETURN(parent_meta, lake::virtual_merge_for_read(tablet_mgr, child_metas, merging_info,
                                                                        new_version, txn_info));
-        } else {
-            ASSIGN_OR_RETURN(parent_meta,
-                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info));
         }
         // This runs on the publish critical path once per parent per version, so keep its cost
         // visible: it is what wedged loads while it went through the full tablet merge.
@@ -968,14 +946,14 @@ static void aggregate_publish_cb(brpc::Controller* cntl, PublishVersionResponse*
     const std::string& desc =
             sub_index < static_cast<int>(ctx->sub_desc.size()) ? ctx->sub_desc[sub_index] : kUnknownSubRequest;
     if (cntl->Failed()) {
-        ctx->handle_failure(fmt::format("[{}] rpc failed after {}us: errcode={} {}", desc, cntl->latency_us(),
-                                        cntl->ErrorCode(), cntl->ErrorText()));
+        ctx->handle_failure(fmt::format("rpc failed: errcode={} {} [{}] after {}us", cntl->ErrorCode(),
+                                        cntl->ErrorText(), desc, cntl->latency_us()));
     } else if (resp->status().status_code() != 0) {
         std::string msg;
         for (const auto& str : resp->status().error_msgs()) {
             msg += str;
         }
-        ctx->handle_failure(fmt::format("[{}] returned error after {}us: {}", desc, cntl->latency_us(), msg));
+        ctx->handle_failure(fmt::format("{} [{}] after {}us", msg, desc, cntl->latency_us()));
     } else if (cntl->latency_us() > kSlowSubRequestUs) {
         LOG(WARNING) << "aggregate publish sub-request slow: [" << desc << "] took " << cntl->latency_us() << "us";
     }

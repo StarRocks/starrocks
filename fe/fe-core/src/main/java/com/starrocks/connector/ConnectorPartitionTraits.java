@@ -148,7 +148,11 @@ public abstract class ConnectorPartitionTraits {
         return traits;
     }
 
-    private static ConnectorPartitionTraits buildWithoutCache(Table table) {
+    /**
+     * Build the partition traits for the table without the query-context cache wrapper, whatever the current
+     * thread's context.
+     */
+    public static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;

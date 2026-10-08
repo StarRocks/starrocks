@@ -1,0 +1,44 @@
+-- name: test_colocate_range_colocate_agg @cloud
+-- SQL integration: an aggregation or window whose keys cover every colocate column of a
+-- range-colocate table runs colocated (one phase, no shuffle EXCHANGE) and returns the same
+-- rows as the same query over a non-colocate copy of the data. Two partitions give the scan
+-- two tablets, so the one-tablet shortcut does not apply.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_colocate_agg_${uuid0}:k1');
+
+create table t_ref (k1 int, k2 int, v int)
+    duplicate key(k1, k2)
+    partition by range(k2) (partition p1 values less than ('100'), partition p2 values less than ('200'))
+    order by(k1, k2)
+    properties('replication_num' = '1');
+
+insert into t (k1, k2, v)
+select cast(x % 7 as int), cast(x % 200 as int), x from table(generate_series(1, 2000)) as g(x);
+-- NULL keys in both partitions: the NULL group must come out once.
+insert into t values (null, 1, 1), (null, 150, 2);
+insert into t_ref select k1, k2, v from t;
+
+-- Plan shape: one-phase aggregate / window in the scan fragment, no shuffle.
+function: assert_explain_contains("select k1, count(*), sum(v) from t group by k1", "AGGREGATE (update finalize)")
+function: assert_explain_not_contains("select k1, count(*), sum(v) from t group by k1", "HASH_PARTITIONED", "merge finalize")
+function: assert_explain_not_contains("select k1, count(distinct v) from t group by k1", "HASH_PARTITIONED", "merge finalize")
+function: assert_explain_not_contains("select k1, v, row_number() over (partition by k1 order by v) from t", "HASH_PARTITIONED")
+
+-- Results equal the non-colocate copy.
+function: assert_equal_result("select k1, count(*), sum(v) from t group by k1 order by k1", "select k1, count(*), sum(v) from t_ref group by k1 order by k1")
+function: assert_equal_result("select k1, count(distinct v % 13) from t group by k1 order by k1", "select k1, count(distinct v % 13) from t_ref group by k1 order by k1")
+function: assert_equal_result("select k1, v, row_number() over (partition by k1 order by v) from t order by k1, v", "select k1, v, row_number() over (partition by k1 order by v) from t_ref order by k1, v")
+
+select k1, count(*), sum(v) from t group by k1 order by k1;
+
+drop table t;
+drop table t_ref;
+drop database db_${uuid0};

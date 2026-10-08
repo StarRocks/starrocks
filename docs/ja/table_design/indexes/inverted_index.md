@@ -108,6 +108,8 @@ ALTER TABLE t DROP index idx;
 
 ここで、キーワードは文字列リテラルである必要があります。式はサポートされていません。
 
+NULL を許可するインデックス列では、値が `NULL` の行は `NOT MATCH`、`NOT MATCH_ANY`、`NOT MATCH_ALL` の結果に含まれません。
+
 1. テーブルを作成し、テストデータを数行挿入します。
 
    ```SQL

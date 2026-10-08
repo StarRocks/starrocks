@@ -120,8 +120,8 @@ struct PKSizeTieredLevel {
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
     explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                     bool force_base_compaction)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
+                                     bool force_base_compaction, bool allow_base_compaction = true)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction, allow_base_compaction) {}
 
     ~PrimaryCompactionPolicy() override = default;
 

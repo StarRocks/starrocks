@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 
 namespace starrocks {
@@ -55,6 +56,21 @@ public:
     template <LogicalType TYPE>
     static MutableColumnPtr create_nullable_column() {
         return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
+    }
+
+    // Re-store the offsets of the BinaryColumn under |column|, which may be nullable, in 64-bit storage without
+    // changing their values. This is how a BinaryColumn looks after its payload has crossed 4GB, but it only holds a
+    // few bytes, so tests can cover the 64-bit offset paths without allocating gigabytes.
+    static void force_large_offsets(Column* column) {
+        auto* binary = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(column));
+        const auto& offsets = binary->get_offset();
+        AdaptiveOffsets::Large large_offsets;
+        large_offsets.resize(offsets.size());
+        for (size_t i = 0; i < offsets.size(); ++i) {
+            large_offsets[i] = offsets[i];
+        }
+        binary->get_offset().set_large_buffer(std::move(large_offsets));
+        binary->invalidate_slice_cache();
     }
 };
 

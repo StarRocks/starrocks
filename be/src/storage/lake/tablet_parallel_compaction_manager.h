@@ -113,6 +113,7 @@ struct TabletParallelCompactionState {
     int64_t txn_id = 0;
     int64_t version = 0;
     bool is_unshare = false;
+    bool is_base_compaction = false;
 
     // Rowsets currently being compacted (to avoid conflicts)
     // Key: rowset_id, Value: reference count (number of subtasks using this rowset)
@@ -243,7 +244,7 @@ public:
                                         ThreadPool* thread_pool, const AcquireTokenFunc& acquire_token,
                                         const ReleaseTokenFunc& release_token, bool is_unshare = false,
                                         int64_t handoff_in_queue_time_sec = 0, int64_t handoff_queue_wait_ns = 0,
-                                        const ReturnTokenFunc& return_token = {});
+                                        const ReturnTokenFunc& return_token = {}, bool allow_base_compaction = true);
 
     // Get tablet's parallel state (for testing/monitoring)
     // Returns shared_ptr to ensure the state remains valid while being used.
@@ -346,7 +347,8 @@ private:
 
     // Pick rowsets for compaction using CompactionPolicy
     StatusOr<std::vector<RowsetPtr>> pick_rowsets_for_compaction(int64_t tablet_id, int64_t txn_id, int64_t version,
-                                                                 bool force_base_compaction, bool is_unshare);
+                                                                 bool force_base_compaction, bool is_unshare,
+                                                                 bool allow_base_compaction, bool* is_base_compaction);
 
     // Split rowsets into groups for parallel compaction
     // Returns empty vector if no valid groups can be formed

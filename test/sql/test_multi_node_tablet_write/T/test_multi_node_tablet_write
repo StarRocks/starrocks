@@ -108,6 +108,19 @@ insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as 
 select count(*), count(distinct dt), sum(k1) from t_auto_pk;
 select dt, k1, v1 from t_auto_pk where k1 = 12345;
 
+-- Automatic bucketing, the other way a load gets tablets the plan never saw. A bucket_size of one
+-- byte makes the sub-partition being written immutable as soon as it holds any data, so FE keeps
+-- adding sub-partitions during the load and hands their tablets back over the immutable-partition
+-- RPC. Every sink instance asks for them separately and must get the same node list per tablet.
+create table t_bucket (k1 bigint, v1 string)
+    duplicate key(k1)
+    distributed by random buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'bucket_size' = '1');
+insert into t_bucket select generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_bucket select generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct k1), sum(k1) from t_bucket;
+select k1, v1 from t_bucket where k1 = 12345 order by v1;
+
 -- The same loads with the feature off must give exactly the same answers.
 set lake_multi_node_tablet_write_mode = 'off';
 create table t_auto_off (dt date, k1 bigint, v1 string)

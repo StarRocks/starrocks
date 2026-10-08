@@ -32,6 +32,7 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 
 #ifdef __AVX2__
 #include <immintrin.h>
@@ -263,13 +264,14 @@ public:
         // fill bytes data
         max_size = std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
                                                 static_cast<decltype(max_size)>(8));
-        if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
-            binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        } else {
-            binary_column->append_bytes(datas, lengths, read_count);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        }
+        TRY_CATCH_BAD_ALLOC({
+            if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
+                binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
+            } else {
+                binary_column->append_bytes(datas, lengths, read_count);
+            }
+        });
+        DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 
         return Status::OK();
     }
@@ -318,11 +320,13 @@ public:
             max_size =
                     std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
                                                  static_cast<decltype(max_size)>(8));
-            if (slices[count - 1].data - _data.data + max_size <= _data.size) {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
-            } else {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
-            }
+            TRY_CATCH_BAD_ALLOC({
+                if (slices[count - 1].data - _data.data + max_size <= _data.size) {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
+                } else {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
+                }
+            });
 
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("PlainDecoder append strings to column failed");

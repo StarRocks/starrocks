@@ -17,6 +17,7 @@ package com.starrocks.context.ai;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.CredentialMask;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -33,8 +34,6 @@ import java.util.Map;
  * (handled centrally in {@code AIProviderMgr.gsonPostProcess} and in legacy edit-log replay).
  */
 public class AIProvider implements Writable {
-
-    public static final String CREDENTIAL_MASK = "******";
 
     // Common params (all types)
     public static final String PROPERTY_ENDPOINT = "endpoint";
@@ -175,7 +174,7 @@ public class AIProvider implements Writable {
 
     public static void addMaskForCredential(Map<String, String> params) {
         if (params.containsKey(PROPERTY_API_KEY)) {
-            params.put(PROPERTY_API_KEY, CREDENTIAL_MASK);
+            params.put(PROPERTY_API_KEY, CredentialMask.LONG);
         }
     }
 

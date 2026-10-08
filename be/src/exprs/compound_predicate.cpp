@@ -224,6 +224,14 @@ public:
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }
+
+    // A bloom filter can rule out matches for the child, but cannot rule out
+    // matches for its negation. Keep the page and evaluate NOT on its rows.
+    bool support_ngram_bloom_filter(ExprContext*) const override { return false; }
+
+    bool ngram_bloom_filter(ExprContext*, const BloomFilter*, const NgramBloomFilterReaderOptions&) const override {
+        return true;
+    }
 #ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }

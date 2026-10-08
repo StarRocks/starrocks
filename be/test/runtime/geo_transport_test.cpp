@@ -38,6 +38,11 @@ GeoColumnDescriptor descriptor() {
             {GEO_ENCODING_WKB, GEO_DIMENSION_MIXED, GEO_VALIDATION_STATE_UNVALIDATED}};
 }
 
+GeoColumnDescriptor geometry_descriptor() {
+    return {{GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_ENCODING_WKB, GEO_DIMENSION_MIXED, GEO_VALIDATION_STATE_UNVALIDATED}};
+}
+
 std::string point() {
     const uint8_t bytes[] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xf0, 0x3f, 0, 0, 0, 0, 0, 0, 0, 0x40};
     return {reinterpret_cast<const char*>(bytes), sizeof(bytes)};
@@ -109,6 +114,47 @@ TEST(GeoTransportTest, ChunkRoundTripAndOwnership) {
     }
 }
 
+TEST(GeoTransportTest, GeometryChunkRoundTrip) {
+    const auto desc = geometry_descriptor();
+    const auto type = TypeDescriptor::create_geo_type(TYPE_GEOMETRY, desc.type);
+    auto round_trip = [&](ColumnPtr column) {
+        Chunk source;
+        source.append_column(column, 1);
+        ProtobufChunkMeta meta;
+        meta.types = {type};
+        meta.is_nulls = {column->is_nullable()};
+        meta.is_consts = {column->is_constant()};
+        meta.slot_id_to_index[1] = 0;
+        auto encoded = ProtobufChunkSerde::serialize(source);
+        ASSERT_TRUE(encoded.ok()) << encoded.status();
+        ProtobufChunkDeserializer reader(meta);
+        auto decoded = reader.deserialize(encoded->data());
+        ASSERT_TRUE(decoded.ok()) << decoded.status();
+        const auto& restored = decoded->get_column_by_slot_id(1);
+        EXPECT_EQ(column->size(), restored->size());
+        EXPECT_EQ(column->is_constant(), restored->is_constant());
+        EXPECT_EQ(column->is_nullable(), restored->is_nullable());
+        for (size_t i = 0; i < restored->size(); ++i) EXPECT_EQ(column->is_null(i), restored->is_null(i));
+        if (!restored->only_null()) {
+            const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(restored.get()));
+            EXPECT_EQ(desc, geo->descriptor());
+            EXPECT_EQ(point(), geo->get_wkb(0).to_string());
+        }
+    };
+
+    auto scalar = GeoColumn::create(desc);
+    scalar->append_wkb(Slice(point()));
+    round_trip(scalar);
+    auto nullable_geo = scalar->clone();
+    nullable_geo->append(*scalar, 0, 1);
+    auto nulls = NullColumn::create(2, 0);
+    nulls->get_data()[0] = 1;
+    auto nullable = NullableColumn::create(std::move(nullable_geo), std::move(nulls));
+    round_trip(nullable);
+    round_trip(ConstColumn::create(scalar->clone(), 128));
+    round_trip(ColumnHelper::create_column(type, true, true, 128));
+}
+
 TEST(GeoTransportTest, RejectsTruncationWithoutChangingDestination) {
     auto source = GeoColumn::create(descriptor());
     source->append_wkb(Slice(point()));
@@ -156,6 +202,28 @@ TEST(GeoTransportTest, RejectsDescriptorMismatchUnknownEnumsAndVersions) {
     EXPECT_EQ(0, target->size());
 }
 
+TEST(GeoTransportTest, GeometryRejectsDescriptorMismatchAndUnknownMetadata) {
+    auto source = GeoColumn::create(geometry_descriptor());
+    source->append_wkb(Slice(point()));
+    auto bytes = serialize_geo(*source);
+    auto other = geometry_descriptor();
+    other.type.crs = "other:crs";
+    auto target = GeoColumn::create(other);
+    EXPECT_FALSE(target->deserialize_column(bytes.data(), bytes.data() + bytes.size()).ok());
+
+    GeoColumnDescPB pb = geometry_descriptor().to_protobuf();
+    pb.mutable_type()->mutable_unknown_fields()->AddVarint(3, 99);
+    const auto metadata = pb.SerializeAsString();
+    const uint32_t old_size = decode_fixed32_le(bytes.data() + 4);
+    std::vector<uint8_t> corrupt(bytes.begin(), bytes.begin() + 16);
+    encode_fixed32_le(corrupt.data() + 4, metadata.size());
+    corrupt.insert(corrupt.end(), metadata.begin(), metadata.end());
+    corrupt.insert(corrupt.end(), bytes.begin() + 16 + old_size, bytes.end());
+    target = GeoColumn::create(geometry_descriptor());
+    EXPECT_FALSE(target->deserialize_column(corrupt.data(), corrupt.data() + corrupt.size()).ok());
+    EXPECT_EQ(0, target->size());
+}
+
 TEST(GeoTransportTest, OrdinaryWireFormatAndUnsupportedPaths) {
     auto binary = BinaryColumn::create();
     binary->append(Slice(point()));
@@ -196,10 +264,18 @@ TEST(GeoTransportTest, SerializedSizeMatchesPayload) {
 #ifndef NDEBUG
 TEST(GeoTransportDeathTest, SerializationRequiresValidDescriptor) {
     testing::FLAGS_gtest_death_test_style = "threadsafe";
-    for (int kind = 1; kind < 3; ++kind) {
+    for (int kind = 1; kind < 5; ++kind) {
         auto desc = descriptor();
         if (kind == 1) desc.type = GeoTypeDescriptor{};
         if (kind == 2) desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+        if (kind == 3) {
+            desc = geometry_descriptor();
+            desc.type.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
+        }
+        if (kind == 4) {
+            desc = geometry_descriptor();
+            desc.type.crs.clear();
+        }
         auto column = GeoColumn::create(desc);
         column->append_wkb(Slice(point()));
         const auto size = ColumnArraySerde::max_serialized_size(*column);
@@ -467,6 +543,27 @@ TEST(GeoTransportTest, SharedSerdeSupportsNestedGeoWithoutTransportFlags) {
             EXPECT_EQ(point(), values->get_wkb(0).to_string());
         }
     }
+}
+
+TEST(GeoTransportTest, SharedSerdeSupportsNestedGeometry) {
+    const auto type = TypeDescriptor::create_geo_type(TYPE_GEOMETRY, geometry_descriptor().type);
+    auto array = ColumnHelper::create_column(TypeDescriptor::create_array_type(type), false);
+    auto* source = down_cast<ArrayColumn*>(array.get());
+    source->offsets_column_raw_ptr()->append(1);
+    auto geometry = GeoColumn::create(type, 0);
+    geometry->append_wkb(Slice(point()));
+    source->elements_column_raw_ptr()->append(*geometry, 0, 1);
+
+    std::vector<uint8_t> bytes(ColumnArraySerde::max_serialized_size(*array));
+    auto written = ColumnArraySerde::serialize(*array, bytes.data());
+    ASSERT_TRUE(written.ok()) << written.status();
+    auto restored = array->clone_empty();
+    auto read = ColumnArraySerde::deserialize(bytes.data(), *written, restored.get());
+    ASSERT_TRUE(read.ok()) << read.status();
+    const auto* elements = down_cast<ArrayColumn*>(restored.get())->elements_column_raw_ptr();
+    const auto* values = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(elements));
+    EXPECT_EQ(geometry->descriptor(), values->descriptor());
+    EXPECT_EQ(point(), values->get_wkb(0).to_string());
 }
 
 TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {

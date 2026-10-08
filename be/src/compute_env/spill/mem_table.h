@@ -138,6 +138,10 @@ public:
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
 
+    // Checks the mem table chunk before it is sorted and spilled. A chunk over 4GB stays a BinaryColumn, whose offsets
+    // grow to 64 bits on demand; only the capacity limits are checked.
+    static Status check_chunk_before_sort(const Chunk& chunk);
+
 private:
     StatusOr<ChunkPtr> _do_sort(const ChunkPtr& chunk);
 

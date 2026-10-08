@@ -19,7 +19,6 @@
 #include <string>
 #include <string_view>
 
-#include "base/string/slice.h"
 #include "gutil/strings/substitute.h"
 #include "types/logical_type.h"
 
@@ -35,6 +34,8 @@ std::string column_type_to_string(const ColumnType& column_type) {
         return "map";
     case STRUCT:
         return "struct";
+    case VARIANT:
+        return "variant";
     default:
         return "unknown";
     }
@@ -66,7 +67,7 @@ std::string ParquetField::debug_string() const {
 }
 
 bool ParquetField::is_complex_type() const {
-    return type == ARRAY || type == MAP || type == STRUCT;
+    return type == ARRAY || type == MAP || type == STRUCT || type == VARIANT;
 }
 
 bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) const {
@@ -77,8 +78,14 @@ bool ParquetField::has_same_complex_type(const TypeDescriptor& type_descriptor) 
         return true;
     } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
         return true;
+    } else if (type == ColumnType::VARIANT && type_descriptor.type == LogicalType::TYPE_VARIANT) {
+        return true;
+    } else if (type == ColumnType::VARIANT && type_descriptor.type == LogicalType::TYPE_STRUCT) {
+        // A variant group can still be read as a plain struct of its binary fields.
+        return true;
     } else if (type == ColumnType::STRUCT && type_descriptor.type == LogicalType::TYPE_VARIANT) {
-        // variant type currently can be mapped to struct type in parquet
+        // A group that is not variant-shaped, read by a VARIANT column: let the reader factory reject it with an error
+        // instead of skipping the column (read as NULL) as a type mismatch.
         return true;
     } else {
         return false;
@@ -101,13 +108,47 @@ static bool is_optional(const tparquet::SchemaElement* schema) {
     return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::OPTIONAL;
 }
 
+// A node is a LIST/MAP if either the legacy converted_type or the logicalType says so: writers are
+// expected to set both, but some only set logicalType.
 static bool is_list(const tparquet::SchemaElement* schema) {
-    return schema->__isset.converted_type && schema->converted_type == tparquet::ConvertedType::LIST;
+    if (schema->__isset.converted_type && schema->converted_type == tparquet::ConvertedType::LIST) {
+        return true;
+    }
+    return schema->__isset.logicalType && schema->logicalType.__isset.LIST;
 }
 
 static bool is_map(const tparquet::SchemaElement* schema) {
-    return schema->__isset.converted_type && (schema->converted_type == tparquet::ConvertedType::MAP ||
-                                              schema->converted_type == tparquet::ConvertedType::MAP_KEY_VALUE);
+    if (schema->__isset.converted_type && (schema->converted_type == tparquet::ConvertedType::MAP ||
+                                           schema->converted_type == tparquet::ConvertedType::MAP_KEY_VALUE)) {
+        return true;
+    }
+    return schema->__isset.logicalType && schema->logicalType.__isset.MAP;
+}
+
+// A group annotated with the parquet VARIANT logical type. The annotation is newer than most variant writers, so the
+// binary shape below is accepted as well.
+static bool is_variant_annotated(const tparquet::SchemaElement* schema) {
+    return schema->__isset.logicalType && schema->logicalType.__isset.VARIANT;
+}
+
+// Parquet variant layout: group { metadata: binary, value: binary [, typed_value] }.
+// The rule is what the variant reader accepts (create_variant_column_reader looks the children up by name and reads
+// `metadata` / `value` as binary), so that no file readable as VARIANT before is rejected now: the binary fields may
+// carry an annotation and other children are ignored.
+// Shredded object fields and array elements are groups { value, typed_value } without `metadata`, and the fields of
+// a shredded object are groups, so only the variant group itself matches; its typed_value subtree stays as is.
+static bool is_variant_group(const ParquetField& field) {
+    bool has_metadata = false;
+    bool has_value = false;
+    for (const auto& child : field.children) {
+        bool is_binary = child.type == ColumnType::SCALAR && child.physical_type == tparquet::Type::BYTE_ARRAY;
+        if (child.name == "metadata") {
+            has_metadata = is_binary;
+        } else if (child.name == "value") {
+            has_value = is_binary;
+        }
+    }
+    return has_metadata && has_value;
 }
 
 Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info,
@@ -128,15 +169,13 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
     return Status::OK();
 }
 
-// Special case mentioned in the format spec:
+// Backward-compatibility rule from the format spec:
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
-//   If the name is array or ends in _tuple, this should be a list of struct
-//   even for single child elements.
-bool has_struct_list_name(const std::string& name) {
-    static const Slice array_slice("array", 5);
-    static const Slice tuple_slice("_tuple", 6);
-    Slice slice(name);
-    return slice == array_slice || slice.ends_with(tuple_slice);
+//   If the repeated field is a group with one field and is named either array or uses the
+//   LIST-annotated group's name with _tuple appended then the repeated type is the element type,
+//   i.e. a list of struct even for a single child element.
+static bool has_struct_list_name(const std::string& repeated_name, const std::string& list_name) {
+    return repeated_name == "array" || repeated_name == list_name + "_tuple";
 }
 
 Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
@@ -182,7 +221,27 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         // rather than a primitive value
         //
         // yields list<item: struct<item: TYPE ?nullable> not null> ?nullable
-        if (list_node_schema->num_children == 1 && !has_struct_list_name(list_node_schema->name)) {
+        //
+        // A LIST-annotated repeated group with a single repeated child takes precedence over the
+        // name rule: it is a nested list with two-level encoding, whatever the repeated group is called.
+        //
+        // required/optional group name=whatever {
+        //   repeated group name=array (LIST) {
+        //     repeated TYPE item;
+        //   }
+        // }
+        //
+        // yields list<item: list<item: TYPE not null> not null> ?nullable
+        //
+        // Without the LIST annotation the name rule still applies, so an `array` group with a single
+        // repeated child is a struct element: list<item: struct<item: list<TYPE>>>.
+        bool is_single_element = false;
+        if (list_node_schema->num_children == 1) {
+            ASSIGN_OR_RETURN(const auto* element_schema, _get_schema_element(t_schemas, pos + 2));
+            is_single_element = (is_repeated(element_schema) && is_list(list_node_schema)) ||
+                                !has_struct_list_name(list_node_schema->name, group_schema->name);
+        }
+        if (is_single_element) {
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));
         } else {
             RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, child_field, next_pos));
@@ -259,14 +318,12 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     // }
     //
 
-    // check map's key must be primitive type
-    ASSIGN_OR_RETURN(const auto* key_schema, _get_schema_element(t_schemas, pos + 2));
-    if (is_group(key_schema)) {
-        return Status::InvalidArgument("Map keys must be primitive type.");
-    }
-
-    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, next_pos));
-    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 3, cur_level_info, value_field, next_pos));
+    // A group key (allowed by the format, accepted by Arrow) is resolved like any other node: rejecting it here
+    // would make every column of the file unreadable. Whether the key can be read is decided when the column is
+    // actually read with a table type (ColumnReaderFactory). The value follows the whole key subtree.
+    size_t value_pos = 0;
+    RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, key_field, &value_pos));
+    RETURN_IF_ERROR(node_to_field(t_schemas, value_pos, cur_level_info, value_field, next_pos));
 
     field->name = group_schema->name;
     // Actually, we don't need to put field_id here
@@ -294,7 +351,8 @@ Status SchemaDescriptor::group_to_struct_field(const std::vector<tparquet::Schem
     field->name = group_schema->name;
     field->is_nullable = is_optional(group_schema);
     field->level_info = cur_level_info;
-    field->type = ColumnType::STRUCT;
+    field->type =
+            is_variant_annotated(group_schema) || is_variant_group(*field) ? ColumnType::VARIANT : ColumnType::STRUCT;
     field->field_id = group_schema->field_id;
     return Status::OK();
 }
@@ -321,6 +379,7 @@ Status SchemaDescriptor::group_to_field(const std::vector<tparquet::SchemaElemen
         RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos, cur_level_info, &field->children[0], next_pos));
 
         field->name = group_schema->name;
+        field->field_id = group_schema->field_id;
         field->type = ColumnType::ARRAY;
         field->is_nullable = false;
         field->level_info = cur_level_info;

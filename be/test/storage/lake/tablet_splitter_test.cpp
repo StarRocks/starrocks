@@ -40,6 +40,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_writer.h"
@@ -2491,6 +2492,54 @@ protected:
         return metadata;
     }
 
+    // Two single-segment PRIMARY_KEYS rowsets over NESTED key runs: rowset 1 holds keys
+    // [0, inner_rows), rowset 2 holds [0, outer_rows). The inner rowset's only source of split
+    // precision beyond its coarse [min, max] pair is the sampler reading its segment. Records the
+    // layout so written_rows_in() below can reconstruct the ground truth.
+    std::shared_ptr<TabletMetadataPB> write_nested_pk_rowsets(int64_t inner_rows, int64_t outer_rows) {
+        const int64_t tablet_id = next_id();
+        prepare_tablet_dirs(tablet_id);
+        _varchar_key = false;
+        _segment_key_runs.clear();
+        _total_rows = inner_rows + outer_rows;
+        _key_span = std::max(inner_rows, outer_rows);
+
+        auto schema_pb = key_schema_pb(/*varchar_key=*/false);
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        auto tablet_schema = TabletSchema::create(schema_pb);
+
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        *metadata->mutable_schema() = schema_pb;
+
+        uint32_t rowset_id = 1;
+        for (int64_t num_rows : {inner_rows, outer_rows}) {
+            std::vector<int64_t> keys(num_rows);
+            std::iota(keys.begin(), keys.end(), int64_t{0});
+            _segment_key_runs.emplace_back(int64_t{0}, num_rows);
+
+            const std::string name = fmt::format("seg_nested_{}.dat", rowset_id);
+            const uint64_t size = write_segment(tablet_id, name, tablet_schema, keys, /*rows_per_block=*/0);
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(rowset_id++);
+            rowset->set_overlapped(false);
+            rowset->set_num_rows(num_rows);
+            rowset->set_data_size(static_cast<int64_t>(size));
+            rowset->set_num_dels(0);
+            // split_tablet refuses a rowset without a uid; every lake writer mints one.
+            tablet_reshard_helper::set_rowset_uid(rowset);
+            auto* sm = rowset->add_segment_metas();
+            sm->set_filename(name);
+            sm->set_size(static_cast<int64_t>(size));
+            sm->set_num_rows(num_rows);
+            sm->set_segment_idx(0);
+            *sm->mutable_sort_key_min() = key_tuple_pb(keys.front());
+            *sm->mutable_sort_key_max() = key_tuple_pb(keys.back());
+        }
+        return metadata;
+    }
+
     // (k1 INT) -- the schema a rowset was written with BEFORE a metadata-only trailing sort-key
     // key-column ADD. k1 alone is the key and the sort key, so every tuple this rowset contributes
     // is one column short of the tablet's current sort key.
@@ -3047,6 +3096,221 @@ TEST_F(SortKeySamplingSplitterTest, a_lost_segment_stays_coarse_while_its_siblin
     ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
     ASSERT_EQ(2u, ranges.size());
     EXPECT_TRUE(ranges_are_ordered_and_gapless(ranges));
+}
+
+// Same nested two-rowset shape as pk_tablet_splitting_samples_every_rowset_segment (rowset A nested
+// inside rowset B's key range), but scaled 100x -- kRowsA=15,000/kRowsB=30,000 rather than 150/300
+// -- so each segment spans many more of BE_TEST's 100-row short-key-index blocks. That is the ratio
+// path A actually sees in production: a real segment is many blocks deep, not the 2-3 blocks the
+// small fixture of that test gives it. At that ratio the greedy boundary-selection algorithm's
+// per-step overshoot (see that test's comment) is a small fraction of the target instead of a large
+// one, so the chosen boundary lands well inside rowset A's range and the two children come out
+// close to even -- proving path A's sampling genuinely improves split quality once it has a
+// realistic amount of index to sample from.
+TEST_F(SortKeySamplingSplitterTest, pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio) {
+    constexpr int64_t kRowsA = 15000;
+    constexpr int64_t kRowsB = 30000;
+    auto metadata = write_nested_pk_rowsets(kRowsA, kRowsB);
+
+    SplittingTabletInfoPB splitting;
+    splitting.set_old_tablet_id(metadata->id());
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSIGN_OR_ABORT(auto children,
+                    split_tablet(_tablet_manager.get(), metadata, splitting, /*new_version=*/2, txn_info));
+    ASSERT_EQ(2U, children.size());
+
+    // Both segments carry index_length, so this must sample via the short key index (path A),
+    // never the data-page path (path B).
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0);
+    EXPECT_EQ(0, sort_key_sampling_data_page_segments_count() - data_page_segments_before)
+            << "a full short key index must be sampled via path A, not path B";
+
+    // Ground truth is what the fixture wrote (written_rows_in()), never the rowset stats the split
+    // computed for itself -- see written_rows_in() for why that comparison would be circular.
+    int64_t interior_boundaries = 0;
+    int64_t total = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = children.at(child)->range();
+        if (const auto lower = decode_bound(range, /*lower=*/true); lower.has_value()) {
+            ++interior_boundaries;
+            EXPECT_GT(*lower, 0) << "boundary must be interior to the key range";
+            EXPECT_LT(*lower, kRowsA - 1)
+                    << "at a realistic block ratio the sampled boundary must beat the coarse fallback's only "
+                       "candidate (key "
+                    << (kRowsA - 1) << "), got " << *lower;
+        }
+        const int64_t rows = written_rows_in(range);
+        total += rows;
+        const double ideal = (kRowsA + kRowsB) / 2.0;
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * 0.20)
+                << "child " << child << " holds a disproportionate share of the rows";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
+    EXPECT_EQ(kRowsA + kRowsB, total) << "the split must conserve every row across its children";
+}
+
+// Multi-rowset split: the tablet carries two rowsets whose segments cover different key ranges.
+// Every rowset's segment must be sampled, and the split must still conserve
+// Σ children.rowset.{num_rows,data_size,num_dels} == parent for both rowsets.
+//
+// write_nested_pk_rowsets()'s PK schema carries index_length, matching every production schema, so
+// both segments sample via the free short key index path (A). See the comment below the
+// sample-count assertion for why this test does NOT also assert the sampled boundary beats the
+// coarse fallback's candidate -- at this fixture's small rowset sizes path A's block-granularity
+// resolution is not enough to guarantee that; see
+// pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio for that property
+// at a realistic scale.
+TEST_F(SortKeySamplingSplitterTest, pk_tablet_splitting_samples_every_rowset_segment) {
+    constexpr int64_t kRowsA = 150;
+    constexpr int64_t kRowsB = 300;
+    // Rowset A: real key range [0, 149]; rowset B: real key range [0, 299].
+    auto metadata = write_nested_pk_rowsets(kRowsA, kRowsB);
+
+    SplittingTabletInfoPB splitting;
+    splitting.set_old_tablet_id(metadata->id());
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSIGN_OR_ABORT(auto children,
+                    split_tablet(_tablet_manager.get(), metadata, splitting, /*new_version=*/2, txn_info));
+    ASSERT_EQ(2U, children.size());
+
+    // The child count and the conservation totals below both hold with ZERO samples -- three coarse
+    // boundary keys already suffice for a 2-way split, and conservation comes from
+    // apply_rowset_anchor -- so neither says anything about sampling. These two do.
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0) << "both segments must be sampled";
+
+    // Rowset A holds keys [0, 149] (150 rows) and rowset B holds [0, 299] (300 rows). This does NOT
+    // also assert the sampled boundary beats the coarse fallback's only interior candidate (key
+    // 149, segment A's max): at BE_TEST's 100-row short-key-index blocks, a 150/300-row rowset
+    // gives path A only 2-3 candidates, and the greedy boundary-selection algorithm in
+    // calculate_range_split_boundaries commits as soon as its running total reaches the target
+    // rather than picking whichever candidate is closest to it -- so it can overshoot onto exactly
+    // this coarse candidate (confirmed: candidates here are 200/84/33/133 rows against a 225
+    // target, and accumulating 200+84=284 triggers the commit at the 84-row candidate's own upper
+    // edge, key 149). That overshoot is bounded by one candidate's row count, which is a large
+    // fraction of the target only because this fixture's rowsets are tiny; at a realistic
+    // block-count-to-segment-size ratio the same algorithm produces an interior, balanced boundary
+    // -- see pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio.
+    // What this test still legitimately pins is that BOTH rowset segments get sampled at all
+    // (asserted above) and that a 2-way split emits exactly one boundary.
+    int64_t interior_boundaries = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = children.at(child)->range();
+        if (!range.has_lower_bound()) continue;
+        ++interior_boundaries;
+        VariantTuple bound;
+        ASSERT_OK(bound.from_proto(range.lower_bound()));
+        ASSERT_EQ(1U, bound.size());
+        const int32_t boundary = bound[0].value().get_int32();
+        EXPECT_GT(boundary, 0) << "boundary must be interior to the key range";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
+
+    struct RsTotals {
+        int64_t num_rows = 0;
+        int64_t data_size = 0;
+        int64_t num_dels = 0;
+    };
+    std::unordered_map<uint32_t, RsTotals> totals;
+    for (int64_t cid : {child_id_1, child_id_2}) {
+        auto it = children.find(cid);
+        ASSERT_TRUE(it != children.end());
+        for (const auto& rs : it->second->rowsets()) {
+            auto& t = totals[rs.id()];
+            t.num_rows += rs.num_rows();
+            t.data_size += rs.data_size();
+            t.num_dels += rs.num_dels();
+        }
+    }
+
+    ASSERT_EQ(2, metadata->rowsets_size());
+    for (const auto& parent_rs : metadata->rowsets()) {
+        SCOPED_TRACE(fmt::format("rowset {}", parent_rs.id()));
+        EXPECT_EQ(parent_rs.num_rows(), totals[parent_rs.id()].num_rows);
+        EXPECT_EQ(parent_rs.data_size(), totals[parent_rs.id()].data_size);
+        EXPECT_EQ(0, totals[parent_rs.id()].num_dels);
+    }
+}
+
+TEST_F(SortKeySamplingSplitterTest, split_boundary_planner_skips_zero_row_segment_without_open) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    auto schema_pb = key_schema_pb(/*varchar_key=*/false);
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+    const std::string empty_name = "sampleless-empty.dat";
+    const std::string live_name = "sampled-live.dat";
+    std::vector<int64_t> live_keys(100);
+    std::iota(live_keys.begin(), live_keys.end(), int64_t{0});
+    const auto empty_size = write_segment(tablet_id, empty_name, tablet_schema, /*keys=*/{}, /*rows_per_block=*/0);
+    const auto live_size = write_segment(tablet_id, live_name, tablet_schema, live_keys, /*rows_per_block=*/0);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(3);
+    *metadata->mutable_schema() = schema_pb;
+    metadata->mutable_range()->mutable_lower_bound()->CopyFrom(key_tuple_pb(0));
+    metadata->mutable_range()->set_lower_bound_included(true);
+    metadata->mutable_range()->mutable_upper_bound()->CopyFrom(key_tuple_pb(100));
+    metadata->mutable_range()->set_upper_bound_included(false);
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(empty_size + live_size);
+    rowset->set_num_dels(0);
+    tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename(empty_name);
+    empty->set_segment_idx(0);
+    empty->set_num_rows(0);
+    empty->set_size(empty_size);
+    auto* live = rowset->add_segment_metas();
+    live->set_filename(live_name);
+    live->set_segment_idx(1);
+    live->set_num_rows(100);
+    live->set_size(live_size);
+    live->mutable_sort_key_min()->CopyFrom(key_tuple_pb(0));
+    live->mutable_sort_key_max()->CopyFrom(key_tuple_pb(99));
+    live->set_deprecated_sort_key_sample_row_interval(50);
+    live->add_deprecated_sort_key_samples()->CopyFrom(key_tuple_pb(50));
+
+    auto* sync = SyncPoint::GetInstance();
+    int opens = 0;
+    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<TabletRangeInfo> ranges;
+    ASSERT_OK(get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
+    // ONE open, not zero: sampling is now on demand, so the live segment is opened deliberately --
+    // that is the feature. The number is still what proves the zero-row segment was skipped, since
+    // a broken skip would open both and read 2 here. (This assertion was 0 when a segment carrying
+    // metadata sort-key samples needed no open at all; those samples are no longer written.)
+    EXPECT_EQ(1, opens);
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].range.has_upper_bound());
+    EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
 }
 
 } // namespace starrocks::lake

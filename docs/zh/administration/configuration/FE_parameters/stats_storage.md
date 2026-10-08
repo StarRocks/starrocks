@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO`，也支持手动 Range 分区的目标表：只对已有的空分区做分裂，不会新建任何分区。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -799,6 +799,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 data-tier 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_data_tier_scan_byte_limit`
+
+- 默认值: 4294967296 (4 GiB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 扫描 Broker Load 或 `INSERT INTO ... SELECT FROM FILES()` 源文件时的字节数软上限。输入超过该值时只从部分文件中采样，采样耗时不再随数据量增长。例外是分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列：这时仍扫描全部文件，因为取子集可能漏掉整个分区。选取时先按路径排序，再按相等的字节间隔抽取，因此较大的文件更容易被选中。分区列取自文件路径（`COLUMNS FROM PATH` 或 `columns_from_path`）时，每个分区按字节占比分摊上限，且至少选取一个文件（分区数多于 `tablet_pre_split_data_tier_max_scan_files` 时除外）；各分区的数据量按其全部文件的字节数计算。由于按整个文件选取，实际扫描量可能超过该值（例如单个文件本身就大于上限）。Tablet 数仍按全部输入计算。设为 `0` 表示扫描全部文件。
+
+### `tablet_pre_split_data_tier_min_scan_files`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）至少扫描的文件数，保证单个文件很大、或每个文件只包含排序键的一小段范围时，样本仍覆盖足够多的独立文件。分区列取自文件路径时，该下限按字节占比分摊到各分区。满足这一下限可能使扫描量超过 `tablet_pre_split_data_tier_scan_byte_limit`，但扫描量达到该值的 4 倍后就不再为凑足下限而增加文件，因此文件很大时扫描时间不会成倍增长。`tablet_pre_split_data_tier_max_scan_files` 为正数时优先于该下限。
+
+### `tablet_pre_split_data_tier_max_scan_files`
+
+- 默认值: 512
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）最多扫描的文件数。子集中的每个文件在读数据之前都要做一次元数据查询，不设上限时，由大量小文件组成的子集光是查询就可能耗费数分钟。分区列取自文件路径时，该上限按字节占比分摊到各分区；每个分区仍至少选取一个文件，因此实际文件数可能超过该上限，超出部分最多为每个分区一个文件。分区数多于该上限时，只从数据量最大的那些分区中各选取一个文件。该上限优先于 `tablet_pre_split_data_tier_min_scan_files`。设为 `0` 或负值表示不设上限。
+
 ### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - 默认值: 0.3
@@ -823,7 +847,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_target_size`
@@ -839,15 +863,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 降级或线上回滚前安全关闭该特性的步骤：
 
 1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
-2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
+2. 等待预分裂创建的在途 reshard 作业排空。可用以下查询监控：
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   该查询不再返回任何行时，回滚即完成。只有 `FINISHED` 和 `ABORTED` 是终态，处于 `PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` 等非终态的作业都仍在执行中。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 
 #### 多分区基于采样的 Tablet 预分裂行为说明（P2-a）
 
-多分区路径将基于采样的 Tablet 预分裂扩展到单条语句命中多个分区的导入场景。两条运维注意事项：
+多分区路径将基于采样的 Tablet 预分裂扩展到单条语句命中多个分区的导入场景。三条运维注意事项：
 
 - **Broker Load 触发载入不对称。** 多分区预分裂钩子在 `BrokerLoadJob.createLoadingTask` 中触发，**晚于** `task.prepare()` 构建该次导入的 sink plan（plan 基于当时的 catalog 状态）。因此 Broker Load 路径下，预建分区和分裂后的 tablet 布局只对**后续**针对同一张表的导入可见 —— 触发本次预分裂的 Broker Load 自身仍按原布局运行，命中的分区走 BE 运行时自动建分区。INSERT-from-FILES 钩子在 `StatementPlanner.plan()` 之前触发，因此触发本次预分裂的 INSERT 本身就能受益。
 - **后续 INSERT 失败时的空分区残留。** 当预建成功，但触发本次预建的 INSERT 因不相关原因失败（FILES schema 不匹配、BE 崩溃、导入超时等），空的预建分区会留在 catalog 中。这与 `ALTER TABLE ADD PARTITION` 在后续失败时的语义一致 —— ALTER 同样不会回滚已建分区。介意残留的运维可以用 `ALTER TABLE ... DROP PARTITION` 手动删除；实际上空分区代价很低，下次重试导入时会复用。
+- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。手动分区表的 `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
 
 #### 生产部署建议
 

@@ -14,8 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hashing;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
@@ -29,7 +27,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(ExternalSampleStatisticsCollectJob.class);
@@ -43,8 +40,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     }
 
     public Set<Long> getSampledPartitionsHashValue() {
-        HashFunction hashFunction = Hashing.murmur3_128();
-        return partitionNames.stream().map(s -> hashFunction.hashUnencodedChars(s).asLong()).collect(Collectors.toSet());
+        return hashPartitionNames(partitionNames);
     }
 
     public int getAllPartitionSize() {
@@ -58,8 +54,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     // (rowCount / sampledPartitionSize * allPartitionSize) naturally comes out to a 1x no-op for them,
     // instead of needing a special read-time bypass.
     public Set<Long> getAllPartitionsHashValue() {
-        HashFunction hashFunction = Hashing.murmur3_128();
-        return allPartitionNames.stream().map(s -> hashFunction.hashUnencodedChars(s).asLong()).collect(Collectors.toSet());
+        return hashPartitionNames(allPartitionNames);
     }
 
     // Direct-value partition columns (see StatisticUtils#isDirectValuePartitionColumn) get their exact
@@ -72,10 +67,10 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     // direct-value phase finishes fully, its ColumnStatsMeta is committed (with full-coverage partition
     // counts) immediately, before the sampled-column phase even starts - so a later failure in that
     // second phase can't retroactively erase an already-successful full-partition scan (see PR #60703
-    // review discussion). If the direct-value phase itself fails partway through, ColumnStatsMeta for
-    // those columns simply isn't updated this run - the existing (possibly still-SAMPLE, possibly
-    // absent) metadata stays in effect and gets correctly re-extrapolated as usual, never
-    // over-multiplied, until the next successful ANALYZE.
+    // review discussion). If the direct-value phase loses a query to a tolerated failure, it no longer
+    // covers every partition, so the early full-coverage commit is skipped and those columns fall back to
+    // the regular post-job commit, which records the partitions actually collected - they are extrapolated
+    // like any sampled column instead of being trusted as complete.
     @Override
     protected void runCollectPhases(ConnectContext context, AnalyzeStatus analyzeStatus, long jobId) throws Exception {
         List<String> directValueColumnNames = new ArrayList<>();
@@ -94,24 +89,31 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
         }
 
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
-        List<List<String>> directValueSQLList = buildCollectSQLListForColumns(allPartitionNames, directValueColumnNames,
+        List<CollectTask> directValueTasks = buildCollectSQLListForColumns(allPartitionNames, directValueColumnNames,
                 directValueColumnTypes, parallelism);
-        List<List<String>> restSQLList = buildCollectSQLListForColumns(partitionNames, restColumnNames, restColumnTypes,
+        List<CollectTask> restTasks = buildCollectSQLListForColumns(partitionNames, restColumnNames, restColumnTypes,
                 parallelism);
-        long totalCollectSQL = directValueSQLList.size() + restSQLList.size();
+        long totalCollectSQL = directValueTasks.size() + restTasks.size();
+        setTotalSQLNum(totalCollectSQL);
 
         long finishedSQLNum = 0;
         if (!directValueColumnNames.isEmpty()) {
-            finishedSQLNum = executeCollectSQLList(directValueSQLList, context, analyzeStatus, finishedSQLNum,
+            finishedSQLNum = executeCollectSQLList(directValueTasks, context, analyzeStatus, finishedSQLNum,
                     totalCollectSQL, parallelism);
             flushInsertStatisticsData(context, true);
-            commitDirectValueColumnsFully(directValueColumnNames);
+            // Only a phase that scanned every partition may claim full coverage. If a query was tolerated away,
+            // these columns are no better covered than a sampled column and must be recorded as such - the
+            // regular post-job commit does that from the actually-collected partitions.
+            if (!hasToleratedFailures()) {
+                commitDirectValueColumnsFully(directValueColumnNames);
+            }
         }
         if (!restColumnNames.isEmpty()) {
-            executeCollectSQLList(restSQLList, context, analyzeStatus, finishedSQLNum, totalCollectSQL, parallelism);
+            executeCollectSQLList(restTasks, context, analyzeStatus, finishedSQLNum, totalCollectSQL, parallelism);
         }
         flushInsertStatisticsData(context, true);
         cleanupStaleRawKeyedRows(context, jobId);
+        reportToleratedFailures(analyzeStatus, jobId);
     }
 
     // Best-effort early commit of ColumnStatsMeta for columns whose full-partition scan just succeeded

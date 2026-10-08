@@ -41,6 +41,8 @@ import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.quartz.impl.StdSchedulerFactory;
 
+import java.text.ParseException;
+import java.util.Date;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -72,6 +74,7 @@ public class CompactionControlScheduler {
         if (RunMode.isSharedDataMode()) {
             throw new IllegalArgumentException("compaction control is not supported in shared-data.");
         }
+        String modifiedCron = toQuartzExpression(crontab);
         startScheduler();
         // Generate JobKey and TriggerKey based on tableId
         String jobKeyString = "job_" + tableId;
@@ -91,7 +94,43 @@ public class CompactionControlScheduler {
             return;
         }
 
-        // Validate crontab format and modify it for Quartz
+        Set<Trigger> triggers = Sets.newHashSet();
+        if ("* * * ? * *".equals(modifiedCron)) {
+            triggers.add(TriggerBuilder.newTrigger()
+                    .withIdentity("syncImmediateTrigger" + tableId, groupKeyString)
+                    .startNow()
+                    .build());
+        }
+        String scheduleCron = "0 0/1 " + modifiedCron.substring(4);
+
+        // Build the new JobDetail
+        JobDetail jobDetail = JobBuilder.newJob(DisableCompactionJob.class)
+                .withIdentity(jobKey)
+                .usingJobData("tableId", tableId)
+                .build();
+
+        // Pass the tableCompactionMap to the job
+        jobDetail.getJobDataMap().put("tableCompactionMap", tableCompactionMap);
+
+        CronTrigger cronTrigger = TriggerBuilder.newTrigger()
+                .withIdentity(triggerKey)
+                .withSchedule(CronScheduleBuilder.cronSchedule(scheduleCron))
+                .build();
+        triggers.add(cronTrigger);
+
+        scheduler.scheduleJob(jobDetail, triggers, true);
+
+        triggerSyncJobWithDelay();
+
+        LOG.info("Table {} has been scheduled for compaction control with crontab {}", tableId, scheduleCron);
+    }
+
+    // The table property has five cron fields. Seconds and minutes are both
+    // wildcards when checking whether a dispatched lake compaction is forbidden.
+    public static String toQuartzExpression(String crontab) {
+        if (crontab == null || crontab.isEmpty()) {
+            return null;
+        }
         String[] cronParts = crontab.split("\\s+");
         if (cronParts.length != 5) {
             throw new IllegalArgumentException("Invalid crontab format. It must have 5 fields.");
@@ -111,50 +150,32 @@ public class CompactionControlScheduler {
             throw new IllegalArgumentException("For Quartz cron, either day of month or day of week must be '*'.");
         }
 
-        Set<Trigger> triggers = Sets.newHashSet();
-        // fully disable should trigger immediately
-        if (dayOfMonth.equals("*") && dayOfWeek.equals("*") && hour.equals("*") && month.equals("*")) {
-            triggers.add(TriggerBuilder.newTrigger()
-                    .withIdentity("syncImmediateTrigger" + tableId, groupKeyString)
-                    .startNow() // Start immediately
-                    .build());
-        }
-
         if (dayOfMonth.equals("*")) {
             dayOfMonth = "?";
         } else {
             dayOfWeek = "?";
         }
 
-        String modifiedCron = String.format("0 0/1 %s %s %s %s", hour, dayOfMonth, month, dayOfWeek);
+        String modifiedCron = String.format("* * %s %s %s %s", hour, dayOfMonth, month, dayOfWeek);
 
         if (!CronExpression.isValidExpression(modifiedCron)) {
             throw new IllegalArgumentException("Invalid crontab format. You can check through "
                 + "https://www.freeformatter.com/cron-expression-generator-quartz.html");
         }
 
-        // Build the new JobDetail
-        JobDetail jobDetail = JobBuilder.newJob(DisableCompactionJob.class)
-                .withIdentity(jobKey)
-                .usingJobData("tableId", tableId)
-                .build();
+        return modifiedCron;
+    }
 
-        // Pass the tableCompactionMap to the job
-        jobDetail.getJobDataMap().put("tableCompactionMap", tableCompactionMap);
-
-        // Create a new CronTrigger based on the modified cron expression
-        CronTrigger cronTrigger = TriggerBuilder.newTrigger()
-                .withIdentity(triggerKey)
-                .withSchedule(CronScheduleBuilder.cronSchedule(modifiedCron))
-                .build();
-        triggers.add(cronTrigger);
-
-        // Schedule the job with both triggers
-        scheduler.scheduleJob(jobDetail, triggers, true);
-
-        triggerSyncJobWithDelay();
-
-        LOG.info("Table {} has been scheduled for compaction control with crontab {}", tableId, modifiedCron);
+    public static boolean isBaseCompactionForbidden(String crontab, Date at) {
+        String expression = toQuartzExpression(crontab);
+        if (expression == null) {
+            return false;
+        }
+        try {
+            return new CronExpression(expression).isSatisfiedBy(at);
+        } catch (ParseException e) {
+            throw new IllegalArgumentException("Invalid base compaction forbidden time ranges", e);
+        }
     }
 
     private void addScheduleSyncTask() throws SchedulerException {

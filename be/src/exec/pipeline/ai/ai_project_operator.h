@@ -108,10 +108,6 @@ public:
     void close(RuntimeState* state) override;
     bool support_event_scheduler() const override { return true; }
 
-    void set_bucket_properties(std::vector<TBucketProperty> bucket_properties) {
-        _bucket_properties = std::move(bucket_properties);
-    }
-
 private:
     const std::shared_ptr<AIProjectProcessor> _processor;
 };

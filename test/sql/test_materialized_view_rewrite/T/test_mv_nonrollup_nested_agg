@@ -1,0 +1,43 @@
+-- name: test_mv_nonrollup_nested_agg
+-- description: Regression for the MV non-rollup rewrite letting an aggregate survive into the
+--              projection it builds over the MV scan. That projection has no aggregation node
+--              under it, so the BE is handed an AGG_EXPR inside an expression tree and fails the
+--              query with "Vectorized engine does not support the operator, node_type: 0".
+--              The guard existed but only looked at the root operator, so it missed every
+--              aggregate wrapped in a scalar: avg expands to divide(cast(sum), cast(count)), and
+--              hll_cardinality(hll_union(..)) keeps its aggregate under a scalar call.
+
+CREATE DATABASE IF NOT EXISTS test_mv_nonrollup_nested_agg_db;
+USE test_mv_nonrollup_nested_agg_db;
+
+CREATE TABLE t_avgd (
+  k INT,
+  x INT
+) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_avgd VALUES (1, 10), (1, 10), (1, 40), (2, 5);
+
+-- The MV groups by the same key the queries below group by, which is what puts the rewrite on
+-- its non-rollup path, but it stores sum(x)/count(x) -- nothing that can satisfy an aggregate
+-- over k.
+CREATE MATERIALIZED VIEW mv_avgd
+REFRESH MANUAL
+AS SELECT k, sum(x) AS s, count(x) AS c FROM t_avgd GROUP BY k;
+REFRESH MATERIALIZED VIEW mv_avgd WITH SYNC MODE;
+
+-- Baseline answers, with the rewrite switched off.
+SET enable_materialized_view_rewrite = false;
+SELECT k, avg(k) FROM t_avgd GROUP BY k ORDER BY k;
+SELECT k, hll_cardinality(hll_union(hll_hash(k))) FROM t_avgd GROUP BY k ORDER BY k;
+
+SET enable_materialized_view_rewrite = true;
+-- avg over the group-by key: only the argument can be mapped onto an MV column, so the sum/count
+-- the expansion introduces would survive. The rewrite has to be declined.
+SELECT k, avg(k) FROM t_avgd GROUP BY k ORDER BY k;
+-- the same hole reached through an aggregate nested under a scalar call
+SELECT k, hll_cardinality(hll_union(hll_hash(k))) FROM t_avgd GROUP BY k ORDER BY k;
+
+-- Negative control. The rewrite the MV really does satisfy must still happen -- declining every
+-- aggregate expression would pass the assertions above while quietly costing the optimization.
+SELECT k, avg(x) FROM t_avgd GROUP BY k ORDER BY k;
+function: assert_explain_contains("SELECT k, avg(x) FROM test_mv_nonrollup_nested_agg_db.t_avgd GROUP BY k ORDER BY k", "mv_avgd")

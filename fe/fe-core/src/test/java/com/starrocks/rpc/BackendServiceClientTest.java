@@ -16,8 +16,18 @@ package com.starrocks.rpc;
 
 import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PGetFileSchemaResult;
+import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PProxyRequest;
+import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
+import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.PUpdateFailPointStatusRequest;
+import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.jupiter.api.Test;
@@ -305,4 +315,41 @@ public class BackendServiceClientTest {
             Thread.interrupted();
         }
     }
+    /**
+     * The one-line request methods: each hands back the future the service returned, wrapped so the
+     * caller's wait carries a door (see {@link GuardedFuture}). Swept rather than written out one by
+     * one, because what is under test is the same property seven times -- the wrapper is attached and
+     * the call still reaches the service.
+     */
+    @Test
+    public void testEveryPlainRequestReturnsAGuardedFuture() throws Exception {
+        PBackendService mockService = mock(PBackendService.class);
+        when(mockService.triggerProfileReport(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PTriggerProfileReportResult()));
+        when(mockService.collectQueryStatistics(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PCollectQueryStatisticsResult()));
+        when(mockService.getInfo(any())).thenReturn(CompletableFuture.completedFuture(new PProxyResult()));
+        when(mockService.getPulsarInfo(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PPulsarProxyResult()));
+        when(mockService.getFileSchema(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PGetFileSchemaResult()));
+        when(mockService.updateFailPointStatusAsync(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PUpdateFailPointStatusResponse()));
+        when(mockService.listFailPointAsync(any()))
+                .thenReturn(CompletableFuture.completedFuture(new PListFailPointResponse()));
+
+        try (MockedStatic<BrpcProxy> mockedBrpcProxy = mockStatic(BrpcProxy.class)) {
+            mockedBrpcProxy.when(() -> BrpcProxy.getBackendService(any())).thenReturn(mockService);
+            BackendServiceClient client = BackendServiceClient.getInstance();
+
+            assertNotNull(client.triggerProfileReportAsync(BAD_ADDRESS, new PTriggerProfileReportRequest()));
+            assertNotNull(client.collectQueryStatisticsAsync(BAD_ADDRESS, new PCollectQueryStatisticsRequest()));
+            assertNotNull(client.getInfo(BAD_ADDRESS, new PProxyRequest()));
+            assertNotNull(client.getPulsarInfo(BAD_ADDRESS, new PPulsarProxyRequest()));
+            assertNotNull(client.getFileSchema(BAD_ADDRESS, new PGetFileSchemaRequest()));
+            assertNotNull(client.updateFailPointStatusAsync(BAD_ADDRESS, new PUpdateFailPointStatusRequest()));
+            assertNotNull(client.listFailPointAsync(BAD_ADDRESS, new PListFailPointRequest()));
+        }
+    }
+
 }

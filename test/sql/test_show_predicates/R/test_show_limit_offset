@@ -1,0 +1,64 @@
+-- name: test_show_limit_offset
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+PARTITION BY RANGE(k1) (
+  PARTITION p1 VALUES LESS THAN ("10"),
+  PARTITION p2 VALUES LESS THAN ("20"),
+  PARTITION p3 VALUES LESS THAN ("30")
+)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+function: print_query_columns("SHOW ALTER TABLE COLUMN LIMIT 10, 1", "JobId")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW ALTER TABLE ROLLUP LIMIT 10, 1", "JobId")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE LIMIT 10, 1", "JobId")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 0, 2", "PartitionName")
+-- result:
+p1
+p2
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 1, 1", "PartitionName")
+-- result:
+p2
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 2, 5", "PartitionName")
+-- result:
+p3
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 3, 1", "PartitionName")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 4, 1", "PartitionName")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 10, 1", "PartitionName")
+-- result:
+
+-- !result
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 4294967296, 1", "PartitionName")
+-- result:
+
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

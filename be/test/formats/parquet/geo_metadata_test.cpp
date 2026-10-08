@@ -29,7 +29,9 @@
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/meta_helper.h"
+#include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
+#include "formats/parquet/statistics_helper.h"
 #include "fs/fs.h"
 #include "io/string_input_stream.h"
 #include "runtime/current_thread.h"
@@ -127,7 +129,7 @@ std::string compact_bytes(const T& value) {
 
 // A complete two-column Parquet file: required id=42 and WKB POINT(0 0).
 // Generated in memory to keep the fixture and its external annotations auditable.
-std::string geo_file(bool geography, bool dictionary = false, bool annotated = true) {
+std::string geo_file(bool geography, bool dictionary = false, bool annotated = true, bool with_statistics = true) {
     auto shape = geo_element(geography);
     if (!annotated) shape.__isset.logicalType = false;
     shape.__set_repetition_type(tparquet::FieldRepetitionType::REQUIRED);
@@ -192,11 +194,12 @@ std::string geo_file(bool geography, bool dictionary = false, bool annotated = t
             metadata.__set_total_uncompressed_size(bytes.size() - column_offset + page_bytes.size());
             metadata.__set_total_compressed_size(bytes.size() - column_offset + page_bytes.size());
         }
-        if (field.name == "shape" && annotated) {
+        if (field.name == "shape" && annotated && with_statistics) {
             // Deliberately misleading bounds must not hide an Iceberg/Parquet metadata conflict.
             tparquet::Statistics stats;
             stats.__set_min_value("z");
             stats.__set_max_value("z");
+            stats.__set_null_count(0);
             metadata.__set_statistics(stats);
             tparquet::BoundingBox bbox;
             bbox.__set_xmin(170);
@@ -640,6 +643,170 @@ TEST(GeoMetadataTest, NativeGeographyRequiresCompatibleIcebergMetadata) {
     unannotated.__isset.logicalType = false;
     lake.fields[0] = lake_geo();
     EXPECT_TRUE(validate_scan(schema_of(unannotated), &lake, {{0, &slot, true}}, true).ok());
+}
+
+TEST(GeoMetadataTest, NativeGeographyChecksParquetDefaultsAndExplicitMetadata) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo()});
+    for (bool explicit_crs : {false, true}) {
+        for (bool explicit_algorithm : {false, true}) {
+            auto element = geo_element();
+            if (explicit_crs) element.logicalType.GEOGRAPHY.__set_crs("OGC:CRS84");
+            if (explicit_algorithm) {
+                element.logicalType.GEOGRAPHY.__set_algorithm(tparquet::EdgeInterpolationAlgorithm::SPHERICAL);
+            }
+            EXPECT_TRUE(validate_scan(schema_of(element), &lake, {{0, &slot, true}}, true).ok());
+        }
+    }
+}
+
+TEST(GeoMetadataTest, NativeGeographyRejectsConflictingParquetMetadata) {
+    const GeoTypeDescriptor semantic{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
+    SlotDescriptor slot(1, "shape", TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, semantic));
+    TIcebergSchema lake;
+    lake.__set_fields({lake_geo()});
+    std::vector<tparquet::SchemaElement> conflicts{geo_element(false)};
+    for (const std::string crs : {"EPSG:3857", "EPSG:4326", ""}) {
+        auto element = geo_element();
+        element.logicalType.GEOGRAPHY.__set_crs(crs);
+        conflicts.push_back(std::move(element));
+    }
+    for (int algorithm : {1, 2, 3, 4, 127}) {
+        auto element = geo_element();
+        element.logicalType.GEOGRAPHY.__set_algorithm(
+                static_cast<tparquet::EdgeInterpolationAlgorithm::type>(algorithm));
+        conflicts.push_back(std::move(element));
+    }
+    auto string_element = geo_element();
+    tparquet::LogicalType string_logical;
+    string_logical.__set_STRING(tparquet::StringType());
+    string_element.__set_logicalType(string_logical);
+    conflicts.push_back(std::move(string_element));
+    auto wrong_physical_type = geo_element();
+    wrong_physical_type.__set_type(tparquet::Type::INT32);
+    conflicts.push_back(wrong_physical_type);
+    wrong_physical_type.__isset.logicalType = false;
+    conflicts.push_back(wrong_physical_type);
+
+    for (const auto& element : conflicts) {
+        auto status = validate_scan(schema_of(element), &lake, {{0, &slot, true}}, true);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_NE(std::string::npos, status.to_string().find("shape"));
+        // A conflict in an unprojected field must not block other projections.
+        EXPECT_TRUE(validate_scan(schema_of(element), &lake, {}, true).ok());
+    }
+}
+
+TEST(GeoMetadataTest, GeoAnnotationsDoNotUseRowGroupOrPageIndexMinMax) {
+    for (int kind : {0, 1, 2}) {
+        auto element = geo_element(kind == 1);
+        if (kind == 2) element.__isset.logicalType = false;
+        tparquet::FileMetaData thrift;
+        thrift.__set_schema(schema_of(element));
+        FileMetaData metadata;
+        ASSERT_TRUE(metadata.init(thrift, true).ok());
+        const auto* field = metadata.schema().get_stored_column_by_field_idx(0);
+        tparquet::ColumnMetaData column;
+        column.__set_type(tparquet::Type::BYTE_ARRAY);
+        tparquet::Statistics statistics;
+        statistics.__set_min_value("z");
+        statistics.__set_max_value("z");
+        statistics.__set_null_count(0);
+        column.__set_statistics(statistics);
+        const TypeDescriptor type = TypeDescriptor::create_varchar_type(1024);
+        std::vector<std::string> min_values;
+        std::vector<std::string> max_values;
+        auto status = StatisticsHelper::get_min_max_value(&metadata, type, &column, field, min_values, max_values);
+        EXPECT_EQ(kind == 2, status.ok()) << status;
+        EXPECT_EQ(kind == 2 ? 1 : 0, min_values.size());
+        EXPECT_EQ(kind == 2 ? 1 : 0, max_values.size());
+
+        tparquet::ColumnChunk chunk;
+        chunk.__set_meta_data(column);
+        ColumnReaderOptions options{};
+        options.file_meta_data = &metadata;
+        ScalarColumnReader reader(field, &chunk, &type, options);
+        ObjectPool pool;
+        auto* predicate =
+                pool.add(new_column_eq_predicate_from_datum(get_type_info(TYPE_VARCHAR), 1, Datum(Slice("a"))));
+        ASSERT_NE(nullptr, predicate);
+        auto filtered = reader.row_group_zone_map_filter({predicate}, CompoundNodeType::AND, 0, 1);
+        ASSERT_TRUE(filtered.ok()) << filtered.status();
+        EXPECT_EQ(kind == 2, filtered.value());
+
+        if (kind != 2) {
+            // An invalid ColumnIndex location must not even be read for GEO annotations.
+            chunk.__set_column_index_offset(1000000);
+            chunk.__set_column_index_length(32);
+            chunk.__set_offset_index_offset(1000000);
+            RandomAccessFile file(std::make_shared<io::StringInputStream>(std::string()), "geo-index.parquet");
+            options.file = &file;
+            SparseRange<uint64_t> ranges;
+            auto page_filtered = reader.page_index_zone_map_filter({predicate}, &ranges, CompoundNodeType::AND, 0, 1);
+            ASSERT_TRUE(page_filtered.ok()) << page_filtered.status();
+            EXPECT_FALSE(page_filtered.value());
+            EXPECT_TRUE(ranges.empty());
+        }
+    }
+}
+
+TEST(GeoMetadataTest, GeoMinMaxCannotHideMatchingFileRows) {
+    MemTracker tracker{-1, "geo_min_max_control"};
+    CurrentThread::set_mem_tracker_source([] { return true; }, []() -> MemTracker* { return nullptr; });
+    DeferOp reset_tracker_source([] { CurrentThread::set_mem_tracker_source(nullptr, nullptr); });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    for (bool geography : {false, true}) {
+        for (bool dictionary : {false, true}) {
+            for (bool with_statistics : {false, true}) {
+                auto bytes = geo_file(geography, dictionary, true, with_statistics);
+                const auto size = bytes.size();
+                RandomAccessFile file(std::make_shared<io::StringInputStream>(std::move(bytes)), "geo-min-max.parquet");
+                FormatScannerStats stats;
+                FormatScanContext context;
+                context.stats = &stats;
+                context.timezone = "UTC";
+                std::atomic<int32_t> lazy_coalesce_counter{0};
+                context.lazy_column_coalesce_counter = &lazy_coalesce_counter;
+                std::string point(1, '\x01');
+                put_fixed32_le(&point, 1);
+                point.append(16, '\0');
+                ObjectPool pool;
+                auto* predicate = pool.add(
+                        new_column_eq_predicate_from_datum(get_type_info(TYPE_VARCHAR), 1, Datum(Slice(point))));
+                ASSERT_NE(nullptr, predicate);
+                PredicateAndNode root;
+                root.add_child(PredicateColumnNode{predicate});
+                auto predicates = PredicateTree::create(std::move(root));
+                context.predicate_tree = &predicates;
+                TSlotDescriptor output;
+                output.__set_id(1);
+                output.__set_colName("shape");
+                output.__set_slotType(TypeDescriptor::create_varchar_type(1024).to_thrift());
+                output.__set_col_unique_id(-1);
+                output.__set_isMaterialized(true);
+                output.__set_isOutputColumn(true);
+                output.__set_isNullable(true);
+                SlotDescriptor shape(output);
+                context.materialized_columns = {{0, &shape, true}};
+                // Isolate min/max pruning from the fixture's deliberately invalid bloom offset.
+                context.options.parquet_bloom_filter_enable = false;
+                FileReader reader(1024, &file, size);
+                ASSERT_TRUE(reader.init(&context).ok());
+                auto chunk = std::make_shared<Chunk>();
+                chunk->append_column(ColumnHelper::create_column(shape.type(), true), shape.id());
+                auto status = reader.get_next(&chunk);
+                ASSERT_TRUE(status.ok()) << status;
+                ASSERT_EQ(1, chunk->num_rows());
+                EXPECT_EQ(point, chunk->get_column_by_index(0)->get(0).get_slice().to_string());
+                EXPECT_EQ(1, stats.total_row_groups);
+                EXPECT_EQ(0, stats.filtered_row_groups);
+            }
+        }
+    }
 }
 
 TEST(GeoMetadataTest, NestedNativeGeographyIsRejectedByComplexReader) {

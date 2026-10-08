@@ -169,7 +169,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction.
+- Description: The time interval since the last Base Compaction. For shared-nothing tables, this is one of the conditions that trigger Base Compaction. For shared-data Primary Key tables and non-Primary Key tables using the Base and Cumulative policy, automatic Base Compaction waits at least this many seconds after the previous successful Base Compaction finished on the same tablet. For non-Primary Key tables using the Size Tiered policy, this interval only disables the delete-version threshold that forces Base Compaction; normal level selection remains unchanged. Manual compaction bypasses the wait.
 - Introduced in: -
 
 ### base_compaction_num_threads_per_disk

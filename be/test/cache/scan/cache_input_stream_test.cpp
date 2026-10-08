@@ -68,6 +68,27 @@ private:
     int64_t _offset{0};
 };
 
+class FailOnceSeekableInputStream : public MockSeekableInputStream {
+public:
+    using MockSeekableInputStream::MockSeekableInputStream;
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        ++_read_count;
+        if (_read_count == 1) {
+            // Leave a deterministic invalid tail after a partial remote read.
+            memset(out, 'x', count);
+            RETURN_IF_ERROR(MockSeekableInputStream::read_at_fully(offset, out, std::min<int64_t>(count, 16)));
+            return Status::IOError("injected partial read failure");
+        }
+        return MockSeekableInputStream::read_at_fully(offset, out, count);
+    }
+
+    int read_count() const { return _read_count; }
+
+private:
+    int _read_count = 0;
+};
+
 class CacheInputStreamTest : public ::testing::Test {
 public:
     static DiskCacheOptions cache_options() {
@@ -451,6 +472,47 @@ TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
         read_stream_data(&cache_stream, 0, read_size, buffer);
         ASSERT_EQ(sb_stream->shared_io_bytes(), read_size);
     }
+}
+
+TEST_F(CacheInputStreamTest, failed_shared_buffer_read_does_not_populate_cache) {
+    std::string data(block_size, 'a');
+    const std::string file_name = "test_failed_shared_buffer_read";
+    auto stream = std::make_shared<FailOnceSeekableInputStream>(data.data(), data.size());
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data.size());
+    sb_stream->set_align_size(block_size);
+    ASSERT_OK(sb_stream->set_io_ranges({SharedBufferedInputStream::IORange(0, block_size)}));
+
+    CacheInputStream cache_stream(sb_stream, file_name, data.size(), 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_async_populate_mode(false);
+
+    std::string result(block_size, '\0');
+    auto status = cache_stream.read_at_fully(0, result.data(), result.size());
+    ASSERT_TRUE(status.is_io_error()) << status.to_string();
+    ASSERT_EQ("injected partial read failure", status.message());
+    ASSERT_EQ(1, stream->read_count());
+    ASSERT_TRUE(sb_stream->peek(16).status().is_not_supported());
+    ASSERT_TRUE(sb_stream->peek_shared_buffer(16, nullptr).status().is_not_supported());
+    ASSERT_TRUE(cache_stream.peek(16).status().is_not_supported());
+    ASSERT_EQ(0, cache_stream.stats().write_block_cache_count);
+
+    // Retrying must perform another remote read instead of reusing partial data.
+    ASSERT_OK(cache_stream.read_at_fully(0, result.data(), result.size()));
+    ASSERT_EQ(2, stream->read_count());
+    ASSERT_EQ(data, result);
+    ASSERT_EQ(1, cache_stream.stats().write_block_cache_count);
+    ASSERT_EQ(2, sb_stream->shared_io_count());
+
+    // A new stream with the same cache key must find the complete, correct block.
+    std::string wrong_data(block_size, 'z');
+    auto new_stream = std::make_shared<MockSeekableInputStream>(wrong_data.data(), wrong_data.size());
+    auto new_sb_stream = std::make_shared<SharedBufferedInputStream>(new_stream, file_name, wrong_data.size());
+    CacheInputStream new_cache_stream(new_sb_stream, file_name, wrong_data.size(), 1000000);
+    ASSERT_OK(new_cache_stream.read_at_fully(0, result.data(), result.size()));
+    ASSERT_EQ(data, result);
+    ASSERT_EQ(1, new_cache_stream.stats().read_block_cache_count);
+    ASSERT_EQ(0, new_sb_stream->shared_io_count());
+    ASSERT_EQ(0, new_sb_stream->direct_io_count());
 }
 
 TEST_F(CacheInputStreamTest, test_peek) {

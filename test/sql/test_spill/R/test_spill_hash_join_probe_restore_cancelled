@@ -29,6 +29,10 @@ as CREATE table tmp as select sum(l.c0), sum(r.c1) from t0 l join t0 r on l.c0 =
 -- result:
 etl_${uuid0}	SUBMITTED
 -- !result
+function: wait_until_has_queries()
+-- result:
+
+-- !result
 shell: sleep 3
 -- result:
 0

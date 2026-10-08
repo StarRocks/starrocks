@@ -106,6 +106,9 @@ struct CompactionTaskStats {
     int64_t read_chunk_count = 0;
     int64_t write_chunk_count = 0;
     int64_t column_group_count = 0;
+    // Read passes whose per-stream read buffer was shrunk below lake_compaction_stream_buffer_size_bytes
+    // because the input fan-in would otherwise outgrow compaction_memory_limit_per_worker.
+    int64_t stream_buffer_shrunk_passes = 0;
     // Nested wall-clock totals for vertical compaction groups. They overlap
     // with the high-level reader/writer phases and are not part of accounting.
     int64_t vertical_key_group_ns = 0;
@@ -179,6 +182,8 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     const bool force_base_compaction;
     const bool skip_write_txnlog;
     const bool is_unshare;
+    bool allow_base_compaction = true;
+    bool is_base_compaction = false;
     std::atomic<int64_t> start_time{0};
     std::atomic<int64_t> finish_time{0};
     // Monotonic timestamps for adding the elapsed part of the current attempt

@@ -75,10 +75,11 @@ enum LogicalType {
 
     TYPE_JSON = 54,
     TYPE_VARIANT = 55,
+    TYPE_FILE = 56,
 
     // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    TYPE_MAX_VALUE = 56
+    TYPE_MAX_VALUE = 57
 };
 
 // TODO(lism): support varbinary for zone map.

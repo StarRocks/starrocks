@@ -34,7 +34,8 @@ If you wish to authenticate users by means of StarRocks retrieving them directly
 ```Properties
 # Add the Base DN of the user, specifying the user's retrieval range.
 authentication_ldap_simple_bind_base_dn =
-# Add the name of the attribute that identifies the user in the LDAP object. Default: uid.
+# Add the name of the attribute that carries the login name. Default: uid (OpenLDAP).
+# On Active Directory use sAMAccountName.
 authentication_ldap_simple_user_search_attr =
 # Add the admin DN for retrieving users.
 authentication_ldap_simple_bind_root_dn =
@@ -92,6 +93,45 @@ When a user logs in with LDAP authentication, StarRocks determines the user's DN
 1. **Per-user DN**: If the user was created with an explicit DN (`CREATE USER ... AS 'dn'`), that DN is used directly.
 2. **Direct bind via DN pattern**: If `authentication_ldap_simple_bind_dn_pattern` is configured, the system constructs the DN from the pattern and attempts to bind directly. Multiple patterns are tried in order.
 3. **Search-and-bind**: If neither of the above applies, the system uses the admin account to search for the user in LDAP, then binds with the found DN.
+
+## Resolve groups from the user entry (memberOf)
+
+From v4.2 onwards, the groups of an LDAP user can be read from the group membership attribute of the user's own entry, instead of declaring in the configuration which groups to look at. A group newly created in the directory then takes effect on the next login without any configuration change.
+
+Two FE configuration items control it, both dynamic:
+
+```Properties
+# Where the groups come from: group_provider (default) | memberof | both
+authentication_ldap_simple_group_source = group_provider
+# Name of the attribute on the user entry that carries the group membership
+authentication_ldap_simple_memberof_attr = memberOf
+```
+
+- `group_provider` (default) keeps the behavior of earlier versions: only the group providers are used.
+- `memberof` uses only the attribute of the user's own entry. Configured group providers are ignored, but their configuration is kept.
+- `both` returns the union of the two.
+
+`memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed. Oracle Directory Server and 389 Directory Server use `isMemberOf`.
+
+These are cluster-wide defaults. A security integration can override both with properties of the same name, which is the recommended way to configure them per LDAP service — see [Security Integration](./security_integration.md) for the full behavior, including how the attribute is read in each authentication mode and what is not covered (nested groups, the Active Directory primary group, and cross-domain groups).
+
+:::note
+
+A user created with an explicit DN (`CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'`) does **not** support this feature: that form is the legacy per-user mechanism and is scheduled for deprecation, so its group resolution is unchanged. Create the user without `AS '<dn>'`, or use a security integration.
+
+:::
+
+## Case sensitivity
+
+There is no single answer for the whole LDAP configuration - some values are compared by the FE and some by the directory - so the table below says which is which.
+
+| What | Compared where | Case-sensitive? |
+| --- | --- | --- |
+| Attribute names: `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_memberof_attr` | the directory, and the FE when it reads the answer back | **No.** An LDAP attribute description is case-insensitive by definition, so `memberof` and `memberOf` are the same attribute. |
+| `authentication_ldap_simple_group_source` | the FE | **No.** Surrounding blanks are ignored too. An unrecognized value is refused by `CREATE` / `ALTER SECURITY INTEGRATION`, and falls back to `group_provider` with an ERROR in the log when it arrives through the FE configuration. |
+| DN values: `authentication_ldap_simple_bind_root_dn`, `..._bind_base_dn`, `..._bind_dn_pattern` | the directory | **Decided by the directory.** The attribute types in a DN (`cn=`, `ou=`, `dc=`) are always case-insensitive; whether their values are depends on the matching rule of each attribute, which for the usual `cn` / `ou` / `dc` is case-insensitive. |
+| The login name | the FE, before the directory sees it | **No.** It is lower-cased before it is put into the search filter or substituted into the bind DN pattern, which matches how Active Directory treats account names. |
+| Group names | the FE | **No for matching, yes for what you see.** `GRANT ... TO EXTERNAL GROUP` and `permitted_groups` are matched ignoring case, but the name itself is never rewritten: `current_group()` and the group set handed to Apache Ranger keep exactly the spelling the directory returned. Ranger matches group names case-sensitively, so its policies must use the directory's spelling. |
 
 ## Create a user with LDAP
 

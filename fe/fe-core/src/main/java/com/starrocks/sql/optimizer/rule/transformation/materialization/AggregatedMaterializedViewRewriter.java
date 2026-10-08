@@ -182,6 +182,14 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                         queryExprToMvExprRewriter, columnRewriter)) {
                     return null;
                 }
+                // Everything below reads the rollup decision back off the context -- EquationRewriter
+                // hands rewriteContext.isRollup() to the shuttle, which is what makes
+                // AggregateFunctionRewriter build a rollup avg (column refs over sum/count added to
+                // the aggregation) instead of the plain expansion divide(sum(x), count(x)). Taking
+                // the rollup path while the context still says "not a rollup" produced an aggregation
+                // node with no aggregate functions and left the sum/count in the projection above it,
+                // which is exactly the invalid plan this retry exists to avoid.
+                rewriteContext.setRollup(true);
                 return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                         rewriteContext, mvOptExpr);
             } else {
@@ -190,12 +198,28 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         }
     }
 
+    /**
+     * Whether the rewritten expression still contains an aggregate function ANYWHERE in its tree.
+     *
+     * <p>A non-rollup rewrite drops the query's aggregation node, so whatever it returns becomes a
+     * scalar projection over the mv scan. An aggregate that survives into that projection has no
+     * aggregation node left to evaluate it, and the BE has no factory for an AGG_EXPR inside an
+     * expression tree -- it fails the query with
+     * "Vectorized engine does not support the operator, node_type: 0".
+     *
+     * <p>Looking at the root operator alone missed every aggregate the rewrite wraps in a scalar.
+     * `avg(k)` is expanded to divide(cast(sum(k)), cast(count(k))), whose root is the division, and
+     * a query like hll_cardinality(hll_union(...)) keeps its aggregate under a scalar call. Both
+     * were accepted as "not an aggregate" and reached the BE as a projection over the mv.
+     */
     private boolean isAggregate(ScalarOperator rewritten) {
-        if (rewritten == null || !(rewritten instanceof CallOperator)) {
+        if (rewritten == null) {
             return false;
         }
-        CallOperator callOp = (CallOperator) rewritten;
-        return callOp.isAggregate();
+        if (rewritten instanceof CallOperator && ((CallOperator) rewritten).isAggregate()) {
+            return true;
+        }
+        return rewritten.getChildren().stream().anyMatch(this::isAggregate);
     }
 
     /**

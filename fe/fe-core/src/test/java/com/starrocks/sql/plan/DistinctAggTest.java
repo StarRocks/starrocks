@@ -56,6 +56,19 @@ public class DistinctAggTest extends PlanTestBase {
     }
 
     @Test
+    void testCountDistinctPrimaryKeyWithOtherAggregation() throws Exception {
+        String sql = "select v1, count(1), count(distinct pk) from tprimary group by v1 order by v1 desc";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: count(1), count(1: pk)");
+    }
+
+    @Test
+    void testCountDistinctPrimaryKeyWithoutOtherAggregation() throws Exception {
+        String plan = getFragmentPlan("select v1, count(distinct pk) from tprimary group by v1");
+        assertContains(plan, "count(1: pk)");
+    }
+
+    @Test
     void testDistinctConstant() throws Exception {
         String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
                 "t1 group by b1";

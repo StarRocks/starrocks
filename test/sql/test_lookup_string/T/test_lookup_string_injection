@@ -1,0 +1,19 @@
+-- name: test_lookup_string_injection
+create database db_${uuid0};
+use db_${uuid0};
+create table t_dict(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
+insert into t_dict values ('k1', 'real-value-1'), ('O''Brien', 'v_ob');
+
+-- normal lookup
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+
+-- a single quote in the key must be treated as data, not break the query: it matches the row keyed by O'Brien
+select lookup_string('db_${uuid0}.t_dict', 'O''Brien', 'v');
+
+-- injection attempt: the quote/UNION must be escaped and treated as a literal key, so nothing matches -> NULL
+select lookup_string('db_${uuid0}.t_dict', 'zzz'' union select ''INJECTED'' as x -- ', 'v');
+
+-- a non-existent return column is rejected up front
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'no_such_col')", "Unknown column 'no_such_col'")
+
+drop database db_${uuid0} force;

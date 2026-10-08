@@ -1,0 +1,5 @@
+-- name: test_fe_memory_usage
+select count(*) > 10 from sys.fe_memory_usage;
+-- result:
+1
+-- !result

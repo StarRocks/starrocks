@@ -1,0 +1,128 @@
+-- name: test_json_subfield_no_catalog_pollution
+create table t (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t values
+  (1, parse_json('{"x":1,"y":"s1"}')),
+  (2, parse_json('{"x":"s2","y":"s2"}')),
+  (3, parse_json('{"x":3,"y":"s3"}'));
+-- result:
+-- !result
+create table dst (k int, v varchar(100)) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, get_json_int(j, '$.x') as as_int from t order by k;
+-- result:
+1	1
+2	None
+3	3
+-- !result
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+-- result:
+1	1
+2	s2
+3	3
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, get_json_int(j, '$.x') as as_int from t order by k;
+-- result:
+1	1
+2	None
+3	3
+-- !result
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+-- result:
+1	1
+2	s2
+3	3
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+insert into dst select k, cast(get_json_int(j, '$.x') as varchar) from t;
+-- result:
+-- !result
+select k, v from dst order by k;
+-- result:
+1	1
+2	None
+3	3
+-- !result
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+-- result:
+1	1
+2	s2
+3	3
+-- !result
+select count(*) as str_cnt from t where get_json_string(j, '$.x') = 's2';
+-- result:
+1
+-- !result
+select sum(length(get_json_string(j, '$.x'))) as sum_len from t;
+-- result:
+4
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, get_json_string(j, '$.x') as as_str from t order by k;
+-- result:
+1	1
+2	s2
+3	3
+-- !result
+select count(*) as str_cnt from t where get_json_string(j, '$.x') = 's2';
+-- result:
+1
+-- !result
+select sum(length(get_json_string(j, '$.x'))) as sum_len from t;
+-- result:
+4
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+insert into t select k, j from t where get_json_int(j, '$.x') = 1;
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+4
+-- !result
+select count(*) from t a join t b on a.k = b.k
+  where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '1';
+-- result:
+4
+-- !result
+set cbo_cte_reuse = false;
+-- result:
+-- !result
+select count(*) from (
+  with c as (select k, j from t where k < 100)
+  select c1.k from c c1 join c c2 on c1.k = c2.k
+  where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '1') x;
+-- result:
+4
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select count(*) from t a join t b on a.k = b.k
+  where get_json_int(a.j, '$.x') = 1 and get_json_string(b.j, '$.x') = '1';
+-- result:
+4
+-- !result
+select count(*) from (
+  with c as (select k, j from t where k < 100)
+  select c1.k from c c1 join c c2 on c1.k = c2.k
+  where get_json_int(c1.j, '$.x') = 1 and get_json_string(c2.j, '$.x') = '1') x;
+-- result:
+4
+-- !result

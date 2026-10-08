@@ -151,6 +151,19 @@ select * from t1_primary where value match 'starrocks%';
 -- result:
 4	starrocks database
 -- !result
+drop database test_gin_index;
+-- result:
+-- !result
+-- name: test_add_gin_index @native
+create database test_gin_add_${uuid0};
+-- result:
+-- !result
+use test_gin_add_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE t2_dup (
     id1 bigint(20) NOT NULL COMMENT "",
     value varchar(255) COMMENT ""
@@ -248,7 +261,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- !result
-drop database test_gin_index;
+drop database test_gin_add_${uuid0};
 -- result:
 -- !result
 -- name: test_gin_not_match_excludes_null @native

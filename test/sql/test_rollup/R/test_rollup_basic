@@ -1,4 +1,4 @@
--- name: test_rollup_basic
+-- name: test_rollup_basic @sequential
 CREATE TABLE test_rollup_basic_tbl1 (
     k1 date,
     k2 int,

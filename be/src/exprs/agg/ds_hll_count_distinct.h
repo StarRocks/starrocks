@@ -124,7 +124,14 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        // src[0] may be a constant. The _state combinator deliberately leaves constant arguments
+        // packed ("return directly to keep efficiency", state_combinator.h), while chunk_size is the
+        // replicated row count -- so the container unwrapped out of it holds exactly one element and
+        // indexing it by the row reads off the end. update() already takes the row-indexed
+        // GetContainer overload, which handles this; this loop hoists the container and so must do it
+        // itself, the way ds_theta_combine and covariance do.
         const auto& datas = GetContainer<LT>::get_data(src[0]);
+        const bool is_const = src[0]->is_constant();
         auto* result = down_cast<BinaryColumn*>(dst.get());
 
         Bytes& bytes = result->get_bytes();
@@ -144,7 +151,7 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             int64_t memory_usage = 0;
             DataSketchesHll hll{log_k, tgt_type, &memory_usage};
-            uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
+            uint64_t value = HashUtil::murmur_hash64A<T>(datas[is_const ? 0 : i], HashUtil::MURMUR_SEED);
             if (value != 0) {
                 hll.update(value);
             }

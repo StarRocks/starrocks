@@ -32,6 +32,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -104,8 +105,6 @@ public class StorageVolume implements Writable, GsonPostProcessable {
 
     public static final String V_SHARD_ID = "v_shard_id";
     public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
-
-    public static String CREDENTIAL_MASK = "******";
 
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
@@ -273,16 +272,19 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public static void addMaskForCredential(Map<String, String> params) {
-        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
+                (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CredentialMask.LONG);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
-                (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, (key, value) -> CREDENTIAL_MASK);
+                (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                (key, value) -> CredentialMask.LONG);
     }
 
     public void getProcNodeData(BaseProcResult result) {
@@ -435,6 +437,11 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             case ADLS2: {
                 ADLS2FileStoreInfo adls2FileStoreInfo = fsInfo.getAdls2FsInfo();
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, adls2FileStoreInfo.getEndpoint());
+                String storageAccount = fsInfo.getPropertiesOrDefault(
+                        CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, "");
+                if (!storageAccount.isEmpty()) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount);
+                }
                 ADLS2CredentialInfo adls2credentialInfo = adls2FileStoreInfo.getCredential();
                 String sharedKey = adls2credentialInfo.getSharedKey();
                 if (!Strings.isNullOrEmpty(sharedKey)) {

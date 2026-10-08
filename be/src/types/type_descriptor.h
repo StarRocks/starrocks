@@ -115,6 +115,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    // FILE is an opaque scalar here; its fixed field layout lives in FileColumn, not in children.
+    static TypeDescriptor create_file_type() {
+        TypeDescriptor res;
+        res.type = TYPE_FILE;
+        return res;
+    }
+
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
@@ -217,6 +224,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_json_type();
         case TYPE_VARIANT:
             return TypeDescriptor::create_variant_type();
+        case TYPE_FILE:
+            return TypeDescriptor::create_file_type();
         case TYPE_OBJECT:
             return TypeDescriptor::create_bitmap_type();
         default:
@@ -311,6 +320,8 @@ struct TypeDescriptor {
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
 
     inline bool is_struct_type() const { return type == TYPE_STRUCT; }
+
+    inline bool is_file_type() const { return type == TYPE_FILE; }
 
     inline bool is_array_type() const { return type == TYPE_ARRAY; }
 

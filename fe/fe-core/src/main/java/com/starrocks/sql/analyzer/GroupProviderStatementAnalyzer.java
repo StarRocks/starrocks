@@ -22,6 +22,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -64,6 +65,29 @@ public class GroupProviderStatementAnalyzer {
             AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
             if (authenticationMgr.getGroupProvider(statement.getName()) == null && !statement.isIfExists()) {
                 throw new SemanticException("Group Provider '" + statement.getName() + "' not found");
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            if (authenticationMgr.getGroupProvider(statement.getName()) == null) {
+                throw new SemanticException("Group Provider '" + statement.getName() + "' not found");
+            }
+
+            if (statement.getProperties().isEmpty()) {
+                throw new SemanticException("no property is specified for ALTER GROUP PROVIDER");
+            }
+
+            // Ignore case here even though property keys are otherwise case-sensitive: SET ("TYPE" = "file")
+            // would slip past an exact-match check and then be stored as an extra property that no
+            // implementation reads - the statement would report success and change nothing.
+            for (String key : statement.getProperties().keySet()) {
+                if (key.equalsIgnoreCase(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY)) {
+                    throw new SemanticException("'type' property cannot be changed");
+                }
             }
 
             return null;

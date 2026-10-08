@@ -31,6 +31,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -710,7 +711,7 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testAfterTabletCreationRoutingForNonLakeTable(
-            @Mocked Database db, @Mocked OlapTable olapTable) throws Exception {
+            @Injectable Database db, @Injectable OlapTable olapTable) throws Exception {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
         new Expectations() {
@@ -737,7 +738,7 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testAfterTabletCreationRoutingForHashColocateLakeTable(
-            @Mocked Database db, @Mocked LakeTable lakeTable, @Mocked StarOSAgent starOSAgent) throws Exception {
+            @Injectable Database db, @Injectable LakeTable lakeTable, @Injectable StarOSAgent starOSAgent) throws Exception {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
         new MockUp<GlobalStateMgr>() {
@@ -777,7 +778,7 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testAfterTabletCreationRoutingForRangeColocateLakeTable(
-            @Mocked Database db, @Mocked LakeTable lakeTable) throws Exception {
+            @Injectable Database db, @Injectable LakeTable lakeTable) throws Exception {
         ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
 
         new MockUp<StarOSAgent>() {

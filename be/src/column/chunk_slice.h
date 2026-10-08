@@ -24,7 +24,6 @@ namespace starrocks {
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
-    size_t segment_id = 0;
     size_t offset = 0;
 
     bool empty() const;
@@ -36,6 +35,5 @@ struct ChunkSliceTemplate {
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
-using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
 
 } // namespace starrocks

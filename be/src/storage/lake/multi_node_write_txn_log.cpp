@@ -19,6 +19,7 @@
 #include <limits>
 
 #include "fmt/format.h"
+#include "storage/lake/lake_proto_normalizer.h"
 
 namespace starrocks::lake {
 
@@ -144,6 +145,7 @@ Status merge_multi_node_write_txn_log(TxnLogPB* dst, TxnLogPB* src) {
         appended->Swap(&segment_meta);
         appended->set_segment_idx(dst_rowset->segment_metas_size() - 1);
     }
+    give_standalone_segments_a_bundle_offset(dst_rowset);
 
     // Rewrite segments ride along with the segments they are named for, keeping the positional pairing
     // publish resolves them by. Both sides were checked to be either full or empty, and mixing the two
