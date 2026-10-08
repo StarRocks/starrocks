@@ -36,7 +36,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorTableVersion;
-import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -762,12 +761,12 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-            EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
+            EsTable.MetaSnapshot metaSnapshot = ((LogicalEsScanOperator) scanOperator).getMetaSnapshot();
             EsTable table = (EsTable) scanOperator.getTable();
-            if (esTablePartitions == null) {
-                if (table.getLastMetaDataSyncException() != null) {
+            if (metaSnapshot.getPartitions() == null) {
+                if (metaSnapshot.getSyncException() != null) {
                     throw new StarRocksPlannerException("fetch es table [" + table.getName() + "] metadata failure: " +
-                            table.getLastMetaDataSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
+                            metaSnapshot.getSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
                 }
                 throw new StarRocksPlannerException("EsTable metadata has not been synced, Try it later",
                         ErrorType.USER_ERROR);

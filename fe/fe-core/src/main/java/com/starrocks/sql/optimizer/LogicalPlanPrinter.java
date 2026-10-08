@@ -470,6 +470,17 @@ public class LogicalPlanPrinter {
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
+        /**
+         * Every scan without its own visitor above lands here. The base class's visitPhysicalScan goes back to
+         * visit(), which dispatches on the operator again and so recursed until the stack overflowed -- a FILE,
+         * HUDI, ES, DELTA LAKE, ... scan could not be printed. Named from the operator type, e.g. "FILE SCAN".
+         */
+        @Override
+        public OperatorStr visitPhysicalScan(OptExpression optExpression, Integer step) {
+            String scanName = optExpression.getOp().getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', ' ');
+            return visitScanCommon(optExpression, step, scanName);
+        }
+
         @Override
         public OperatorStr visitPhysicalJDBCScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "JDBC SCAN");

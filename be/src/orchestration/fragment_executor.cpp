@@ -520,6 +520,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
+        } else {
+            _fragment_ctx->set_has_per_driver_scan_ranges();
         }
 
         bool should_compute_cache_key_prefix = _fragment_ctx->enable_cache() &&

@@ -17,6 +17,7 @@
 #include <bthread/execution_queue.h>
 #include <fmt/format.h>
 
+#include <atomic>
 #include <memory>
 #include <string_view>
 #include <vector>
@@ -170,7 +171,27 @@ public:
     MergeBlockTask(std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> finish_task, AsyncDeltaWriterImpl* async_writer)
             : _finish_task(std::move(finish_task)), _async_writer(async_writer) {}
 
+    // Once this task has been submitted it holds the only remaining reference to the finish
+    // callback, and that callback is the only thing that counts down the latch the caller waits
+    // on -- LakeTabletsChannel::add_chunk(), which blocks the bthread that is holding the brpc
+    // closure of a tablet_writer_add_chunks. ThreadPoolToken::shutdown() waits for the tasks it
+    // is running but cancels the ones still queued, so a task that never runs has to answer for
+    // the callback itself. Dropping it silently parks that closure forever, its connection is
+    // never recycled, and the BE cannot finish brpc's Server::Join() on exit.
+    //
+    // Report through closed_status(), not a status of our own: on the cancel path
+    // TabletsChannel::cancel() has already recorded the reason the coordinator sent -- the error
+    // that actually ended the load -- before abort() closes the writers and gets us here.
+    // WriteContext::update_status() is first-wins, so answering with a status of our own would put
+    // this derived message in the response and hide that reason.
+    ~MergeBlockTask() override { fail(_async_writer->closed_status("load spill block merge task was dropped")); }
+
+    void cancel() override { fail(_async_writer->closed_status("load spill block merge task was cancelled")); }
+
     void run() override {
+        if (!_claim()) {
+            return;
+        }
         auto delta_writer = _async_writer->_writer.get();
         if (_async_writer->closed()) {
             _finish_task->cb(_async_writer->closed_status(kClosedMsg));
@@ -182,9 +203,28 @@ public:
         _finish_task->cb(std::move(res));
     }
 
+    // Report |st| through the finish callback unless the task has already answered it.
+    void fail(const Status& st) {
+        // An OK here would report a tablet that never finished as if it had: the caller's callback
+        // would add it to the finished set and take a txn log out of a StatusOr that carries none.
+        // closed_status() cannot return OK today; this is what keeps that true.
+        DCHECK(!st.ok()) << "a dropped merge task must not answer its callback with OK";
+        if (_claim()) {
+            _finish_task->cb(st);
+        }
+    }
+
 private:
+    // Whoever wins this runs the callback, exactly once, whether the task ran, was cancelled by
+    // the thread pool, or was never submitted at all.
+    bool _claim() {
+        bool expected = false;
+        return _answered.compare_exchange_strong(expected, true);
+    }
+
     std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> _finish_task;
     AsyncDeltaWriterImpl* _async_writer;
+    std::atomic<bool> _answered{false};
 };
 
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::TaskPtr>& iter) {
@@ -258,7 +298,15 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
                 if (!res.ok()) {
                     st.update(res);
                     LOG_IF(ERROR, !st.ok()) << "Fail to submit merge task: " << st;
-                    finish_task->cb(st);
+                    // Report through the task so that it, and not this branch, decides whether the
+                    // callback still needs an answer.
+                    merge_task->fail(st);
+                } else {
+                    // Queued, not yet run. A test has to reach this point before closing the
+                    // writer, or close() shuts the token down first, submit() fails, and the
+                    // branch above answers the callback -- which passes whether or not the task
+                    // itself would have.
+                    TEST_SYNC_POINT("AsyncDeltaWriterImpl::merge_task_submitted");
                 }
             } else {
                 auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);

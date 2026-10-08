@@ -268,3 +268,18 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
 
+
+  conflict-marker-check:
+    # Deliberately NOT exempted for backport / cherry-pick PRs the way changelist-check
+    # is: an automated backport that hits a conflict and commits its own markers is
+    # exactly the case this gate exists for.
+    runs-on: [self-hosted, quick]
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: Check Conflict Markers
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/check-conflict-markers.py

@@ -29,6 +29,7 @@
 #include "base/testutil/assert.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_path_fwd.h"
+#include "fmt/format.h"
 #include "platform/broker_mgr.h"
 #include "platform/small_file_mgr.h"
 #include "platform/store_path.h"
@@ -128,7 +129,7 @@ TEST(PlatformEnvTest, OwnsSmallFileMgrLifecycle) {
 
     static constexpr int64_t kFileId = 12345;
     static constexpr const char* kEmptyFileMd5 = "d41d8cd98f00b204e9800998ecf8427e";
-    const auto cached_file = small_file_dir.path() / (std::to_string(kFileId) + "." + kEmptyFileMd5);
+    const auto cached_file = small_file_dir.path() / fmt::format("{}.{}", kFileId, kEmptyFileMd5);
     std::ofstream(cached_file.string()).close();
 
     MetricRegistry metrics("platform_env_small_file_test");

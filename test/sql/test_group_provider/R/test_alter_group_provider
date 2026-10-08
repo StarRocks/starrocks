@@ -1,0 +1,73 @@
+-- name: test_alter_group_provider
+CREATE GROUP PROVIDER gp_unix_${uuid0} PROPERTIES ("type" = "unix", "keep" = "original", "change" = "before");
+-- result:
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("change" = "after");
+-- result:
+-- !result
+SHOW CREATE GROUP PROVIDER gp_unix_${uuid0};
+-- result:
+[REGEX](?s)(?=.*"keep" = "original")(?=.*"change" = "after")(?=.*"type" = "unix").*
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("change" = "after2");
+-- result:
+-- !result
+SHOW CREATE GROUP PROVIDER gp_unix_${uuid0};
+-- result:
+[REGEX](?s)(?=.*"keep" = "original")(?=.*"change" = "after2").*
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("type" = "file");
+-- result:
+[REGEX](?s).*'type' property cannot be changed.*
+-- !result
+ALTER GROUP PROVIDER gp_missing_${uuid0} SET ("change" = "x");
+-- result:
+[REGEX](?s).*Group Provider 'gp_missing_[0-9a-f]+' not found.*
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ();
+-- result:
+[REGEX](?s).*no property is specified for ALTER GROUP PROVIDER.*
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("TYPE" = "file");
+-- result:
+[REGEX](?s).*'type' property cannot be changed.*
+-- !result
+ALTER GROUP PROVIDER gp_unix_${uuid0} SET ("no_such_property" = "x");
+-- result:
+[REGEX](?s).*unknown property 'no_such_property'.*
+-- !result
+DROP GROUP PROVIDER gp_unix_${uuid0};
+-- result:
+-- !result
+CREATE GROUP PROVIDER gp_ldap_${uuid0} PROPERTIES (
+    "type" = "ldap",
+    "ldap_conn_url" = "ldap://127.0.0.1:1",
+    "ldap_bind_root_dn" = "cn=admin,dc=example,dc=com",
+    "ldap_bind_root_pwd" = "sql_test_bind_secret",
+    "ldap_ssl_conn_trust_store_pwd" = "sql_test_store_secret",
+    "ldap_bind_base_dn" = "dc=example,dc=com",
+    "ldap_group_dn" = "cn=group1,dc=example,dc=com",
+    "ldap_conn_timeout" = "100",
+    "ldap_cache_refresh_interval" = "3600"
+);
+-- result:
+-- !result
+SHOW CREATE GROUP PROVIDER gp_ldap_${uuid0};
+-- result:
+[REGEX](?s)(?=.*"ldap_bind_root_pwd" = "\*\*\*")(?=.*"ldap_ssl_conn_trust_store_pwd" = "\*\*\*")(?!.*sql_test_bind_secret)(?!.*sql_test_store_secret).*
+-- !result
+ALTER GROUP PROVIDER gp_ldap_${uuid0} SET ("ldap_bind_root_pwd" = "sql_test_rotated_secret");
+-- result:
+[REGEX](?s).*failed to apply the new configuration to group provider.*
+-- !result
+SHOW CREATE GROUP PROVIDER gp_ldap_${uuid0};
+-- result:
+[REGEX](?s)(?=.*"ldap_bind_root_pwd" = "\*\*\*")(?!.*sql_test_rotated_secret).*
+-- !result
+DROP GROUP PROVIDER gp_ldap_${uuid0};
+-- result:
+-- !result
+CLEANUP {
+    DROP GROUP PROVIDER IF EXISTS gp_unix_${uuid0};
+    DROP GROUP PROVIDER IF EXISTS gp_ldap_${uuid0};
+} END CLEANUP

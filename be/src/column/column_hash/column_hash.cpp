@@ -25,6 +25,7 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -373,6 +374,13 @@ public:
     }
 
     Status do_visit(const StructColumn& column) {
+        for (const ColumnPtr& field : column.fields()) {
+            (void)field->accept(this);
+        }
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
         for (const ColumnPtr& field : column.fields()) {
             (void)field->accept(this);
         }

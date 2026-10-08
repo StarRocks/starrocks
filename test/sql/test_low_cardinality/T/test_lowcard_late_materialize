@@ -47,3 +47,37 @@ select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
 -- Both consumers of the shared CTE ask for the same dictionary column.
 with c as (select k1, v1 from lm_dict)
 select x.k1, x.v1, y.v1 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+
+-- name: test_lowcard_late_materialize_force_encode @sequential
+CREATE TABLE `lm_force_dict_${uuid0}` (
+  `k1` bigint NULL,
+  `v1` varchar(255) NULL,
+  `v3` varchar(255) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO lm_force_dict_${uuid0} VALUES
+(1, 'a1', 'c1'), (2, 'a2', 'c2'), (3, 'a3', 'c3'), (4, 'a4', 'c4'), (5, 'a5', 'c5'),
+(6, 'a6', 'c6'), (7, 'a7', 'c7'), (8, 'a8', 'c8'), (9, 'a9', 'c9'), (10, 'a10', 'c10');
+function: wait_global_dict_ready('v1', 'lm_force_dict_${uuid0}')
+function: wait_global_dict_ready('v3', 'lm_force_dict_${uuid0}')
+set cbo_cte_reuse_rate = 0;
+set enable_global_late_materialization = true;
+set enable_global_late_materialization_cost_based = false;
+-- The failpoint puts every global-dict column on SegmentIterator's force-encode path (read ->
+-- decode -> materialize -> encode), which builds the global-id column from the iterator's output
+-- schema. The lookup never set up the encoded output schema, so that column was a string column,
+-- the codes were written into it as a LowCardDictColumn, and appending the fetched chunk crashed
+-- the backend with std::length_error.
+admin enable failpoint 'segment_iterator_force_global_dict_encode';
+with c as (select k1, v1, v3 from lm_force_dict_${uuid0})
+select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+admin disable failpoint 'segment_iterator_force_global_dict_encode';
+with c as (select k1, v1, v3 from lm_force_dict_${uuid0})
+select x.k1, x.v1, y.v3 from c x join c y on x.k1 = y.k1 order by x.k1 limit 5;
+
+CLEANUP {
+    admin disable failpoint 'segment_iterator_force_global_dict_encode';
+    drop table if exists lm_force_dict_${uuid0} force;
+} END CLEANUP

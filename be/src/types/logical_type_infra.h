@@ -117,7 +117,8 @@ namespace starrocks {
     M(JSON)                             \
     M(VARIANT)                          \
     M(GEOGRAPHY)                        \
-    M(GEOMETRY)
+    M(GEOMETRY)                         \
+    M(FILE)
 
 #define APPLY_FOR_MIN_MAX_COMPRESSABLE_TYPE(M) \
     APPLY_FOR_ALL_INT_TYPE(M)                  \

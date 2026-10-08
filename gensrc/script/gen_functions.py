@@ -76,6 +76,7 @@ import java.util.Vector;
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
 import static com.starrocks.type.AnyGeographyType.GEOGRAPHY;
+import static com.starrocks.type.AnyGeometryType.GEOMETRY;
 import static com.starrocks.type.AnyMapType.ANY_MAP;
 import static com.starrocks.type.AnyStructType.ANY_STRUCT;
 import static com.starrocks.type.ArrayType.ARRAY_BIGINT;

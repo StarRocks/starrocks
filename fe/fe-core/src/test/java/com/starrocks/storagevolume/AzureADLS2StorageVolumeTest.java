@@ -14,6 +14,7 @@
 
 package com.starrocks.storagevolume;
 
+import com.staros.filestore.FileStore;
 import com.staros.proto.ADLS2CredentialInfo;
 import com.staros.proto.ADLS2CredentialType;
 import com.staros.proto.FileStoreInfo;
@@ -36,8 +37,10 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class AzureADLS2StorageVolumeTest {
     private Map<String, String> workloadParams() {
@@ -71,6 +74,99 @@ public class AzureADLS2StorageVolumeTest {
         assertEquals("org.apache.hadoop.fs.azurebfs.oauth2.WorkloadIdentityTokenProvider",
                 conf.get("fs.azure.account.oauth.provider.type"));
         assertEquals(credential.getOauth2TokenFile(), conf.get("fs.azure.account.oauth2.token.file"));
+    }
+
+    @Test
+    public void testAccountScopeSurvivesPersistenceForEveryCredentialType() throws Exception {
+        for (String credentialKey : List.of(AZURE_ADLS2_SHARED_KEY, AZURE_ADLS2_SAS_TOKEN,
+                AZURE_ADLS2_OAUTH2_CLIENT_SECRET, AZURE_ADLS2_OAUTH2_TOKEN_FILE,
+                AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY)) {
+            Map<String, String> params = workloadParams();
+            params.remove(AZURE_ADLS2_OAUTH2_TOKEN_FILE);
+            params.put(AZURE_ADLS2_STORAGE_ACCOUNT, "account");
+            params.put(AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "https://login.microsoftonline.com/tenant/oauth2/token");
+            params.put(credentialKey, credentialKey.equals(AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY) ? "true" : "value");
+            StorageVolume volume = volume(params);
+            volume.setVTabletId(11);
+            volume.setVTabletGroupId(22);
+            Map<String, String> expected = azureConfiguration(volume);
+            ADLS2CredentialType expectedType = volume.toFileStoreInfo().getAdls2FsInfo().getCredential().getCredentialType();
+            for (int i = 0; i < 3; i++) {
+                volume = reload(volume);
+                assertEquals("account", StorageVolume.getParamsFromFileStoreInfo(volume.toFileStoreInfo())
+                        .get(AZURE_ADLS2_STORAGE_ACCOUNT), credentialKey);
+                assertEquals(expected, azureConfiguration(volume), credentialKey);
+                assertEquals(expectedType, volume.toFileStoreInfo().getAdls2FsInfo().getCredential().getCredentialType());
+                assertEquals(11, volume.getVTabletId());
+                assertEquals(22, volume.getVTabletGroupId());
+            }
+        }
+    }
+
+    private Map<String, String> azureConfiguration(StorageVolume volume) {
+        Configuration conf = new Configuration(false);
+        volume.getCloudConfiguration().applyToConfiguration(conf);
+        Map<String, String> properties = new HashMap<>();
+        for (Map.Entry<String, String> entry : conf) {
+            if (entry.getKey().startsWith("fs.azure.")) {
+                properties.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return properties;
+    }
+
+    @Test
+    public void testAccountOnlyCredentialsSurviveModelRoundTrip() throws Exception {
+        // The SQL accessibility precheck still requires an endpoint; credential serialization must be lossless.
+        for (String credentialKey : List.of(AZURE_ADLS2_SHARED_KEY, AZURE_ADLS2_SAS_TOKEN)) {
+            StorageVolume volume = volume(Map.of(AZURE_ADLS2_STORAGE_ACCOUNT, "account", credentialKey, "value"));
+            assertEquals(azureConfiguration(volume), azureConfiguration(reload(volume)), credentialKey);
+        }
+    }
+
+    @Test
+    public void testAlterAccountScopeAndClearIt() throws Exception {
+        Map<String, String> params = workloadParams();
+        params.put(AZURE_ADLS2_STORAGE_ACCOUNT, "account");
+        StorageVolume volume = reload(volume(params));
+        volume.setCloudConfiguration(Map.of(AZURE_ADLS2_STORAGE_ACCOUNT, "otheraccount",
+                AZURE_ADLS2_ENDPOINT, "https://otheraccount.dfs.core.windows.net"));
+        volume = reload(volume);
+        assertEquals("client", azureConfiguration(volume).get(
+                "fs.azure.account.oauth2.client.id.otheraccount.dfs.core.windows.net"));
+        assertNull(azureConfiguration(volume).get("fs.azure.account.oauth2.client.id.account.dfs.core.windows.net"));
+        volume.setCloudConfiguration(Map.of(AZURE_ADLS2_STORAGE_ACCOUNT, ""));
+        volume = reload(volume);
+        assertFalse(volume.toFileStoreInfo().containsProperties(AZURE_ADLS2_STORAGE_ACCOUNT));
+        assertEquals("client", azureConfiguration(volume).get("fs.azure.account.oauth2.client.id"));
+        assertNull(azureConfiguration(volume).get("fs.azure.account.oauth2.client.id.otheraccount.dfs.core.windows.net"));
+    }
+
+    @Test
+    public void testAccountScopeSurvivesStarMgrUpdates() throws Exception {
+        Map<String, String> params = workloadParams();
+        params.put(AZURE_ADLS2_STORAGE_ACCOUNT, "account");
+        StorageVolume volume = volume(params);
+        FileStore persisted = FileStore.fromProtobuf(volume.toFileStoreInfo());
+        StorageVolume restored = StorageVolume.fromFileStoreInfo(persisted.toProtobuf());
+        assertEquals(azureConfiguration(volume), azureConfiguration(restored));
+        assertEquals("account", restored.getProperties().get(AZURE_ADLS2_STORAGE_ACCOUNT));
+
+        restored.setCloudConfiguration(Map.of(AZURE_ADLS2_STORAGE_ACCOUNT, ""));
+        // StarMgr updates must remove a cleared scope rather than retain the previous property.
+        persisted.mergeFrom(FileStore.fromProtobuf(restored.toFileStoreInfo()));
+        restored = StorageVolume.fromFileStoreInfo(persisted.toProtobuf());
+        assertFalse(restored.getProperties().containsKey(AZURE_ADLS2_STORAGE_ACCOUNT));
+        assertEquals("client", azureConfiguration(restored).get("fs.azure.account.oauth2.client.id"));
+    }
+
+    @Test
+    public void testLegacyVolumeWithoutAccountScopeRemainsUnscoped() throws Exception {
+        StorageVolume volume = volume(workloadParams());
+        FileStoreInfo legacy = volume.toFileStoreInfo().toBuilder().clearProperties().build();
+        StorageVolume restored = StorageVolume.fromFileStoreInfo(FileStoreInfo.parseFrom(legacy.toByteArray()));
+        assertEquals(azureConfiguration(volume), azureConfiguration(restored));
+        assertFalse(restored.toFileStoreInfo().containsProperties(AZURE_ADLS2_STORAGE_ACCOUNT));
     }
 
     @Test

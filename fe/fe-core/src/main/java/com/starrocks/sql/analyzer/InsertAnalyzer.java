@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
@@ -129,6 +130,18 @@ public class InsertAnalyzer {
             table = insertStmt.getTargetTable();
         } else {
             table = getTargetTable(insertStmt, session);
+            // An INSERT into an external OLAP table is always handed a synced copy above, except inside an
+            // explicit transaction, which skips the sync -- and cannot work: the published table has no
+            // partitions, tablets or backends, and its transaction lives on the other cluster.
+            if (table instanceof ExternalOlapTable && session.getTxnId() != 0) {
+                throw unsupportedException("An external OLAP table cannot be written in an explicit transaction");
+            }
+        }
+        // Checked here, where a target synced before the lock and a target resolved just now both pass. The
+        // overwrite job swaps partitions of a local table; an external OLAP table's partitions are on the other
+        // cluster, and its published object has none, so the job would never sync it.
+        if (insertStmt.isOverwrite() && table.isOlapExternalTable()) {
+            throw unsupportedException("INSERT OVERWRITE is not supported on an external OLAP table");
         }
 
         if (table instanceof OlapTable) {
@@ -412,6 +425,13 @@ public class InsertAnalyzer {
                 if (properties.containsKey(property)) {
                     tableFunctionProperties.put(property, properties.get(property));
                 }
+            }
+            // The relation may already carry a FILES() table resolved outside the meta lock, before
+            // this push-down ran -- StatementPlanner's lock-free pre-analysis, or the tablet
+            // pre-split hook. QueryAnalyzer#resolveTableRef reuses that instance rather than
+            // rebuilding it from the map above, so the pushed-down keys would never reach it.
+            if (relation.getTable() instanceof TableFunctionTable preResolved) {
+                preResolved.applyPushedDownLoadProperties(tableFunctionProperties);
             }
         }
     }
@@ -834,12 +854,18 @@ public class InsertAnalyzer {
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
-        if (database == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        // An external target was resolved before the lock was taken, because the lock covers nothing about
+        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
+        // succeed -- falls through to the resolve this has always done.
+        Table table = session.getPreResolvedWriteTargets().take(tableNameObj);
+        if (table == null) {
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
+            if (database == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        }
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

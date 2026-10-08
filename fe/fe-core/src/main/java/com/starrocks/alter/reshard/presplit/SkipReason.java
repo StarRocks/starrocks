@@ -38,6 +38,22 @@ public enum SkipReason {
     MULTIPLE_BASE_INDEX_TABLETS,
     PARTITION_NOT_EMPTY,
     UNSUPPORTED_SORT_KEY,
+    /**
+     * A column the sampler has to project -- the base sort key, a visible rollup's sort key, or a
+     * partition source column -- is absent from the resolved INSERT projection. Reached by an
+     * INSERT-from-FILES whose target column is legitimately absent from the inferred
+     * {@code FILES()} schema (a {@code BY NAME} load defaults it, or reads it NULL under
+     * {@code fill_mismatch_column_with=null}).
+     *
+     * <p>Deliberately NOT recorded for a projection-shape rejection (a duplicate output name, a
+     * by-position arity mismatch, a foreign-qualified slot), a computed or NULL projection, nor
+     * for a key made only of literals:
+     * those decline for reasons that have nothing to do with a missing column, and a wrong reason
+     * sends an operator to the wrong place.
+     */
+    SOURCE_MISSING_SAMPLED_COLUMN,
+    /** A sampled INSERT-from-FILES column is supplied by an expression the sampler cannot reproduce. */
+    UNSUPPORTED_SAMPLED_PROJECTION,
     /** Catalog snapshot did not resolve the partition or base index — load surfaces this error. */
     METADATA_NOT_RESOLVED,
     /** Pre-submit phase (sample + plan + build job) exceeded its timeout. */
@@ -58,6 +74,11 @@ public enum SkipReason {
     UNSUPPORTED_PARTITION_COLUMN_TYPE,
     /** A sampled partition tuple could not be turned into a usable AddPartitionClause (formatter null or analyzer threw). */
     INVALID_PARTITION_VALUE,
+    /**
+     * Manually range-partitioned target: a sampled partition tuple lies outside every declared range
+     * the load may write. Dropped rather than pre-created -- the load rejects those rows itself.
+     */
+    NO_MATCHING_PARTITION,
     /** Grouping produced no usable target partitions (every row dropped). */
     GROUPER_EMPTY,
     /**

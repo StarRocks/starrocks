@@ -697,8 +697,20 @@ public abstract class MVRefreshProcessor {
     }
 
     /**
-     * Collect all deduplicated databases of the materialized view's base tables.
-     * @return: the deduplicated databases of the materialized view's base tables,
+     * Collect all deduplicated databases of the materialized view's base tables that are worth locking.
+     * <p>
+     * Only internal-catalog base tables enter the lock set. An external base table carries no usable lock
+     * identity: {@link BaseTableInfo#getTableId()} is left at its -1 default by the external constructor, and
+     * the database id comes from the connector (a fresh CONNECTOR_ID_GENERATOR value for Hive, constant 0 for
+     * JDBC). Locking on those either never contends or serializes every external base table in the FE behind a
+     * single (0, -1) entry, while protecting nothing: connector metadata refresh replaces cache entries and
+     * never takes the FE Locker. This also makes the code agree with collectBaseTableSnapshotInfos' javadoc,
+     * which already states the base table metadata does not change during a refresh.
+     * <p>
+     * The database existence check still runs for every base table, external ones included, so the diagnostics
+     * are unchanged.
+     *
+     * @return: the deduplicated internal databases of the materialized view's base tables,
      * throw exception if the database does not exist.
      */
     public LockParams collectDatabases() {
@@ -711,6 +723,12 @@ public abstract class MVRefreshProcessor {
                 logger.warn("database {} do not exist", baseTableInfo.getDbInfoStr());
                 throw new DmlException("Materialized view %s.%s refresh failed: base table database %s does not exist",
                         db.getFullName(), mv.getName(), baseTableInfo.getDbInfoStr());
+            }
+            // Judged on the catalog name BaseTableInfo carries, not through Table#isMetaLockTarget: the ids
+            // about to be locked are the ones this name produced, and a resource-mapping base table both
+            // resolves its Database through the connector and never gets a real tableId (see BaseTableInfo).
+            if (!baseTableInfo.isInternalCatalog()) {
+                continue;
             }
             Database db = dbOpt.get();
             lockParams.add(db, baseTableInfo.getTableId());

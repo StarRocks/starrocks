@@ -20,6 +20,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -34,10 +35,41 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 
 @TestMethodOrder(MethodName.class)
 public class MVTaskRunProcessorTest extends MVTestBase {
+
+    @Test
+    public void testLegacyMvPostRunIsNotExecuted() throws Exception {
+        String legacyAnalyze = "ANALYZE SAMPLE TABLE test_mv WITH ASYNC MODE";
+        TaskRunContext context = new TaskRunContext();
+        context.setPostRun(legacyAnalyze);
+        AtomicInteger executedStatements = new AtomicInteger();
+        ConnectContext connectContext = new ConnectContext() {
+            @Override
+            public StmtExecutor executeSql(String sql) {
+                Assertions.assertEquals(legacyAnalyze, sql);
+                executedStatements.incrementAndGet();
+                return null;
+            }
+        };
+        context.setCtx(connectContext);
+
+        MVTaskRunProcessor mvProcessor = new MVTaskRunProcessor();
+        TaskRunStatus status = new TaskRunStatus();
+        context.setStatus(status);
+        status.setState(Constants.TaskRunState.SUCCESS);
+        mvProcessor.postTaskRun(context);
+        status.setState(Constants.TaskRunState.SKIPPED);
+        mvProcessor.postTaskRun(context);
+        Assertions.assertEquals(0, executedStatements.get());
+
+        // Other task types still use the generic postRun behavior.
+        new SqlTaskRunProcessor().postTaskRun(context);
+        Assertions.assertEquals(1, executedStatements.get());
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {

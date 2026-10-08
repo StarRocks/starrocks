@@ -969,7 +969,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // The Slices borrow from pkc, so pkc must outlive them.
     auto extract_keys = [&](const MutableColumnPtr& pkc, Buffer<Slice>* keys) -> Status {
         keys->reserve(pkc->size());
-        if (pkc->is_binary() || pkc->is_large_binary()) {
+        if (pkc->is_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
             ColumnHelper::build_slices(pkc, *keys);
@@ -1460,11 +1460,11 @@ Status scan_one_rebuild_unit(const RebuildScanUnit& unit, const RebuildScanConte
 
         // Build keys as Slices into the source column and keep that column alive in the batch, so
         // Phase C can insert after the scan without copying the key bytes. Same extraction as the
-        // serial path (ColumnHelper::build_slices for (large) binary, RawBytesVisitor for fixed-size).
+        // serial path (ColumnHelper::build_slices for binary, RawBytesVisitor for fixed-size).
         RebuildInsertBatch batch;
         batch.values = std::move(values);
         batch.keys.reserve(pkc->size());
-        if (pkc->is_binary() || pkc->is_large_binary()) {
+        if (pkc->is_binary()) {
             ColumnHelper::build_slices(pkc, batch.keys);
         } else {
             RawBytesVisitor visitor;

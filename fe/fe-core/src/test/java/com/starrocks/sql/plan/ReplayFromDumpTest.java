@@ -740,7 +740,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("38:HASH JOIN\n" +
+        // Do not pin the HASH JOIN plan-node id: partitioned row_number() NDV estimates
+        // can change costing enough to shift node numbering without changing this join.
+        Assertions.assertTrue(replayPair.second.contains("HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 398: substring = 361: date\n" +

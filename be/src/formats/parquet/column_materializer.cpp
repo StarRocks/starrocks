@@ -172,7 +172,10 @@ StatusOr<size_t> ColumnMaterializer::read_active_range_round_by_round(const Rang
                 std::vector<ExprContext*> ctxs = _post_read_conjuncts_by_slot.at(slot_id);
                 ASSIGN_OR_RETURN(hit_count, eval_slot_conjuncts(ctxs, slot_id, chunk, filter));
                 if (hit_count == 0) {
-                    break;
+                    // No row left: skip the regular columns too, like the other early exits below. Reading
+                    // them with an all-zero filter is wasted work and leaves the stored readers' page state
+                    // out of step with their read cursors.
+                    return hit_count;
                 }
             }
         }

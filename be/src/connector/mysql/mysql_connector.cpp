@@ -199,6 +199,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_MAX_VALUE:
             case TYPE_GEOGRAPHY:
             case TYPE_GEOMETRY:
+            case TYPE_FILE:
                 break;
             }
         }

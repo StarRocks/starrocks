@@ -51,6 +51,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -231,6 +232,15 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
+        // The locker covers only internal tables, so resolving an external base table under it buys a connector
+        // round trip (e.g. a JDBC getDb) with the lock held and no protection. Pre-resolve those relations here,
+        // as StatementPlanner does; the locked analyzer reuses a pre-resolved external relation. The IVM branch
+        // below regenerates the AST under the lock and so resolves its external tables there, as before.
+        if (Config.enable_experimental_external_table_preparse) {
+            try (Timer ignored = Tracers.watchScope("MVRefreshPreResolveExternalTables")) {
+                new QueryAnalyzer(ctx).analyzeExternalTablesOnly(insertStmt);
+            }
+        }
         ExecPlan execPlan = null;
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +

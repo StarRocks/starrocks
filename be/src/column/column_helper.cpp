@@ -22,6 +22,7 @@
 #include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/file_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -113,15 +114,9 @@ void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescri
     switch (type.type) {
     case TYPE_BINARY:
     case TYPE_VARBINARY: {
-        if (data_column->is_binary()) {
-            auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
-            binary_column->set_is_binary_type(true);
-        } else {
-            DCHECK(data_column->is_large_binary());
-            auto* large_binary_column =
-                    const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
-            large_binary_column->set_is_binary_type(true);
-        }
+        DCHECK(data_column->is_binary());
+        auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
+        binary_column->set_is_binary_type(true);
         break;
     }
     case TYPE_STRUCT: {
@@ -302,6 +297,13 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(FileColumn* column) {
+        for (const ColumnPtr& field : column->fields()) {
+            RETURN_IF_ERROR(field->as_mutable_raw_ptr()->accept_mutable(this));
+        }
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
         return Status::OK();
@@ -473,6 +475,9 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
             columns.emplace_back(std::move(field_column));
         }
         p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type_desc.type == LogicalType::TYPE_FILE) {
+        // FileColumn owns its fixed column layout; the TypeDescriptor carries no children.
+        p = FileColumn::create(size);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

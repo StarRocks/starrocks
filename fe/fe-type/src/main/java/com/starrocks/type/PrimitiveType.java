@@ -75,6 +75,7 @@ public enum PrimitiveType {
 
     JSON("JSON", 16),
     VARIANT("VARIANT", 16),
+    FILE("FILE", 16),
 
     FUNCTION("FUNCTION", 8),
 
@@ -162,7 +163,8 @@ public enum PrimitiveType {
     static {
         ImmutableSetMultimap.Builder<PrimitiveType, PrimitiveType> builder = ImmutableSetMultimap.builder();
         builder.putAll(NULL_TYPE, BASIC_TYPE_LIST);
-        builder.putAll(NULL_TYPE, ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT));
+        builder.putAll(NULL_TYPE,
+                ImmutableList.of(HLL, BITMAP, PERCENTILE, JSON, VARBINARY, VARIANT, GEOGRAPHY, GEOMETRY));
 
         builder.putAll(BOOLEAN, BASIC_TYPE_LIST);
         builder.putAll(TINYINT, BASIC_TYPE_LIST);
@@ -231,6 +233,10 @@ public enum PrimitiveType {
 
     // Check whether 'type' can cast to 'target'
     public static boolean isImplicitCast(PrimitiveType type, PrimitiveType target) {
+        // Keep GEOMETRY casts strict until descriptor-aware cast semantics are defined.
+        if (type == GEOMETRY && target == GEOMETRY) {
+            return false;
+        }
         if (type.equals(target)) {
             return true;
         }
@@ -400,6 +406,7 @@ public enum PrimitiveType {
                 break;
             case JSON:
             case VARIANT:
+            case FILE:
                 typeSize = 1024;
                 break;
             default:
@@ -469,6 +476,10 @@ public enum PrimitiveType {
 
     public boolean isVariantType() {
         return this == VARIANT;
+    }
+
+    public boolean isFileType() {
+        return this == FILE;
     }
 
     public boolean isFunctionType() {

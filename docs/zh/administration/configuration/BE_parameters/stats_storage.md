@@ -176,7 +176,7 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 类型：Int
 - 单位：秒
 - 是否动态：是
-- 描述：上一轮 Base Compaction 距今的间隔。此项为 Base Compaction 触发条件之一。
+- 描述：上一轮 Base Compaction 距今的间隔。对于存算一体表，此项为 Base Compaction 的触发条件之一。对于存算分离主键表和使用 Base and Cumulative 策略的非主键表，同一 Tablet 上次 Base Compaction 成功完成后，自动 Base Compaction 至少等待此间隔。对于使用 Size Tiered 策略的非主键表，此间隔仅禁用删除版本数达到阈值后强制触发 Base Compaction 的条件，不改变正常的层级选择。手动 Compaction 不受此限制。
 - 引入版本：-
 
 ### base_compaction_num_threads_per_disk
