@@ -641,14 +641,9 @@ Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_
         // simple decoding, src & dest should have same type
         dest->get_column_raw_ptr_by_index(0)->append(keys, offset, len);
     } else {
-        RETURN_ERROR_IF_FALSE(keys.is_binary() || keys.is_large_binary());
-        if (keys.is_binary()) {
-            auto& bkeys = down_cast<const BinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
-        } else {
-            auto& bkeys = down_cast<const LargeBinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
-        }
+        RETURN_ERROR_IF_FALSE(keys.is_binary());
+        auto& bkeys = down_cast<const BinaryColumn&>(keys);
+        return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
     }
     return Status::OK();
 }
