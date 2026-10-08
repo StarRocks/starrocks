@@ -426,51 +426,24 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
     if (schema.num_key_fields() == 1 && encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1) {
         // simple encoding without big-endian transformation
         auto& src = chunk.get_column_by_index(0);
-        if (dest->is_large_binary() && src->is_binary()) {
-            auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
-            const auto& bsrc = down_cast<const BinaryColumn&>(*src);
-            for (size_t i = 0; i < len; i++) {
-                bdest.append(bsrc.get_slice(offset + i));
-            }
-        } else if (dest->is_binary() && src->is_large_binary()) {
-            auto& bdest = down_cast<BinaryColumn&>(*dest);
-            const auto& bsrc = down_cast<const LargeBinaryColumn&>(*src);
-            for (size_t i = 0; i < len; i++) {
-                bdest.append(bsrc.get_slice(offset + i));
-            }
-        } else {
-            dest->append(*src, offset, len);
-        }
+        dest->append(*src, offset, len);
     } else {
         // For V2 or multi-column: always use big-endian encoding
-        DCHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+        DCHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<ColumnId> primary_key_iota_idxes(ncol);
         std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
         prepare_ops(schema, primary_key_iota_idxes, chunk, &ops);
-        if (dest->is_binary()) {
-            auto& bdest = down_cast<BinaryColumn&>(*dest);
-            bdest.reserve(bdest.size() + len);
-            std::string buff;
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    ops[j](offset + i, &buff);
-                }
-                bdest.append(buff);
+        auto& bdest = down_cast<BinaryColumn&>(*dest);
+        bdest.reserve(bdest.size() + len);
+        std::string buff;
+        for (size_t i = 0; i < len; i++) {
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                ops[j](offset + i, &buff);
             }
-        } else {
-            auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
-            bdest.reserve(bdest.size() + len);
-            std::string buff;
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    ops[j](offset + i, &buff);
-                }
-                bdest.append(buff);
-            }
+            bdest.append(buff);
         }
     }
 }
