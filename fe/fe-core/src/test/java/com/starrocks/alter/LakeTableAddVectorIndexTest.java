@@ -36,6 +36,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -410,11 +412,13 @@ public class LakeTableAddVectorIndexTest {
      *
      * <p>Mechanically:
      * <pre>
+     *   0. Keep the job PENDING: the handler's daemon (every 100 ms in UTs) would otherwise
+     *      advance it and attach its shadow index itself before the replay below.
      *   1. createTable + alterTable  →  PENDING job, physicalPartitionIndexMap has shadow
      *      LakeTablets with vibv = vSnap.
-     *   2. GSON round-trip of the job (simulate edit-log persist + reload).
-     *   3. Set deserialisedJob.state = WAITING_TXN, watershedTxnId = 1 (any non-(-1) value).
-     *   4. Clear the handler's in-memory job map (simulate fresh FE — no prior in-memory job).
+     *   2. Clear the handler's in-memory job map (simulate fresh FE — no prior in-memory job).
+     *   3. GSON round-trip of the job (simulate edit-log persist + reload).
+     *   4. Set deserialisedJob.state = WAITING_TXN, watershedTxnId = 1 (any non-(-1) value).
      *   5. replayAlterJobV2(deserialisedJob)  →  addShadowIndexToCatalog  →  shadow index
      *      added to physical partition.
      *   6. Assert: partition shadow indexes have tablets with vibv == vSnap (not 0).
@@ -422,6 +426,16 @@ public class LakeTableAddVectorIndexTest {
      */
     @Test
     public void testReplayRecoversShadowTabletVibvIntoLiveCatalog() throws Exception {
+        // ---- Step 0: the daemon must not advance the job this test replays ----
+        // Clearing the handler's job map afterwards is too late: the daemon may already have run
+        // the job past PENDING, so the snapshot taken below would no longer be a WAITING_TXN replay.
+        // JMockit restores this when the test method returns.
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void runPendingJob() {
+            }
+        };
+
         // ---- Step 1: create table + issue vector-index ALTER ----
         LakeTable table = createVectorTable("t_replay_vibv");
 
@@ -433,8 +447,13 @@ public class LakeTableAddVectorIndexTest {
 
         // Retrieve the in-memory PENDING job and sanity-check it has shadow tablets.
         LakeTableSchemaChangeJob pendingJob = getSinglePendingJob(table);
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, pendingJob.getJobState());
 
-        // ---- Step 2: GSON round-trip to simulate edit-log persist + reload ----
+        // ---- Step 2: clear the handler's job map (simulate fresh FE with no prior job) ----
+        GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                .getSchemaChangeHandler().clearJobs();
+
+        // ---- Step 3: GSON round-trip to simulate edit-log persist + reload ----
         LakeTableSchemaChangeJob deserialisedJob = gsonRoundTrip(pendingJob);
 
         // Confirm the deserialisedJob carries shadow tablets (inherited from GSON round-trip).
@@ -442,15 +461,11 @@ public class LakeTableAddVectorIndexTest {
         Assertions.assertFalse(desMap.isEmpty(),
                 "deserialisedJob physicalPartitionIndexMap must not be empty");
 
-        // ---- Step 3: advance deserialisedJob to WAITING_TXN ----
+        // ---- Step 4: advance deserialisedJob to WAITING_TXN ----
         // In a real restart the WAITING_TXN edit-log entry is the one replayed; here we
         // simulate it by advancing the deserialisedJob's state + setting watershedTxnId.
         deserialisedJob.setJobState(AlterJobV2.JobState.WAITING_TXN);
         Deencapsulation.setField(deserialisedJob, "watershedTxnId", 1L);
-
-        // ---- Step 4: clear the handler's job map (simulate fresh FE with no prior job) ----
-        GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().clearJobs();
 
         // ---- Step 5: drive the replay — this is the actual failover path ----
         // replayAlterJobV2 finds no existing job → calls deserialisedJob.replay(deserialisedJob)
