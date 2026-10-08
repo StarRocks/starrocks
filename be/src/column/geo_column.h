@@ -103,7 +103,6 @@ public:
     size_t reference_memory_usage(size_t from, size_t count) const override { return 0; }
     Status capacity_limit_reached() const override { return _data->capacity_limit_reached(); }
     void check_or_die() const override { _data->check_or_die(); }
-    bool has_large_column() const override { return _data->has_large_column(); }
 
     // Dedicated GEO visitors only; never fall back to binary equality/order/hash.
     Status accept(ColumnVisitor* visitor) const override;

@@ -56,7 +56,7 @@ namespace starrocks::lake {
 
 namespace {
 
-// BinaryColumn / LargeBinaryColumn store string data as a bytes buffer plus
+// BinaryColumn stores string data as a bytes buffer plus
 // an offsets array; BitmapIndexWriter expects a Slice* stride, so we
 // materialize one ad-hoc for the requested row range.
 template <typename BinaryT>
@@ -81,7 +81,7 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
                               size_t char_pad_len = 0) {
     if (run_len == 0) return Status::OK();
 
-    // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
+    // Binary: sidestep the raw_data flow entirely; we need a
     // Slice array anchored at start_row.
     std::vector<Slice> slice_buf;
     // Backing store for CHAR re-padding; must outlive the writer->add_values()
@@ -115,12 +115,6 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
         if (auto* bin = dynamic_cast<const BinaryColumn*>(&data_col); bin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*bin, start_row, run_len, &slice_buf);
-            repad_char();
-            return reinterpret_cast<const uint8_t*>(slice_buf.data());
-        }
-        if (auto* lbin = dynamic_cast<const LargeBinaryColumn*>(&data_col); lbin != nullptr) {
-            DCHECK_EQ(type_size, sizeof(Slice));
-            fill_slice_buffer(*lbin, start_row, run_len, &slice_buf);
             repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }

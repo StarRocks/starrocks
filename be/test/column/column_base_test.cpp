@@ -47,8 +47,6 @@ public:
     void reserve(size_t n) override { _data.reserve(n); }
     void resize(size_t n) override { _data.resize(n); }
 
-    bool has_large_column() const override { return false; }
-
     void assign(size_t n, size_t idx) override { _data.assign(n, _data[idx]); }
 
     void append_datum(const Datum& datum) override { _data.emplace_back(datum.is_null() ? 0 : datum.get_int32()); }

@@ -816,6 +816,16 @@ public class TableFunctionTable extends Table {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
     }
 
+    /**
+     * Not a lock target: every FILES() call builds its own instance, which is never published in a database, so
+     * there is nothing for the meta lock to protect -- and no reason for it to keep the other tables of the
+     * statement under the lock for the whole planning phase, whether FILES() is read or written.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;

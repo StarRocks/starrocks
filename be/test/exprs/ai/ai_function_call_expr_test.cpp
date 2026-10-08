@@ -397,7 +397,7 @@ protected:
 
 TEST_F(AIFunctionCallExprTest, FactoryDispatchesAIBeforeThePostHook) {
     for (TExprNodeType::type node_type : {TExprNodeType::FUNCTION_CALL, TExprNodeType::COMPUTE_FUNCTION_CALL}) {
-        for (const std::string& function_name : {"ai_complete", "AI_COMPLETE", "Ai_Complete"}) {
+        for (const char* function_name : {"ai_complete", "AI_COMPLETE", "Ai_Complete"}) {
             SCOPED_TRACE(function_name);
             SCOPED_TRACE(node_type);
             g_post_hook_calls = 0;

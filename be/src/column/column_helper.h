@@ -616,16 +616,10 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
-    // Build a slice buffer from a binary/large-binary column.
-    // Unwraps NullableColumn and ConstColumn before dispatch.
-    // Supports BinaryColumn (uint32_t offsets) and LargeBinaryColumn (uint64_t offsets).
+    // Build a slice buffer from a binary column.
+    // Unwraps NullableColumn and ConstColumn before building.
     static void build_slices(const Column* column, Buffer<Slice>& slices) {
-        const Column* data_col = get_data_column(column);
-        if (data_col->is_large_binary()) {
-            down_cast<const LargeBinaryColumn*>(data_col)->build_slices(slices);
-        } else {
-            down_cast<const BinaryColumn*>(data_col)->build_slices(slices);
-        }
+        down_cast<const BinaryColumn*>(get_data_column(column))->build_slices(slices);
     }
 
     // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
@@ -635,16 +629,7 @@ public:
     template <LogicalType LT>
     static void append_column_value(Column* column, const RunTimeCppType<LT>& value) {
         using ColumnType = RunTimeColumnType<LT>;
-        if constexpr (lt_is_string_or_binary<LT>) {
-            using LargeColumnType = RunTimeLargeColumnType<LT>;
-            if (column->is_large_binary()) {
-                down_cast<LargeColumnType*>(column)->append(value);
-            } else {
-                down_cast<ColumnType*>(column)->append(value);
-            }
-        } else {
-            down_cast<ColumnType*>(column)->append(value);
-        }
+        down_cast<ColumnType*>(column)->append(value);
     }
 
     static bool is_all_const(const Columns& columns);
@@ -717,10 +702,6 @@ struct GetContainer {
     static const auto get_data(const Column* column) {
         const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
-            using LargeColumnType = RunTimeLargeColumnType<ltype>;
-            if (data_column->is_large_binary()) {
-                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
-            }
             return down_cast<const ColumnType*>(data_column)->immutable_data();
         } else {
             return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
@@ -741,17 +722,12 @@ struct GetContainer {
 //   - TYPE_BOOLEAN       -> UInt8Column  (same as GetContainer, BooleanColumn = UInt8Column)
 //   - TYPE_DATE_V1       -> FixedLengthColumn<uint24_t>  (no RunTime equivalent)
 //   - TYPE_DATETIME_V1   -> Int64Column  (no RunTime equivalent)
-//   - string/binary types use StorageLargeColumnType for large binary columns.
 template <LogicalType ltype>
 struct GetStorageContainer {
     using ColumnType = StorageColumnType<ltype>;
     static const auto get_data(const Column* column) {
         const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
-            using LargeColumnType = StorageLargeColumnType<ltype>;
-            if (data_column->is_large_binary()) {
-                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
-            }
             return down_cast<const ColumnType*>(data_column)->immutable_data();
         } else {
             return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();

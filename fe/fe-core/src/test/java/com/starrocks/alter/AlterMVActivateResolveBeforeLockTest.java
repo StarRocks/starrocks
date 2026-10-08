@@ -160,6 +160,40 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
     }
 
     /**
+     * An MV over an MV over a hive table. The rebuild reloads, under the top MV's lock, every base MV that has
+     * not reloaded yet -- one in that state after a restart, say -- and that reload resolves the base MV's own
+     * base tables. Those are pre-resolved too, so the hive table is not reached under the lock either.
+     */
+    @Test
+    public void testAlterActiveResolvesNoExternalTableOfAnUnreloadedBaseMvUnderTheLock() throws Exception {
+        String baseMvName = "mv_activate_before_lock_base";
+        String topMvName = "mv_activate_before_lock_top";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + baseMvName + "\n" + HIVE_MV_DEFINITION);
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + topMvName + "\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT l_orderkey, l_shipdate FROM " + baseMvName + ";");
+        try {
+            MaterializedView baseMv = getMv(DB_NAME, baseMvName);
+            MaterializedView topMv = getMv(DB_NAME, topMvName);
+            topMv.setInactiveAndReason("test: forced inactive before the activation");
+            // As after a restart, before the startup reload got to it.
+            baseMv.changeReloadState(-1);
+            Assertions.assertFalse(baseMv.hasReloaded());
+
+            installProbe();
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + topMvName + " ACTIVE");
+
+            Assertions.assertTrue(topMv.isActive(), topMv.getInactiveReason());
+            Assertions.assertTrue(baseMv.hasReloaded(), "the activation did not reload the base MV");
+            assertNoConnectorCallUnderTheLock();
+        } finally {
+            starRocksAssert.dropMaterializedView(topMvName);
+            starRocksAssert.dropMaterializedView(baseMvName);
+        }
+    }
+
+    /**
      * The definition is what the analysis done before the lock was derived from. If it changes before the
      * lock is taken, the analysis no longer describes the MV and must not be applied.
      */

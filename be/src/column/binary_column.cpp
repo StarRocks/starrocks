@@ -1313,18 +1313,12 @@ std::string BinaryColumnBase<T>::raw_item_value(size_t idx) const {
 }
 
 template <typename T>
-bool BinaryColumnBase<T>::has_large_column() const {
-    static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
-    return std::is_same_v<T, uint64_t>;
-}
-
-template <typename T>
 Status BinaryColumnBase<T>::capacity_limit_reached() const {
     static_assert(std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>);
     // The size limit of a single element is 2^32 - 1.
     // The size limit of all elements is 2^64 - 1.
     // The number limit of elements is 2^32 - 1.
-    const char* column_name = has_large_column() ? "large binary column" : "binary column";
+    const char* column_name = is_large_binary() ? "large binary column" : "binary column";
     if (get_immutable_bytes().size() >= Column::MAX_LARGE_CAPACITY_LIMIT) {
         return Status::CapacityLimitExceed(strings::Substitute("Total byte size of $0 exceed the limit: $1",
                                                                column_name,

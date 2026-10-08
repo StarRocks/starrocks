@@ -117,9 +117,11 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
-                insertStmt, selectRelation, target, resolvedSource.sourceTable(),
-                resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
+                insertStmt, selectRelation, target,
+                new InsertSelectSourceColumns.ResolutionContext(resolvedSource.sourceTable(),
+                        resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
+                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
+                sortKeyColumns, partitionColumns);
         if (resolved == null) {
             return null;
         }

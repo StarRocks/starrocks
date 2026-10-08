@@ -120,6 +120,7 @@ CompactionTaskStats CompactionTaskStats::operator+(const CompactionTaskStats& th
     diff.read_chunk_count += that.read_chunk_count;
     diff.write_chunk_count += that.write_chunk_count;
     diff.column_group_count += that.column_group_count;
+    diff.stream_buffer_shrunk_passes += that.stream_buffer_shrunk_passes;
     diff.vertical_key_group_ns += that.vertical_key_group_ns;
     diff.vertical_value_group_ns += that.vertical_value_group_ns;
     diff.read_segment_count += that.read_segment_count;
@@ -185,6 +186,7 @@ CompactionTaskStats CompactionTaskStats::operator-(const CompactionTaskStats& th
     diff.read_chunk_count -= that.read_chunk_count;
     diff.write_chunk_count -= that.write_chunk_count;
     diff.column_group_count -= that.column_group_count;
+    diff.stream_buffer_shrunk_passes -= that.stream_buffer_shrunk_passes;
     diff.vertical_key_group_ns -= that.vertical_key_group_ns;
     diff.vertical_value_group_ns -= that.vertical_value_group_ns;
     diff.read_segment_count -= that.read_segment_count;
@@ -271,6 +273,7 @@ static void fill_stats_fields(rapidjson::Document& root, const CompactionTaskSta
     root.AddMember("read_chunk_count", rapidjson::Value(s.read_chunk_count), allocator);
     root.AddMember("write_chunk_count", rapidjson::Value(s.write_chunk_count), allocator);
     root.AddMember("column_group_count", rapidjson::Value(s.column_group_count), allocator);
+    root.AddMember("stream_buffer_shrunk_passes", rapidjson::Value(s.stream_buffer_shrunk_passes), allocator);
     root.AddMember("vertical_key_group_ns", rapidjson::Value(s.vertical_key_group_ns), allocator);
     root.AddMember("vertical_value_group_ns", rapidjson::Value(s.vertical_value_group_ns), allocator);
     root.AddMember("read_segment_count", rapidjson::Value(s.read_segment_count), allocator);

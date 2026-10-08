@@ -14,7 +14,6 @@
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <kudu.version>1.17.1</kudu.version>
-        <zstd.version>1.5.5-5</zstd.version>
     </properties>
 
     <dependencies>
@@ -62,7 +61,6 @@
         <dependency>
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
-            <version>${zstd.version}</version>
         </dependency>
 
         <dependency>

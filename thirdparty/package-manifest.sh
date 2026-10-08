@@ -118,6 +118,8 @@ starrocks_set_default_packages() {
         benchgen
         paimon_cpp
         libdeflate
+        libnl
+        nsjail
     )
 
     if [[ "${machine_type}" != "aarch64" ]]; then
