@@ -22,6 +22,7 @@
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
 
+#include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <sstream>
 #include <string>
@@ -85,10 +86,28 @@ static bool is_credential_header(const std::string& key) {
 }
 
 std::string HttpRequest::debug_string() const {
+    return debug_string(nullptr);
+}
+
+std::string HttpRequest::debug_string(const std::function<bool(std::string_view)>& is_sensitive_param) const {
+    auto is_sensitive = [&](const std::string& key) { return is_sensitive_param && is_sensitive_param(key); };
+    // The uri carries the query string verbatim. If it holds a sensitive param, print it rebuilt from the
+    // parsed query params instead, with that value masked.
+    std::string uri = _uri;
+    if (std::any_of(_query_params.begin(), _query_params.end(),
+                    [&](const auto& kv) { return is_sensitive(kv.first); })) {
+        uri = _raw_path + "?";
+        bool first = true;
+        for (const auto& [key, value] : _query_params) {
+            uri += (first ? "" : "&") + key + "=" + (is_sensitive(key) ? std::string(kCredentialMask) : value);
+            first = false;
+        }
+    }
+
     std::stringstream ss;
     ss << "HttpRequest: \n"
        << "method:" << _method << "\n"
-       << "uri:" << _uri << "\n"
+       << "uri:" << uri << "\n"
        << "raw_path:" << _raw_path << "\n"
        << "headers: \n";
     for (auto& iter : _headers) {
@@ -100,7 +119,11 @@ std::string HttpRequest::debug_string() const {
     }
     ss << "params: \n";
     for (auto& iter : _params) {
-        ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        if (is_sensitive(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
     }
 
     return ss.str();
