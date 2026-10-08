@@ -529,36 +529,22 @@ void PrimaryKeyEncoder::encode_selective(const Schema& schema, const Chunk& chun
         auto& src = chunk.get_column_by_index(0);
         dest->append_selective(*src, indexes, 0, len);
     } else {
-        DCHECK(dest->is_binary() || dest->is_large_binary()) << "dest column should be binary";
+        DCHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
         std::vector<EncodeOp> ops(ncol);
         std::vector<ColumnId> primary_key_iota_idxes(ncol);
         std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
         prepare_ops(schema, primary_key_iota_idxes, chunk, &ops);
-        if (dest->is_binary()) {
-            auto& bdest = down_cast<BinaryColumn&>(*dest);
-            bdest.reserve(bdest.size() + len);
-            std::string buff;
-            for (int i = 0; i < len; i++) {
-                uint32_t idx = indexes[i];
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    ops[j](idx, &buff);
-                }
-                bdest.append(buff);
+        auto& bdest = down_cast<BinaryColumn&>(*dest);
+        bdest.reserve(bdest.size() + len);
+        std::string buff;
+        for (int i = 0; i < len; i++) {
+            uint32_t idx = indexes[i];
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                ops[j](idx, &buff);
             }
-        } else {
-            auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
-            bdest.reserve(bdest.size() + len);
-            std::string buff;
-            for (int i = 0; i < len; i++) {
-                uint32_t idx = indexes[i];
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    ops[j](idx, &buff);
-                }
-                bdest.append(buff);
-            }
+            bdest.append(buff);
         }
     }
 }
