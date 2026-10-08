@@ -287,7 +287,18 @@ public final class ParquetRowGroupStatisticsReader {
                     // the BE unsigned memcmp + shorter-prefix tiebreak, and a CHAR StringVariant is
                     // canonicalized (truncated at the first '\0') to match the BE's strnlen view of a
                     // CHAR value, so a CHAR boundary separates rows exactly as a VARCHAR one does.
-                    yield starRocksPrimitive.isCharFamily();
+                    //
+                    // A UTF8 string can also back a StarRocks DATE / DATETIME sort key -- some Parquet
+                    // exports store timestamps as strings. The footer min/max are the lexicographically
+                    // min/max strings; for canonical ISO-8601 text ("yyyy-MM-dd[ HH:mm:ss]") that equals
+                    // chronological order, so they loosely bound the row group's date/datetime range.
+                    // toVariant coerces them with the same Variant.of the data tier applies to a
+                    // projected string (unparseable / out-of-range datetime -> throws -> data-tier
+                    // fallback). A non-canonical string only degrades tablet balance -- the BE still
+                    // routes every row by its true value, so no row is misplaced.
+                    yield starRocksPrimitive.isCharFamily()
+                            || starRocksPrimitive == PrimitiveType.DATE
+                            || starRocksPrimitive == PrimitiveType.DATETIME;
                 }
                 yield isSignedByteArrayDecimal(logicalAnnotation, sortKeyColumn, typeDefinedColumnOrder);
             }
@@ -396,6 +407,9 @@ public final class ParquetRowGroupStatisticsReader {
                 ? ((Binary) parquetValue).toStringUsingUTF8()
                 : parquetValue.toString();
         // A CHAR value is NUL-canonicalized in the StringVariant constructor; VARCHAR keeps raw bytes.
+        // A UTF8 string backing a DATE / DATETIME sort key is parsed here by Variant.of -- the same
+        // coercion the data tier applies to a projected string value; an unparseable or out-of-range
+        // datetime throws IllegalArgumentException, which convertBlock turns into a data-tier fallback.
         return Variant.of(location.starRocksColumn.getType(), rendered);
     }
 
