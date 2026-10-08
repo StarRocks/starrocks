@@ -25,11 +25,16 @@
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
+#include <cstdlib>
+
 #if defined(__linux__)
 #include <sys/auxv.h>
 #if __has_include(<asm/hwcap.h>)
 #include <asm/hwcap.h>
 #endif
+#endif
+#if defined(__aarch64__) && !defined(HWCAP_PMULL)
+#define HWCAP_PMULL (1 << 4)
 #endif
 #include "base/coding.h"
 
@@ -248,10 +253,19 @@ uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #if defined(__ARM_NEON) && defined(__aarch64__)
 namespace {
 inline bool has_arm_pmull() {
+#if defined(USE_ARM_PMULL)
+    static const bool s_has_pmull = []() {
+        if (getenv("STARROCKS_DISABLE_PMULL") != nullptr) {
+            return false;
+        }
 #if defined(__APPLE__)
-    return true;
-#elif defined(__linux__) && defined(HWCAP_PMULL)
-    static const bool s_has_pmull = (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+        return true;
+#elif defined(__linux__)
+        return (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+#else
+        return false;
+#endif
+    }();
     return s_has_pmull;
 #else
     return false;
