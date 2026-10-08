@@ -71,6 +71,9 @@ public:
 
     void add_output_header(const char* key, const char* value);
 
+    // For logging. The values of the credential headers Authorization, Proxy-Authorization and Cookie are
+    // printed as kCredentialMask. The URI and params are printed as is, so do not rely on this to hide a
+    // credential passed in the query string.
     std::string debug_string() const;
 
     void set_handler(HttpHandler* handler) { _handler = handler; }

@@ -28,6 +28,8 @@
 
 #include "common/logging.h"
 #include "http/http_handler.h"
+#include "http/http_headers.h"
+#include "util/credential_mask.h"
 
 namespace starrocks {
 
@@ -75,6 +77,13 @@ int HttpRequest::init_from_evhttp() {
     return 0;
 }
 
+// Headers that carry a credential: Basic Auth is base64 of "user:password", and a browser sends the
+// session cookie of another service on the same host (such as the FE web UI) along to the BE port.
+static bool is_credential_header(const std::string& key) {
+    return boost::iequals(key, HttpHeaders::AUTHORIZATION) || boost::iequals(key, HttpHeaders::PROXY_AUTHORIZATION) ||
+           boost::iequals(key, HttpHeaders::COOKIE);
+}
+
 std::string HttpRequest::debug_string() const {
     std::stringstream ss;
     ss << "HttpRequest: \n"
@@ -83,7 +92,11 @@ std::string HttpRequest::debug_string() const {
        << "raw_path:" << _raw_path << "\n"
        << "headers: \n";
     for (auto& iter : _headers) {
-        ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        if (is_credential_header(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
     }
     ss << "params: \n";
     for (auto& iter : _params) {
