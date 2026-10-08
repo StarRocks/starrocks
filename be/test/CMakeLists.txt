@@ -22,6 +22,7 @@ set(EXEC_FILES
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
+        ./exec/pipeline/global_rf_wait_timer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp

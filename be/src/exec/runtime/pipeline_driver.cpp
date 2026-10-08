@@ -1002,7 +1002,12 @@ void PipelineDriver::_update_global_rf_timer() {
     auto timer = std::make_shared<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, observer());
     _global_rf_timer = std::move(timer);
-    timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
+    // We want to wake the driver when global_rf_block() times out, because this timer is the only wakeup if no
+    // global runtime filter arrives. It times out when the time in the precondition block reaches
+    // _global_rf_wait_timeout_ns, and part of that time is already spent, so we schedule the timer at the rest.
+    const int64_t elapsed_ns = static_cast<int64_t>(_precondition_block_timer_sw->elapsed_time());
+    const int64_t remaining_ns = std::max<int64_t>(0, _global_rf_wait_timeout_ns - elapsed_ns);
+    timespec abstime = butil::nanoseconds_from_now(remaining_ns);
     WARN_IF_ERROR(_pipeline_timer_context->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
