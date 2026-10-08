@@ -43,19 +43,11 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
-<<<<<<< HEAD
-        <jackson.version>2.21.4</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.4 version released -->
-        <jackson-annotations.version>2.21</jackson-annotations.version>
-        <spark.version>3.5.7</spark.version>
-        <parquet.version>1.15.2</parquet.version>
-=======
         <jackson.version>2.21.7</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.7 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.18.1</parquet.version>
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         <ranger.version>2.9.0</ranger.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
@@ -94,21 +86,7 @@ under the License.
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
-<<<<<<< HEAD
-        <bouncycastle.version>1.85</bouncycastle.version>
-=======
-        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
-        <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
-             (ASM frame merge AIOOBE on delta-kernel Metadata, VerifyError on iceberg REST catalog
-             classes). 1.49.4 cannot redefine sealed JDK classes (java.net.InetAddress on JDK 19+),
-             so tests must not JMockit-mock those; use Mockito for them instead. -->
-        <jmockit.version>1.49.4</jmockit.version>
-        <!-- Mockito 5.x ships a Byte Buddy that understands Java 21 class files;
-             keep byte-buddy and byte-buddy-agent on the version mockito-core declares -->
-        <mockito.version>5.23.0</mockito.version>
-        <bytebuddy.version>1.17.7</bytebuddy.version>
         <bouncycastle.version>1.86</bouncycastle.version>
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         <thrift.version>0.24.0</thrift.version>
         <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>

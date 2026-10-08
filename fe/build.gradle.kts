@@ -63,11 +63,7 @@ subprojects {
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
         set("io.netty.version", "4.1.137.Final")
-<<<<<<< HEAD
-        set("jackson.version", "2.21.4")
-=======
         set("jackson.version", "2.21.7")
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.58.v20250814")
         set("jprotobuf-starrocks.version", "1.0.0")
@@ -77,13 +73,8 @@ subprojects {
         set("luben.zstd.jni.version", "1.5.7-15")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-<<<<<<< HEAD
         set("paimon.version", "1.3.1")
-        set("parquet.version", "1.15.2")
-=======
-        set("paimon.version", "2.0.0")
         set("parquet.version", "1.18.1")
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         set("ranger.version", "2.9.0")
         set("protobuf-java.version", "3.25.5")
         set("puppycrawl.version", "10.21.1")
