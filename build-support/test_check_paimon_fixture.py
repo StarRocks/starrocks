@@ -10,6 +10,7 @@
 # limitations under the License.
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import sys
@@ -19,6 +20,10 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test" / "lib"))
 from paimon_fixture import PaimonFixtureMixin, load_manifest, validate_transition, warehouse_uri
+
+spec = importlib.util.spec_from_file_location("fixture_checker", Path(__file__).with_name("check_paimon_fixture.py"))
+fixture_checker = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(fixture_checker)
 
 
 class FixtureTest(unittest.TestCase):
@@ -142,6 +147,45 @@ class FixtureTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown"):
             client.paimon_stage("run-1", "basic.t,basic.missing")
         client._paimon_oss.assert_not_called()
+
+    def check_selection(self, selection):
+        for directory in ("T", "R"):
+            path = self.root / "test/sql/test_paimon_catalog" / directory
+            path.mkdir(parents=True, exist_ok=True)
+            (path / "case").write_text('function: paimon_stage("run-1", "%s")\n' % selection)
+        with patch.object(fixture_checker, "REPO", self.root), \
+                patch.object(fixture_checker, "DATA", "."), \
+                patch.object(fixture_checker, "load_manifest", return_value=self.manifest), \
+                patch("builtins.print"):
+            fixture_checker.check()
+
+    def test_table_selection_whitespace(self):
+        table = self.root / "basic.db/other"
+        table.mkdir()
+        (table / "data").write_bytes(b"fixture")
+        self.manifest["tables"]["basic.other"] = self.manifest["tables"]["basic.t"]
+        self.load()
+        selection = " basic.t , basic.other "
+        with self.subTest(consumer="checker"):
+            self.check_selection(selection)
+        with self.subTest(consumer="uploader"):
+            client = self.client()
+            client.paimon_stage("run-1", selection)
+            self.assertEqual([call.args[-1] for call in client._paimon_oss.call_args_list], [
+                "oss://bucket/joobin/fixtures/run-1/basic.db/t/",
+                "oss://bucket/joobin/fixtures/run-1/basic.db/other/",
+            ])
+
+    def test_empty_table_selection_is_rejected(self):
+        self.load()
+        for selection in ("", " ", ",basic.t", "basic.t,", "basic.t, ,basic.t"):
+            with self.subTest(selection=selection):
+                with self.assertRaises(ValueError):
+                    self.check_selection(selection)
+                client = self.client()
+                with self.assertRaises(ValueError):
+                    client.paimon_stage("run-1", selection)
+                client._paimon_oss.assert_not_called()
 
     def test_stage_does_not_repeat_integrity_validation(self):
         self.load()

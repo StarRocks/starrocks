@@ -55,7 +55,7 @@ def check(base=None):
             if "paimon_stage(" in content and not selections:
                 raise ValueError("%s: use literal comma-separated table names in paimon_stage" % path)
             for selection in selections:
-                names = set(selection.split(","))
+                names = {name.strip() for name in selection.split(",")}
                 if names - set(manifest["tables"]):
                     raise ValueError("%s: unknown fixture tables %s" % (path, names - set(manifest["tables"])))
                 used.update(names)
