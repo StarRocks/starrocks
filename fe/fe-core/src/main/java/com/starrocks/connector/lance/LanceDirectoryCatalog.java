@@ -16,6 +16,7 @@ package com.starrocks.connector.lance;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -26,9 +27,11 @@ import java.util.Arrays;
 /** Loads Lance's native runtime with its own Arrow dependencies, exchanging only JSON and strings. */
 class LanceDirectoryCatalog {
     private static class Holder {
-        private static final Class<?> CLIENT = load();
+        // The SDK's native library binds to this loader, so it belongs to the FE process, not a catalog or request.
+        private static final URLClassLoader LOADER = createLoader();
+        private static final Class<?> CLIENT = loadClientClass(LOADER);
 
-        private static Class<?> load() {
+        private static URLClassLoader createLoader() {
             String home = System.getenv("STARROCKS_HOME");
             if (home == null) {
                 throw new IllegalStateException("STARROCKS_HOME is required for Lance directory metadata");
@@ -41,12 +44,26 @@ class LanceDirectoryCatalog {
                         throw new IllegalStateException("Invalid Lance reader library path");
                     }
                 }).toArray(URL[]::new);
-                // Keep the loader alive for the FE process: Lance's native library binds to it.
-                return new URLClassLoader(urls, ClassLoader.getPlatformClassLoader())
-                        .loadClass("com.starrocks.lance.metadata.LanceDirectoryNamespace");
+                return new URLClassLoader(urls, ClassLoader.getPlatformClassLoader());
             } catch (Exception e) {
                 throw new IllegalStateException("Install the Lance metadata libraries in FE lib/lance-metadata-lib");
             }
+        }
+    }
+
+    static Class<?> loadClientClass(URLClassLoader loader) {
+        try {
+            return loader.loadClass("com.starrocks.lance.metadata.LanceDirectoryNamespace");
+        } catch (Exception | LinkageError e) {
+            IllegalStateException failure =
+                    new IllegalStateException("Install the Lance metadata libraries in FE lib/lance-metadata-lib");
+            // A failed initialization cannot publish a usable client; release any JARs already opened.
+            try {
+                loader.close();
+            } catch (IOException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
         }
     }
 
