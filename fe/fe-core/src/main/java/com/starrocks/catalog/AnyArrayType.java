@@ -15,10 +15,39 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/catalog/AnyArrayType.java
 public class AnyArrayType extends PseudoType {
     @Override
     public boolean equals(Object t) {
         return t instanceof AnyArrayType;
+=======
+import com.google.gson.annotations.SerializedName;
+
+import java.util.List;
+
+public class LanceTable extends Table {
+
+    @SerializedName(value = "uri")
+    private final String uri;
+
+    // The Lance catalog this table belongs to. Without it the table reported the internal catalog's name, so it
+    // counted as a meta lock target although it never lives in an internal database (see isMetaLockTarget).
+    private final String catalogName;
+
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
+        super(id, name, TableType.LANCE, schema);
+        this.catalogName = catalogName;
+        this.uri = uri;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getUri() {
+        return uri;
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240)):fe/fe-core/src/main/java/com/starrocks/catalog/LanceTable.java
     }
 
     @Override

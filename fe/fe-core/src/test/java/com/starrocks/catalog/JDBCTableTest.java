@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -193,6 +194,77 @@ public class JDBCTableTest {
         TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
         Assertions.assertEquals("jdbc:mysql://127.0.0.1:3306/db0?key=value", jdbcTable.getJdbc_url());
     }
+<<<<<<< HEAD
+=======
+    public void testQueryTableToThriftKeepsOriginalJdbcUrl(@Mocked GlobalStateMgr globalStateMgr,
+                                                           @Mocked ResourceMgr resourceMgr) throws Exception {
+        String uri = "jdbc:oracle:thin:@//127.0.0.1:1521/xe";
+        Map<String, String> jdbcProperties = getMockedJDBCProperties(uri);
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, null, "catalog0", jdbcProperties);
+        table.setPassThroughQuery("select * from system.t2");
+
+        TTableDescriptor tableDescriptor = table.toThrift(null);
+        TJDBCTable jdbcTable = tableDescriptor.getJdbcTable();
+        Assertions.assertEquals(uri, jdbcTable.getJdbc_url());
+        Assertions.assertEquals("(select * from system.t2) starrocks_query", jdbcTable.getJdbc_table());
+    }
+
+    @Test
+    public void testOriginalJdbcColumnTypesAccessor() throws Exception {
+        Map<String, String> jdbcProperties = getMockedJDBCProperties("jdbc:mysql://127.0.0.1:3306");
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, "db0", "catalog0", jdbcProperties);
+        Map<String, Integer> originalTypes = new HashMap<>();
+        originalTypes.put("col1", java.sql.Types.BIGINT);
+
+        table.setOriginalJdbcColumnTypes(originalTypes);
+
+        Assertions.assertEquals(java.sql.Types.BIGINT, table.getOriginalJdbcColumnTypes().get("col1"));
+    }
+
+    /**
+     * A resource table is shared by every query and planned without the meta lock, and planning an ORACLE scan
+     * reads the original column types. The getter used to fill the field in on the shared table; it is read-only.
+     */
+    @Test
+    public void testOriginalJdbcColumnTypesGetterDoesNotWriteTheTable(@Mocked GlobalStateMgr globalStateMgr,
+                                                                     @Mocked ResourceMgr resourceMgr)
+            throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getResourceMgr();
+                result = resourceMgr;
+
+                resourceMgr.getResource("jdbc0");
+                result = getMockedJDBCResource(resourceName);
+            }
+        };
+        JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
+        Assertions.assertFalse(table.isMetaLockTarget());
+        Assertions.assertTrue(table.getOriginalJdbcColumnTypes().isEmpty());
+        Assertions.assertNull(Deencapsulation.getField(table, "originalJdbcColumnTypes"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsInsert() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("insert into t values (1)"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsDdl() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("create table t (id int)"));
+    }
+
+    @Test
+    public void testNormalizePassThroughQueryRejectsWithQuery() {
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> JDBCTable.normalizePassThroughQuery("with cte as (select 1) select * from cte;"));
+    }
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
 
     @Test
     public void testWithIlegalResourceName(@Mocked GlobalStateMgr globalStateMgr,

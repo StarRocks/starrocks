@@ -159,6 +159,98 @@ public class JDBCTable extends Table {
         return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
     }
 
+<<<<<<< HEAD
+=======
+    // Does not fill the field in: a resource table is shared by every query and planned without the meta lock
+    // (see isMetaLockTarget), so a getter reached from planning must not write to it.
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        return originalJdbcColumnTypes == null ? Map.of() : originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        if (originalJdbcColumnTypes == null) {
+            this.originalJdbcColumnTypes = new HashMap<>();
+        } else {
+            this.originalJdbcColumnTypes = new HashMap<>(originalJdbcColumnTypes);
+        }
+    }
+
+    public boolean isCommentFetched() {
+        return commentFetched;
+    }
+
+    public void setCommentFetched(boolean commentFetched) {
+        this.commentFetched = commentFetched;
+    }
+
+    public boolean isQueryTable() {
+        return queryTable;
+    }
+
+    public void setPassThroughQuery(String query) {
+        jdbcTable = "(" + normalizePassThroughQuery(query) + ") starrocks_query";
+        queryTable = true;
+    }
+
+    public static String normalizePassThroughQuery(String query) {
+        String normalizedQuery = StringUtils.trimToEmpty(query);
+        while (normalizedQuery.endsWith(";")) {
+            normalizedQuery = StringUtils.stripEnd(normalizedQuery.substring(0, normalizedQuery.length() - 1), null);
+        }
+        if (normalizedQuery.isEmpty()) {
+            throw new IllegalArgumentException("pass-through query cannot be empty");
+        }
+        validatePassThroughQuery(normalizedQuery);
+        return normalizedQuery;
+    }
+
+    private static void validatePassThroughQuery(String query) {
+        String leadingSql = stripLeadingComments(query);
+        if (!startsWithSqlKeyword(leadingSql, "select")) {
+            throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+        }
+    }
+
+    private static String stripLeadingComments(String query) {
+        int offset = 0;
+        while (offset < query.length()) {
+            char ch = query.charAt(offset);
+            if (Character.isWhitespace(ch)) {
+                offset++;
+                continue;
+            }
+            if (ch == '-' && offset + 1 < query.length() && query.charAt(offset + 1) == '-') {
+                offset += 2;
+                while (offset < query.length() && query.charAt(offset) != '\n' && query.charAt(offset) != '\r') {
+                    offset++;
+                }
+                continue;
+            }
+            if (ch == '/' && offset + 1 < query.length() && query.charAt(offset + 1) == '*') {
+                int commentEnd = query.indexOf("*/", offset + 2);
+                if (commentEnd < 0) {
+                    throw new IllegalArgumentException("JDBC query table function only supports SELECT queries");
+                }
+                offset = commentEnd + 2;
+                continue;
+            }
+            break;
+        }
+        return query.substring(offset);
+    }
+
+    private static boolean startsWithSqlKeyword(String query, String keyword) {
+        if (!query.regionMatches(true, 0, keyword, 0, keyword.length())) {
+            return false;
+        }
+        if (query.length() == keyword.length()) {
+            return true;
+        }
+        char next = query.charAt(keyword.length());
+        return !Character.isLetterOrDigit(next) && next != '_';
+    }
+
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of jdbc table, they are: table and resource");
@@ -291,6 +383,18 @@ public class JDBCTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setJdbcTable(tJDBCTable);
         return tTableDescriptor;
+    }
+
+    /**
+     * Not a lock target, also when it lives in an internal database (ENGINE=JDBC from a resource; a JDBC catalog
+     * table is not one anyway). Nothing writes to a published JDBCTable: its fields are only set while it is
+     * constructed, ALTER TABLE rejects it, the resource is read afresh by name rather than cached, and the
+     * pushdown rules that rewrite a table do so on their own copy ({@link #JDBCTable(JDBCTable)}). Planning does
+     * not open a JDBC connection either. So the reference a query resolves is already a consistent snapshot.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override

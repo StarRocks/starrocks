@@ -43,9 +43,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ConnectorTableVersion;
+<<<<<<< HEAD
 import com.starrocks.connector.PointerType;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+=======
+>>>>>>> bf42f2c ([BugFix] Keep MYSQL, JDBC, ES, ExternalOlapTable and per-statement tables off the FE planning lock (#80240))
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -719,12 +722,12 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
-            EsTablePartitions esTablePartitions = ((LogicalEsScanOperator) scanOperator).getEsTablePartitions();
+            EsTable.MetaSnapshot metaSnapshot = ((LogicalEsScanOperator) scanOperator).getMetaSnapshot();
             EsTable table = (EsTable) scanOperator.getTable();
-            if (esTablePartitions == null) {
-                if (table.getLastMetaDataSyncException() != null) {
+            if (metaSnapshot.getPartitions() == null) {
+                if (metaSnapshot.getSyncException() != null) {
                     throw new StarRocksPlannerException("fetch es table [" + table.getName() + "] metadata failure: " +
-                            table.getLastMetaDataSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
+                            metaSnapshot.getSyncException().getLocalizedMessage(), ErrorType.USER_ERROR);
                 }
                 throw new StarRocksPlannerException("EsTable metadata has not been synced, Try it later",
                         ErrorType.USER_ERROR);
