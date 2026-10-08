@@ -601,6 +601,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入バージョン: v4.0
 
 
+### `lake_publish_version_timeout_ms`
+
+- デフォルト：60000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：共有データクラスタにおけるトランザクションの Version Publish RPC のタイムアウトです。FE がコンピュートノードの応答を待つ時間と、コンピュートノードが publish タスク自体に適用する期限の両方を制限するため、両者は常に連動します。単一トランザクションが大量の tablet を公開して publish タイムアウトで失敗する場合など、publish にデフォルトより長い時間が正当に必要な場合に引き上げてください。
+- 導入時期：v3.5.22
+
 ### `lake_batch_publish_max_version_num`
 
 - デフォルト：10

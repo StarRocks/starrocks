@@ -578,6 +578,15 @@ This topic introduces the following types of FE configurations:
 - Description: Sets the HDFS write buffer size (in KB) used for direct writes to HDFS or object stores when not using a broker. The FE converts this value to bytes (`<< 10`) and initializes the local write buffer in HdfsFsManager, and it is propagated in Thrift requests (e.g., TUploadReq, TExportSink, sink options) so backends/agents use the same buffer size. Increasing this value can improve throughput for large sequential writes at the cost of more memory per writer; decreasing it reduces per-stream memory usage and may lower latency for small writes. Tune alongside `hdfs_read_buffer_size_kb` and consider available memory and concurrent writers.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Introduced in: v3.5.22
+
 ### `lake_batch_publish_max_version_num`
 
 - Default: 10
