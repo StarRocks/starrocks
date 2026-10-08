@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/auth/credential_mask.h"
 #include "common/logging.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -87,6 +88,30 @@ TEST_F(HttpUtilsTest, parse_basic_auth) {
         auto res = parse_basic_auth(req, &user, &passwd);
         ASSERT_FALSE(res);
     }
+}
+
+TEST_F(HttpUtilsTest, debug_string_masks_credential_headers) {
+    HttpRequest req(_evhttp_req);
+    std::string encoded;
+    base64_encode("root:FakePwd123", &encoded);
+    req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic " + encoded);
+    // Header names are case-insensitive, so a lower-case name must be masked too.
+    req._headers.emplace("proxy-authorization", "Basic cHJveHk6cHJveHlQd2Q=");
+    req._headers.emplace(HttpHeaders::COOKIE, "session_id=FakeSessionCookie");
+    req._headers.emplace(HttpHeaders::CONTENT_TYPE, "application/json");
+    req.add_param("label", "load_1");
+
+    const std::string s = req.debug_string();
+    EXPECT_EQ(std::string::npos, s.find(encoded));
+    EXPECT_EQ(std::string::npos, s.find("cHJveHk6cHJveHlQd2Q="));
+    EXPECT_EQ(std::string::npos, s.find("FakeSessionCookie"));
+    const std::string mask(kCredentialMask);
+    EXPECT_NE(std::string::npos, s.find("key=Authorization, value=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, s.find("key=proxy-authorization, value=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, s.find("key=Cookie, value=" + mask + "\n"));
+    // Everything else is printed as is.
+    EXPECT_NE(std::string::npos, s.find("key=Content-Type, value=application/json\n"));
+    EXPECT_NE(std::string::npos, s.find("key=label, value=load_1\n"));
 }
 
 } // namespace starrocks
