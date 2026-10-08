@@ -10,6 +10,9 @@ The runner needs `ossutil64` with credentials for its bucket, and the BE needs p
 `oss_endpoint` is used by both ossutil and the catalog. Use the internal endpoint for local development.
 Override `paimon_fixture_prefix` in a local config to your own prefix, such as `joobin/paimon-fixtures`.
 Do not commit credentials or local configuration. `paimon_fixture_source=repo` is the only implemented source.
+When selected cases use `paimon_stage`, SQL-Tester validates all fixture file lists, checksums and
+sizes once during case discovery, before starting workers. Uploads only check the selected table
+names and directories. Keep fixture files unchanged during a test run.
 
 ## Cases
 

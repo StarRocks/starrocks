@@ -15,7 +15,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "test" / "lib"))
 from paimon_fixture import PaimonFixtureMixin, load_manifest, validate_transition, warehouse_uri
@@ -140,6 +140,23 @@ class FixtureTest(unittest.TestCase):
         self.load()
         client = self.client()
         with self.assertRaisesRegex(ValueError, "unknown"):
+            client.paimon_stage("run-1", "basic.t,basic.missing")
+        client._paimon_oss.assert_not_called()
+
+    def test_stage_does_not_repeat_integrity_validation(self):
+        self.load()
+        client = self.client()
+        with patch("paimon_fixture.load_manifest", side_effect=AssertionError("already validated")):
+            client.paimon_stage("run-1", "basic.t")
+        client._paimon_oss.assert_called_once_with(
+            "cp", "-r", "-f", str(self.root / "basic.db/t") + "/",
+            "oss://bucket/joobin/fixtures/run-1/basic.db/t/")
+
+    def test_missing_selected_directory_uploads_nothing(self):
+        self.manifest["tables"]["basic.missing"] = self.manifest["tables"]["basic.t"]
+        (self.root / "MANIFEST.json").write_text(json.dumps(self.manifest))
+        client = self.client()
+        with self.assertRaisesRegex(ValueError, "missing fixture directory"):
             client.paimon_stage("run-1", "basic.t,basic.missing")
         client._paimon_oss.assert_not_called()
 

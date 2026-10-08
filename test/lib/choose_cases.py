@@ -36,6 +36,7 @@ from nose import tools
 
 from lib import skip
 from lib import sr_sql_lib
+from lib import paimon_fixture
 from lib import *
 
 
@@ -716,6 +717,10 @@ def choose_cases(record_mode=False):
     sr_sql_lib.self_print(run_info, color=ColorEnum.GREEN, bold=False, logout=True)
 
     cases = ChooseCase(confirm_case_dir, record_mode, filename_regex, case_name_regex)
+
+    # Validate once during discovery, before workers execute the selected cases.
+    if any("function: paimon_stage(" in str(case.sql) for case in cases.case_list):
+        paimon_fixture.load_manifest(cases.sr_lib_obj.paimon_fixture_root)
 
     # log info: case list
     sr_sql_lib.self_print("case num: %s" % len(cases.case_list))
