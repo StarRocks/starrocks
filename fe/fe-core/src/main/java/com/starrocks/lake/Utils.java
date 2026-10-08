@@ -14,12 +14,14 @@
 
 package com.starrocks.lake;
 
+import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
 import com.google.common.collect.Lists;
 import com.staros.proto.ShardInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -142,12 +144,15 @@ public class Utils {
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        // Read once so every per-node request of one batch carries the same deadline even if the
+        // config is changed while the batch is being built.
+        long timeoutMs = Config.lake_publish_version_timeout_ms;
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
             request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
-            request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
+            request.timeoutMs = timeoutMs;
             request.txnInfos = txnInfos;
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
@@ -155,6 +160,10 @@ public class Utils {
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // @ProtobufRPC can only carry a compile-time constant, so the configured timeout is applied
+            // per call. It has to match the deadline the request carries: a shorter brpc wait would make
+            // FE give up while the node is still publishing. The override is consumed by this one call.
+            TalkTimeoutController.setTalkTimeout(timeoutMs);
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
             nodeList.add(node);

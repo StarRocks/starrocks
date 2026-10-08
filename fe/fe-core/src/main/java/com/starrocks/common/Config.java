@@ -1057,6 +1057,14 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_batch_publish_version = true;
 
+    /**
+     * Timeout (ms) of the publish version RPC of a shared-data transaction. It bounds both how long FE waits
+     * for the compute node to answer and the deadline the compute node applies to the publish task itself.
+     * Raise it when publishing a large batch of tablets legitimately takes longer than the default.
+     */
+    @ConfField(mutable = true)
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 
