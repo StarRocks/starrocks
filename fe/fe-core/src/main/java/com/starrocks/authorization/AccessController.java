@@ -19,6 +19,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.UserIdentity;
+>>>>>>> c9cb8e9 ([BugFix] Keep no-snapshot external tables, the policy TableUID and nested MV reloads off FE metadata locks (#80239))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -187,6 +193,15 @@ public interface AccessController {
 
     default Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         return null;
+    }
+
+    /**
+     * Called by the unlocked analysis pre-pass for each external table it resolved, before the meta lock is
+     * taken. A controller whose {@link #getColumnMaskingPolicy} / {@link #getRowAccessPolicy} would otherwise
+     * ask the catalog again -- under the lock, since those run during analysis -- can do that asking here. Must
+     * not change the outcome of either lookup, nor throw: anything it cannot do is left to them.
+     */
+    default void preResolvePolicyTarget(ConnectContext context, TableName tableName, Table table) {
     }
 
     default void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
