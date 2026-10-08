@@ -997,7 +997,7 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
         // The thrift path holds no planner lock and must keep behaving exactly as before.
         TGetTablesParams params = new TGetTablesParams();
-        params.setCurrent_user_ident(UserIdentityUtils.toThrift(connectContext.getCurrentUserIdentity()));
+        params.setCurrent_user_ident(connectContext.getCurrentUserIdentity().toThrift());
         params.setDb("test_views_lock_db");
         params.setType(TTableType.VIEW);
         TListTableStatusResult result = ViewsSystemTable.query(params, connectContext);
