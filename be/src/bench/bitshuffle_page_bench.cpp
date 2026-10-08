@@ -43,6 +43,7 @@ struct PageFixture {
     Slice encoded;
     std::unique_ptr<std::vector<uint8_t>> decoded_page;
     std::unique_ptr<BitShufflePageDecoder<Type>> decoder;
+    std::vector<uint8_t> null_flags;
 
     Status init() {
         std::mt19937 rng(42);
@@ -53,6 +54,11 @@ struct PageFixture {
             } else {
                 values[i] = static_cast<CppType>(rng());
             }
+        }
+
+        null_flags.resize(kPageRows);
+        for (size_t i = 0; i < kPageRows; ++i) {
+            null_flags[i] = (i % 10 == 0 ? 1 : 0);
         }
 
         PageBuilderOptions options;
@@ -101,7 +107,8 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
         auto ref = ChunkFactory::column_from_field_type(Type, nullable);
         size_t n = kPageRows;
         BitShufflePageDecoder<Type> seq(page.encoded);
-        if (Status st = seq.init(); !st.ok() || !(st = seq.next_batch(&n, ref.get())).ok() || n != kPageRows) {
+        Column* target_ref = nullable ? down_cast<NullableColumn*>(ref.get())->data_column_raw_ptr() : ref.get();
+        if (Status st = seq.init(); !st.ok() || !(st = seq.next_batch(&n, target_ref)).ok() || n != kPageRows) {
             state.SkipWithError("reference decode failed");
             return;
         }
@@ -114,7 +121,18 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
             return;
         }
         if (nullable) {
-            down_cast<NullableColumn*>(out.get())->null_column_raw_ptr()->append_default(count);
+            auto* nc_ref = down_cast<NullableColumn*>(ref.get());
+            nc_ref->null_column_raw_ptr()->append_numbers(page.null_flags.data(), page.null_flags.size());
+            nc_ref->update_has_null();
+
+            std::vector<uint8_t> null_flags;
+            null_flags.reserve(count);
+            for (size_t i = 0; i < count; i++) {
+                null_flags.emplace_back(page.null_flags[rowids[i]]);
+            }
+            auto* nc_out = down_cast<NullableColumn*>(out.get());
+            nc_out->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc_out->update_has_null();
         }
         for (size_t i = 0; i < rowids.size(); i++) {
             if (!out->equals(i, *ref, rowids[i])) {
@@ -131,14 +149,25 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
     for (auto _ : state) {
         column->resize(0);
         size_t count = rowids.size();
-        Column* target = column.get();
         if (nullable) {
-            target = down_cast<NullableColumn*>(target)->data_column_raw_ptr();
+            auto* nc = down_cast<NullableColumn*>(column.get());
+            Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, nc->data_column_raw_ptr());
+            std::vector<uint8_t> null_flags;
+            null_flags.reserve(count);
+            for (size_t i = 0; i < count; i++) {
+                null_flags.emplace_back(page.null_flags[rowids[i]]);
+            }
+            nc->null_column_raw_ptr()->append_numbers(null_flags.data(), null_flags.size());
+            nc->update_has_null();
+            benchmark::DoNotOptimize(st);
+            benchmark::DoNotOptimize(count);
+            benchmark::ClobberMemory();
+        } else {
+            Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, column.get());
+            benchmark::DoNotOptimize(st);
+            benchmark::DoNotOptimize(count);
+            benchmark::ClobberMemory();
         }
-        Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, target);
-        benchmark::DoNotOptimize(st);
-        benchmark::DoNotOptimize(count);
-        benchmark::ClobberMemory();
     }
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(rowids.size()));
 }
