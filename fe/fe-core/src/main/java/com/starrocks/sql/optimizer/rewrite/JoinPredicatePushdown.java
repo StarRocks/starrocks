@@ -355,7 +355,7 @@ public class JoinPredicatePushdown {
         boolean isLeftEmpty = leftPushDown.isEmpty();
         if (joinType.isAnyInnerJoin() || joinType.isRightSemiJoin()) {
             leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
-                optimizerContext.addPushdownNotNullPredicates(notNull);
+                recordPushdownNotNull(join.inputAt(0), notNull);
                 if (isLeftEmpty) {
                     leftPushDown.add(notNull);
                 }
@@ -364,13 +364,53 @@ public class JoinPredicatePushdown {
         boolean isRightEmpty = rightPushDown.isEmpty();
         if (joinType.isAnyInnerJoin() || joinType.isLeftSemiJoin()) {
             rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
-                optimizerContext.addPushdownNotNullPredicates(notNull);
+                recordPushdownNotNull(join.inputAt(1), notNull);
                 if (isRightEmpty) {
                     rightPushDown.add(notNull);
                 }
             });
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
+    }
+
+    // A recorded NULL rejection lets an outer join below turn into an inner join (convertOuterToInner), dropping the
+    // NULL-extended rows before they reach this join. That is only right if no operator on the way down picks or
+    // computes its output rows from other input rows (a limit, a top-n, a window), so do not record it past one.
+    private void recordPushdownNotNull(OptExpression child, IsNullPredicateOperator notNull) {
+        if (!isRowDependentOnTheWay(child, notNull.getUsedColumns())) {
+            optimizerContext.addPushdownNotNullPredicates(notNull);
+        }
+    }
+
+    // Walk down the inputs carrying the columns until the operator producing them.
+    private static boolean isRowDependentOnTheWay(OptExpression root, ColumnRefSet columns) {
+        OptExpression current = root;
+        while (current != null) {
+            if (dependsOnOtherRows(current.getOp())) {
+                return true;
+            }
+            OptExpression next = null;
+            for (OptExpression input : current.getInputs()) {
+                if (outputColumns(input).containsAll(columns)) {
+                    next = input;
+                    break;
+                }
+            }
+            current = next;
+        }
+        return false;
+    }
+
+    private static boolean dependsOnOtherRows(Operator op) {
+        return op.hasLimit() || op.getOpType() == OperatorType.LOGICAL_LIMIT ||
+                op.getOpType() == OperatorType.LOGICAL_TOPN || op.getOpType() == OperatorType.LOGICAL_WINDOW ||
+                op.getOpType() == OperatorType.LOGICAL_ASSERT_ONE_ROW;
+    }
+
+    // an input created by a rewrite of this pass may not have its logical property derived yet
+    private static ColumnRefSet outputColumns(OptExpression expression) {
+        return expression.getLogicalProperty() != null ? expression.getOutputColumns() :
+                expression.getRowOutputInfo().getOutputColumnRefSet();
     }
 
     private JoinOperator deriveJoinType(JoinOperator originalType, ScalarOperator newJoinOnPredicate) {
