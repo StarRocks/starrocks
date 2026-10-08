@@ -28,6 +28,29 @@
 
 namespace starrocks::crc32c {
 
+class ScopedEnv {
+public:
+    ScopedEnv(const char* name, const char* value) : _name(name) {
+#if defined(__aarch64__)
+        ResetArmCrc32cCacheForTesting();
+#endif
+        if (value) {
+            setenv(_name, value, 1);
+        } else {
+            unsetenv(_name);
+        }
+    }
+    ~ScopedEnv() {
+        unsetenv(_name);
+#if defined(__aarch64__)
+        ResetArmCrc32cCacheForTesting();
+#endif
+    }
+
+private:
+    const char* _name;
+};
+
 class CRC {};
 
 TEST(CRC, StandardResults) {
@@ -68,6 +91,31 @@ TEST(CRC, Extend) {
 
     std::vector<Slice> slices = {Slice("hello "), Slice("world")};
     ASSERT_EQ(Value("hello world", 11), Value(slices));
+}
+
+TEST(CRC, SmallAndUnalignedBuffers) {
+    std::string test_str = "StarRocks High-Performance Analytical Database Engine Checksum Test 1234567890";
+    ASSERT_EQ(0xd17e79b6U, Value(test_str.data(), test_str.size()));
+    ASSERT_EQ(0xe3069283U, Value("123456789", 9));
+
+    for (size_t len = 0; len <= 64; ++len) {
+        for (size_t offset = 0; offset < 16 && offset + len <= test_str.size(); ++offset) {
+            const char* ptr = test_str.data() + offset;
+            uint32_t val = Value(ptr, len);
+            for (size_t split = 0; split <= len; ++split) {
+                ASSERT_EQ(val, Extend(Extend(0, ptr, split), ptr + split, len - split));
+            }
+        }
+    }
+}
+
+TEST(CRC, FallbackEquivalence) {
+    std::string test_str = "StarRocks High-Performance Analytical Database Engine Checksum Test 1234567890";
+    uint32_t hw_val = Value(test_str.data(), test_str.size());
+
+    ScopedEnv env("STARROCKS_DISABLE_CRC32", "1");
+    uint32_t sw_val = Value(test_str.data(), test_str.size());
+    ASSERT_EQ(hw_val, sw_val);
 }
 
 } // namespace starrocks::crc32c
