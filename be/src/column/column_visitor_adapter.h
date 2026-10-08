@@ -95,7 +95,6 @@ public:
 
     Status visit(const BinaryColumn& column) override { return _impl->do_visit(column); }
 
-
     Status visit(const VariantColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const FileColumn& column) override { return _impl->do_visit(column); }
@@ -174,7 +173,6 @@ public:
     Status visit(StructColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(BinaryColumn* column) override { return _impl->do_visit(column); }
-
 
     Status visit(VariantColumn* column) override { return _impl->do_visit(column); }
 
