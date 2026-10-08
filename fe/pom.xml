@@ -105,7 +105,7 @@ under the License.
              keep byte-buddy and byte-buddy-agent on the version mockito-core declares -->
         <mockito.version>5.23.0</mockito.version>
         <bytebuddy.version>1.17.7</bytebuddy.version>
-        <bouncycastle.version>1.85</bouncycastle.version>
+        <bouncycastle.version>1.86</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
         <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
@@ -1408,7 +1408,7 @@ under the License.
                         <artifactId>lz4-pure-java</artifactId>
                     </exclusion>
                     <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
-                         bcprov-jdk18on 1.85 on the classpath provides the same packages -->
+                         bcprov-jdk18on 1.86 on the classpath provides the same packages -->
                     <exclusion>
                         <groupId>org.bouncycastle</groupId>
                         <artifactId>bcprov-jdk15on</artifactId>

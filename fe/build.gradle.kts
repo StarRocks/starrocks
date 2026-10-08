@@ -45,7 +45,7 @@ subprojects {
         set("avro.version", "1.12.0")
         set("aws-v2-sdk.version", "2.42.1")
         set("azure.version", "1.2.34")
-        set("bouncycastle.version", "1.85")
+        set("bouncycastle.version", "1.86")
         set("byteman.version", "4.0.24")
         set("commons-beanutils.version", "1.11.0")
         set("delta-kernel.version", "4.3.0")
