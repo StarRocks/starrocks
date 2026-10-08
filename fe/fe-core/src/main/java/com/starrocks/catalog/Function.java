@@ -45,11 +45,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.CredentialMask;
-import com.starrocks.common.util.PrintableMap;
->>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
