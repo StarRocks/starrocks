@@ -4488,9 +4488,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Translate a catalog {@link Index} to the thrift payload consumed by
-     * BE's do_process_add_index_only. BE re-resolves column names via the
-     * new tablet schema, so we pass names, not unique ids.
+     * Build the persisted fast-path index definition. Keep column display names
+     * for compatibility with existing journaled jobs; LakeTableAddIndexJob
+     * converts a copy to stable ColumnIds before sending it to BE.
      */
     private static com.starrocks.thrift.TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
         com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
