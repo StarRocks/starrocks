@@ -47,11 +47,7 @@ under the License.
         <thrift.version>0.24.0</thrift.version>
         <tomcat.version>9.0.121</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
-<<<<<<< HEAD
-        <jackson.version>2.21.4</jackson.version>
-=======
         <jackson.version>2.21.7</jackson.version>
->>>>>>> 9d0256d ([BugFix][CVE] bump BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15 and parquet to 1.18.1 (#80248))
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <avro.version>1.11.4</avro.version>
         <jetty.version>9.4.58.v20250814</jetty.version>
