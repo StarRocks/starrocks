@@ -450,6 +450,11 @@ public class Authorizer {
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
     }
 
+    /** See {@link com.starrocks.authorization.AccessController#preResolvePolicyTarget}; the name is fully qualified. */
+    public static void preResolvePolicyTarget(ConnectContext context, TableName tableName, Table table) {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).preResolvePolicyTarget(context, tableName, table);
+    }
+
     /**
      * check privilege for `show tablet` statement
      * if current user has 'OPERATE' privilege, it will result all the result

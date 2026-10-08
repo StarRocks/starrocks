@@ -472,6 +472,25 @@ public class IcebergTable extends Table {
         return table;
     }
 
+    /**
+     * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
+     * query to plan and run on. The published object is shared by every query and read without the meta lock,
+     * and a query writes to the table it plans on: it loads the native table lazily, installs its own metrics
+     * reporter, fills the partition caches and clears the native table when it ends. On the copy those stay
+     * with the query. The native table is handed over as it is -- possibly still unloaded, in which case the
+     * copy loads it for itself -- and the related MVs and constraints are shared, since the planner only reads
+     * them.
+     */
+    public IcebergTable copyForQuery() {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, fullSchema, nativeTable, icebergProperties);
+        table.createTime = createTime;
+        table.relatedMaterializedViews = relatedMaterializedViews;
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        return table;
+    }
+
     // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
     // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
     // are not exposed; ordinary reads keep the current spec.
@@ -678,6 +697,19 @@ public class IcebergTable extends Table {
                 fullSchema.size(), 0, catalogTableName, catalogDBName);
         tTableDescriptor.setIcebergTable(tIcebergTable);
         return tTableDescriptor;
+    }
+
+    /**
+     * Not a lock target, even when it lives in an internal database (ENGINE=ICEBERG from a resource). The data
+     * is in the Iceberg catalog, and ALTER TABLE rejects the table, so its definition is never rewritten. What
+     * a query does write -- the native table it loads, the metrics reporter, the partition caches, the
+     * clearMetadata at the end -- goes to the per-query copy the analyzer swaps in ({@link #copyForQuery}),
+     * never to the published object. Planning, which reaches the catalog for manifests and statistics, runs
+     * without the lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override
