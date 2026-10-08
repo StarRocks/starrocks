@@ -1,0 +1,82 @@
+-- name: test_spill_agg_family_events @sequential @slow
+-- Force-spill all four spillable-agg families now on the spill-agg event scheduler, and assert the result is
+-- identical with enable_spill_agg_events ON and OFF (mutable BE config; "true" routes the spilled sink/source
+-- onto the event scheduler, "false" keeps the legacy poller). The contract this test can check is just that:
+-- the query does not hang under force-spill and the result does not change with the flip. The event internals
+-- (park/notify, has_output vs _blocked_on lockstep) are checked in the BE unit tests
+-- (spillable_agg_source_lockstep_test, spillable_agg_observer_wakeup_test).
+--
+-- Each section selects its target operator by the planner recipe (spill_partitionwise_agg + new_planner_agg_stage,
+-- traced from aggregate_blocking_node.cpp / distinct_blocking_node.cpp). KEY recipe facts:
+--   * count(distinct) at the default stage folds to a single multi_distinct_count agg (NOT the distinct node);
+--     new_planner_agg_stage=3 forces the multi-phase split into a DISTINCT_GLOBAL dedup stage (group by c1,c2)
+--     that the BE routes to distinct_blocking_node -- the spillable distinct operators.
+--   * spill_mem_table_size is lowered to 1 MB so the light 500K dataset spills in EVERY family -- the
+--     partitionwise wrappers spill by memory pressure (auto path), not unconditionally, so without a low
+--     threshold they would not spill on small data and the ON/OFF flip would be a no-op.
+-- The EXPLAIN guard is a coarse "the query did not fold" check; it does NOT prove which spillable wrapper runs
+-- (BE-runtime choice) -- that is covered by the BE unit tests and the poller-win profile. So the distinct
+-- sections only assert the multi_distinct_count fold did NOT happen (i.e. it was decomposed).
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=1;
+set spill_mem_table_size=1048576;
+
+create table t_src (
+    c0 INT,
+    c1 INT,
+    c2 INT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+insert into t_src
+SELECT generate_series, generate_series % 100000, generate_series % 5000
+FROM TABLE(generate_series(1, 500000));
+
+-- Section 1: distinct-blocking (SpillableAggregateDistinctBlocking). stage=3 -> DISTINCT_GLOBAL dedup node;
+-- spill_partitionwise_agg=false -> non-partitionwise distinct wrapper.
+set spill_partitionwise_agg=false;
+set new_planner_agg_stage=3;
+function: assert_explain_not_contains('select c2, count(distinct c1) d from t_src group by c2', 'multi_distinct_count')
+function: update_be_config("enable_spill_agg_events", "true")
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+function: update_be_config("enable_spill_agg_events", "false")
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+
+-- Section 2: partitionwise-agg (SpillablePartitionWiseAggregate, spill_partitionwise_agg=true). Plain
+-- single-stage blocking agg, not distinct -- the not_contains guard separates it from Sections 1/3.
+set spill_partitionwise_agg=true;
+set new_planner_agg_stage=1;
+function: assert_explain_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'AGGREGATE (update finalize)')
+function: assert_explain_not_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'multi_distinct')
+function: update_be_config("enable_spill_agg_events", "true")
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+function: update_be_config("enable_spill_agg_events", "false")
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+
+set new_planner_agg_stage=0;
+
+-- Section 3: partitionwise-distinct (SpillablePartitionWiseDistinct). Same distinct query + stage=3 as
+-- Section 1; only spill_partitionwise_agg=true differs (partitionwise distinct wrapper). FE EXPLAIN identical.
+set spill_partitionwise_agg=true;
+set new_planner_agg_stage=3;
+function: assert_explain_not_contains('select c2, count(distinct c1) d from t_src group by c2', 'multi_distinct_count')
+function: update_be_config("enable_spill_agg_events", "true")
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+function: update_be_config("enable_spill_agg_events", "false")
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+
+-- Section 4: blocking-agg (SpillableAggregateBlocking, spill_partitionwise_agg=false, single-stage). Same
+-- sum-wrapper query as Section 2; only spill_partitionwise_agg=false differs (non-partitionwise blocking
+-- wrapper), so the FE EXPLAIN is identical to Section 2 and the result must match.
+set spill_partitionwise_agg=false;
+set new_planner_agg_stage=1;
+function: assert_explain_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'AGGREGATE (update finalize)')
+function: assert_explain_not_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'multi_distinct')
+function: update_be_config("enable_spill_agg_events", "true")
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+function: update_be_config("enable_spill_agg_events", "false")
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+
+-- Restore the default (false) so the config does not leak across tests.
+CLEANUP {
+  function: update_be_config("enable_spill_agg_events", "false")
+} END CLEANUP

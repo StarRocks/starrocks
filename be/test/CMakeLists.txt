@@ -14,6 +14,10 @@ set(EXEC_FILES
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/hash_join_build_chunk_slicer_test.cpp
         ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/block_reason_agg_test.cpp
+        ./exec/pipeline/spillable_agg_event_test.cpp
+        ./exec/pipeline/spillable_agg_source_lockstep_test.cpp
+        ./exec/pipeline/spillable_agg_observer_wakeup_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp

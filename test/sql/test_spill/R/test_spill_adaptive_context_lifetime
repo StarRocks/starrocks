@@ -1,0 +1,82 @@
+-- name: test_spill_adaptive_context_lifetime
+CREATE DATABASE spill_adaptive_${uuid0};
+-- result:
+-- !result
+USE spill_adaptive_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_spill_adaptive(id BIGINT, a INT, b INT, v BIGINT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 16 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t_spill_adaptive SELECT generate_series, IF(generate_series % 2 = 0, NULL, 1),
+generate_series % 97, generate_series % 97 FROM TABLE(generate_series(0, 193999));
+-- result:
+-- !result
+SET enable_query_cache=false;
+-- result:
+-- !result
+SET enable_spill=true;
+-- result:
+-- !result
+SET spill_mode='force';
+-- result:
+-- !result
+SET enable_runtime_adaptive_dop=true;
+-- result:
+-- !result
+SET new_planner_agg_stage=2;
+-- result:
+-- !result
+SET chunk_size=128;
+-- result:
+-- !result
+SET topn_push_down_agg_mode=0;
+-- result:
+-- !result
+SET enable_pipeline_event_scheduler=false;
+-- result:
+-- !result
+SET pipeline_dop=1;
+-- result:
+-- !result
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+-- result:
+10	1000	1000	0
+-- !result
+SET pipeline_dop=8;
+-- result:
+-- !result
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+-- result:
+10	1000	1000	0
+-- !result
+SET enable_pipeline_event_scheduler=true;
+-- result:
+-- !result
+SET pipeline_dop=1;
+-- result:
+-- !result
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+-- result:
+10	1000	1000	0
+-- !result
+SET pipeline_dop=8;
+-- result:
+-- !result
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+-- result:
+10	1000	1000	0
+-- !result
+
+DROP DATABASE spill_adaptive_${uuid0};
+-- result:
+-- !result

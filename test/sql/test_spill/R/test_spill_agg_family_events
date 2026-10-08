@@ -1,0 +1,143 @@
+-- name: test_spill_agg_family_events @sequential @slow
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set spill_mem_table_size=1048576;
+-- result:
+-- !result
+create table t_src (
+    c0 INT,
+    c1 INT,
+    c2 INT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t_src
+SELECT generate_series, generate_series % 100000, generate_series % 5000
+FROM TABLE(generate_series(1, 500000));
+-- result:
+-- !result
+set spill_partitionwise_agg=false;
+-- result:
+-- !result
+set new_planner_agg_stage=3;
+-- result:
+-- !result
+function: assert_explain_not_contains('select c2, count(distinct c1) d from t_src group by c2', 'multi_distinct_count')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_agg_events", "true")
+-- result:
+None
+-- !result
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+-- result:
+5000	100000	20	20
+-- !result
+function: update_be_config("enable_spill_agg_events", "false")
+-- result:
+None
+-- !result
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+-- result:
+5000	100000	20	20
+-- !result
+set spill_partitionwise_agg=true;
+-- result:
+-- !result
+set new_planner_agg_stage=1;
+-- result:
+-- !result
+function: assert_explain_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'AGGREGATE (update finalize)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'multi_distinct')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_agg_events", "true")
+-- result:
+None
+-- !result
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+-- result:
+125000250000	1500000	1000005	100000
+-- !result
+function: update_be_config("enable_spill_agg_events", "false")
+-- result:
+None
+-- !result
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+-- result:
+125000250000	1500000	1000005	100000
+-- !result
+set new_planner_agg_stage=0;
+-- result:
+-- !result
+set spill_partitionwise_agg=true;
+-- result:
+-- !result
+set new_planner_agg_stage=3;
+-- result:
+-- !result
+function: assert_explain_not_contains('select c2, count(distinct c1) d from t_src group by c2', 'multi_distinct_count')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_agg_events", "true")
+-- result:
+None
+-- !result
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+-- result:
+5000	100000	20	20
+-- !result
+function: update_be_config("enable_spill_agg_events", "false")
+-- result:
+None
+-- !result
+select count(*), sum(d), max(d), min(d) from (select c2, count(distinct c1) d from t_src group by c2) tb;
+-- result:
+5000	100000	20	20
+-- !result
+set spill_partitionwise_agg=false;
+-- result:
+-- !result
+set new_planner_agg_stage=1;
+-- result:
+-- !result
+function: assert_explain_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'AGGREGATE (update finalize)')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb', 'multi_distinct')
+-- result:
+None
+-- !result
+function: update_be_config("enable_spill_agg_events", "true")
+-- result:
+None
+-- !result
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+-- result:
+125000250000	1500000	1000005	100000
+-- !result
+function: update_be_config("enable_spill_agg_events", "false")
+-- result:
+None
+-- !result
+select sum(s), max(s), min(s), count(*) from (select c1, sum(c0) s from t_src group by c1) tb;
+-- result:
+125000250000	1500000	1000005	100000
+-- !result
+CLEANUP {
+  function: update_be_config("enable_spill_agg_events", "false")
+} END CLEANUP
