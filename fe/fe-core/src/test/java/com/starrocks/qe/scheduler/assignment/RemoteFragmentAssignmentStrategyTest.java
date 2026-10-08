@@ -41,11 +41,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * Unit tests for gather fragment placement in {@link RemoteFragmentAssignmentStrategy},
- * covering the {@code enable_gather_fragment_child_affinity} session variable behavior
- * and its interaction with {@code enable_gather_fragment_locality_optimization}.
- */
 public class RemoteFragmentAssignmentStrategyTest {
 
     private ConnectContext connectContext;
