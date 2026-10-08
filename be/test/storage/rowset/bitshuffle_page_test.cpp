@@ -39,14 +39,19 @@
 #include <memory>
 
 #include "base/logging.h"
+#include "base/types/decimal12.h"
+#include "base/types/uint24.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
+#include "storage/rowset/encoding_info.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
+#include "storage/rowset/parsed_page.h"
 #include "storage/rowset/storage_page_decoder.h"
+#include "types/decimalv2_value.h"
 
 using starrocks::PageBuilderOptions;
 using starrocks::DataDecoder;
@@ -675,6 +680,14 @@ struct ReadByRowidsPage {
                 int128_t hi = static_cast<int128_t>(i) * 0x123456789ABCDEF0LL ^ 0x5555555555555555LL;
                 uint128_t lo = static_cast<uint128_t>(i) * 0x0FEDCBA987654321ULL ^ 0xAAAAAAAAAAAAAAAAULL;
                 src[i] = int256_t(hi, lo);
+            } else if constexpr (Type == TYPE_DECIMAL) {
+                src[i] = decimal12_t(i, 0);
+            } else if constexpr (Type == TYPE_DECIMALV2) {
+                src[i] = DecimalV2Value(i, 0);
+            } else if constexpr (Type == TYPE_DATE_V1) {
+                src[i] = static_cast<CppType>(static_cast<uint32_t>(i));
+            } else if constexpr (Type == TYPE_DATETIME_V1) {
+                src[i] = static_cast<CppType>(static_cast<int64_t>(i));
             } else {
                 src[i] = static_cast<CppType>(static_cast<int64_t>(i) * 2654435761LL % 100003 - 50000);
             }
@@ -928,6 +941,15 @@ TEST_F(BitShufflePageTest, non_nullable_matches_source_all_fast_path_types) {
     check_non_nullable_stride<TYPE_DECIMAL256>(kRows, kStride);
 }
 
+TEST_F(BitShufflePageTest, non_nullable_matches_source_legacy_types) {
+    constexpr size_t kRows = 16384;
+    constexpr size_t kStride = 7;
+    check_non_nullable_stride<TYPE_DATE_V1>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DATETIME_V1>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMAL>(kRows, kStride);
+    check_non_nullable_stride<TYPE_DECIMALV2>(kRows, kStride);
+}
+
 TEST_F(BitShufflePageTest, delegated_decimal_empty_column) {
     check_delegated_empty_column<TYPE_INT, TYPE_DECIMAL32>();
     check_delegated_empty_column<TYPE_BIGINT, TYPE_DECIMAL64>();
@@ -1088,6 +1110,105 @@ TEST_F(BitShufflePageTest, count_zero_is_noop) {
     EXPECT_EQ(0, count);
     ASSERT_EQ(1, column->size());
     EXPECT_EQ(42, GetStorageContainer<TYPE_INT>::get_data(column)[0]);
+}
+
+TEST_F(BitShufflePageTest, ParsedPageV2ReadByRowidsNullable) {
+    constexpr size_t kRows = 1000;
+    std::vector<int32_t> src(kRows);
+    std::vector<uint8_t> null_flags(kRows);
+    for (size_t i = 0; i < kRows; ++i) {
+        src[i] = static_cast<int32_t>(i * 17 + 5);
+        null_flags[i] = (i % 3 == 0) ? 1 : 0;
+    }
+
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BitshufflePageBuilder<TYPE_INT> page_builder(options);
+    size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src.data()), kRows);
+    ASSERT_EQ(kRows, added);
+    OwnedSlice data_owned = page_builder.finish()->build();
+
+    size_t padded_null_size = ALIGN_UP(kRows, 8u);
+    std::vector<uint8_t> padded_nulls(padded_null_size, 0);
+    memcpy(padded_nulls.data(), null_flags.data(), kRows);
+    std::vector<uint8_t> compressed_nulls(bitshuffle::compress_lz4_bound(padded_null_size, sizeof(uint8_t), 0));
+    int64_t r = bitshuffle::compress_lz4(padded_nulls.data(), compressed_nulls.data(), padded_null_size,
+                                         sizeof(uint8_t), 0);
+    ASSERT_GT(r, 0);
+    compressed_nulls.resize(r);
+
+    std::string encoded(data_owned.slice().data, data_owned.slice().size);
+    encoded.append(reinterpret_cast<const char*>(compressed_nulls.data()), compressed_nulls.size());
+
+    PageFooterPB page_footer;
+    page_footer.set_type(DATA_PAGE);
+    DataPageFooterPB* data_page_footer = page_footer.mutable_data_page_footer();
+    data_page_footer->set_format_version(2);
+    data_page_footer->set_nullmap_size(compressed_nulls.size());
+    data_page_footer->set_first_ordinal(0);
+    data_page_footer->set_num_values(kRows);
+
+    Slice body(encoded);
+    std::unique_ptr<std::vector<uint8_t>> decoded_page;
+    ASSERT_TRUE(StoragePageDecoder::decode_page(&page_footer, 0, BIT_SHUFFLE, &decoded_page, &body).ok());
+
+    const EncodingInfo* encoding = nullptr;
+    ASSERT_TRUE(EncodingInfo::get(TYPE_INT, BIT_SHUFFLE, &encoding).ok());
+    std::unique_ptr<ParsedPage> parsed_page;
+    PagePointer page_pointer;
+    ASSERT_TRUE(parse_page(&parsed_page, PageHandle(), body, *data_page_footer, encoding, page_pointer, 0).ok());
+    ASSERT_TRUE(parsed_page->supports_read_by_rowids());
+
+    auto nullable_col = ChunkFactory::column_from_field_type(TYPE_INT, true);
+    std::vector<rowid_t> rowids;
+    for (size_t i = 0; i < kRows; i += 7) {
+        rowids.push_back(static_cast<rowid_t>(i));
+    }
+    if (rowids.back() != kRows - 1) {
+        rowids.push_back(static_cast<rowid_t>(kRows - 1));
+    }
+    size_t count = rowids.size();
+    ASSERT_TRUE(parsed_page->read_by_rowids(nullable_col.get(), rowids.data(), &count).ok());
+    ASSERT_EQ(rowids.size(), count);
+    ASSERT_EQ(count, nullable_col->size());
+
+    auto* nc = down_cast<NullableColumn*>(nullable_col.get());
+    const auto values = GetStorageContainer<TYPE_INT>::get_data(nc->data_column());
+    for (size_t i = 0; i < count; ++i) {
+        rowid_t rid = rowids[i];
+        bool expected_null = (null_flags[rid] != 0);
+        EXPECT_EQ(expected_null, nc->is_null(i)) << "null mismatch at rowid=" << rid << " index=" << i;
+        EXPECT_EQ(src[rid], values[i]) << "data mismatch at rowid=" << rid << " index=" << i;
+    }
+
+    // Verify appending to populated NullableColumn preserves existing values
+    {
+        auto col = ChunkFactory::column_from_field_type(TYPE_INT, true);
+        auto* nc_col = down_cast<NullableColumn*>(col.get());
+        nc_col->append_datum(Datum());
+        nc_col->append_datum(Datum(static_cast<int32_t>(42)));
+        ASSERT_EQ(2, col->size());
+        ASSERT_TRUE(col->is_null(0));
+        ASSERT_FALSE(col->is_null(1));
+
+        const rowid_t append_rowids[] = {1, 3, 5, 999};
+        size_t append_count = 4;
+        ASSERT_TRUE(parsed_page->read_by_rowids(col.get(), append_rowids, &append_count).ok());
+        ASSERT_EQ(4, append_count);
+        ASSERT_EQ(6, col->size());
+
+        EXPECT_TRUE(col->is_null(0));
+        EXPECT_FALSE(col->is_null(1));
+        EXPECT_EQ(42, GetStorageContainer<TYPE_INT>::get_data(nc_col->data_column())[1]);
+
+        const auto append_vals = GetStorageContainer<TYPE_INT>::get_data(nc_col->data_column());
+        for (size_t i = 0; i < 4; ++i) {
+            rowid_t rid = append_rowids[i];
+            bool expected_null = (null_flags[rid] != 0);
+            EXPECT_EQ(expected_null, col->is_null(2 + i));
+            EXPECT_EQ(src[rid], append_vals[2 + i]);
+        }
+    }
 }
 
 } // namespace starrocks
