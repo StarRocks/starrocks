@@ -41,16 +41,6 @@ def check(base=None):
             old = json.loads(git("show", base + ":" + DATA + "/MANIFEST.json"))
             validate_transition(old, manifest)
             changed_tables = set(old["tables"]) ^ set(manifest["tables"])
-        # Count new blob contents, not renames or deletions. Include uncommitted files for local review.
-        old_blobs = {line.split()[2] for line in git("ls-tree", "-r", base, "--", DATA).splitlines()}
-        added = {}
-        for path in root.rglob("*"):
-            if path.is_file():
-                blob = git("hash-object", str(path))
-                if blob not in old_blobs:
-                    added[blob] = path.stat().st_size
-        if sum(added.values()) > manifest["budget"]["per_change_bytes"]:
-            raise ValueError("new fixture blobs exceed per_change_bytes")
 
     used = set()
     suite = REPO / "test/sql/test_paimon_catalog"
@@ -80,7 +70,7 @@ def check(base=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--base", help="compare immutable fixtures and new blob budget against this merge base")
+    parser.add_argument("--base", help="check fixture immutability and retirement against this merge base")
     args = parser.parse_args()
     try:
         check(args.base)

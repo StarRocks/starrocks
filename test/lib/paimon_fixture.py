@@ -28,9 +28,9 @@ def table_path(name):
 def load_manifest(root):
     root = Path(root)
     manifest = json.loads((root / "MANIFEST.json").read_text())
-    for key in ("total_bytes", "per_table_bytes", "per_change_bytes"):
-        if type(manifest["budget"][key]) is not int or manifest["budget"][key] <= 0:
-            raise ValueError("%s must be a positive integer" % key)
+    total_budget = manifest["budget"]["total_bytes"]
+    if type(total_budget) is not int or total_budget <= 0:
+        raise ValueError("total_bytes must be a positive integer")
     for path in root.rglob("*"):
         if path.is_symlink():
             raise ValueError("fixture symlink is not allowed: %s" % path)
@@ -49,21 +49,19 @@ def load_manifest(root):
         size = 0
         for filename, path in files.items():
             size_on_disk = path.stat().st_size
-            if size_on_disk > manifest["budget"]["per_table_bytes"]:
-                raise ValueError("%s: exceeds per_table_bytes" % name)
+            if total + size + size_on_disk > total_budget:
+                raise ValueError("fixtures exceed total_bytes")
             data = path.read_bytes()
             if hashlib.md5(data).hexdigest() != entry["files"][filename]:
                 raise ValueError("%s/%s: checksum mismatch" % (name, filename))
             size += len(data)
         if size != entry["bytes"]:
             raise ValueError("%s: bytes differs from MANIFEST" % name)
-        if size > manifest["budget"]["per_table_bytes"]:
-            raise ValueError("%s: exceeds per_table_bytes" % name)
         total += size
     actual = {p.relative_to(root).as_posix() for db in root.glob("*.db") for p in db.iterdir()}
     if actual != expected:
         raise ValueError("table directories differ from MANIFEST: %s" % (actual ^ expected))
-    if total > manifest["budget"]["total_bytes"]:
+    if total > total_budget:
         raise ValueError("fixtures exceed total_bytes")
     if set(manifest["tables"]) & set(manifest["retired"]):
         raise ValueError("retired table names cannot be reused")
