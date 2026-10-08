@@ -476,14 +476,17 @@ jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     return res_arr;
 }
 
-jobject JVMFunctionHelper::batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end) {
+// A failure here must fail the query: a caller that skipped the merge would return the
+// unmerged states, e.g. NULL from a two-stage aggregate.
+StatusOr<jobject> JVMFunctionHelper::batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin,
+                                                          int end) {
     int size = end - begin;
     auto offsets = _env->NewIntArray(size + 1);
-    RETURN_IF_JNI_EXCEPTION(_env, "batch_create_bytebuf: NewIntArray failed", nullptr);
-    _env->SetIntArrayRegion(offsets, 0, size + 1, (const int32_t*)offset);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "Failed to allocate the offsets of Java UDAF states");
     LOCAL_REF_GUARD(offsets);
+    _env->SetIntArrayRegion(offsets, 0, size + 1, (const int32_t*)offset);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_create_bytebuf, ptr, offsets, size);
-    RETURN_IF_JNI_EXCEPTION(_env, "batch_create_bytebuf", nullptr);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(_env, "Failed to wrap serialized Java UDAF states for merge");
     return res;
 }
 
