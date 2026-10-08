@@ -116,13 +116,14 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target, resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
                 sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
-        if (targetToSource == null) {
+        if (resolved == null) {
             return null;
         }
+        Map<String, String> targetToSource = resolved.targetToSource();
         // Sized last: for an external source this reads connector metadata, so only a load that
         // passed every other gate -- the SELECT re-check included -- pays for it.
         Estimates estimates = sourceEstimates(resolvedSource.sourceTable(), context);
@@ -142,7 +143,8 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
                 targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource(),
-                estimates.totalBytes(), estimates.totalRows());
+                estimates.totalBytes(), estimates.totalRows(),
+                resolved.targetToConstantSql());
         long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource());
