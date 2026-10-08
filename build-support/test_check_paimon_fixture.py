@@ -30,7 +30,7 @@ class FixtureTest(unittest.TestCase):
         table.mkdir(parents=True)
         (table / "data").write_bytes(b"fixture")
         self.manifest = {
-            "budget": {"total_bytes": 100, "per_table_bytes": 100, "per_change_bytes": 100},
+            "budget": {"total_bytes": 100},
             "tables": {"basic.t": {"bytes": 7, "files": {"data": hashlib.md5(b"fixture").hexdigest()}}},
             "retired": [],
         }
@@ -73,9 +73,28 @@ class FixtureTest(unittest.TestCase):
             self.load()
 
     def test_budget(self):
+        self.manifest["budget"]["total_bytes"] = 7
+        self.assertEqual(self.load(), self.manifest)
         self.manifest["budget"]["total_bytes"] = 6
         with self.assertRaisesRegex(ValueError, "total_bytes"):
             self.load()
+
+    def test_total_budget_across_tables(self):
+        table = self.root / "basic.db" / "other"
+        table.mkdir()
+        (table / "data").write_bytes(b"fixture")
+        self.manifest["tables"]["basic.other"] = {
+            "bytes": 7, "files": {"data": hashlib.md5(b"fixture").hexdigest()}}
+        self.manifest["budget"]["total_bytes"] = 13
+        with self.assertRaisesRegex(ValueError, "total_bytes"):
+            self.load()
+
+    def test_invalid_total_budget(self):
+        for budget in (0, -1, True, "100"):
+            with self.subTest(budget=budget):
+                self.manifest["budget"]["total_bytes"] = budget
+                with self.assertRaisesRegex(ValueError, "positive integer"):
+                    self.load()
 
     def test_mutation_and_retirement(self):
         old = json.loads(json.dumps(self.manifest))

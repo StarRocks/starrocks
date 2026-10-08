@@ -45,8 +45,9 @@ of cluster deployment.
 ## Data changes
 
 Run `python3 build-support/check_paimon_fixture.py --base upstream/main` from the repository root.
-The checker verifies checksums, file lists, table sizes, total size, new blob size, retired names,
-and the fixture names declared by cases. It does not parse arbitrary SQL references.
+The checker verifies checksums, file lists, recorded table sizes, the total size limit, retired names,
+and the fixture names declared by cases. Individual tables and changes have no separate size limits.
+It does not parse arbitrary SQL references.
 The comparison uses the merge base, and includes uncommitted files so a diff can be reviewed before committing.
 
 Tables cannot change in place. Add a new table name, migrate the cases, delete the old table, and
