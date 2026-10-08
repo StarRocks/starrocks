@@ -204,7 +204,6 @@ class FixtureSelectionTest(unittest.TestCase):
         cases = SimpleNamespace(
             case_list=[SimpleNamespace(sql=[sql], file="case", name=str(i))
                        for i, sql in enumerate(statements)],
-            sr_lib_obj=SimpleNamespace(paimon_fixture_root="custom/fixtures"),
         )
         with patch.object(choose_cases, "ChooseCase", return_value=cases), \
                 patch.object(choose_cases.sr_sql_lib, "self_print"):
@@ -213,7 +212,7 @@ class FixtureSelectionTest(unittest.TestCase):
     def test_selected_fixtures_are_validated_once(self):
         with patch.object(paimon_fixture, "load_manifest") as validate:
             self.select(['function: paimon_stage("${uuid0}", "db.t")'] * 3)
-        validate.assert_called_once_with("custom/fixtures")
+        validate.assert_called_once_with(paimon_fixture.FIXTURE_ROOT)
 
     def test_unrelated_cases_skip_fixture_validation(self):
         with patch.object(paimon_fixture, "load_manifest") as validate:
