@@ -1,4 +1,7 @@
 -- name: test_lake_add_index_fallback @cloud
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
 create database lake_idx_fb_${uuid0};
 -- result:
 -- !result
@@ -17,11 +20,10 @@ insert into t1 values (1, 'hello world'), (2, 'starrocks lake'), (3, 'fast path 
 -- !result
 ALTER TABLE t1 ADD INDEX idx_gin(v1) USING GIN ("parser" = "english");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
 -- !result
 function: wait_alter_table_finish()
 -- result:
-
+None
 -- !result
 select count(*) from t1;
 -- result:
