@@ -114,19 +114,8 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
         _append_binary_impl(binary.get_offset(), binary.raw_bytes(), offset, count);
         return;
     }
-    if constexpr (std::is_same_v<T, uint64_t>) {
-        if (src.is_large_binary()) {
-            if (UNLIKELY(count == 0)) {
-                return;
-            }
-            const auto& binary = down_cast<const LargeBinaryColumn&>(src);
-            _append_binary_impl(binary.get_offset(), binary.raw_bytes(), offset, count);
-            return;
-        }
-    }
 
-    CHECK(false) << "BinaryColumnBase::append: incompatible column type"
-                 << " src.is_binary=" << src.is_binary() << " src.is_large_binary=" << src.is_large_binary();
+    CHECK(false) << "BinaryColumnBase::append: incompatible column type " << src.get_name();
 }
 
 template <typename T>
@@ -1318,7 +1307,7 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
     // The size limit of a single element is 2^32 - 1.
     // The size limit of all elements is 2^64 - 1.
     // The number limit of elements is 2^32 - 1.
-    const char* column_name = is_large_binary() ? "large binary column" : "binary column";
+    const char* column_name = "binary column";
     if (get_immutable_bytes().size() >= Column::MAX_LARGE_CAPACITY_LIMIT) {
         return Status::CapacityLimitExceed(strings::Substitute("Total byte size of $0 exceed the limit: $1",
                                                                column_name,
@@ -1331,5 +1320,4 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
 }
 
 template class BinaryColumnBase<uint32_t>;
-template class BinaryColumnBase<uint64_t>;
 } // namespace starrocks

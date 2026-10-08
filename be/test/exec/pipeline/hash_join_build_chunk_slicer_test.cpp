@@ -89,7 +89,6 @@ TEST(HashJoinBuildChunkSlicerTest, SliceBuildChunksWithLargeOffsets) {
             ASSERT_LE(slice->num_rows(), 2u);
             const Column* data = ColumnHelper::get_data_column(slice->get_column_by_slot_id(0).get());
             ASSERT_TRUE(data->is_binary());
-            ASSERT_FALSE(data->is_large_binary());
             for (size_t i = 0; i < slice->num_rows(); i++) {
                 strings.push_back(slice->get_column_by_slot_id(0)->get(i).get_slice().to_string());
                 ints.push_back(slice->get_column_by_slot_id(1)->get(i).get_int32());
