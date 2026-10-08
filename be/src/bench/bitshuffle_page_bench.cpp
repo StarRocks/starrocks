@@ -23,6 +23,7 @@
 
 #include "column/chunk_factory.h"
 #include "column/column.h"
+#include "column/nullable_column.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/storage_page_decoder.h"
@@ -106,10 +107,14 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
         }
         auto out = ChunkFactory::column_from_field_type(Type, nullable);
         size_t count = rowids.size();
-        if (Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, out.get());
-            !st.ok() || count != rowids.size() || out->size() != rowids.size()) {
+        Column* target_out = nullable ? down_cast<NullableColumn*>(out.get())->data_column_raw_ptr() : out.get();
+        if (Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, target_out);
+            !st.ok() || count != rowids.size() || target_out->size() != rowids.size()) {
             state.SkipWithError("read_by_rowids failed or returned a short count");
             return;
+        }
+        if (nullable) {
+            down_cast<NullableColumn*>(out.get())->null_column_raw_ptr()->append_default(count);
         }
         for (size_t i = 0; i < rowids.size(); i++) {
             if (!out->equals(i, *ref, rowids[i])) {
@@ -126,7 +131,11 @@ void run_read_by_rowids(benchmark::State& state, bool nullable, size_t selectivi
     for (auto _ : state) {
         column->resize(0);
         size_t count = rowids.size();
-        Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, column.get());
+        Column* target = column.get();
+        if (nullable) {
+            target = down_cast<NullableColumn*>(target)->data_column_raw_ptr();
+        }
+        Status st = page.decoder->read_by_rowids(0, rowids.data(), &count, target);
         benchmark::DoNotOptimize(st);
         benchmark::DoNotOptimize(count);
         benchmark::ClobberMemory();
