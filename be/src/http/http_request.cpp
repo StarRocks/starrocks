@@ -26,14 +26,10 @@
 #include <sstream>
 #include <string>
 
-#include "base/auth/credential_mask.h"
 #include "common/logging.h"
-<<<<<<< HEAD:be/src/http/http_request.cpp
 #include "http/http_handler.h"
-=======
-#include "platform/http/http_handler.h"
-#include "platform/http/http_headers.h"
->>>>>>> 664ba43 ([BugFix] Mask credential headers in BE HTTP request logs (#80203)):be/src/platform/http/http_request.cpp
+#include "http/http_headers.h"
+#include "util/credential_mask.h"
 
 namespace starrocks {
 
