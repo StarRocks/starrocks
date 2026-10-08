@@ -45,6 +45,11 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.combinator.AggStateDesc;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.CredentialMask;
+import com.starrocks.common.util.PrintableMap;
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.HdfsURI;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -64,6 +69,10 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
+<<<<<<< HEAD
+=======
+
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
     // The wildcard can *only* exist as function type, the caller will always be a
@@ -873,6 +882,33 @@ public class Function implements Writable {
         return "";
     }
 
+<<<<<<< HEAD
+=======
+    public String getProperties(boolean hideLocation) {
+        if (!hideLocation) {
+            return getProperties();
+        }
+
+        String properties = getProperties();
+        if (properties == null || properties.isEmpty()) {
+            return properties;
+        }
+
+        try {
+            JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
+            if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, CredentialMask.SHORT);
+            }
+            if (propertyObject.has("object_file")) {
+                propertyObject.addProperty("object_file", CredentialMask.SHORT);
+            }
+            return new Gson().toJson(propertyObject);
+        } catch (RuntimeException e) {
+            return properties;
+        }
+    }
+
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
     public List<Comparable> getInfo(boolean isVerbose) {
         List<Comparable> row = Lists.newArrayList();
         if (isVerbose) {

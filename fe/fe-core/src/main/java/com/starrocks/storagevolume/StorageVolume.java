@@ -31,6 +31,7 @@ import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -81,7 +82,27 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     @SerializedName("e")
     private boolean enabled;
 
+<<<<<<< HEAD
     public static String CREDENTIAL_MASK = "******";
+=======
+    /**
+     * Each storage volume can have a virtual tablet bind to it.
+     * It is used to create a virtual shard in starmgr, and the value's persistence is guaranteed in filestore of starmgr.
+     * The value of `vTabletId` is not -1L if a virtual tablet needed.
+     */
+    @SerializedName("vt")
+    private long vTabletId = -1L;
+
+    /**
+     * Same as `vTabletId`, but it is used to create a virtual shard group in starmgr, and the value's persistence
+     * is also guaranteed in filestore of starmgr.
+     */
+    @SerializedName("vtg")
+    private long vTabletGroupId = -1L;
+
+    public static final String V_SHARD_ID = "v_shard_id";
+    public static final String V_SHARD_GROUP_ID = "v_shard_group_id";
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 
     private String dumpMaskedParams(Map<String, String> params) {
         Gson gson = new Gson();
@@ -231,6 +252,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     }
 
     public static void addMaskForCredential(Map<String, String> params) {
+<<<<<<< HEAD
         params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
@@ -238,9 +260,21 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
+=======
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET,
+                (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CredentialMask.LONG);
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
-                (key, value) -> CREDENTIAL_MASK);
-        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, (key, value) -> CREDENTIAL_MASK);
+                (key, value) -> CredentialMask.LONG);
+        params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY,
+                (key, value) -> CredentialMask.LONG);
     }
 
     public void getProcNodeData(BaseProcResult result) {

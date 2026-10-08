@@ -117,7 +117,7 @@ public class PrintableMap<K, V> {
                 sb.append("\"");
             }
             if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
-                sb.append("***");
+                sb.append(CredentialMask.SHORT);
             } else {
                 String text = entry.getValue().toString();
                 if (withQuotation) {

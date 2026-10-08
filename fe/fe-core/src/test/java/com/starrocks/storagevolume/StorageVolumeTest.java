@@ -29,6 +29,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.CredentialMask;
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
@@ -766,6 +771,54 @@ public class StorageVolumeTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAdls2DescMasksAllSecretsWithoutChangingCredentials() throws DdlException {
+        Map<String, String> params = Map.of(
+                AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net",
+                AZURE_ADLS2_SHARED_KEY, "fake-shared-key",
+                AZURE_ADLS2_SAS_TOKEN, "fake-sas-token",
+                AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "fake-client-secret");
+        StorageVolume volume = new StorageVolume("1", "adls", "adls2",
+                Collections.singletonList("adls2://container/path"), params, true, "");
+        BaseProcResult result = new BaseProcResult();
+        volume.getProcNodeData(result);
+        String rendered = result.getRows().get(0).get(4);
+        for (String key : Arrays.asList(AZURE_ADLS2_SHARED_KEY, AZURE_ADLS2_SAS_TOKEN, AZURE_ADLS2_OAUTH2_CLIENT_SECRET)) {
+            Assertions.assertFalse(rendered.contains(params.get(key)), key);
+            Assertions.assertTrue(rendered.contains(key), key);
+        }
+        Assertions.assertTrue(rendered.contains("account.dfs.core.windows.net"));
+        Assertions.assertTrue(rendered.contains(CredentialMask.LONG));
+        Assertions.assertEquals("fake-client-secret",
+                volume.toFileStoreInfo().getAdls2FsInfo().getCredential().getClientSecret());
+    }
+
+    @Test
+    public void testInvalidAdls2ConfigurationMasksClientSecret() throws DdlException {
+        Map<String, String> params = Map.of(
+                AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net",
+                AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id",
+                AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "fake-client-secret");
+        // A missing OAuth endpoint makes this invalid; diagnostic context must survive masking.
+        Exception error = Assertions.assertThrows(SemanticException.class, () -> new StorageVolume(
+                "1", "adls", "adls2", Collections.singletonList("adls2://container/path"), params, true, ""));
+        Assertions.assertFalse(error.getMessage().contains("fake-client-secret"));
+        Assertions.assertTrue(error.getMessage().contains(CredentialMask.LONG));
+        Assertions.assertTrue(error.getMessage().contains("account.dfs.core.windows.net"));
+        Assertions.assertTrue(error.getMessage().contains("client-id"));
+
+        StorageVolume volume = new StorageVolume("1", "adls", "adls2", Collections.singletonList("adls2://container/path"),
+                Map.of(AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net", AZURE_ADLS2_SHARED_KEY, "key"), true, "");
+        Map<String, String> updated = new HashMap<>(params);
+        updated.put(AZURE_ADLS2_SHARED_KEY, "");
+        error = Assertions.assertThrows(SemanticException.class, () -> volume.setCloudConfiguration(updated));
+        Assertions.assertFalse(error.getMessage().contains("fake-client-secret"));
+        Assertions.assertTrue(error.getMessage().contains("account.dfs.core.windows.net"));
+    }
+
+    @Test
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
     public void testAddMaskForCredential() {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_ACCESS_KEY, "accessKey");
@@ -775,12 +828,12 @@ public class StorageVolumeTest {
         storageParams.put(AZURE_ADLS2_SAS_TOKEN, "sasToken");
         storageParams.put(AZURE_ADLS2_SHARED_KEY, "sharedKey");
         Deencapsulation.invoke(StorageVolume.class, "addMaskForCredential", storageParams);
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_ACCESS_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AWS_S3_SECRET_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SAS_TOKEN));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_BLOB_SHARED_KEY));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SAS_TOKEN));
-        Assertions.assertEquals(StorageVolume.CREDENTIAL_MASK, storageParams.get(AZURE_ADLS2_SHARED_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AWS_S3_ACCESS_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AWS_S3_SECRET_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_BLOB_SAS_TOKEN));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_BLOB_SHARED_KEY));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_ADLS2_SAS_TOKEN));
+        Assertions.assertEquals(CredentialMask.LONG, storageParams.get(AZURE_ADLS2_SHARED_KEY));
     }
 
     @Test
@@ -794,6 +847,6 @@ public class StorageVolumeTest {
                 "1", "test", "obs", Collections.singletonList("s3://foobar"), storageParams, true, ""
         ));
         Assertions.assertFalse(exception.getMessage().contains(awsSecretKey));
-        Assertions.assertTrue(exception.getMessage().contains(StorageVolume.CREDENTIAL_MASK));
+        Assertions.assertTrue(exception.getMessage().contains(CredentialMask.LONG));
     }
 }

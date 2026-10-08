@@ -36,6 +36,11 @@ package com.starrocks.common;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.common.util.CredentialMask;
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.qe.ConnectContext;
@@ -98,18 +103,15 @@ public class ConfigBase {
 
         /**
          * Whether the value is a credential (password, secret key, token, ...). ADMIN SHOW FRONTEND CONFIG and
-         * the /variable page report a set value as {@link ConfigBase#SENSITIVE_CONFIG_MASK}; the field keeps the real value.
+         * the /variable page report a set value as {@link CredentialMask#LONG}; the field keeps the real value.
          */
         boolean sensitive() default false;
     }
 
-    // What a sensitive config's value is reported as. Matches the BE (/varz, be_configs) and SHOW STORAGE VOLUMES.
-    public static final String SENSITIVE_CONFIG_MASK = "******";
-
     // An empty value stays empty, so the output still tells an unset credential from a set one.
     static String maskIfSensitive(ConfField anno, String value) {
         if (anno.sensitive() && !Strings.isNullOrEmpty(value)) {
-            return SENSITIVE_CONFIG_MASK;
+            return CredentialMask.LONG;
         }
         return value;
     }

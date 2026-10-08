@@ -18,6 +18,13 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.util.CredentialMask;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b144b09 ([Refactor] Share credential mask constants in the FE (#80260))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -212,7 +219,7 @@ public class ConfigTest {
         Assertions.assertEquals("[1.5, 2.5]", dumped.get("dump_array_double"));
         Assertions.assertEquals("[true, false]", dumped.get("dump_array_boolean"));
         Assertions.assertEquals("[a, b]", dumped.get("dump_array_string"));
-        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, dumped.get("dump_array_secret"));
+        Assertions.assertEquals(CredentialMask.LONG, dumped.get("dump_array_secret"));
     }
 
     private static class ConfigForSensitive extends ConfigBase {
@@ -236,14 +243,14 @@ public class ConfigTest {
         for (List<String> row : ConfigForSensitive.getConfigInfo(null)) {
             shown.put(row.get(0), row.get(2));
         }
-        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, shown.get("prop_secret"));
+        Assertions.assertEquals(CredentialMask.LONG, shown.get("prop_secret"));
         // An unset credential stays empty, so it is still visible that none is configured.
         Assertions.assertEquals("", shown.get("prop_unset_secret"));
         Assertions.assertEquals("http://127.0.0.1:9000", shown.get("prop_endpoint"));
 
         // The /variable page
         Map<String, String> dumped = ConfigForSensitive.dump();
-        Assertions.assertEquals(ConfigBase.SENSITIVE_CONFIG_MASK, dumped.get("prop_secret"));
+        Assertions.assertEquals(CredentialMask.LONG, dumped.get("prop_secret"));
         Assertions.assertEquals("", dumped.get("prop_unset_secret"));
         Assertions.assertEquals("http://127.0.0.1:9000", dumped.get("prop_endpoint"));
 
