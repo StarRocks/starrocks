@@ -48,6 +48,7 @@ import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
@@ -131,6 +132,31 @@ public class GlobalStateMgrTest {
         imageWriter.setOutputStream(image2.getDataOutputStream());
         globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
         globalStateMgr.loadHeader(image2.getDataInputStream());
+    }
+
+    @Test
+    public void testLabelCleanerPicksUpIntervalChange() throws Exception {
+        int originInterval = Config.label_clean_interval_second;
+        try {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+
+            Config.label_clean_interval_second = 3600;
+            globalStateMgr.createLabelCleaner();
+
+            Field labelCleanerField = GlobalStateMgr.class.getDeclaredField("labelCleaner");
+            labelCleanerField.setAccessible(true);
+            FrontendDaemon labelCleaner = (FrontendDaemon) labelCleanerField.get(globalStateMgr);
+            Assertions.assertEquals(3600 * 1000L, labelCleaner.getInterval());
+
+            // a running cycle applies the new value, so ADMIN SET FRONTEND CONFIG needs no FE restart
+            Config.label_clean_interval_second = 600;
+            Method runAfterCatalogReady = labelCleaner.getClass().getDeclaredMethod("runAfterCatalogReady");
+            runAfterCatalogReady.setAccessible(true);
+            runAfterCatalogReady.invoke(labelCleaner);
+            Assertions.assertEquals(600 * 1000L, labelCleaner.getInterval());
+        } finally {
+            Config.label_clean_interval_second = originInterval;
+        }
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {

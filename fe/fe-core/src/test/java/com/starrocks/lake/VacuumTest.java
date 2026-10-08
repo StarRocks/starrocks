@@ -587,17 +587,23 @@ public class VacuumTest {
             }
         };
 
-        Config.lake_enable_fullvacuum = true;
-        FeConstants.runningUnitTest = false;
         int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
-        Config.lake_fullvacuum_parallel_partitions = 1;
-        Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
-        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
-        Config.lake_fullvacuum_parallel_partitions = oldValue1;
-        FeConstants.runningUnitTest = true;
-        Config.lake_enable_fullvacuum = false;
+        // runningUnitTest is the only thing keeping the singleton AutovacuumDaemon (2s tick) and
+        // FullVacuumDaemon off these very partitions, so restore it even when the round below throws:
+        // leaking it would leave both daemons vacuuming behind every later case and @AfterAll.
+        Config.lake_enable_fullvacuum = true;
+        FeConstants.runningUnitTest = false;
+        try {
+            Config.lake_fullvacuum_parallel_partitions = 1;
+            Config.lake_fullvacuum_partition_naptime_seconds = 0;
+            Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
+        } finally {
+            Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+            Config.lake_fullvacuum_parallel_partitions = oldValue1;
+            FeConstants.runningUnitTest = true;
+            Config.lake_enable_fullvacuum = false;
+        }
     }
 
     @Test
@@ -715,15 +721,20 @@ public class VacuumTest {
             }
         };
 
-        FeConstants.runningUnitTest = false;
         int oldValue1 = Config.lake_fullvacuum_parallel_partitions;
         long oldValue2 = Config.lake_fullvacuum_partition_naptime_seconds;
-        Config.lake_fullvacuum_parallel_partitions = 1;
-        Config.lake_fullvacuum_partition_naptime_seconds = 0;
-        Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
-        Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
-        Config.lake_fullvacuum_parallel_partitions = oldValue1;
-        FeConstants.runningUnitTest = true;
+        // See testFullVacuumBasic: restore runningUnitTest even on a throw, so a failure here cannot
+        // leave the background vacuum daemons running against these partitions for the rest of the class.
+        FeConstants.runningUnitTest = false;
+        try {
+            Config.lake_fullvacuum_parallel_partitions = 1;
+            Config.lake_fullvacuum_partition_naptime_seconds = 0;
+            Deencapsulation.invoke(fullVacuumDaemon, "runAfterLeaseValid");
+        } finally {
+            Config.lake_fullvacuum_partition_naptime_seconds = oldValue2;
+            Config.lake_fullvacuum_parallel_partitions = oldValue1;
+            FeConstants.runningUnitTest = true;
+        }
     }
 
     @Test

@@ -30,6 +30,7 @@
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_network_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
@@ -52,6 +53,7 @@
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
 
 #ifdef USE_STAROS
 DECLARE_int64(fslib_s3_max_single_part_size);
@@ -60,6 +62,10 @@ DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 #endif
+
+namespace brpc {
+DECLARE_int32(max_connection_pool_size);
+} // namespace brpc
 
 namespace starrocks {
 
@@ -135,7 +141,10 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
     {
         auto st = ConfigUpdateRegistry::instance()->update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
@@ -143,6 +152,28 @@ TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_cou
     auto st = ConfigUpdateRegistry::instance()->update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, _runtime_env->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_brpc_max_connection_pool_size) {
+    const int32_t orig_config = config::brpc_max_connection_pool_size;
+    const int32_t orig_flag = brpc::FLAGS_max_connection_pool_size;
+    DeferOp restore([&]() {
+        WARN_IF_ERROR(config::set_config("brpc_max_connection_pool_size", std::to_string(orig_config)),
+                      "failed to restore brpc_max_connection_pool_size");
+        brpc::FLAGS_max_connection_pool_size = orig_flag;
+    });
+
+    // The gflag assertion is the load-bearing one: update_config() still reports OK and still sets the
+    // StarRocks config when no callback is registered under the given name, so only the gflag reveals a
+    // callback registered under a misspelled key or one that never reached brpc.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("brpc_max_connection_pool_size", "37"));
+    ASSERT_EQ(37, config::brpc_max_connection_pool_size);
+    ASSERT_EQ(37, brpc::FLAGS_max_connection_pool_size);
+
+    // Update a second time to prove the callback runs on every change, not just the first one.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("brpc_max_connection_pool_size", "512"));
+    ASSERT_EQ(512, config::brpc_max_connection_pool_size);
+    ASSERT_EQ(512, brpc::FLAGS_max_connection_pool_size);
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_tablet_meta_info_worker_count) {

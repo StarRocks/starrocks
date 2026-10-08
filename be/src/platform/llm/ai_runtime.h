@@ -38,6 +38,7 @@ struct AIRuntimeConfig {
     int32_t max_retries_on_throttle = 5;
     std::string on_error = "ignore";
     int32_t rate_limit_qps_chat = 128;
+    int32_t rate_limit_qps_embedding = 128;
     int32_t max_inflight = 512;
 
     Status validate() const;

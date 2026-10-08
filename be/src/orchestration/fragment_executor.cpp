@@ -24,6 +24,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
+#include "common/util/thrift_util.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/data_stream/data_stream_mgr.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
@@ -519,6 +520,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
+        } else {
+            _fragment_ctx->set_has_per_driver_scan_ranges();
         }
 
         bool should_compute_cache_key_prefix = _fragment_ctx->enable_cache() &&
@@ -948,7 +951,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
                          << " fragment_instance_id=" << print_id(request.fragment_instance_id())
                          << " backend_num=" << request.backend_num();
-            VLOG_QUERY << "Prepare fragment failed fragment=" << request.common().fragment;
+            VLOG_QUERY << "Prepare fragment failed fragment=" << thrift_plan_debug_string(request.common().fragment);
         }
     });
 

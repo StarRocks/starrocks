@@ -1755,10 +1755,11 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     const auto& tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(
-            auto compaction_policy,
-            CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction, context->is_unshare));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction,
+                                              context->is_unshare, context->allow_base_compaction));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    context->is_base_compaction = compaction_policy->picked_base_compaction();
     return compact(context, std::move(input_rowsets));
 }
 
@@ -1784,9 +1785,9 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
 
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
-    ASSIGN_OR_RETURN(
-            auto compaction_policy,
-            CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction, context->is_unshare));
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction,
+                                              context->is_unshare, context->allow_base_compaction));
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
     size_t total_input_rowsets_file_size = 0;
@@ -1965,7 +1966,12 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
-    auto shard_info_or = get_staros_worker()->retrieve_shard_info(tablet_id);
+    auto worker = get_staros_worker();
+    if (worker == nullptr) {
+        // Shutdown already released the StarOS worker while this operation was in flight.
+        return Status::ServiceUnavailable(fmt::format("StarOS worker is not available, tablet_id: {}", tablet_id));
+    }
+    auto shard_info_or = worker->retrieve_shard_info(tablet_id);
     if (!shard_info_or.ok()) {
         return Status::InternalError(fmt::format("fail to get shard info of tablet: {}, err: {}", tablet_id,
                                                  shard_info_or.status().message()));

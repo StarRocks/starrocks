@@ -1,0 +1,39 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -170,13 +170,31 @@
+             check_assembler_support(AVX_VNNI "{vex} vpdpbusd %ymm0, %ymm0, %ymm0")
+         endif()
+     elseif(${machine} MATCHES "^aarch64")
+-        if(${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 8.1)
++        # The probe has to use the same arch the compiler will, or it answers a
++        # question nobody asked.  gcc 14 and later omit the arch from the dotprod
++        # and sha3 target attributes (see lib/arm/adler32_impl.h and
++        # lib/arm/crc32_impl.h), so the assembler gets the base arch of the build
++        # with the extension appended, e.g. `.arch armv8-a+dotprod`.  binutils
++        # accepts that only from 2.41 onwards; before that it still requires an
++        # armv8.2-a base and rejects it with "selected processor does not
++        # support `udot ...'".  Probing `.arch armv8.2-a+dotprod` instead hides
++        # this, because every binutils that knows dotprod at all accepts that one.
++        # Older compilers spell the attribute with an explicit armv8.2-a arch, so
++        # for those the original probe is the right one.
++        if(${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 14.0)
+             # Set LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_DOTPROD if needed.
+-            check_assembler_support(DOTPROD ".arch armv8.2-a+dotprod\nudot v0.4s, v0.16b, v0.16b")
+-        endif()
+-        if(${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 9.1)
++            check_assembler_support(DOTPROD ".arch armv8-a+dotprod\nudot v0.4s, v0.16b, v0.16b")
+             # Set LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_SHA3 if needed.
+-            check_assembler_support(SHA3 ".arch armv8.2-a+sha3\neor3 v0.16b, v0.16b, v0.16b, v0.16b")
++            check_assembler_support(SHA3 ".arch armv8-a+sha3\neor3 v0.16b, v0.16b, v0.16b, v0.16b")
++        else()
++            if(${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 8.1)
++                # Set LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_DOTPROD if needed.
++                check_assembler_support(DOTPROD ".arch armv8.2-a+dotprod\nudot v0.4s, v0.16b, v0.16b")
++            endif()
++            if(${CMAKE_C_COMPILER_VERSION} VERSION_GREATER_EQUAL 9.1)
++                # Set LIBDEFLATE_ASSEMBLER_DOES_NOT_SUPPORT_SHA3 if needed.
++                check_assembler_support(SHA3 ".arch armv8.2-a+sha3\neor3 v0.16b, v0.16b, v0.16b, v0.16b")
++            endif()
+         endif()
+     endif()
+ endif()

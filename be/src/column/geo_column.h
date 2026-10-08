@@ -24,8 +24,12 @@
 
 namespace starrocks {
 
+struct TypeDescriptor;
+
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
-// The descriptor is immutable. Column-to-column copies require identical descriptors;
+// Semantic metadata is immutable; transport restores storage metadata after validation.
+// A typed materialization placeholder binds its storage metadata on the first payload copy.
+// Populated columns and concrete physical descriptors require identical storage metadata;
 // SQL assignment/coercion belongs to FE, not to these physical copy operations.
 // NULL is represented by NullableColumn. Empty bytes are only a default/null placeholder,
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
@@ -38,6 +42,7 @@ public:
 
     // Untyped physical placeholders, not an inferred CRS or a native SQL value.
     explicit GeoColumn(size_t size = 0);
+    GeoColumn(const TypeDescriptor& type, size_t size);
     explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
     DISALLOW_COPY(GeoColumn);
 
@@ -49,6 +54,12 @@ public:
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
+    // Copies source bytes; source and this column must not alias.
+    void append_wkb_column(const BinaryColumn& source);
+    // Whole-column transport. WKB remains opaque; no parsed cache crosses the wire.
+    int64_t serialized_column_size() const;
+    StatusOr<uint8_t*> serialize_column(uint8_t* dst) const;
+    StatusOr<const uint8_t*> deserialize_column(const uint8_t* src, const uint8_t* end);
     // Borrowed slices are read-only and follow Column lifetime rules: mutation may invalidate them.
     // Inspection returns a pointer-free value. Only a mutable column can fill the cache:
     // immutable shared columns never acquire mutable execution state through const access.
@@ -93,11 +104,8 @@ public:
     Status capacity_limit_reached() const override { return _data->capacity_limit_reached(); }
     void check_or_die() const override { _data->check_or_die(); }
     bool has_large_column() const override { return _data->has_large_column(); }
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-    StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
-    // No binary visitor fallback. Only GEOGRAPHY WKB MySQL output is supported;
-    // transport serde, equality, ordering and geo keys remain unsupported.
+    // Dedicated GEO visitors only; never fall back to binary equality/order/hash.
     Status accept(ColumnVisitor* visitor) const override;
     Status accept_mutable(ColumnVisitorMutable* visitor) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int hint) const override;
@@ -114,7 +122,8 @@ public:
                                                bool& has_null) override;
 
 private:
-    const GeoColumn& _source(const Column& src) const;
+    bool _is_storage_placeholder() const;
+    const GeoColumn& _source(const Column& src);
     struct CachedWkb {
         size_t row;
         GeoWkbInfo info;

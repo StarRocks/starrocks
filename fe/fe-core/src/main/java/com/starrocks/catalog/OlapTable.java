@@ -238,6 +238,15 @@ public class OlapTable extends Table {
     @SerializedName(value = "bfFpp")
     protected double bfFpp;
 
+    // columns that use a column-level compression dictionary (a ZSTD dictionary)
+    @SerializedName(value = "zstdCompressionColumns")
+    protected Set<ColumnId> zstdCompressionColumns;
+    // Per-column data page size for the columns above, in bytes. A column absent from
+    // this map (or mapped to 0) keeps the BE default. Kept strictly in step with
+    // zstdCompressionColumns: the key set is always a subset of it.
+    @SerializedName(value = "zstdCompressionPageSizes")
+    protected Map<ColumnId, Integer> zstdCompressionPageSizes;
+
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
@@ -316,6 +325,8 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -347,6 +358,8 @@ public class OlapTable extends Table {
 
         this.bfColumns = null;
         this.bfFpp = 0;
+        this.zstdCompressionColumns = null;
+        this.zstdCompressionPageSizes = null;
 
         this.colocateGroup = null;
 
@@ -398,6 +411,14 @@ public class OlapTable extends Table {
         } else {
             olapTable.bfColumns = null;
         }
+        if (zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+            olapTable.zstdCompressionColumns.addAll(zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    zstdCompressionPageSizes == null ? null : Maps.newHashMap(zstdCompressionPageSizes);
+        } else {
+            olapTable.zstdCompressionColumns = null;
+        }
 
         olapTable.keysType = this.keysType;
         if (this.relatedMaterializedViews != null) {
@@ -439,6 +460,11 @@ public class OlapTable extends Table {
 
         if (this.bfColumns != null) {
             olapTable.bfColumns = Sets.newHashSet(this.bfColumns);
+        }
+        if (this.zstdCompressionColumns != null) {
+            olapTable.zstdCompressionColumns = Sets.newHashSet(this.zstdCompressionColumns);
+            olapTable.zstdCompressionPageSizes =
+                    this.zstdCompressionPageSizes == null ? null : Maps.newHashMap(this.zstdCompressionPageSizes);
         }
         olapTable.bfFpp = this.bfFpp;
         if (this.curBinlogConfig != null) {
@@ -732,6 +758,26 @@ public class OlapTable extends Table {
         }
         fullSchema = newFullSchema;
         updateSchemaIndex();
+        // A ColumnId is only a name, so an entry left behind by a dropped column does not
+        // just linger: re-creating a column with that name would resolve the stale id again
+        // and silently switch the compression dictionary on for it. The schema index has
+        // just been rebuilt, and every schema mutation ends up here -- fast schema
+        // evolution, the shadow-index jobs and edit-log replay alike -- so this is the one
+        // place that can keep the set honest.
+        if (zstdCompressionColumns != null) {
+            zstdCompressionColumns.removeIf(columnId -> idToColumn.get(columnId) == null);
+            if (zstdCompressionPageSizes != null) {
+                zstdCompressionPageSizes.keySet().removeIf(columnId -> idToColumn.get(columnId) == null);
+                if (zstdCompressionPageSizes.isEmpty()) {
+                    zstdCompressionPageSizes = null;
+                }
+            }
+            if (zstdCompressionColumns.isEmpty()) {
+                zstdCompressionColumns = null;
+                zstdCompressionPageSizes = null;
+            }
+        }
+
         // The column set just changed and the cache is keyed by column NAME, so DROP COLUMN c +
         // ADD COLUMN c would otherwise hand the new column the old one's min/max. Called on every
         // schema-change job and on their replay; the calls from metadata load are a no-op because
@@ -1684,6 +1730,45 @@ public class OlapTable extends Table {
         } else {
             return columnNames;
         }
+    }
+
+    public Set<ColumnId> getZstdCompressionColumnIds() {
+        return zstdCompressionColumns;
+    }
+
+    public Set<String> getZstdCompressionColumnNames() {
+        if (zstdCompressionColumns == null) {
+            return null;
+        }
+
+        Set<String> columnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (ColumnId columnId : zstdCompressionColumns) {
+            Column column = idToColumn.get(columnId);
+            if (column == null) {
+                LOG.warn("can not find column by column id: {}, maybe the column has been dropped.", columnId);
+                continue;
+            }
+            columnNames.add(column.getName());
+        }
+        if (columnNames.isEmpty()) {
+            return null;
+        } else {
+            return columnNames;
+        }
+    }
+
+    public Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns) {
+        setZstdCompressionColumns(zstdCompressionColumns, null);
+    }
+
+    public void setZstdCompressionColumns(Set<ColumnId> zstdCompressionColumns,
+                                          Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+        this.zstdCompressionColumns = zstdCompressionColumns;
     }
 
     public List<Index> getCopiedIndexes() {
@@ -3128,6 +3213,26 @@ public class OlapTable extends Table {
         Set<String> bfColumnNames = getBfColumnNames();
         if (bfColumnNames != null && !bfColumnNames.isEmpty()) {
             properties.put(PropertyAnalyzer.PROPERTIES_BF_COLUMNS, Joiner.on(", ").join(bfColumnNames));
+        }
+
+        // columns using a compression dictionary. Both halves are keyed by ColumnId, which is the
+        // column's original name, so the page size has to be looked up by the same id the name is
+        // resolved from -- re-deriving an id from the current name loses it after RENAME COLUMN.
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            List<String> specs = Lists.newArrayListWithCapacity(zstdCompressionColumns.size());
+            for (ColumnId columnId : zstdCompressionColumns) {
+                Column column = idToColumn.get(columnId);
+                if (column == null) {
+                    continue;
+                }
+                Integer pageSize = zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.get(columnId);
+                String columnName = column.getName();
+                specs.add(pageSize == null || pageSize <= 0 ? columnName : columnName + ":" + pageSize);
+            }
+            if (!specs.isEmpty()) {
+                Collections.sort(specs, String.CASE_INSENSITIVE_ORDER);
+                properties.put(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS, Joiner.on(", ").join(specs));
+            }
         }
 
         // colocate group

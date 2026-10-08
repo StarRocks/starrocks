@@ -140,6 +140,16 @@ CONF_mString(jemalloc_conf,
 // size is larger than the available physical memory without wrapping with TRY_CATCH_BAD_ALLOC
 CONF_mBool(abort_on_large_memory_allocation, "false");
 
+// Log a WARNING with the query id and the allocating stack whenever a single allocation
+// requests more than this many bytes. A value of 0 or below disables the report.
+// The check itself sits in the allocation hot path, but it is only a comparison against this
+// value; the expensive part is the report, which captures and symbolizes a stack trace and
+// takes the glog lock. Lowering the threshold far enough that ordinary allocations cross it
+// therefore degrades the whole process, so only lower it temporarily for diagnosis.
+// NOTE: the declared default only applies once config::init() has run. Allocations made before
+// that, during static initialization, see 0 and are never reported.
+CONF_mInt64(large_memory_alloc_report_threshold, "1073741824");
+
 // The port heartbeat service used.
 CONF_Int32(heartbeat_service_port, "9050");
 // The count of heart beat service.
@@ -254,15 +264,16 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Maximum number of files copied concurrently for one tablet during lake-to-lake replication.
+CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
-// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
-// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
-// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
-// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
-// guard. The pool is built once at startup; CN restart is required to change its size.
-CONF_Int32(lake_replication_file_copy_threads, "0");
+// Number of threads in the dedicated thread pool used by lake replication for per-file copy.
+// The fixed default bounds per-copy read buffers independently of CPU count. 0 means
+// cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;
+// CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "16");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -270,8 +281,9 @@ CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
 CONF_String(user_function_dir, "${STARROCKS_HOME}/lib/udf");
 // If true, clear udf cache every time be starts
 CONF_Bool(clear_udf_cache_when_start, "false");
-// The sys log level, INFO, WARNING, ERROR, FATAL.
-CONF_mString(sys_log_level, "INFO");
+// The sys log level. Matched case-insensitively; a value that matches none of the four is reported
+// and INFO is used, so a typo cannot leave the process without working logging.
+CONF_mString_enum_or_default(sys_log_level, "INFO", "INFO,WARNING,ERROR,FATAL");
 // TIME-DAY, TIME-HOUR, SIZE-MB-nnn
 CONF_String(sys_log_roll_mode, "SIZE-MB-1024");
 // The log roll num.
@@ -368,24 +380,12 @@ CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
-// Row interval between consecutive sort-key samples recorded by the segment
-// writer. Samples are consumed by tablet split and range-split parallel
-// compaction to accurately estimate row distribution for overlapping segments.
-// Setting to 0 disables sampling. The per-segment value is persisted in
-// SegmentMetadataPB.deprecated_sort_key_sample_row_interval so that a runtime change
-// does not break cross-version readers.
-CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
-// Write-time gate. When true, the segment writer ADDITIONALLY writes a full, untruncated,
-// all-sort-column order-preserving sort key index page (alongside the always-written legacy
-// truncated short key page) and stops writing the metadata sort-key samples. When false, only the
-// legacy short key page + metadata samples are written. Default true.
-CONF_mBool(enable_full_sort_key_index, "true");
-// Read-time gate (rollback valve). When true, query read paths (segment seek + logical split) USE
-// the full sort key index page when a segment has one. When false, they fall back to the legacy
-// truncated short key page for ALL segments (including ones that already carry a full page) --
-// go-forward rollback with no data rewrite. Tablet split / range-split compaction are NOT gated by
-// this switch (they consume the full page by presence). Default true.
-CONF_mBool(enable_full_sort_key_index_read, "true");
+// Upper bound on sort-key samples taken from one tablet when computing split boundaries. Matches FE
+// tablet_reshard_max_split_count (1024): a K-way split needs K-1 interior boundary points. Sampling
+// reads a bounded number of segment data pages when a tablet's short key index does not already
+// encode its whole sort key, so this also bounds that I/O. 0 disables sampling entirely -- split
+// boundaries then come from segment [min, max] only, which is coarser but always correct.
+CONF_mInt32(sort_key_max_samples_per_tablet, "1024");
 CONF_Bool(enable_transparent_data_encryption, "false");
 // BE process will exit if the percentage of error disk reach this value.
 CONF_mInt32(max_percentage_of_error_disk, "0");
@@ -472,6 +472,8 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B
@@ -560,10 +562,6 @@ CONF_mInt64(pk_index_target_file_size, "67108864");
 CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 // early sst compaction threshold for primary key index in shared-data mode.
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
-// Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "true");
-// Whether enable parallel get for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 // The threadpool max thread num for pk index get in shared-data mode.
@@ -597,7 +595,7 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // Max threads for lake partial update segment-level parallelism.
-// <= 0 means use half of CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+// <= 0 means use half of CPU core count.
 CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // Queue size for the lake partial update threadpool.
 CONF_mInt32(lake_partial_update_thread_pool_queue_size, "2048");
@@ -740,6 +738,50 @@ CONF_Double(dictionary_encoding_ratio, "0.7");
 CONF_Int32(dictionary_page_size, "1048576");
 
 CONF_Int32(small_dictionary_page_size, "4096");
+
+// compression dict column-level compression dictionary (a ZSTD dictionary). Master switch checked at the write
+// gate (segment_writer); when false, columns flagged use_zstd_compression fall back
+// to plain per-column ZSTD with no compression dict. Independent of the per-column
+// flag so it can be flipped at runtime as an operational safety valve.
+//
+// DEFAULT IS true: this switch ships only in builds that already contain the reader
+// (ColumnMetaPB.zstd_compression_dict_page, field 35, merged ahead of the write side),
+// and a dictionary page is only ever written for columns the user nominated through
+// the zstd_compression_columns table property -- a cluster that never sets the
+// property writes no dictionary pages regardless of this default.
+//
+// The one window that still needs care is a rolling upgrade FROM a release that
+// predates the reader: a compression dict data page is a ZSTD frame compressed
+// against a raw-content dictionary (dictID=0), so its frame header carries no signal
+// that a dictionary is required, and an old BE would decompress it WITHOUT the
+// dictionary and hit ZSTD corruption. During such an upgrade, do not add
+// zstd_compression_columns to any table (or set this to false) until every BE is
+// upgraded. WARNING: once a cluster has written compression dict segments it cannot
+// be downgraded below the reader build (old BEs cannot read or compact those
+// segments). Same reasoning covers cross-replica clone/replication during a
+// mixed-version window.
+CONF_mBool(enable_zstd_compression_dict, "true");
+// Bytes sampled from the first eligible data page to build the compression dict
+// ("first-page sampling" mode). ~one 64KB data page by default.
+CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
+// Minimum encoded_values size (bytes) of a data page for it to be used as the
+// dictionary sample. Guards against building a garbage dict from a tiny/near
+// empty first page and permanently marking the column dict-ready.
+CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
+// How much smaller the trial pages must get before the per-column compression
+// dictionary is kept, as a fraction. The writer compresses the first
+// kZstdDictTrialPages pages after the sample both ways and compares; below this
+// the dictionary is dropped for the whole column.
+//
+// A dictionary is not free: a page of its own per column per segment, a load per
+// segment on every read, and a decision that cannot be revisited once pages
+// reference it. So the default asks for a clear win rather than a measurable one.
+// Measured across 13 corpora x 3 page sizes: at 0.10 the dictionary is kept only
+// where it earns 10%+ (agent-log columns and replayed text at 64KB), and the cost
+// is turning down gains of 5-9% that cluster at 256KB pages, where a plain page
+// already captures most of the repetition. Lower it to about 0.05 to take those
+// too. Values below 0 are treated as 0.
+CONF_mDouble(zstd_compression_dict_min_gain, "0.10");
 
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
@@ -1080,6 +1122,14 @@ CONF_Int64(brpc_max_body_size, "2147483648");
 CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc connection types, "single", "pooled", "short".
 CONF_String_enum(brpc_connection_type, "single", "single,pooled,short");
+// Only takes effect when brpc_connection_type is "pooled". Maps to brpc's -max_connection_pool_size.
+// Note this is the capacity of the idle-connection cache of a single remote endpoint, NOT a cap on the
+// number of connections: when no idle connection is available a new one is always created, and on return
+// the connection is closed if the pool already holds this many. A value below the peak concurrency makes
+// the excess connections be created and closed repeatedly, which behaves like short connections and burns
+// ephemeral ports. Set it no lower than the peak number of in-flight RPCs to a single peer.
+// brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
+CONF_mInt32(brpc_max_connection_pool_size, "100");
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.
@@ -1438,6 +1488,13 @@ CONF_Int64(max_load_dop, "16");
 
 CONF_Bool(enable_load_colocate_mv, "true");
 
+// Whether this BE takes part in the ENCODE_ALL_NULL layout on the tablet sink RPC: as a receiver it
+// advertises the bit in the tablet-writer open result, and as a sender it asks for it. Turning it off on
+// either end of a load falls back to the unencoded layout for that load. Deliberately immutable: the
+// receiver decides from this flag both what to advertise and whether to honor the levels a sender sends,
+// and a mid-process flip would desynchronize those two decisions.
+CONF_Bool(enable_load_chunk_all_null_encoding, "true");
+
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
 
@@ -1492,6 +1549,15 @@ CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 CONF_Bool(starlet_star_cache_async_init, "true");
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -1538,6 +1604,17 @@ CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_tim
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+// Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
+// tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
+// "zstd" compresses the payload on the heartbeat thread, inside the same
+// starmgr_client_rpc_timeout_ms budget, and the FE decompresses it. "none", the default, sends the
+// heartbeat uncompressed as before.
+//
+// The FE must be able to decompress before any node is switched: an FE that predates this
+// mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this on
+// the compute nodes. An unrecognized value is reported and falls back to "none" rather than
+// keeping the node from starting.
+CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 CONF_mBool(starlet_write_file_with_tag, "false");
 #endif
 
@@ -1691,8 +1768,6 @@ CONF_mBool(enable_strict_delvec_crc_check, "true");
 // existed (or by the replication path, which cannot compute it) carry none and are always accepted.
 // Writing the checksum is unconditional; this only controls verification, as an escape hatch.
 CONF_mBool(lake_enable_del_file_crc_check, "true");
-// When the ratio of cumulative level to base level is greater than this config, use base merge.
-CONF_mDouble(lake_pk_index_cumulative_base_compaction_ratio, "0.1");
 CONF_Int32(lake_pk_index_block_cache_limit_percent, "10");
 // When true, shared-data (lake) tablet metadata and txn log files are written with an
 // Adler-32 checksum (a FixedFileHeader for single files, a footer crc for bundle files), so
@@ -1781,7 +1856,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.5"); // 50%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
@@ -2077,6 +2152,15 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+// Read-time rollback valve for constant-folding the zone map of a column that is physically
+// absent from a segment (the normal outcome of fast schema evolution `ALTER TABLE ADD COLUMN`).
+// Such a column reads through DefaultValueColumnIterator, where every row holds the same value,
+// so predicates can be evaluated exactly against a synthetic min==max zone map. Turning this off
+// restores the legacy behaviour: keep every row and mark every batch delete-partial-satisfied.
+// It is deliberately separate from enable_index_page_level_zonemap_filter, which only guards
+// SegmentIterator::_get_row_ranges_by_zone_map() and therefore cannot switch off the runtime
+// filter path (SegmentIterator::_try_to_update_ranges_by_runtime_filter).
+CONF_mBool(enable_default_value_column_zonemap_filter, "true");
 CONF_mBool(enable_index_bloom_filter, "true");
 CONF_mBool(enable_index_bitmap_filter, "true");
 
@@ -2188,6 +2272,9 @@ CONF_mInt64(jit_lru_cache_size, "0");
 CONF_mInt64(arrow_io_coalesce_read_max_buffer_size, "8388608");
 CONF_mInt64(arrow_io_coalesce_read_max_distance_size, "1048576");
 CONF_mInt64(arrow_read_batch_size, "4096");
+
+// Largest gap between two needed Parquet byte ranges that the paimon-cpp reader still merges into one read.
+CONF_mInt64(paimon_native_parquet_cache_hole_size_limit, "1048576");
 
 // default not to build the empty index
 CONF_mInt32(config_tenann_default_build_threshold, "0");
@@ -2358,6 +2445,13 @@ CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
 CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+// Hold the input segments of a compaction task on its Rowset objects for the whole task, so the
+// per-column-group passes of vertical compaction reuse them instead of reloading through the
+// metadata cache. When the cache cannot hold all input segments (small limit, or a node crowded
+// with many tablets), every pass otherwise rebuilds every segment's column metadata, which is
+// CPU-bound and proportional to the column count. Memory cost is one set of segment metadata per
+// running task, bounded by the task's input size.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 // Enable tablet write log tracking for write amplification analysis
 CONF_mBool(enable_tablet_write_log, "false");
@@ -2466,6 +2560,7 @@ CONF_mInt32(ai_function_max_retries, "3");
 CONF_mInt32(ai_function_max_retries_on_throttle, "5");
 CONF_mString(ai_function_on_error, "ignore");
 CONF_mInt32(ai_function_rate_limit_qps_chat, "128");
+CONF_mInt32(ai_function_rate_limit_qps_embedding, "128");
 CONF_mInt32(ai_function_max_inflight, "512");
 
 // Legacy ai_query runtime configuration. It is intentionally independent from the AI function runtime.
@@ -2492,4 +2587,23 @@ CONF_mInt32(table_schema_service_max_retries, "3");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// Evaluate each THEN branch of a searched CASE WHEN only on the rows that branch actually owns,
+// instead of evaluating it over the whole chunk and picking rows afterwards. Only applies when the
+// CASE result is a collection/variant type, where building a row is expensive enough to pay for
+// compacting the branch's input rows into a sub-chunk.
+// A branch is compacted when `owned_rows * ratio < chunk_rows`, i.e. when its selectivity is below
+// 1/ratio; above that threshold copying the branch's input costs more than the skipped evaluation
+// saves. 1 means "always compact", and 0 or less turns the whole thing off and restores the previous
+// behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
+// an error is no longer evaluated when no row selects it.
+CONF_mInt32(case_when_selective_eval_ratio, "2");
+// Limits for one H3 function row/worker; all values must be positive.
+CONF_mInt64(h3_max_cells_per_row, "100000");
+CONF_mInt32(h3_max_grid_disk_k, "128");
+CONF_mInt64(h3_max_polygon_vertices, "10000");
+CONF_mInt32(h3_max_polygon_components, "256");
+CONF_mInt64(h3_max_working_bytes, "67108864");
+CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
+
 } // namespace starrocks::config

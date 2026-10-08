@@ -10,7 +10,7 @@ description: "列出已注册的 AI provider，可按名称模式或类型过滤
 ## 语法
 
 ```SQL
-SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
+SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | chat } ]
 ```
 
 ## 参数
@@ -18,14 +18,15 @@ SHOW AI PROVIDERS [ LIKE '<pattern>' | TYPE { embedding | rerank | text } ]
 | 参数               | 说明                                                        |
 | ------------------ | ----------------------------------------------------------- |
 | `LIKE '<pattern>'` | 仅显示名称匹配该 SQL `LIKE` 模式的 provider。               |
-| `TYPE <type>`      | 仅显示指定类型（`embedding`、`rerank` 或 `text`）的 provider。 |
+| `TYPE <type>`      | 仅显示指定类型（`embedding`、`rerank` 或 `chat`）的 provider。 |
 
 ## 返回列
 
 | 列             | 说明                                              |
 | -------------- | ------------------------------------------------- |
 | `Name`         | provider 名称。                                   |
-| `Type`         | provider 类型（`embedding` / `rerank` / `text`）。 |
+| `Type`         | provider 类型（`embedding` / `rerank` / `chat`）。 |
+| `Protocol`     | 端点协议（`openai` / `anthropic` / `cohere`）。 |
 | `IsDefault`    | 是否为其类型的默认值（`true`/`false`）。          |
 | `Endpoint`     | 端点 URL。                                        |
 | `Model`        | 模型名。                                          |

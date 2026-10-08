@@ -39,6 +39,8 @@ import java.util.Map;
 public class MergeTabletClauseAnalyzerTest {
     private static Database db;
     private static OlapTable table;
+    private static OlapTable separateSortKeyTable;
+    private static OlapTable sortKeyIsPrimaryKeyTable;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -57,6 +59,24 @@ public class MergeTabletClauseAnalyzerTest {
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "test_table");
         Assertions.assertNotNull(table);
+
+        starRocksAssert.withTable("create table test_pk_separate_sort_key "
+                + "(k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        separateSortKeyTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_pk_separate_sort_key");
+        Assertions.assertNotNull(separateSortKeyTable);
+
+        starRocksAssert.withTable("create table test_pk_sort_key_is_key "
+                + "(k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        sortKeyIsPrimaryKeyTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "test_pk_sort_key_is_key");
+        Assertions.assertNotNull(sortKeyIsPrimaryKeyTable);
     }
 
     @Test
@@ -146,6 +166,29 @@ public class MergeTabletClauseAnalyzerTest {
         SemanticException exception = Assertions.assertThrows(SemanticException.class,
                 () -> analyzer.analyze(null, clause));
         Assertions.assertTrue(exception.getMessage().contains("Unknown properties"));
+    }
+
+    // A merge of this shape cannot attribute the rows of a segment its sources share and would fail at
+    // publish for good, so it is refused where the user can see why.
+    @Test
+    public void testRejectSeparateSortKeyPrimaryKeyTable() {
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(separateSortKeyTable);
+        MergeTabletClause clause = new MergeTabletClause(null,
+                new TabletGroupList(List.of(List.of(1L, 2L))), null);
+        SemanticException exception = Assertions.assertThrows(SemanticException.class,
+                () -> analyzer.analyze(null, clause));
+        Assertions.assertTrue(exception.getMessage().contains("Merge tablet is not supported"),
+                exception.getMessage());
+    }
+
+    // The refusal is about the ORDER BY, not about primary-key tables: one whose sort key IS its primary key
+    // routes and merges by the same columns, so it keeps working.
+    @Test
+    public void testAcceptPrimaryKeyTableWhoseSortKeyIsTheKey() {
+        AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(sortKeyIsPrimaryKeyTable);
+        MergeTabletClause clause = new MergeTabletClause(null,
+                new TabletGroupList(List.of(List.of(1L, 2L))), null);
+        analyzer.analyze(null, clause);
     }
 
     @Test

@@ -235,10 +235,21 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     static const int64_t kGetShardInfoTimeout = 5 * 1000 * 1000; // 5s (heartbeat interval)
     static const int64_t kCheckInterval = 10 * 1000;             // 10ms
     Awaitility wait;
-    auto cond = []() { return get_starlet()->is_ready(); };
+    // A null starlet means the runtime was already released by `shutdown_staros_worker()`. Treat
+    // that as "stop waiting" so a late call fails immediately instead of burning the full timeout.
+    auto cond = []() {
+        auto starlet = get_starlet();
+        return starlet == nullptr || starlet->is_ready();
+    };
     auto ret = wait.timeout(kGetShardInfoTimeout).interval(kCheckInterval).until(cond);
     if (!ret) {
         return absl::UnavailableError("starlet is still not ready!");
+    }
+    // Hold the runtime for the rest of the call: shutdown can release the global at any point, and
+    // `get_shard_info()` below blocks on a starmgr RPC that outlives any point-in-time check.
+    auto starlet = get_starlet();
+    if (starlet == nullptr) {
+        return absl::UnavailableError("starlet is not available");
     }
 
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
@@ -246,7 +257,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     // FE-side task/node selection is scheduling work on a BE whose local cache does not have
     // the shard (the FE did not push it in time, or the placement was wrong).
     StarOSWorkerMetrics::instance()->staros_shard_info_fallback_total.increment(1);
-    auto info_or = get_starlet()->get_shard_info(id);
+    auto info_or = starlet->get_shard_info(id);
     if (!info_or.ok()) {
         StarOSWorkerMetrics::instance()->staros_shard_info_fallback_failed_total.increment(1);
     }

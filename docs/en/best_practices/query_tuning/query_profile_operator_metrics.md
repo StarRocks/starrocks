@@ -312,7 +312,9 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | OverallThroughput | Throughput rate. |
 | NetworkTime | Time taken for data packet transmission (excluding post-reception processing time). |
 | NetworkBandwidth | Estimated network bandwidth. |
-| WaitTime | Waiting time due to a full sender queue. |
+| WaitTime | Sum of `BufferFullTime` and `PendingFinishTime`. |
+| BufferFullTime | Accumulated recorded time that the sender buffer was full. A child of `WaitTime`. |
+| PendingFinishTime | Elapsed time since the sink buffer began finishing, measured when the profile is updated; zero before finishing begins. A child of `WaitTime`, separate from the Pipeline-level counter of the same name. |
 | OverallTime | Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet. |
 | RpcAvgTime | Average time for RPC. |
 | RpcCount | Total number of RPCs. |
@@ -451,6 +453,31 @@ Project Operator is responsible for performing `SELECT <expr>`. If there're some
 | `ExprComputeTime` | Computation time for expressions. |
 | `CommonSubExprComputeTime` | Computation time for common sub-expressions. |
 
+### AI Project Operator
+
+AI Project executes asynchronous model calls. Its source operator exposes the following fixed counters in `UniqueMetrics`. Each driver reports only its own completed tasks; profile refreshes replace cumulative values rather than adding them again.
+
+| Metric | Unit | Description |
+|--------|------|-------------|
+| `AITaskCount` | Tasks | Terminal dispatcher tasks, including success, row failure, and cancellation. SQL NULL rows and rejections before task submission are not counted. |
+| `AIRequestCount` | Requests | HTTP submissions accepted for these tasks, including retries. Rejected submissions are not counted. |
+| `AIRetryCount` | Requests | Accepted HTTP retry submissions. |
+| `AITimeoutCount` | Events | Timeout events recorded by the dispatcher for accepted attempts. |
+| `AIErrorCount` | Tasks | Tasks ending in a sanitized row failure. Lifecycle cancellation is not a row failure. |
+| `AIHttpTime` | Time | Sum of accepted HTTP attempt durations, from submission to the transport callback. Excludes retry backoff, response parsing, and completion-queue wait time. |
+| `AIPromptTokens` | Tokens | Sum of valid provider-reported prompt token counts. |
+| `AICompletionTokens` | Tokens | Sum of valid provider-reported completion token counts. |
+| `AITotalTokens` | Tokens | Sum of valid provider-reported total token counts; not derived from prompt and completion counts. |
+| `AIPromptUsageCount` | Responses | Parsed responses containing a valid prompt token count, including an explicit zero. |
+| `AICompletionUsageCount` | Responses | Parsed responses containing a valid completion token count, including an explicit zero. |
+| `AITotalUsageCount` | Responses | Parsed responses containing a valid total token count, including an explicit zero. |
+
+All counters, including `AIHttpTime`, aggregate by sum across drivers. Concurrent requests can make this cumulative time exceed query wall-clock time. A task publishes its statistics at terminal completion, so ongoing tasks are not included yet.
+
+AI counters opt into saturating Profile summation: totals stop at the signed 64-bit maximum instead of overflowing. This requires all participating BE and FE Profile mergers to support the optional counter strategy. Older nodes ignore the strategy and retain their existing merge behavior during rolling upgrades. Other counters keep their existing aggregation policies.
+
+A token counter of zero with its corresponding usage count of zero means **unreported**, not zero consumption. A positive usage count does not imply complete provider coverage: missing, invalid, or unparsed response usage is excluded independently for each field. These are observed execution statistics, not token estimates or an exactly-once billing ledger. Query statistics and audit reporting reuse their existing delivery and failure semantics, independently of whether Profile collection is enabled. No prompts, responses, credentials, or model identifiers are added to these counters.
+
 ### LocalExchange Operator
 
 | Metric | Description |
@@ -488,3 +515,221 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
+| `RawInputBytes` | In-memory size of the chunk data passed to serialization. |
+| `SerializedBytes` | Size of the serialized chunk data before compression. Because `load_transmission_compression_type` defaults to `NO_COMPRESSION`, this is normally also the number of bytes sent over the network. |
+| `CompressedInputBytes` | Size of the serialized (pre-compression) data that was actually fed to the compressor. Chunks skipped because compression is disabled, or because the input exceeds the RPC compression size limit, are not counted. |
+| `CompressedBytes` | Size of the compressed chunk data. Only chunks that were actually compressed are counted, so both this metric and `CompressedInputBytes` are `0` under the default `NO_COMPRESSION`. `CompressedInputBytes / CompressedBytes` gives the compression ratio, and `SerializedBytes - CompressedInputBytes` is the size of the data that was not compressed. |
+
+### Spill Metrics
+
+When a query exceeds its memory budget, the spillable operators write intermediate data to disk or
+to remote storage. Every one of them publishes the same counter group, `SpillStatistics`, inside its
+own operator profile: the spillable aggregate and distinct operators, the hash join and nested loop
+join build and probe operators, and the sort operator.
+
+Which counters are non-zero depends on which of the three writers the operator uses:
+
+- **Sorted** — the blocking aggregate and blocking `DISTINCT` operators, which sort by the `GROUP BY`
+  expressions, and the sort operator, which sorts by the `ORDER BY` expressions. Each mem-table is
+  sorted and written out as one sorted block group; once enough of them accumulate, they are merged
+  back into one. This is the only writer with a compaction stage. `SortChunkTime` and `MaterializeChunkTime`
+  are non-zero only here, and so are `CompactTime`, `CompactMergeTime`, `CompactCount`,
+  `CompactBlockCount`, `CompactBytesRead`, and `CompactBytesWritten` — and those only when block
+  compaction is enabled, which today means the blocking aggregate operator and the sort operator.
+- **Partitioned** — the hash join build and probe operators and the partition-wise aggregate and
+  `DISTINCT` operators. Rows are hash-partitioned and each partition is written out on its own;
+  there is no compaction stage. A partition that grows past the mem-table limit is split in two
+  instead, and that work is counted under `SplitPartitionTime` rather than `FlushTime`.
+  `ShuffleTime`, `SplitPartitionTime`, `PartitionWriterPeakMemoryBytes`, and the `SkewMemTable*`
+  counters are non-zero only here.
+- **Unordered** — the nested loop join build and probe operators. Mem-tables are written out as
+  they are, with no sorting, no partitioning, and no compaction.
+
+`FlushMemTableTime` measures the first write-out and is reported by the sorted and the unordered
+writer. The partitioned writer has no such stage and leaves it at zero.
+
+#### Counter tree
+
+```text
+SpillStatistics
+├── AppendDataTime
+├── RowsSpilled
+├── FlushTime
+│   ├── FlushMemTableTime
+│   └── CompactTime
+│       └── CompactMergeTime
+├── WriteIOTime
+│   ├── LocalWriteIOTime
+│   └── RemoteWriteIOTime
+├── RowsRestored
+├── RestoreTime
+├── ReadIOTime
+│   ├── LocalReadIOTime
+│   └── RemoteReadIOTime
+├── BytesFlush
+│   ├── BytesFlushToLocalDisk
+│   └── BytesFlushToRemoteStorage
+├── BytesRestore
+│   ├── BytesRestoreFromLocalDisk
+│   └── BytesRestoreFromRemoteStorage
+├── SerializeTime
+├── DeserializeTime
+├── MemTablePeakMemoryBytes
+├── InputStreamPeakMemoryBytes
+├── SortChunkTime
+├── MaterializeChunkTime
+├── ShuffleTime
+├── SplitPartitionTime
+├── PartitionWriterPeakMemoryBytes
+├── RowsRestoreFromMemTable
+├── BytesRestoreFromMemTable
+├── BlockCount
+│   ├── LocalBlockCount
+│   └── RemoteBlockCount
+├── ReadIOCount
+│   ├── LocalReadIOCount
+│   └── RemoteReadIOCount
+├── CompactCount
+├── CompactBlockCount
+├── CompactBytesRead
+├── CompactBytesWritten
+├── FlushIOTaskCount
+├── PeakFlushIOTaskCount
+├── RestoreIOTaskCount
+├── PeakRestoreIOTaskCount
+├── MemTableFinalizeTime
+├── FlushIOTaskYieldCount
+├── RestoreIOTaskYieldCount
+└── SkewMemTableCount / SkewMemTableSkewRatio / SkewMemTableMergeTime /
+    SkewMemTableInputRows / SkewMemTableOutputRows /
+    SkewMemTableInputBytes / SkewMemTableOutputBytes
+```
+
+Nesting in this tree means "is part of" only where the description says so. Several counters are
+siblings in the tree but still overlap in time, because the same work is charged to more than one
+of them. See [Overlapping counters](#overlapping-counters).
+
+:::note
+`WriteIOTime`, `ReadIOTime`, `BytesFlush`, `BytesRestore`, `BlockCount`, and `ReadIOCount` are
+grouping rows for query spill: the value is always charged to the `Local...` or `Remote...` child
+that matches where the block lives, and the parent row stays at `0`. Read the totals from the
+children.
+:::
+
+#### Accepting rows
+
+These counters are charged to the operator's own thread, so they are part of the operator's time.
+
+| Metric | Description | Writer |
+|--------|-------------|------|
+| `AppendDataTime` | Time to accept a chunk into the spiller: appending it to the in-memory mem-table and, on the partitioned path, distributing its rows across partitions. | All |
+| `RowsSpilled` | Number of rows accepted by the spiller. | All |
+| `ShuffleTime` | Time to compute the target partition of each row and copy the rows into the matching partition mem-tables. Part of `AppendDataTime`. | Partitioned |
+| `SortChunkTime` | Time to sort a full mem-table by the sort keys. Charged when the flush is triggered, before the flush task is submitted. | Sorted |
+| `MaterializeChunkTime` | Time to rebuild the mem-table chunk in sorted order from the sort permutation. Charged together with `SortChunkTime`. | Sorted |
+| `MemTablePeakMemoryBytes` | Peak memory held by mem-tables. | All |
+| `PartitionWriterPeakMemoryBytes` | Peak memory held by the partitioned writer across all of its partitions. | Partitioned |
+| `SkewMemTableCount` | Number of mem-tables whose rows were merged because one group-by value dominated them. Requires an operator that supplies a skew compactor. | Partitioned |
+| `SkewMemTableSkewRatio` | Percentage of mem-table bytes removed by that merge, reported as the lowest ratio observed. | Partitioned |
+| `SkewMemTableMergeTime` | Time spent merging skewed mem-tables. | Partitioned |
+| `SkewMemTableInputRows` / `SkewMemTableOutputRows` | Rows before and after the skew merge. | Partitioned |
+| `SkewMemTableInputBytes` / `SkewMemTableOutputBytes` | Mem-table bytes before and after the skew merge. | Partitioned |
+
+#### Writing data out
+
+These counters are charged to the spill I/O threads. They run asynchronously, so they do not add to
+the operator's time directly; they slow the query down when the operator has to wait for a free
+mem-table.
+
+| Metric | Description | Writer |
+|--------|-------------|------|
+| `FlushTime` | Total time of the flush task. With the sorted writer it is `FlushMemTableTime` plus `CompactTime`; with the unordered writer it is `FlushMemTableTime` alone; with the partitioned writer it covers writing out each full partition and has no sub-stages. | All |
+| `FlushMemTableTime` | Time to write one finalized mem-table out as a new block group. | Sorted, unordered |
+| `CompactTime` | Time to merge several sorted block groups into one. Zero when block compaction is disabled, or when the number of runs never reaches the merge threshold. | Sorted |
+| `CompactMergeTime` | The merge itself: comparing sort keys and assembling the merged chunk. | Sorted |
+| `MemTableFinalizeTime` | Time inside the mem-table's serialize loop. It runs within `FlushMemTableTime` with the sorted and the unordered writer, and directly within `FlushTime` with the partitioned writer. | All |
+| `SerializeTime` | Time to serialize chunks before they are written out. | All |
+| `WriteIOTime` | Time spent appending to and flushing a block. Read the `LocalWriteIOTime` and `RemoteWriteIOTime` children. | All |
+| `BytesFlush` | Bytes written out. Read the `BytesFlushToLocalDisk` and `BytesFlushToRemoteStorage` children. | All |
+| `BlockCount` | Number of blocks allocated. Read the `LocalBlockCount` and `RemoteBlockCount` children. | All |
+| `FlushIOTaskCount` | Number of flush I/O tasks submitted. | All |
+| `PeakFlushIOTaskCount` | Highest number of flush tasks in flight at one time. | All |
+| `FlushIOTaskYieldCount` | Number of times a flush task used up its time slice and was resubmitted to finish later. | All |
+| `SplitPartitionTime` | Time to split partitions that outgrew the mem-table limit, including reading each one back and writing out the two halves. Not part of `FlushTime`. | Partitioned |
+
+#### Compaction
+
+| Metric | Description | Writer |
+|--------|-------------|------|
+| `CompactCount` | Number of compaction rounds. | Sorted |
+| `CompactBlockCount` | Number of *block groups* fed into those rounds. Despite the name it counts block groups, not blocks. | Sorted |
+| `CompactBytesRead` | Bytes read back by compaction. A subset of `BytesRestore`. | Sorted |
+| `CompactBytesWritten` | Bytes rewritten by compaction. A subset of `BytesFlush`. | Sorted |
+
+#### Reading data back
+
+| Metric | Description | Writer |
+|--------|-------------|------|
+| `RestoreTime` | Time to take the next chunk out of the prefetch buffer and start the next prefetch. Charged to the operator's own thread. | All |
+| `RowsRestored` | Number of rows handed back to the operator. | All |
+| `DeserializeTime` | Time to deserialize chunks read back from a block. | All |
+| `ReadIOTime` | Time spent reading blocks. Read the `LocalReadIOTime` and `RemoteReadIOTime` children. | All |
+| `ReadIOCount` | Number of read operations. Read the `LocalReadIOCount` and `RemoteReadIOCount` children. | All |
+| `BytesRestore` | Bytes read back. Read the `BytesRestoreFromLocalDisk` and `BytesRestoreFromRemoteStorage` children. | All |
+| `InputStreamPeakMemoryBytes` | Peak memory held by chunks that have been prefetched but not yet consumed. | All |
+| `RestoreIOTaskCount` | Number of restore I/O tasks submitted. | All |
+| `PeakRestoreIOTaskCount` | Highest number of restore tasks in flight at one time. | All |
+| `RestoreIOTaskYieldCount` | Number of times a restore task used up its time slice and was resubmitted to finish later. | All |
+| `RowsRestoreFromMemTable` / `BytesRestoreFromMemTable` | Reserved for rows served straight from a partition that never left memory. Not updated by the current implementation, so always `0`. | Partitioned |
+
+#### Overlapping counters
+
+Several counters cover the same work, so adding them up double-counts:
+
+- `MemTableFinalizeTime` contains the `SerializeTime` and write I/O of the mem-table it is writing
+  out. It is a stage boundary, not an extra cost.
+- `SerializeTime`, `WriteIOTime`, and `BytesFlush` count both the first write-out and the
+  compaction rewrite. `CompactBytesWritten` is the compaction share of `BytesFlush`.
+- `DeserializeTime`, `ReadIOTime`, `ReadIOCount`, and `BytesRestore` are shared by restore and by
+  compaction, which reads its input back through the same path. `CompactBytesRead` is the
+  compaction share of `BytesRestore`; subtract it from `BytesRestore` to get what restore itself
+  read.
+- `CompactMergeTime` does **not** overlap `DeserializeTime` or `ReadIOTime`. The merge only takes
+  chunks that a prefetch has already placed in the input buffer; the read and the deserialization
+  that fill that buffer are charged separately.
+
+#### How to read these counters
+
+1. **Start from `FlushTime`.** When spilling dominates a query, `FlushTime` is usually the largest
+   value in the group, and the upstream operator's wait time typically tracks it.
+
+2. **Split `FlushTime` into its two stages** (sorted writer only):
+   `FlushTime` = `FlushMemTableTime` + `CompactTime`.
+
+   - `FlushMemTableTime` dominates: writing the data out the first time is the cost. Compare
+     `SerializeTime` against `LocalWriteIOTime` and `RemoteWriteIOTime` to tell CPU-bound
+     serialization from a slow device, and check `BytesFlush` for how much data is involved. A wide
+     table, or one whose columns are mostly NULL, makes serialization the larger of the two.
+   - `CompactTime` dominates: the query keeps producing enough sorted block groups to hit the merge
+     threshold, and the same data is being rewritten. `CompactCount` is the number of rounds and
+     `CompactBlockCount` the number of block groups they consumed. `CompactBytesRead` and
+     `CompactBytesWritten` against `BytesRestore` and `BytesFlush` give the write amplification
+     compaction adds; when they approach the totals, most of the I/O is rewriting rather than
+     making progress.
+
+3. **Look at `CompactMergeTime` inside `CompactTime`.** It is the merge itself, so its share says
+   where compaction is stuck:
+
+   - A high share means the merge is CPU-bound. Many sort columns, wide chunks, or many block groups
+     merged at once all push key comparison and chunk assembly up.
+   - A low share means the merge is waiting on its input or its output. The rest of `CompactTime`
+     is then the read side (`ReadIOTime`, `DeserializeTime`) or the write side (`SerializeTime`,
+     `WriteIOTime`), and those counters say which.
+
+4. **Check for concurrency limits.** `PeakFlushIOTaskCount` and `PeakRestoreIOTaskCount` show how
+   many I/O tasks ever ran at once; a high `FlushIOTaskYieldCount` means flush tasks repeatedly ran
+   out of their time slice and had to be resubmitted.
+
+5. **Do not add overlapping counters together.** See
+   [Overlapping counters](#overlapping-counters) before treating the group as a breakdown of
+   `FlushTime`.

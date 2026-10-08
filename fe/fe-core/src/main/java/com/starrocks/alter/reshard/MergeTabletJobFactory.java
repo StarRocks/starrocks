@@ -32,6 +32,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
@@ -59,6 +60,11 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
     // which exception the empty case throws -- see createTabletReshardJob. A new factory is built per
     // invocation, so this is per-plan state, not shared.
     private boolean sawStaleTabletStats;
+
+    // Per-plan state, like sawStaleTabletStats: a tablet was excluded only because it still holds
+    // merge-blocking shared data files (or has not been observed yet). Compaction clears that without
+    // changing layout, so an empty plan caused by it must stay retriable.
+    private boolean sawTabletsHoldingSharedFiles;
 
     public MergeTabletJobFactory(Database db, OlapTable table, MergeTabletClause mergeTabletClause) {
         this.db = db;
@@ -111,13 +117,21 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         Map<Long, ReshardingPhysicalPartition> reshardingPhysicalPartitions =
                 createReshardingPhysicalPartitions(parallelismFloor);
         if (reshardingPhysicalPartitions.isEmpty()) {
-            if (sawStaleTabletStats) {
+            if (sawStaleTabletStats || sawTabletsHoldingSharedFiles) {
                 // Transient, so it must stay retriable: a plain StarRocksException is not latched by
-                // the caller. Signalling "deterministic" here would suppress this table until its
-                // layout or configuration changed, which a statistics refresh does not do.
+                // the caller. Both causes clear without a layout or configuration change -- a
+                // statistics refresh for the former, a compaction for the latter -- so signalling
+                // "deterministic" here would suppress this table until something unrelated changed.
+                List<String> reasons = new ArrayList<>();
+                if (sawStaleTabletStats) {
+                    reasons.add("tablet size statistics are stale");
+                }
+                if (sawTabletsHoldingSharedFiles) {
+                    reasons.add("tablets have not been proven free of merge-blocking shared data files");
+                }
                 throw new StarRocksException("No tablets need to merge in table "
                         + db.getFullName() + '.' + table.getName()
-                        + " (tablet size statistics are stale)");
+                        + " (" + String.join("; ", reasons) + ")");
             }
             // Deterministic: the same layout and configuration produce the same empty plan, so the
             // caller may treat it as a normal outcome rather than a failure. That matters for a
@@ -164,6 +178,29 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             if (tabletGroupList != null) {
                 Map<PhysicalPartition, Map<MaterializedIndex, List<List<Long>>>> mergeTabletGroups =
                         resolveMergeTabletGroups(tabletGroupList.getTabletIdGroups());
+
+                // The user named these tablets explicitly, so silently dropping one that still holds
+                // merge-blocking shared data files would be worse than an error -- they would believe
+                // the merge had happened. Reject the whole request and name the tablet, rather than
+                // filtering it out the way the automatic path does.
+                for (var physicalPartitionEntry : mergeTabletGroups.entrySet()) {
+                    for (var indexEntry : physicalPartitionEntry.getValue().entrySet()) {
+                        MaterializedIndex oldIndex = indexEntry.getKey();
+                        for (List<Long> group : indexEntry.getValue()) {
+                            for (Long tabletId : group) {
+                                Tablet tablet = oldIndex.getTablet(tabletId);
+                                if (holdsSharedFiles(tablet)) {
+                                    throw new StarRocksException("Tablet " + tabletId
+                                            + " has not been proven free of merge-blocking shared data files"
+                                            + " and cannot be merged yet; this is usually cleared by"
+                                            + " compaction, but can also mean the tablet has not been"
+                                            + " observed yet");
+                                }
+                            }
+                        }
+                    }
+                }
+
                 for (var physicalPartitionEntry : mergeTabletGroups.entrySet()) {
                     PhysicalPartition physicalPartition = physicalPartitionEntry.getKey();
                     Map<Long, ReshardingMaterializedIndex> reshardingIndexes = new HashMap<>();
@@ -323,6 +360,26 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
         return mergeTabletGroups;
     }
 
+    /**
+     * A tablet that still holds merge-blocking shared data files must not be merged: a merge inherits
+     * those files verbatim, so a second owner makes the merged result unsafe. This filter is currently
+     * the only thing keeping such a tablet out of a merge job, and a planned job cannot be given up --
+     * its transaction is already committed by publish time. A tablet nobody has reported on counts as
+     * holding them: without a fallback, missing evidence must never admit a candidate.
+     *
+     * <p>How fast a tablet leaves this state is not uniform. A split does not rewrite data, so its
+     * children inherit the parent's files; only a compaction that rewrites them clears the flag. On a
+     * non-primary-key table an operator can force that with ALTER TABLE ... COMPACT, which runs at
+     * MANUAL_COMPACT priority and reaches the BE as force_base_compaction. PrimaryCompactionPolicy
+     * does read that flag, but only inside a branch guarded by total_dels &gt; 0, so it forces base
+     * compaction on a primary-key tablet that carries outstanding deletes and skips it on one that
+     * does not. A split child is typically delete-free, so the same statement leaves it unmergeable
+     * until ordinary compaction happens to rewrite those rowsets.
+     */
+    private static boolean holdsSharedFiles(Tablet tablet) {
+        return ((LakeTablet) tablet).hasSharedFiles();
+    }
+
     private List<List<Long>> createMergeTabletGroups(
             PhysicalPartition physicalPartition, MaterializedIndex oldIndex, long targetSize, int parallelismFloor,
             @Nullable ColocateRangeUtils.Classifier classifier) {
@@ -385,6 +442,26 @@ public class MergeTabletJobFactory implements TabletReshardJobFactory {
             // becomes valid as soon as the next statistics pass lands.
             sawStaleTabletStats |= staleStats;
             if (dataSize >= pairThresh || staleStats) {
+                flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
+                currentTabletGroup = new ArrayList<>();
+                currentSize = 0;
+                continue;
+            }
+
+            // Everything else about this tablet qualifies; the shared-file state is the deciding
+            // reason.
+            if (holdsSharedFiles(tablet)) {
+                sawTabletsHoldingSharedFiles = true;
+                // This counts dirty tablets that passed every preceding per-tablet gate (colocate-range
+                // classification, size, staleness) while merge budget for some group still remained. It
+                // is a diagnostic signal, not exact causal accounting: a counted tablet is not
+                // guaranteed to have itself ended up in an emitted (two-or-more member) merge group --
+                // a group it would have joined can still be flushed as a singleton by a later gate or by
+                // the final flush. Exact accounting would mean deferring the count until a group
+                // actually reaches two members.
+                if (MetricRepo.hasInit && mergeBudget > 0) {
+                    MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED.increase(1L);
+                }
                 flushMergeTabletGroup(mergeTabletGroups, currentTabletGroup);
                 currentTabletGroup = new ArrayList<>();
                 currentSize = 0;

@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - 单位: 计数
 - 描述: 小文件缓存的数量。
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- 单位: 计数
+- 描述: 从数据页采样排序键时放弃某个 Segment、退回到该 Segment 粗粒度 `[min, max]` 区间的累计次数：Schema 不符合预期、`sort_key_idxes` 与 Segment 自身的 Schema 不一致、页读取失败、读取行数不足，或采样值超出 Segment 声明的边界。采样采用失败即退化（fail-open）策略，因此该指标上升不会导致分裂失败，但意味着 Tablet 分裂与范围分裂 Compaction 使用的边界比预期更粗。
+
+## `sort_key_sampling_data_page_latency`
+
+- 单位: us
+- 描述: 从数据页采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。统计所有通过采样预算检查的尝试，包括随后退回粗粒度区间的尝试，因此持续失败即退化的慢 Tablet 在此依然可见。
+
+## `sort_key_sampling_data_page_segments_total`
+
+- 单位: 计数
+- 描述: 采样确定走数据页路径的 Segment 累计数量。该计数在采样几何确定之后、首次读取之前累加，因此随后读取失败并退化的 Segment 同样计入——该指标的目的是显示"未走"免费的 Short Key Index 路径。若要了解实际付出的 I/O，请查看 `sort_key_sampling_read_bytes_total`。
+
+## `sort_key_sampling_read_bytes_total`
+
+- 单位: 字节
+- 描述: 采样排序键时从 Segment 数据页读取的累计压缩字节数。取自页读取器自身的统计，因此只统计真实发生的传输，包括随后退化的那些尝试。这是观察分裂点采样 I/O 开销的指标。
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- 单位: 计数
+- 描述: 为采样而打开 Segment 文件的 Rowset 累计数量。打开操作以该 Rowset 至少有一个 Segment 具有非零采样预算为前提，因此只有真正尝试采样时该指标才会上升。请与 `sort_key_sampling_samples_total` 对照阅读：打开了 Rowset 却没有产生样本，说明采样预算没有落到被读取的那些 Segment 上。
+
+## `sort_key_sampling_samples_total`
+
+- 单位: 计数
+- 描述: 两条采样路径共同产生的排序键样本累计数量。若该指标上升而 `sort_key_sampling_data_page_segments_total` 未上升，说明样本来自免费的 Short Key Index 路径。
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- 单位: 计数
+- 描述: 进入 Short Key Index 采样路径后放弃该 Segment 的累计次数，原因包括：几何信息与 Segment 自身行数交叉校验不通过、索引项解码失败、采样值乱序或超出 Segment 声明的边界。放弃并不意味着该 Segment 就此没有采样：只要它分到了数据页预算，接下来会改走数据页采样，只有预算为 0 或数据页采样同样一无所获时，才退回到粗粒度 `[min, max]` 区间。该指标**不**统计两种情形：一是索引块少于两个的 Segment，它直接离开该路径而不计数，改由数据页按行粒度采样；二是 Short Key Index 无法完整编码排序键的 Schema（例如 VARCHAR 排序键），这类表根本不会进入该路径，指标恒为 0，相应 Segment 体现在 `sort_key_sampling_data_page_segments_total` 中。
+
+## `sort_key_sampling_short_key_index_latency`
+
+- 单位: us
+- 描述: 从 Short Key Index 采样单个 Segment 排序键所花费的时间，以 bvar 延迟序列发布（平均值、分位数、最大值、qps 与计数）。该路径不读取任何数据页，因此其取值应远低于 `sort_key_sampling_data_page_latency`。
+
 ## `spill_disk_bytes_used`
 
 - 单位: 字节
@@ -618,7 +658,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。推导层（derived tier，即 Range 分布的增量物化视图刷新，其边界由推导得出而非采样得出）取值：`materialized_view_target`（目标是推导层无法取键的物化视图 —— 不是增量物化视图、可见 index 多于一个、排序键不是那唯一一列隐藏 row-id 列，或 row-id 的种类还没有边界来源支持）、`row_id_span_too_small`（预估输出太小，row-id 键空间无法被有效切分 —— 单个 tablet 分到的行数无法避开各计算节点缓存 id 区间留下的空洞，切出来的分裂会不均衡而非有帮助）、`row_id_space_not_pristine`（目标表的自增计数器已经发放过 id，计算节点可能仍持有规划器无法计入的缓存 id 区间；只有全新未使用的 id 空间才允许推导边界）、`multiple_temporary_partitions`（该次刷新写入多个替换分区；Row ID 由整表共用的一个计数器分配，因此单个分区的 id 会成连续带，跨整个 id 空间的切分会让每个分区的大多数 Tablet 为空——开启该特性也不会改变这一点，因此与 `disabled_by_config` 分开上报）、`estimate_unavailable`（没有可用的输出大小估计，无法据此选定 tablet 数量）、`derivation_failed`（边界来源抛错，或推导出的边界未通过校验。与属于采样层的 `tablet_pre_split_sampler_failed{reason=sample_failed}` 相区分）、`stale_catalog_state`（推导层含义：切分点推导完成到构建作业之间，目标的可见 index 集合发生了变化 —— 与上文多分区路径同一类快照失效竞争，只是发生在另一个快照上）、`submit_failed`（推导层含义：推导出的切分点未能变成一个被接纳的作业 —— 或是 reshard 作业工厂拒绝构建，或是 `TabletReshardJobMgr` 拒绝接纳。与 `derivation_failed` 相区分，后者指切分点本身没能产出。采样层的同名取值记在 `tablet_pre_split_sampler_failed` 下，因为那里采样器确实运行过）。
+- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`source_missing_sampled_column`（从 `FILES()` 导入的 INSERT 中，需要采样的目标列不在解析后的 INSERT 投影中，采样器没有可投影的 FILES 源列或字面量）、`unsupported_sampled_projection`（需要采样的目标列由采样器无法重现的表达式或 NULL 提供，例如依赖会话时区的 `from_unixtime(ts)`；FILES 源列可能存在。`date_trunc('day', ts)` 这类确定性表达式会直接参与采样，不计入该值）、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`no_matching_partition`（手动 Range 分区的目标表：采样到的分区列值不落在本次导入可写入的任何已声明分区范围内，该值直接丢弃，不会据此新建分区）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。推导层（derived tier，即 Range 分布的增量物化视图刷新，其边界由推导得出而非采样得出）取值：`materialized_view_target`（目标是推导层无法取键的物化视图 —— 不是增量物化视图、可见 index 多于一个、排序键不是那唯一一列隐藏 row-id 列，或 row-id 的种类还没有边界来源支持）、`row_id_span_too_small`（预估输出太小，row-id 键空间无法被有效切分 —— 单个 tablet 分到的行数无法避开各计算节点缓存 id 区间留下的空洞，切出来的分裂会不均衡而非有帮助）、`row_id_space_not_pristine`（目标表的自增计数器已经发放过 id，计算节点可能仍持有规划器无法计入的缓存 id 区间；只有全新未使用的 id 空间才允许推导边界）、`multiple_temporary_partitions`（该次刷新写入多个替换分区；Row ID 由整表共用的一个计数器分配，因此单个分区的 id 会成连续带，跨整个 id 空间的切分会让每个分区的大多数 Tablet 为空——开启该特性也不会改变这一点，因此与 `disabled_by_config` 分开上报）、`estimate_unavailable`（没有可用的输出大小估计，无法据此选定 tablet 数量。INSERT-from-table 导入在无法根据表统计信息估算 External Catalog 源表大小时，也记为该值）、`derivation_failed`（边界来源抛错，或推导出的边界未通过校验。与属于采样层的 `tablet_pre_split_sampler_failed{reason=sample_failed}` 相区分）、`stale_catalog_state`（推导层含义：切分点推导完成到构建作业之间，目标的可见 index 集合发生了变化 —— 与上文多分区路径同一类快照失效竞争，只是发生在另一个快照上）、`submit_failed`（推导层含义：推导出的切分点未能变成一个被接纳的作业 —— 或是 reshard 作业工厂拒绝构建，或是 `TabletReshardJobMgr` 拒绝接纳。与 `derivation_failed` 相区分，后者指切分点本身没能产出。采样层的同名取值记在 `tablet_pre_split_sampler_failed` 下，因为那里采样器确实运行过）。
 - 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。推导层的跳过同样记在本计数器上，而不是 `tablet_pre_split_sampler_failed`：推导层完全不读取数据，因此采样器从未运行 —— `derivation_failed` 也是如此。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
@@ -657,7 +697,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径（P2-a）计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留样本数最多的分区、丢弃样本数最少的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

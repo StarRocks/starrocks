@@ -63,7 +63,6 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -134,6 +133,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.plugin.AuditEvent;
+import com.starrocks.proto.AIExecutionStatisticsPB;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -360,8 +360,8 @@ public class StmtExecutor {
     private boolean isProxy;
     private List<ByteBuffer> proxyResultBuffer = null;
     private ShowResultSet proxyResultSet = null;
+    // Authoritative result-batch or forwarded statistics; coordinator snapshots are read on demand.
     private PQueryStatistics statisticsForAuditLog;
-    private boolean statisticsForAuditLogFromPlaceholder = false;
     private List<StmtExecutor> subStmtExecutors;
     // Set as soon as a cancellation reaches this statement, by whatever route: KILL QUERY, a cancelled
     // TaskRun, a closed client. cancel() itself only reaches the coordinator, so once a statement has
@@ -431,6 +431,7 @@ public class StmtExecutor {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
+        summaryProfile.addInfoString(ProfileManager.CUSTOM_QUERY_ID, context.getCustomQueryId());
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeStringWithTimeZone(context.getStartTime(), profileZone));
 
@@ -1134,9 +1135,26 @@ public class StmtExecutor {
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
                     retryContext.setRetryTime(i);
+                    // The plan this attempt actually runs. A previous iteration's
+                    // ExecuteExceptionHandler.handle() may have replaced it via rebuildExecPlan(), so the
+                    // profile and EXPLAIN ANALYZE below must describe this plan rather than the one the
+                    // first planning produced -- otherwise the new coordinator's runtime counters are
+                    // paired with a stale operator tree. retryContext owns the current plan; this is only
+                    // a per-attempt snapshot of it, distinct from lastExecPlan, which tracks the latest
+                    // generated plan for the failure dump in fe.plan.log.
+                    final ExecPlan attemptPlan = retryContext.getExecPlan();
                     try {
                         //reset query id for each retry
                         if (i > 0) {
+                            // Re-read the cancellation flag: a KILL can land between the gate below and
+                            // here, because the finally block does real work in between (profile cleanup,
+                            // compute-resource re-acquisition). Without this, a query stopped in that
+                            // window still gets a fresh coordinator and is redeployed. This narrows the
+                            // window rather than closing it -- cancel() and the coord handoff inside
+                            // handleQueryStmt are still not atomic, which predates this path.
+                            if (isCancelled()) {
+                                throw new StarRocksException("Query has been cancelled");
+                            }
                             uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
@@ -1144,7 +1162,7 @@ public class StmtExecutor {
                             retryContext.prepareRetry();
                         }
 
-                        handleQueryStmt(retryContext.getExecPlan());
+                        handleQueryStmt(attemptPlan);
                         break;
                     } catch (Exception e) {
                         // For Arrow Flight SQL, FE doesn't know whether the client has already pull data from BE.
@@ -1155,7 +1173,11 @@ public class StmtExecutor {
                         ExecuteExceptionHandler.handle(e, retryContext);
                         // sync lastExecPlan in case rebuildExecPlan produced a new plan
                         lastExecPlan = retryContext.getExecPlan();
-                        if (!context.getMysqlChannel().isSend()) {
+                        // Two things make a retry unsafe. Results already on the wire (isSend), and a
+                        // cancellation that has reached this statement: KILL QUERY or a closed client
+                        // sets `cancelled`, and without this check a retryable failure recorded before
+                        // the KILL would still start a whole new execution of a query someone stopped.
+                        if (!context.getMysqlChannel().isSend() && !isCancelled()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
                                 originStmt = parsedStmt.getOrigStmt().originStmt;
@@ -1185,7 +1207,7 @@ public class StmtExecutor {
                                 }
 
                                 if (context.isProfileEnabled()) {
-                                    isAsync = tryProcessProfileAsync(execPlan, i);
+                                    isAsync = tryProcessProfileAsync(attemptPlan, i);
                                     if (parsedStmt.isExplainAnalyze()) {
                                         if (coord != null && coord.isShortCircuit()) {
                                             throw new StarRocksException(
@@ -1193,7 +1215,7 @@ public class StmtExecutor {
                                                             "you can set it off by using  set enable_short_circuit=false");
                                         }
                                         handleExplainStmt(ExplainAnalyzer.analyze(
-                                                ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                                ProfilingExecPlan.buildFrom(attemptPlan), profile, null,
                                                 context.getSessionVariable().getColorExplainOutput()));
                                     }
                                 }
@@ -1444,6 +1466,19 @@ public class StmtExecutor {
         context.getAuditEventBuilder().addReadRemoteCnt(execStats.readRemoteCnt != null ? execStats.readRemoteCnt : 0);
         context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
         context.getAuditEventBuilder().addTransmittedBytes(execStats.transmittedBytes != null ? execStats.transmittedBytes : 0);
+        if (execStats.aiStatistics != null) {
+            AIExecutionStatisticsPB ai = execStats.aiStatistics;
+            context.getAuditEventBuilder()
+                    .addAITaskCount(ai.taskCount)
+                    .addAIRequestCount(ai.requestCount)
+                    .addAIRetryCount(ai.retryCount)
+                    .addAITimeoutCount(ai.timeoutCount)
+                    .addAIErrorCount(ai.errorCount)
+                    .addAIHttpTimeNs(ai.httpTimeNs)
+                    .addAIPromptTokens(ai.promptTokens, ai.promptUsageCount)
+                    .addAICompletionTokens(ai.completionTokens, ai.completionUsageCount)
+                    .addAITotalTokens(ai.totalTokens, ai.totalUsageCount);
+        }
     }
 
     private void clearQueryScopeHintContext() {
@@ -1561,6 +1596,7 @@ public class StmtExecutor {
 
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
+            context.getAuditEventBuilder().setCustomQueryId(clonedSessionVariable.getCustomQueryId());
         }
     }
 
@@ -2240,7 +2276,6 @@ public class StmtExecutor {
     void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null && parsedStmt.getOrigStmt() != null && parsedStmt.getOrigStmt().getOrigStmt() != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
-            statisticsForAuditLogFromPlaceholder = false;
             if (!isOutfileQuery) {
                 context.getState().setEof();
             } else {
@@ -2413,6 +2448,10 @@ public class StmtExecutor {
             throw new StarRocksException("Query profile not found for query_id: " + queryId +
                 ". The query may not have generated a profile, or the profile has been evicted from memory.");
         }
+        // Checked again here, not only in the analyzer: a profile absent at analysis time is allowed through,
+        // and a running query publishes its profile every runtime_profile_report_interval, so it can appear
+        // between the two lookups.
+        Authorizer.checkQueryProfileAccessAndReport(context, profileElement);
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
@@ -3268,48 +3307,39 @@ public class StmtExecutor {
 
     public void setQueryStatistics(PQueryStatistics statistics) {
         this.statisticsForAuditLog = statistics;
-        this.statisticsForAuditLogFromPlaceholder = false;
     }
 
     public PQueryStatistics getQueryStatisticsForAuditLog() {
-        if (statisticsForAuditLog == null) {
-            statisticsForAuditLog = coord != null ? coord.getAuditStatistics() : null;
-            if (statisticsForAuditLog == null) {
-                statisticsForAuditLog = new PQueryStatistics();
-                statisticsForAuditLogFromPlaceholder = true;
-            } else {
-                statisticsForAuditLogFromPlaceholder = false;
-            }
-        } else if (statisticsForAuditLogFromPlaceholder && coord != null) {
-            // Refresh placeholder stats with coordinator audit statistics when they arrive.
-            PQueryStatistics coordinatorStats = coord.getAuditStatistics();
-            if (coordinatorStats != null) {
-                statisticsForAuditLog = coordinatorStats;
-                statisticsForAuditLogFromPlaceholder = false;
-            }
+        PQueryStatistics statistics = statisticsForAuditLog;
+        if (statistics == null && coord != null) {
+            // Read a fresh snapshot so late reports remain visible to later audit/detail consumers.
+            statistics = coord.getAuditStatistics();
         }
-        if (statisticsForAuditLog.scanBytes == null) {
-            statisticsForAuditLog.scanBytes = 0L;
+        if (statistics == null) {
+            statistics = new PQueryStatistics();
         }
-        if (statisticsForAuditLog.scanRows == null) {
-            statisticsForAuditLog.scanRows = 0L;
+        if (statistics.scanBytes == null) {
+            statistics.scanBytes = 0L;
         }
-        if (statisticsForAuditLog.cpuCostNs == null) {
-            statisticsForAuditLog.cpuCostNs = 0L;
+        if (statistics.scanRows == null) {
+            statistics.scanRows = 0L;
         }
-        if (statisticsForAuditLog.memCostBytes == null) {
-            statisticsForAuditLog.memCostBytes = 0L;
+        if (statistics.cpuCostNs == null) {
+            statistics.cpuCostNs = 0L;
         }
-        if (statisticsForAuditLog.spillBytes == null) {
-            statisticsForAuditLog.spillBytes = 0L;
+        if (statistics.memCostBytes == null) {
+            statistics.memCostBytes = 0L;
         }
-        if (statisticsForAuditLog.readLocalCnt == null) {
-            statisticsForAuditLog.readLocalCnt = 0L;
+        if (statistics.spillBytes == null) {
+            statistics.spillBytes = 0L;
         }
-        if (statisticsForAuditLog.readRemoteCnt == null) {
-            statisticsForAuditLog.readRemoteCnt = 0L;
+        if (statistics.readLocalCnt == null) {
+            statistics.readLocalCnt = 0L;
         }
-        return statisticsForAuditLog;
+        if (statistics.readRemoteCnt == null) {
+            statistics.readRemoteCnt = 0L;
+        }
+        return statistics;
     }
 
     public void handleInsertOverwrite(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
@@ -4168,6 +4198,7 @@ public class StmtExecutor {
     }
 
     public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        coord = null;
         try {
             UUID uuid = context.getQueryId();
             context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
@@ -4196,10 +4227,12 @@ public class StmtExecutor {
             processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
             LOG.error("Failed to execute metadata collection job", e);
-            if (coord.getExecStatus().ok()) {
+            if (coord == null || coord.getExecStatus().ok()) {
                 context.getState().setError(e.getMessage());
             }
-            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            if (coord != null) {
+                coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+            }
         } finally {
             try {
                 if (context.isProfileEnabled()) {
@@ -4212,6 +4245,17 @@ public class StmtExecutor {
                 recordExecStatsIntoContext();
             } catch (Exception e) {
                 LOG.warn("Failed to unregister query", e);
+            }
+            if (coord != null) {
+                coord.clearExternalResources();
+            } else {
+                for (ScanNode scanNode : plan.getScanNodes()) {
+                    try {
+                        scanNode.clear();
+                    } catch (Exception e) {
+                        LOG.warn("Failed to clear scan resources for {}", scanNode.getClass().getSimpleName(), e);
+                    }
+                }
             }
         }
     }
@@ -4362,9 +4406,8 @@ public class StmtExecutor {
     }
 
     private String resolveImpersonatedUser() {
-        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
-        String currentUser = context.getCurrentUserIdentity() == null ? null :
-                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        String qualifiedUser = context.getQualifiedUser();
+        String currentUser = context.getCurrentUserIdentity() == null ? null : context.getCurrentUserIdentity().getUser();
         if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
             return null;
         }

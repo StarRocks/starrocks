@@ -399,6 +399,27 @@ public class PreSplitTargetsTest {
     }
 
     @Test
+    public void isEmptyPartition_requiresNoCommittedLoadAndZeroRowCount() {
+        // The index row count lags a load by a TabletStatMgr sweep, so a partition a load has already
+        // committed to (visible version past the initial one) must not count as empty while it still
+        // reads zero rows.
+        MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        PhysicalPartition partition = mock(PhysicalPartition.class);
+
+        when(partition.getVisibleVersion()).thenReturn(PhysicalPartition.PARTITION_INIT_VERSION);
+        when(baseIndex.getRowCount()).thenReturn(0L);
+        Assertions.assertTrue(PreSplitTargets.isEmptyPartition(partition, baseIndex));
+
+        when(partition.getVisibleVersion()).thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        Assertions.assertFalse(PreSplitTargets.isEmptyPartition(partition, baseIndex),
+                "a committed load with a not-yet-refreshed row count is not empty");
+
+        when(partition.getVisibleVersion()).thenReturn(PhysicalPartition.PARTITION_INIT_VERSION);
+        when(baseIndex.getRowCount()).thenReturn(42L);
+        Assertions.assertFalse(PreSplitTargets.isEmptyPartition(partition, baseIndex));
+    }
+
+    @Test
     public void resolveVisibleIndexTargets_baseNonEmptyRowCount_stillResolves() {
         // Row-count emptiness is a separate PARTITION_NOT_EMPTY gate elsewhere; the resolver
         // itself must not reject a non-empty base index.

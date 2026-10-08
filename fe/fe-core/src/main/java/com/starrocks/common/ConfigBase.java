@@ -94,6 +94,23 @@ public class ConfigBase {
          * @return an array of alias names
          */
         String[] aliases() default {};
+
+        /**
+         * Whether the value is a credential (password, secret key, token, ...). ADMIN SHOW FRONTEND CONFIG and
+         * the /variable page report a set value as {@link ConfigBase#SENSITIVE_CONFIG_MASK}; the field keeps the real value.
+         */
+        boolean sensitive() default false;
+    }
+
+    // What a sensitive config's value is reported as. Matches the BE (/varz, be_configs) and SHOW STORAGE VOLUMES.
+    public static final String SENSITIVE_CONFIG_MASK = "******";
+
+    // An empty value stays empty, so the output still tells an unset credential from a set one.
+    static String maskIfSensitive(ConfField anno, String value) {
+        if (anno.sensitive() && !Strings.isNullOrEmpty(value)) {
+            return SENSITIVE_CONFIG_MASK;
+        }
+        return value;
     }
 
     protected Properties props;
@@ -143,35 +160,38 @@ public class ConfigBase {
         HashMap<String, String> map = new HashMap<String, String>();
         Field[] fields = configFields;
         for (Field f : fields) {
-            if (f.getAnnotation(ConfField.class) == null) {
+            ConfField anno = f.getAnnotation(ConfField.class);
+            if (anno == null) {
                 continue;
             }
+            String value;
             if (f.getType().isArray()) {
                 switch (f.getType().getSimpleName()) {
                     case "short[]":
-                        map.put(f.getName(), Arrays.toString((short[]) f.get(null)));
+                        value = Arrays.toString((short[]) f.get(null));
                         break;
                     case "int[]":
-                        map.put(f.getName(), Arrays.toString((int[]) f.get(null)));
+                        value = Arrays.toString((int[]) f.get(null));
                         break;
                     case "long[]":
-                        map.put(f.getName(), Arrays.toString((long[]) f.get(null)));
+                        value = Arrays.toString((long[]) f.get(null));
                         break;
                     case "double[]":
-                        map.put(f.getName(), Arrays.toString((double[]) f.get(null)));
+                        value = Arrays.toString((double[]) f.get(null));
                         break;
                     case "boolean[]":
-                        map.put(f.getName(), Arrays.toString((boolean[]) f.get(null)));
+                        value = Arrays.toString((boolean[]) f.get(null));
                         break;
                     case "String[]":
-                        map.put(f.getName(), Arrays.toString((String[]) f.get(null)));
+                        value = Arrays.toString((String[]) f.get(null));
                         break;
                     default:
                         throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
                 }
             } else {
-                map.put(f.getName(), f.get(null).toString());
+                value = f.get(null).toString();
             }
+            map.put(f.getName(), maskIfSensitive(anno, value));
         }
         return map;
     }
@@ -262,11 +282,32 @@ public class ConfigBase {
                             + confVal);
                 }
                 break;
+            case "group_provider_http_connect_timeout_ms":
+            case "group_provider_http_read_timeout_ms":
+                // URLConnection reads 0 as "no timeout" - the unbounded read these exist to prevent - and
+                // rejects a negative value with an unchecked exception that would surface on the journal
+                // replay thread. Neither may reach the setter.
+                int timeoutMs = Integer.parseInt(confVal);
+                if (timeoutMs <= 0) {
+                    throw new InvalidConfException("'" + f.getName() + "' must be a positive number of " +
+                            "milliseconds, current value: " + confVal);
+                }
+                break;
             case "db_used_data_quota_update_interval_secs":
                 int intVal = Integer.parseInt(confVal);
                 if (intVal < 30) {
                     throw new InvalidConfException("'db_used_data_quota_update_interval_secs' configuration " +
                             "must be at least 30 seconds, current value: " + confVal);
+                }
+                break;
+            case "label_clean_interval_second":
+                // The value drives Daemon.run()'s Thread.sleep(): 0 spins the label cleaner and a
+                // negative value throws IllegalArgumentException, which escapes the daemon loop and
+                // kills the cleaner thread for good.
+                int labelCleanInterval = Integer.parseInt(confVal);
+                if (labelCleanInterval <= 0) {
+                    throw new InvalidConfException("'label_clean_interval_second' configuration " +
+                            "must be greater than 0, current value: " + confVal);
                 }
                 break;
             case "http_request_allow_private_in_allowlist":
@@ -588,7 +629,7 @@ public class ConfigBase {
 
             config.add(confKey);
             config.add(Arrays.toString(anno.aliases()));
-            config.add(Strings.nullToEmpty(confVal));
+            config.add(Strings.nullToEmpty(maskIfSensitive(anno, confVal)));
             config.add(f.getType().getSimpleName());
             config.add(String.valueOf(anno.mutable()));
             config.add(anno.comment());

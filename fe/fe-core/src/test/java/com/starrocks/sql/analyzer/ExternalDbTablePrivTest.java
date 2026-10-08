@@ -261,4 +261,45 @@ public class ExternalDbTablePrivTest {
                 "revoke usage on catalog hive0 from test",
                 "you need (at least one of) the ANY privilege(s) on CATALOG hive0 for this operation");
     }
+
+    @Test
+    public void testTruncateTableChecksStatementCatalog() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        // The session sits in the internal catalog while the statement names hive0 explicitly.
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        ctx.setDatabase(null);
+        StatementBase stmt =
+                UtFrameUtils.parseStmtWithNewParser("truncate table hive0.tpch.region", ctx);
+
+        // Without DELETE on hive0.tpch.region the statement must be rejected -- the check may not
+        // fall back to the session catalog, where the object does not exist and the native
+        // controller would let it through.
+        ctxToTestUser();
+        try {
+            Authorizer.check(stmt, ctx);
+            Assertions.fail("truncate on an external table was allowed without any privilege");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(
+                    "you need (at least one of) the DELETE privilege(s) on TABLE region"), e.getMessage());
+        }
+
+        // GRANT resolves the table against the session catalog -- only two-part names are accepted.
+        ctxToRoot();
+        ctx.setCurrentCatalog("hive0");
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("grant delete on table tpch.region to test", ctx), ctx);
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        ctxToTestUser();
+        Authorizer.check(stmt, ctx);
+
+        ctxToRoot();
+        ctx.setCurrentCatalog("hive0");
+        DDLStmtExecutor.execute(
+                UtFrameUtils.parseStmtWithNewParser("revoke delete on table tpch.region from test", ctx), ctx);
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        ctxToTestUser();
+        Assertions.assertThrows(Exception.class, () -> Authorizer.check(stmt, ctx));
+    }
 }

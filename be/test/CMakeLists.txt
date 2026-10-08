@@ -12,6 +12,7 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
+        ./exec/pipeline/hash_join_build_chunk_slicer_test.cpp
         ./exec/pipeline/block_reason_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
@@ -32,15 +33,17 @@ set(EXEC_FILES
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp
         ./exec/pipeline/analytic_node_pipeline_test.cpp
         ./exec/pipeline/local_bucket_shuffle_test.cpp
+        ./exec/pipeline/local_shuffle_alignment_test.cpp
         ./exec/pipeline/local_exchange_memory_test.cpp
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/lookup_operator_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_test.cpp
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
-        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -48,6 +51,7 @@ set(EXEC_FILES
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
@@ -123,6 +127,7 @@ set(EXEC_FILES
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/dump_tablet_metadata_action_test.cpp
+        ./http/greplog_action_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
@@ -140,8 +145,6 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
-        ./storage/seek_tuple_test.cpp
-        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -295,6 +298,8 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+    ./storage/lake/tablet_merger_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
@@ -319,6 +324,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
     ./storage/lake/delete_test.cpp
+    ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
@@ -375,13 +381,11 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
-    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
     ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
     ./storage/rowset/segment_writer_short_key_encode_test.cpp
-    ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
     ./storage/rowset/unique_rowset_id_generator_test.cpp
@@ -396,6 +400,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
     ./storage/storage_env_test.cpp
@@ -457,11 +462,14 @@ endif()
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        connector/paimon/paimon_blob_converter_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()

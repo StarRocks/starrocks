@@ -147,7 +147,8 @@ std::shared_ptr<SpillOutputDataStream> create_spill_output_stream(Spiller* spill
 }
 
 Status DataTranster::transfer(workgroup::YieldContext& yield_ctx, RuntimeState* state, Serde* serde,
-                              const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream) {
+                              const SpillOutputDataStreamPtr& output, const InputStreamPtr& input_stream,
+                              RuntimeProfile::Counter* merge_timer) {
     // read data from input stream and append to output stream
     bool need_aligned = state->spill_enable_direct_io();
     auto task_context = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
@@ -167,7 +168,13 @@ Status DataTranster::transfer(workgroup::YieldContext& yield_ctx, RuntimeState* 
             RETURN_IF_YIELD(yield_ctx.need_yield);
         }
         DCHECK(input_stream->is_ready());
-        auto chunk_st = input_stream->get_next(yield_ctx, read_ctx);
+        // Charge the read itself -- for a compaction, key comparison and chunk assembly -- to the
+        // caller's timer. The deserialize and read IO it feeds on happen in the restore task above
+        // and keep their own counters, so the two do not overlap.
+        auto chunk_st = [&]() {
+            SCOPED_TIMER(merge_timer);
+            return input_stream->get_next(yield_ctx, read_ctx);
+        }();
         RETURN_IF(!chunk_st.status().is_ok_or_eof(), chunk_st.status());
         RETURN_IF(chunk_st.status().is_end_of_file(), Status::OK());
         RETURN_IF_ERROR(serde->serialize(state, read_ctx, std::move(chunk_st.value()), output, need_aligned));

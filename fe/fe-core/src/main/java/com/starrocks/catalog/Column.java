@@ -1141,7 +1141,8 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         return Math.max(this.uniqueId, type.getMaxUniqueId());
     }
 
-    public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns) {
+    public void setIndexFlag(TColumn tColumn, List<Index> indexes, Set<ColumnId> bfColumns,
+                             Set<ColumnId> zstdCompressionColumns, Map<ColumnId, Integer> zstdCompressionPageSizes) {
         for (Index index : indexes) {
             if (index.getIndexType() == IndexDef.IndexType.BITMAP) {
                 List<ColumnId> columns = index.getColumns();
@@ -1152,6 +1153,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (bfColumns != null && bfColumns.contains(this.columnId)) {
             tColumn.setIs_bloom_filter_column(true);
+        }
+        if (zstdCompressionColumns != null && zstdCompressionColumns.contains(this.columnId)) {
+            tColumn.setUse_zstd_compression(true);
+            // the page size travels with the flag: a writer that gets the flag without it
+            // compresses the column with ZSTD at the default page size, which is not what
+            // the table asked for.
+            Integer pageSize = zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.get(this.columnId);
+            if (pageSize != null && pageSize > 0) {
+                tColumn.setZstd_compression_page_size(pageSize);
+            }
         }
     }
 

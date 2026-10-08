@@ -29,14 +29,18 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -251,6 +255,11 @@ public class PlannerMetaLocker implements AutoCloseable {
             return null;
         }
 
+        // Judged on the catalog *name*, because that is what the database is about to be resolved through:
+        // any other catalog, resource-mapping included, routes getDb to the connector and yields a
+        // connector-minted id that must never be locked. Returning early also keeps lock collection off the
+        // network. The check below re-asks the same question of the resolved table object, where the answer
+        // for resource-mapping is the opposite one -- see Table#isMetaLockTarget.
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
@@ -266,6 +275,15 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
+            return null;
+        }
+
+        // Only lock what the lock can protect. Same predicate AnalyzerUtils.CopyUnsafeTablesCollector uses to
+        // decide who may extend the lock's lifetime, so who gets locked and who decides for how long cannot
+        // drift apart. A no-op in practice -- a table reached through the internal catalog always lives in an
+        // internal database -- so this is here as the one named statement of the invariant, and as the anchor
+        // for asserting it inside Locker later.
+        if (!table.isMetaLockTarget()) {
             return null;
         }
 
@@ -299,6 +317,14 @@ public class PlannerMetaLocker implements AutoCloseable {
             TableName tableName = TableName.fromTableRef(tableRef);
             Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
+            // Same reason as the MERGE INTO override below: this runs before Analyzer.analyze, so
+            // getQueryStatement() is null and super's traversal reaches nothing. Until the analyzer folds
+            // them into one query, the tables an UPDATE reads live in the raw FROM clause, the CTEs, the
+            // where predicate's subqueries and the assignment expressions.
+            visitRawDmlClauses(node.getCommonTableExpressions(), node.getFromRelations(), node.getWherePredicate());
+            if (node.getAssignments() != null) {
+                node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+            }
             return super.visitUpdateStatement(node, context);
         }
 
@@ -308,7 +334,33 @@ public class PlannerMetaLocker implements AutoCloseable {
             TableName tableName = TableName.fromTableRef(tableRef);
             Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
+            // See the UPDATE override: the raw USING clause, the CTEs and the where predicate's subqueries
+            // are where a DELETE's other tables are before the analyzer builds its query statement.
+            visitRawDmlClauses(node.getCommonTableExpressions(), node.getUsingRelations(),
+                    node.getWherePredicate());
             return super.visitDeleteStatement(node, context);
+        }
+
+        /**
+         * Lock what planning will read, and therefore what it may snapshot: {@code StatementPlanner} copies
+         * every OlapTable of the analyzed statement while this lock is held, and a table that never made it
+         * into the lock set would be copied without one.
+         */
+        private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
+                                        Expr wherePredicate) {
+            if (cteRelations != null) {
+                cteRelations.forEach(this::visitIfPresent);
+            }
+            if (relations != null) {
+                relations.forEach(this::visitIfPresent);
+            }
+            visitIfPresent(wherePredicate);
+        }
+
+        private void visitIfPresent(ParseNode node) {
+            if (node != null) {
+                visit(node);
+            }
         }
 
         @Override

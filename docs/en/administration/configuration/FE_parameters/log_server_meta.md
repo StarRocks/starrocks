@@ -1233,8 +1233,21 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+- Description: How many connections can wait for a worker thread while all `thrift_server_max_worker_threads` workers are busy. This bounds what the pending queue can hold, not what it will serve: a connection arriving once the queue is full is closed immediately instead of being retried, and a queued connection that waits longer than `thrift_server_queue_timeout_ms` is closed without being served once a worker reaches it. The two cases are counted separately, by `starrocks_fe_thrift_server_rejected_connections_total` and `starrocks_fe_thrift_server_expired_connections_total`.
 - Introduced in: -
+
+### `thrift_server_queue_timeout_ms`
+
+- Default: 0
+- Type: Long
+- Unit: ms
+- Is mutable: Yes
+- Description: The maximum time a connection may wait in the Thrift server pending queue before a worker thread picks it up. A connection that has waited longer is closed without being served, on the assumption that its caller has abandoned it and serving it only holds a worker away from work someone is still waiting for. When armed, this also bounds how long the queue takes to drain after a burst, however deep it grew.
+
+  `0`, the default, disables the check: every queued connection is served no matter how long it waited. The check is off by default because that assumption does not hold for every caller, and a queued connection carries no deadline the server can read. The deadlines callers actually use span four orders of magnitude. Plain FE-internal RPCs give up after `thrift_rpc_timeout_ms` (10 seconds), but a statement forwarded from a follower to the leader waits the session's execution timeout plus `thrift_rpc_timeout_ms` -- about 310 seconds at the default `query_timeout`, and about four hours at the default `insert_timeout` -- and BE stream-load and transaction-commit RPCs wait `stream_load_thrift_rpc_timeout_ms` (60 seconds) or a quarter of the load's own `timeout_second`, whichever is larger. Because `query_timeout`, `insert_timeout` and `timeout_second` are all user-settable and unbounded, no fixed value is safe for every cluster: a timeout short enough to speed up recovery can also cut off a forwarded statement whose client is still waiting, during exactly the saturation it was meant to shorten.
+
+  Arm it per cluster, at a value above the largest deadline that cluster's clients rely on -- derive it from that cluster's `query_timeout` and `insert_timeout`. Each drop is counted in `starrocks_fe_thrift_server_expired_connections_total` and reported by a rate-limited WARN naming the peer. `starrocks_fe_thrift_server_queue_wait_ms` reports queue waits whether or not the check is armed, so use it to size the value before arming it.
+- Introduced in: v4.2.0
 
 ## Metadata and cluster management
 
@@ -1664,6 +1677,15 @@ This topic introduces the following types of FE configurations:
 - Description: Interval, in seconds, between executions of the LockChecker frontend daemon (named "deadlock-checker"). The daemon performs deadlock detection and slow-lock scanning; the configured value is multiplied by 1000 to set the timer in milliseconds. Decreasing this value reduces detection latency but increases scheduling and CPU overhead; increasing it reduces overhead but delays detection and slow-lock reporting. Changes take effect at runtime because the daemon resets its interval each run. This setting interacts with `lock_checker_enable_deadlock_check` (enables deadlock checks) and `slow_lock_threshold_ms` (defines what constitutes a slow lock).
 - Introduced in: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of hash buckets, that is, lock tables, across which Lock Manager shards metadata locks. Each resource is mapped to one bucket by its resource ID, and each bucket is guarded by its own mutex, so a larger value reduces contention between lockers that work on unrelated resources, at the cost of slightly more memory. The value is read once when Lock Manager is created, so a change takes effect only after the FE restarts. The default value is changed from `32` to `256` from v4.1.0, v4.0.1, and v3.5.8 onwards.
+- Introduced in: v3.3.0
+
 ### `master_sync_policy`
 
 - Default: SYNC
@@ -1697,6 +1719,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
 - Introduced in: -
 
+### `meta_freshness_check_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The interval at which a Follower or Observer FE re-evaluates whether its metadata is still fresh enough to serve reads, as defined by `meta_delay_toleration_second`. Values outside the range [10, 5000] are clamped. This check runs on a dedicated thread rather than on the metadata replay thread, so that the node still stops serving stale metadata while a single journal entry is taking a long time to apply, for example when a replay operation is waiting for a database lock.
+- Introduced in: v4.2
+
+### `metadata_replay_stuck_warn_threshold_second`
+
+- Default: 30
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: A metadata journal entry that has been applying for longer than this duration is reported in **fe.log** as a stuck replay, together with the stack of the replay thread, so that you can identify what is blocking metadata replay. Set this item to `0` to disable the report.
+- Introduced in: v4.2
+
 ### `meta_dir`
 
 - Default: `StarRocksFE.STARROCKS_HOME_DIR` + "/meta"
@@ -1713,6 +1753,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- Introduced in: -
+
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- Default: 128L * 1024 * 1024 (134217728)
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum total size of the off-heap buffers that the FE keeps for gzip and zlib compression, such as compressing query profiles before they are stored in `ProfileManager`. Compressing between off-heap buffers keeps the JVM from blocking garbage collection during compression, which can otherwise make memory allocations fail with an `OutOfMemoryError` while the heap still has room to reclaim. Each compression in progress uses two 256 KB buffers regardless of the data size, so the default value allows 256 compressions at the same time. When no buffer is available within this limit, the data is compressed on the heap as before. Lowering the value at runtime takes effect as buffers are returned. Set it to `0` to disable off-heap compression: all data is then compressed on the heap in small chunks, and the off-heap buffers already allocated are released.
 - Introduced in: -
 
 ### `profile_info_format`

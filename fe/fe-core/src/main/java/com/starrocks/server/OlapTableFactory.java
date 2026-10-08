@@ -53,6 +53,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.IndexAnalyzer;
@@ -339,6 +340,32 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.setBloomFilterInfo(bfColumnIds, bfFpp);
 
                 IndexAnalyzer.analyseBfWithNgramBf(table, new HashSet<>(stmt.getIndexes()), bfColumnIds);
+
+                // analyze compression dict columns
+                Map<String, Integer> zstdCompressionPageSizes =
+                        PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(properties, baseSchema);
+                Set<String> zstdCompressionColumns =
+                        zstdCompressionPageSizes == null ? null : zstdCompressionPageSizes.keySet();
+                if (zstdCompressionColumns != null && zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumns = null;
+                }
+                Set<ColumnId> zstdCompressionColumnIds = null;
+                Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+                if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+                    zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    zstdCompressionColumnIds.addAll(
+                            zstdCompressionColumns.stream().map(ColumnId::create).collect(Collectors.toSet()));
+                    zstdCompressionPageSizeIds = Maps.newHashMap();
+                    for (Map.Entry<String, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                        if (entry.getValue() != null && entry.getValue() > 0) {
+                            zstdCompressionPageSizeIds.put(ColumnId.create(entry.getKey()), entry.getValue());
+                        }
+                    }
+                    if (zstdCompressionPageSizeIds.isEmpty()) {
+                        zstdCompressionPageSizeIds = null;
+                    }
+                }
+                table.setZstdCompressionColumns(zstdCompressionColumnIds, zstdCompressionPageSizeIds);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
@@ -499,19 +526,23 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             try {
-                table.setBaseCompactionForbiddenTimeRanges(PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties));
+                String forbiddenTimeRanges = PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
+                CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);
+                table.setBaseCompactionForbiddenTimeRanges(forbiddenTimeRanges);
                 if (!table.getBaseCompactionForbiddenTimeRanges().isEmpty()) {
                     if (table instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) table;
                         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                                || olapTable.isCloudNativeTableOrMaterializedView()) {
+                                && !olapTable.isCloudNativeTableOrMaterializedView()) {
                             throw new SemanticException("Property " +
                                     PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                         }
                     }
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            table.getId(), table.getBaseCompactionForbiddenTimeRanges());
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                table.getId(), forbiddenTimeRanges);
+                    }
                 }
                 if (properties != null) {
                     properties.remove(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);

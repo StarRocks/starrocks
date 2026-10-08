@@ -33,6 +33,8 @@ CONF_Int32(base_compaction_num_threads_per_disk, "1");
 
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
 
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B
@@ -105,9 +107,6 @@ CONF_mBool(enable_rowset_verify, "false");
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
-
-// Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "true");
 
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
@@ -251,5 +250,13 @@ CONF_mBool(enable_lake_compaction_range_split, "false");
 
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+
+// Hold the input segments of a compaction task on its Rowset objects for the whole task, so the
+// per-column-group passes of vertical compaction reuse them instead of reloading through the
+// metadata cache. When the cache cannot hold all input segments (small limit, or a node crowded
+// with many tablets), every pass otherwise rebuilds every segment's column metadata, which is
+// CPU-bound and proportional to the column count. Memory cost is one set of segment metadata per
+// running task, bounded by the task's input size.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 } // namespace starrocks::config

@@ -63,6 +63,7 @@ from timeout_decorator import timeout, TimeoutError
 from dbutils.pooled_db import PooledDB
 
 from lib import skip
+from lib.result_format import format_cell
 from lib import data_delete_lib
 from lib import data_insert_lib
 from lib.connection_base_lib import BaseConnectionLib
@@ -91,6 +92,67 @@ if not os.path.exists(CRASH_DIR):
 
 LOG_LEVEL = logging.INFO
 QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
+
+# A shared-data alter job is cancelled with this message when any transaction id is allocated,
+# anywhere in the cluster, between taking the watershed txn id and adding the shadow index
+# (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
+# cleaned up and nothing is lost, so the statement can just be submitted again.
+ALTER_RERUN_MSG = "please re-run the alter table command"
+ALTER_RERUN_MAX_RETRY = 3
+# Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
+# ALTER MATERIALIZED VIEW (RollupProcDir).
+SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
+ROLLUP_INDEX_NAME_COL, ROLLUP_STATE_COL, ROLLUP_MSG_COL = 5, 8, 9
+# An unquoted identifier. Stops at the `;` SQL-tester keeps on the statement.
+_ALTER_UNQUOTED = r"[^\s`.(;]+"
+# A backquoted identifier, which may contain spaces and `` (StarRocksLex.g4 BACKQUOTED_IDENTIFIER).
+_ALTER_QUOTED = r"`(?:[^`]|``)+`"
+# An identifier, either of the two.
+_ALTER_IDENT = r"(?:{q}|{u})".format(q=_ALTER_QUOTED, u=_ALTER_UNQUOTED)
+# A possibly db-qualified name.
+_ALTER_NAME = r"{i}(?:\.{i})*".format(i=_ALTER_IDENT)
+ALTER_STMT_RE = re.compile(
+    r"^\s*(?:ALTER\s+TABLE\s+(?P<alter>{n})|(?:CREATE|DROP)\s+INDEX\s+{i}\s+ON\s+(?P<index>{n})"
+    r"|CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<mv>{n}))".format(i=_ALTER_IDENT, n=_ALTER_NAME),
+    re.IGNORECASE,
+)
+
+
+def alter_job_key(statement):
+    """
+    What identifies the alter job an ALTER TABLE / CREATE INDEX / DROP INDEX / CREATE MATERIALIZED
+    VIEW statement creates, as (column, unqualified unquoted name), else None. SHOW ALTER lists a
+    schema change or rollup under its table, and a synchronous MV under its base table with the MV
+    as RollupIndexName, so an MV is matched by its own name. An asynchronous MV creates no alter
+    job and so never matches anything.
+    """
+    m = ALTER_STMT_RE.match(statement)
+    if not m:
+        return None
+    column = "RollupIndexName" if m.group("mv") else "TableName"
+    names = re.findall(_ALTER_IDENT, m.group("alter") or m.group("index") or m.group("mv"))
+    # The FE drops every backquote of a backquoted identifier, `` included
+    # (AstBuilder#visitBackQuotedIdentifier), so that is the name SHOW ALTER reports.
+    return column, names[-1].replace("`", "")
+
+
+def is_watershed_cancel(state, msg):
+    """True iff an alter job in `state` with `msg` was cancelled by the watershed check."""
+    return state == "CANCELLED" and ALTER_RERUN_MSG in str(msg)
+
+
+def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name):
+    """
+    True iff a job listed by SHOW ALTER was cancelled by the watershed check and belongs to
+    `last_alter`, the statement execute_single_statement remembered. SHOW ALTER is scoped to the
+    current database, which is the case's own, but the newest job there may still come from
+    another table the case altered. `rollup_index_name` is None for a schema change.
+    """
+    if not is_watershed_cancel(status, msg) or last_alter is None:
+        return False
+    column, name = last_alter[2]
+    actual = table_name if column == "TableName" else rollup_index_name
+    return actual is not None and str(actual) == name
 
 
 class Filter(logging.Filter):
@@ -162,6 +224,8 @@ class StarrocksSQLApiLib(object):
         self.db = list()
         self.resource = list()
         self.arrow_sql_lib = ArrowSqlLib()
+        # The alter statement each thread last ran, see _remember_alter.
+        self._last_alter_local = threading.local()
         self.starrocks_sql_lib = MysqlLib()
         self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
@@ -808,7 +872,7 @@ class StarrocksSQLApiLib(object):
             if isinstance(result, tuple) or isinstance(result, list):
                 if len(result) > 0:
                     if isinstance(result[0], tuple):
-                        res_log.extend(["\t".join([str(y) for y in x]) for x in result])
+                        res_log.extend(["\t".join([format_cell(y) for y in x]) for x in result])
                     else:
                         res_log.extend(["\t".join(str(x)) for x in result])
             elif isinstance(result, bytes):
@@ -917,7 +981,26 @@ class StarrocksSQLApiLib(object):
         args = {"table_name": table_name, "database_name": database_name, "query": query}
         return self.delete_from(args)
 
-    def treatment_record_res(self, sql, sql_res, res_container: list = None):
+    def treatment_record_res(self, sql, sql_res, res_container: list = None, sort_rows: bool = False):
+        """
+        Record one statement's result into the R file under construction.
+
+        `sort_rows` is set for a statement that carried [UNORDERED]. Recording writes the rows in
+        the order the server returned them, so re-recording a statement whose row order is not
+        fixed produces a diff that says nothing -- and says it in the middle of the diff that
+        does. Sorting the lines makes the recording reproducible for exactly the statements that
+        have declared their row order is not part of what they assert.
+
+        The sort is applied to the assembled lines rather than inside one of the branches below,
+        because an ordinary query does not arrive here as rows at all: execute_sql is called
+        without `ori`, so it has already joined the rows into a single newline-delimited string
+        and the tuple branch is not the one that runs. Only the callers that ask for the original
+        result -- and the non-SQL recorders -- see a tuple.
+
+        Nothing else is sorted. An untagged statement is only unordered by default, not by
+        anyone's decision, so canonicalising it would rewrite row orders no one has looked at. A
+        failed statement is not sorted either; there is one line and it is not a row.
+        """
 
         res_container = res_container if res_container is not None else self.res_log
 
@@ -930,19 +1013,27 @@ class StarrocksSQLApiLib(object):
         else:
             # msg info no need to be checked
             sql_res = sql_res["result"] if "result" in sql_res else ""
+            recorded = []
             if isinstance(sql_res, tuple):
                 if len(sql_res) > 0:
                     if isinstance(sql_res[0], tuple):
-                        res_container.extend(["\t".join([str(y) for y in x]) for x in sql_res])
+                        recorded = ["\t".join([format_cell(y) for y in x]) for x in sql_res]
                     else:
-                        res_container.extend(["\t".join(str(x)) for x in sql_res])
+                        recorded = ["\t".join(str(x)) for x in sql_res]
             elif isinstance(sql_res, bytes):
                 if sql_res != b"":
-                    res_container.append(str(sql_res).strip())
+                    recorded = [str(sql_res).strip()]
             elif sql_res is not None and str(sql_res).strip() != "":
-                res_container.append(str(sql_res))
+                recorded = [str(sql_res)]
             else:
                 log.info("SQL result: %s" % sql_res)
+
+            if sort_rows and recorded:
+                # One entry may hold every row, newline joined, so split before sorting and put it
+                # back the way it came -- the R file is written from these entries verbatim.
+                lines = sorted(line for entry in recorded for line in entry.split("\n"))
+                recorded = ["\n".join(lines)] if len(recorded) == 1 else lines
+            res_container.extend(recorded)
 
         res_container.append(RESULT_END_FLAT)
 
@@ -1196,6 +1287,9 @@ class StarrocksSQLApiLib(object):
         execute single statement and return result
         """
         order = False
+        # Distinct from `order`: False covers both "[UNORDERED] was written" and "nothing was
+        # written", and only the first one may have its recording sorted.
+        unordered = False
         res_container = res_container if res_container is not None else self.res_log
 
         if statement.startswith(TRINO_FLAG):
@@ -1282,19 +1376,29 @@ class StarrocksSQLApiLib(object):
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
 
-            # order flag
+            # order flags. Both are written out, rather than only the one that differs from the
+            # default, so that a case says which it meant and the default can be changed without
+            # reading every case to find out. [UNORDERED] is the current default, so it does
+            # nothing today beyond recording the intent.
             if statement.startswith(ORDER_FLAG):
                 order = True
                 statement = statement[len(ORDER_FLAG) :]
+            elif statement.startswith(UNORDERED_FLAG):
+                unordered = True
+                statement = statement[len(UNORDERED_FLAG) :]
 
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            alter_key = alter_job_key(statement)
+            if alter_key is not None:
+                self._remember_alter((statement, conn, alter_key))
 
             actual_res = self.execute_sql(statement, conn=conn)
             self_print(statement)
 
             if record_mode:
-                self.treatment_record_res(statement, actual_res, res_container)
+                self.treatment_record_res(statement, actual_res, res_container, sort_rows=unordered)
 
             actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
 
@@ -1872,18 +1976,41 @@ class StarrocksSQLApiLib(object):
         log.warning(f"Table {table_name} not found in database {db_name}")
         return None
 
-    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30, deadline=None):
         """
-        wait table state to normal
+        Block until `table_name` is back in the NORMAL state.
+
+        A table is held for the duration of an alter, and every ALTER TABLE checks that hold
+        before anything else (AlterJobExecutor.java:176), so this is what stands between one
+        alter finishing and the next being allowed to start.
+
+        Whether the job reaching a terminal state already implies the hold is released depends on
+        the alter. SchemaChangeJobV2#onFinished releases the table itself (.java:1065), inside the
+        callback that persists JobState.FINISHED, so for a schema change the two are one event.
+        RollupJobV2#onFinished does not (.java:813-828): the table is released later, by
+        MaterializedViewHandler#onJobDone, and only once this is its last unfinished job. Both
+        happen in one pass of runAlterJobV2, so the gap is short, but it is real and documented
+        where it opens (MaterializedViewHandler.java:1200):
+
+            ATTN(cmy): there is still a short gap between "job finish" and "table become
+            normal", so if user send next alter job right after the "job finish", it may
+            encounter "table's state not NORMAL" error.
+
+        `deadline` lets a caller that is already on a clock -- wait_alter_table_finish, which
+        spends part of its budget waiting for the job itself -- spend the rest here rather than
+        start a second one. Callers that pass nothing keep their own `timeout_sec`.
         """
-        times = 0
-        while times < timeout_sec:
+        if deadline is None:
+            deadline = time.monotonic() + timeout_sec
+        while True:
             state = self.get_table_state(db_name, table_name)
             if state == "NORMAL":
-                break
-            time.sleep(1)
-            times += 1
-        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+                return
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait table state normal error, %s.%s is %s" % (db_name, table_name, state),
+            )
+            time.sleep(0.1)
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
@@ -1972,41 +2099,177 @@ class StarrocksSQLApiLib(object):
 
     def wait_table_rollup_finish(self, check_count=60):
         """
-        wait materialized view job finish and return status
-        """
-        status = ""
-        show_sql = "SHOW ALTER TABLE ROLLUP "
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "FINISHED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
-                break
-            count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        Block until the rollup submitted just before this call has landed.
 
-    def wait_materialized_view_finish(self, check_count=60):
+        This is wait_alter_table_finish("ROLLUP", 8) written a second time, from before that one
+        learned to tell whose job it is looking at, to poll at 100ms, to time out, and to wait for
+        the table to be released rather than sleep a flat second and hope. Defer to it instead of
+        carrying the old shape alongside the new one.
+
+        `check_count` was a count of one-second polls, so it maps onto the timeout in seconds. All
+        12 call sites leave it at the default.
+
+        The delegate returns "" for a SHOW that failed and for one that came back empty alike,
+        and None otherwise. Neither reading is survivable for a caller that has just submitted a
+        rollup, and the code this replaces did not survive them either -- it indexed the result
+        straight away, so a failed query raised KeyError (execute_sql leaves out "result"
+        entirely) and an empty one IndexError. Assert rather than let either become a quiet
+        success. All 6 recorded results are None and stay None; no green case is on that path,
+        since it used to raise there.
         """
-        wait materialized view job finish and return status
+        tools.assert_true(
+            self.wait_alter_table_finish("ROLLUP", 8, timeout=check_count) is None,
+            "no rollup job to wait for: SHOW ALTER TABLE ROLLUP failed or came back empty",
+        )
+
+    def wait_materialized_view_finish(self, timeout=60):
         """
+        Block until the synchronous materialized view created just before this call is usable.
+        See _wait_alter_mv_job, which this and wait_materialized_view_cancel share.
+        """
+        self._wait_alter_mv_job("FINISHED", timeout)
+
+    def wait_materialized_view_cancel(self, check_count=60):
+        """
+        Block until the synchronous materialized view created just before this call has been
+        rejected, and the table it was on is free again.
+
+        A cancel is a terminal state like any other (AlterJobV2.JobState#isFinalState), so the
+        same MaterializedViewHandler#onJobDone runs and the table is released a moment after the
+        job reports CANCELLED -- which is what a case doing this twice on one table needs:
+        test_inverted_index creates two MVs on t_create_mv_with_match, each expected to be
+        refused, and the second CREATE cannot start while the first is still holding the table.
+
+        `check_count` was a count of one-second polls, so it maps onto the timeout in seconds.
+        All 4 call sites -- on branch-4.1, branch-4.0 and branch-3.5; main has none -- leave it
+        at the default.
+        """
+        self._wait_alter_mv_job("CANCELLED", check_count)
+
+    def _remember_alter(self, last_alter):
+        """
+        Keep `last_alter`, (statement, conn, alter_job_key), so the alter wait helpers can submit
+        it again, see ALTER_RERUN_MSG. Per thread: the threads of a concurrency block run their
+        statements and waits on this same object, each on its own connection.
+        """
+        self._last_alter_local.value = last_alter
+
+    def _take_last_alter(self):
+        """
+        Return the alter this thread last remembered, or None, and forget it, so no return path of
+        a wait helper leaves it for a later wait to resubmit.
+        """
+        last_alter = getattr(self._last_alter_local, "value", None)
+        self._last_alter_local.value = None
+        return last_alter
+
+    def _resubmit_alter(self, stmt, conn, job_id, msg, rerun, table_name, deadline):
+        """
+        Submit `stmt` again on `conn` after its job `job_id` on `table_name` was cancelled by the
+        watershed check, see ALTER_RERUN_MSG.
+
+        The table has to be NORMAL first. A cancelled schema change releases it before reporting
+        CANCELLED (LakeTableSchemaChangeJob#removeShadowIndex), but a cancelled rollup or sync MV
+        does not: LakeRollupJob#cancelImpl only removes the rollup index and the table is released
+        later by MaterializedViewHandler#onJobDone, the same gap wait_table_state_normal explains
+        for a finished one.
+        """
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+        # wait_table_state_normal returns on NORMAL without looking at the clock, so the deadline
+        # may have passed by now; a job submitted after it would outlive the failed case.
+        tools.assert_true(
+            time.monotonic() < deadline,
+            "timed out before resubmitting alter after job %s was cancelled: %s" % (job_id, msg),
+        )
+        log.info("alter job %s cancelled (%s), resubmit #%d: %s" % (job_id, msg, rerun, stmt))
+        res = self.execute_sql(stmt, conn=conn)
+        tools.assert_true(res["status"], "resubmit alter failed: %s" % res.get("msg"))
+
+    def _wait_alter_mv_job(self, expect_status, timeout):
+        """
+        Block until the alter listed by SHOW ALTER MATERIALIZED VIEW reaches `expect_status` and
+        the table it was on is free again.
+
+        Two things stand between "the statement returned" and "the next statement may run", and
+        the old code covered both by sleeping a second whenever it saw a terminal state -- on top
+        of polling once a second, which rounds a sub-second rollup up to two.
+
+        First, the row cannot be attributed. SHOW ALTER MATERIALIZED VIEW resolves to the rollup
+        proc dir, so a terminal row is either the job this call should wait for or a leftover from
+        an earlier one. JobId separates them: MaterializedViewHandler registers the job inside the
+        DDL's own execution path, atomically with its edit log (.java:238-240), so by the time
+        this runs the job is listed, and an id no higher than the last one waited on means no job
+        was created. One watermark serves both callers: the ids come from GlobalStateMgr#getNextId
+        and only increase, and what it records is the newest job already accounted for, whatever
+        state that job ended in.
+
+        Second, the terminal state is not the end: the table is released a moment after the job
+        reports it. wait_table_state_normal is where that is explained and waited on; a sync MV is
+        a rollup, so it reaches it by the same route an ADD ROLLUP does.
+
+        Every path returns None -- a `function:` line's value is recorded into the R file, and all
+        42 recorded results across the two callers are None.
+        """
+        seen = getattr(self, "_last_alter_mv_job_id", None)
+        last_alter = self._take_last_alter()
+        deadline = time.monotonic() + timeout
         status = ""
-        show_sql = "SHOW ALTER MATERIALIZED VIEW"
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "FINISHED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
+        job_id = None
+        table_name = None
+        rerun = 0
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True
+            )
+            # A failed query and a successful empty one both arrive with no rows, and only one of
+            # them means "no job to wait for".
+            tools.assert_true(res["status"], "show alter materialized view failed: %s" % res["msg"])
+            if not res["result"]:
+                return None
+
+            row = res["result"][0]
+            job_id, table_name, status = int(row[0]), row[1], row[8]
+            if seen is not None and job_id <= seen:
+                # No job of our own, so there is nothing to wait for and nothing holding the
+                # table. Whether that should have happened is the statement's business, not this
+                # helper's -- a CREATE that never made a job recorded its own failure already.
+                return None
+
+            # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
+            if (
+                expect_status == "FINISHED"
+                and rerun < ALTER_RERUN_MAX_RETRY
+                and time.monotonic() < deadline
+                and should_resubmit_alter(
+                    last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
+                )
+            ):
+                rerun += 1
+                seen = job_id
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, row[ROLLUP_MSG_COL], rerun, table_name, deadline)
+                continue
+
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
-            count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait materialized view job %s to reach %s timed out after %ss, it is %s"
+                % (job_id, expect_status, timeout, status),
+            )
+            time.sleep(0.1)
+
+        self._last_alter_mv_job_id = job_id
+        tools.assert_equal(expect_status, status, "wait materialized view job %s, msg: %s" % (job_id, row[ROLLUP_MSG_COL]))
+
+        # The database has to be asked for: this helper has no other way to know which one the
+        # case is in.
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
 
     """
         Return True or error message if refresh mv failed
@@ -2031,25 +2294,6 @@ class StarrocksSQLApiLib(object):
             # Catch any exception raised by execute_sql and return its string representation
             return str(e)
             
-    def wait_materialized_view_cancel(self, check_count=60):
-        """
-        wait materialized view job cancel and return status
-        """
-        status = ""
-        show_sql = "SHOW ALTER MATERIALIZED VIEW"
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "CANCELLED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
-                break
-            count += 1
-        tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
-
     def retry_execute_sql(self, sql: str, ori: bool, max_retry_times: int = 3, pending_time_ms: int = 100):
         """
         execute sql with retry
@@ -2453,12 +2697,130 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
-    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
+    def alter_and_wait(self, sql, alter_type="COLUMN", timeout=600):
         """
-        wait alter table job finish and return status
+        Submit `sql`, an alter that may create a job listed by SHOW ALTER TABLE `alter_type`
+        (COLUMN for a schema change, ROLLUP for ADD ROLLUP or a synchronous MV), and block until
+        that job has landed. The explicit form of the statement followed by wait_alter_table_finish:
+        being handed the statement, it needs no statement matching to retry a watershed cancel
+        (ALTER_RERUN_MSG), which it does like wait_alter_table_finish, through _resubmit_alter.
+        Any other outcome than FINISHED fails.
+
+        `timeout` bounds waiting for the job and for the table, retries included, and no statement
+        is submitted once it has passed. The statements themselves (the SHOWs and each submission
+        of `sql`) are not interrupted: they run under the connection's own timeouts, so a slow one
+        can take the call past `timeout`.
+
+        The job is told apart by JobId: the newest id is read before `sql` is submitted, and since
+        a job is registered within the DDL's own execution (see wait_alter_table_finish), a newer
+        id afterwards is this statement's and no newer id means the alter was applied inline. That
+        holds as long as nothing else alters a table in the database meanwhile, which a case
+        running statements one at a time guarantees; it is not meant for alters issued from
+        several threads of a case at once.
+
+        Returns None, which is what the R file records.
         """
+        # State and Msg of each layout. OPTIMIZE is a valid SHOW ALTER type too, with its own
+        # layout, but its jobs never hit the watershed cancel; refuse it rather than misread it.
+        layouts = {
+            "COLUMN": (SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL),
+            "ROLLUP": (ROLLUP_STATE_COL, ROLLUP_MSG_COL),
+        }
+        tools.assert_true(
+            alter_type.upper() in layouts,
+            "alter_and_wait supports alter_type COLUMN or ROLLUP, got %s" % alter_type,
+        )
+        state_col, msg_col = layouts[alter_type.upper()]
+        rollup = alter_type.upper() == "ROLLUP"
+        show_sql = "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type
+        deadline = time.monotonic() + timeout
+
+        res = self.execute_sql(show_sql, True)
+        tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+        watermark = int(res["result"][0][0]) if res["result"] else None
+
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], "alter failed: %s" % res["msg"])
+
+        rerun = 0
+        while True:
+            res = self.execute_sql(show_sql, True)
+            tools.assert_true(res["status"], "show alter table %s failed: %s" % (alter_type, res["msg"]))
+            if not res["result"] or (watermark is not None and int(res["result"][0][0]) <= watermark):
+                # No job of its own: the alter was applied inline.
+                return None
+            row = res["result"][0]
+            job_id, table_name, state, msg = int(row[0]), row[1], row[state_col], row[msg_col]
+
+            if state not in ("FINISHED", "CANCELLED"):
+                tools.assert_true(
+                    time.monotonic() < deadline,
+                    "alter_and_wait timed out after %ss, job %s is %s" % (timeout, job_id, state),
+                )
+                time.sleep(0.1)
+                continue
+
+            # Keep the watermarks of the legacy wait helpers past this job, so one used later in
+            # the case does not take it for its own.
+            self._last_alter_job_id = max(job_id, getattr(self, "_last_alter_job_id", None) or 0)
+            if rollup:
+                self._last_alter_mv_job_id = max(job_id, getattr(self, "_last_alter_mv_job_id", None) or 0)
+
+            if state == "FINISHED":
+                if rollup:
+                    res = self.execute_sql("SELECT DATABASE()", True)
+                    tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+                    # See wait_table_state_normal: a finished rollup releases the table later.
+                    self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+                return None
+
+            tools.assert_true(
+                is_watershed_cancel(state, msg) and rerun < ALTER_RERUN_MAX_RETRY,
+                "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
+            )
+            rerun += 1
+            watermark = job_id
+            self._resubmit_alter(sql, None, job_id, msg, rerun, table_name, deadline)
+
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
+        """
+        Block until the alter submitted just before this call has landed.
+
+        `SHOW ALTER TABLE` lists jobs newest first and this helper cannot name the one it is
+        waiting for, so a row in a terminal state is ambiguous. It is either the job this call
+        should wait for, finished quickly, or the *previous* job -- because the alter took the
+        fast-schema-evolution path and created no job at all (SchemaChangeHandler#process returns
+        early when analyzeAndCreateJob gives null). Both cases look identical, and the old code
+        paid a flat second to cover the difference.
+
+        JobId separates them. A job is registered inside the DDL's own execution path, atomically
+        with its edit log (SchemaChangeHandler.java:3004-3012), so by the time this runs a heavy
+        alter is already listed: an id above the last one waited on means the job is ours, and no
+        new id means the change was applied inline and there is nothing left to wait for. Ids only
+        increase, so the watermark stays valid across databases and alter types.
+
+        What it waits for is then a real signal rather than a guess -- FINISHED is set after the
+        index swap, under the table's write lock (SchemaChangeJobV2.java:1215-1227), so it means
+        the new schema is in effect.
+
+        The first call has no watermark, but it does not need one: registration being
+        synchronous rules out the only reading that would have to keep waiting -- our job
+        submitted but not yet listed -- so both remaining readings return straight away. The flat
+        second is gone from every path; the loop now only sleeps while a job is genuinely running,
+        and polls at 100ms so a fast job is not rounded up.
+
+        FINISHED is the whole signal for a schema change but not for a rollup, which is released
+        from the table a moment later; `alter_type` is what tells the two apart, so an ADD ROLLUP
+        waited on with the default COLUMN is not covered. See wait_table_state_normal.
+        """
+        seen = getattr(self, "_last_alter_job_id", None)
+        last_alter = self._take_last_alter()
+        deadline = time.monotonic() + timeout
         status = ""
-        sleep_time = 0
+        msg = ""
+        job_id = None
+        table_name = None
+        rerun = 0
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2467,14 +2829,53 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][off]
+            job_id, table_name, status = res["result"][0][0], res["result"][0][1], res["result"][0][off]
+            # Msg is the column right after State for both COLUMN and ROLLUP.
+            msg = res["result"][0][off + 1] if len(res["result"][0]) > off + 1 else ""
+            if seen is not None and int(job_id) <= int(seen):
+                # No job of our own: either the alter was applied inline, or it created a job of
+                # a different type than the one being listed (a caller that leaves alter_type at
+                # COLUMN after an ADD ROLLUP, say). Nothing to wait for either way.
+                #
+                # Return None, not "": the value a `function:` line produces is recorded into the
+                # R file, and the path this replaces fell through to the end of the method. ""
+                # is reserved for the pre-existing "no rows at all" return above, whose recorded
+                # value callers already depend on.
+                return None
+
+            rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
+            if (
+                rerun < ALTER_RERUN_MAX_RETRY
+                and time.monotonic() < deadline
+                and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
+            ):
+                # Wait for the resubmitted job instead.
+                rerun += 1
+                seen = int(job_id)
+                stmt, conn, _ = last_alter
+                self._resubmit_alter(stmt, conn, job_id, msg, rerun, table_name, deadline)
+                continue
+
             if status == "FINISHED" or status == "CANCELLED" or status == "":
-                if sleep_time <= 1:
-                    time.sleep(1)
                 break
-            time.sleep(0.5)
-            sleep_time += 0.5
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait alter table %s finish timeout after %ss, job %s is %s"
+                % (alter_type, timeout, job_id, status),
+            )
+            time.sleep(0.1)
+
+        self._last_alter_job_id = int(job_id)
+        tools.assert_equal("FINISHED", status, "wait alter table finish error, msg: %s" % msg)
+
+        if alter_type.upper() == "ROLLUP":
+            # The rollup is finished but the table may not be released yet -- see
+            # wait_table_state_normal, which is where the two alter families differ. The database
+            # has to be asked for: this helper has no other way to know which one the case is in.
+            res = self.execute_sql("SELECT DATABASE()", True)
+            tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+            self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
 
     @staticmethod
     def _canonical_json(value):
@@ -2799,6 +3200,21 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
                 return ""
             time.sleep(1)
+
+    def wait_until_has_queries(self, timeout_sec=60):
+        """
+        wait until a query shows up in current_queries. A query is listed there only after its
+        coordinator exists, so a KILL / DROP TASK issued afterwards reaches it instead of being lost.
+        """
+        for _ in range(timeout_sec):
+            sql = "show proc '/current_queries'"
+            res = self.execute_sql(sql, True)
+            if not res["status"]:
+                tools.assert_true(False, "run current_queries error")
+            if len(res["result"]) > 0:
+                return ""
+            time.sleep(1)
+        tools.assert_true(False, "no query showed up in current_queries within %ss" % timeout_sec)
 
     def wait_util_no_queries(self):
         while True:
@@ -3182,6 +3598,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "wait compaction timeout")
 
+    def wait_compaction_committed(self, table_name: str, version_before, timeout: int = 60):
+        """Block until a compaction of `table_name` commits, i.e. until the tablet's visible
+        version moves past `version_before`.
+
+        `ALTER TABLE ... COMPACT` is fire-and-forget on shared-data tables: CompactionHandler only
+        raises the partition's priority to MANUAL_COMPACT and returns, CompactionScheduler
+        dispatches it on a 1s loop, and the CN runs it asynchronously. SQL exposes no synchronous
+        completion signal, which is why these cases used to sleep a fixed 30s -- pure wall clock
+        when compaction is quick, and still not enough when it is not.
+        """
+        sql = (
+            "SELECT MAX(t.MAX_VERSION) FROM information_schema.be_tablets t, "
+            "information_schema.tables_config c "
+            "WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = '%s' "
+            "AND c.TABLE_SCHEMA = DATABASE()" % table_name
+        )
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            res = self.execute_sql(sql, True)
+            tools.assert_true(res["status"], f'Fail to read MAX_VERSION, error=[{res["msg"]}]')
+            rows = list(res["result"])
+            if rows and rows[0][0] is not None and int(rows[0][0]) > int(version_before):
+                return
+            time.sleep(0.5)
+        tools.assert_true(False, "compaction of %s did not commit within %ss" % (table_name, timeout))
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
@@ -3443,6 +3885,33 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 str(res["result"]).find(expect) < 0,
                 "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
             )
+
+    def print_query_columns(self, query, *columns):
+        """
+        Run `query` and print only the named columns, one row per line, tab separated.
+
+        SHOW statements answer with job ids, timestamps and progress counters that differ on every
+        run, so their output cannot go into an R file as it stands. Projecting to the columns that
+        are stable makes the rest recordable -- which is worth more than asserting a substring is
+        or is not present, because the recorded rows say what actually came back.
+
+        Column names are matched against the result's own description, case-insensitively, and an
+        unknown name fails rather than silently projecting nothing.
+        """
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "execute failed: %s, sql: %s" % (res["msg"], query))
+
+        names = [col[0] for col in res["desc"]]
+        indexes = []
+        for column in columns:
+            matched = [i for i, name in enumerate(names) if name.lower() == str(column).lower()]
+            tools.assert_true(
+                len(matched) == 1,
+                "column %s is not one of %s, sql: %s" % (column, names, query),
+            )
+            indexes.append(matched[0])
+
+        return "\n".join("\t".join(str(row[i]) for i in indexes) for row in res["result"])
 
     def assert_query_contains_times(self, query, expect, expected_times: int):
         """
@@ -4153,3 +4622,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             log.info(f"Set tablet_id = {self.tablet_id}")
         else:
             raise Exception(f"Failed to get tablet ID for table {table_name}")
+
+    def wait_reshard_job_finish(self, table_name, job_type, expect_count, timeout_sec=60):
+        """
+        Wait until at least expect_count reshard jobs of job_type have FINISHED for the table.
+        The scan is scoped to the current database because tablet_reshard_jobs is cluster-wide.
+        """
+        sql = (
+            "SELECT count(*) FROM INFORMATION_SCHEMA.tablet_reshard_jobs WHERE DB_NAME = database()"
+            f" AND TABLE_NAME = '{table_name}' AND JOB_TYPE = '{job_type}' AND JOB_STATE = 'FINISHED'"
+        )
+        begin_time = time.time()
+        while time.time() - begin_time < timeout_sec:
+            result = self.execute_sql(sql, True)
+            if result["status"] and len(result["result"]) > 0 and int(result["result"][0][0]) >= expect_count:
+                return
+            time.sleep(1)
+        tools.assert_true(
+            False,
+            f"wait {job_type} job of {table_name} error, expect {expect_count} finished job(s) in {timeout_sec}s",
+        )

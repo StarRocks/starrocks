@@ -22,15 +22,19 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
+#include <optional>
 #include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config_paimon_fwd.h"
+#include "connector/hive/paimon/paimon_blob_converter.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
+#include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "formats/arrow/arrow_column_converter.h"
 #include "runtime/descriptors_ext.h"
@@ -40,13 +44,38 @@ namespace starrocks {
 namespace {
 
 constexpr int64_t kPaimonReadBatchSize = 10000;
-constexpr int64_t kPaimonParquetCacheHoleSizeLimit = 4L * 1024 * 1024;
-constexpr int64_t kPaimonParquetCacheRangeSizeLimit = 32L * 1024 * 1024;
-constexpr int64_t kPaimonParquetBitmapCoalesceHoleSizeLimit = 32;
-constexpr std::string_view kPaimonParquetBitmapRefiningStrategy = "coalesce";
-constexpr bool kPaimonEnablePrefetch = true;
+// 0 leaves the process-wide Arrow CPU pool alone; paimon-cpp's default of 3 caps every reader in the BE.
+constexpr int32_t kPaimonParquetExecutorThreadCount = 0;
 constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
 constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
+
+// paimon-cpp resolves blob-view references by rebuilding the upstream table path as
+// <warehouse>/<db>[.db]/<table> under a FileSystemCatalog, and it has no catalog access of its own,
+// so the warehouse has to be handed in. Every table paimon-cpp can resolve against sits in that
+// same layout, hence the current table's grandparent directory is the warehouse. Returns nullopt
+// when the path is too shallow for that layout (e.g. a custom table location right under a bucket).
+std::optional<std::string> paimon_warehouse_from_table_path(std::string_view table_path) {
+    // Keep "scheme://authority" intact: never cut into or before it.
+    size_t root_end = 0;
+    if (size_t scheme = table_path.find("://"); scheme != std::string_view::npos) {
+        root_end = scheme + 3;
+    }
+    std::string_view path = table_path;
+    for (int level = 0; level < 2; ++level) {
+        while (path.size() > root_end && path.back() == '/') {
+            path.remove_suffix(1);
+        }
+        size_t slash = path.rfind('/');
+        if (slash == std::string_view::npos || slash < root_end) {
+            return std::nullopt;
+        }
+        path = path.substr(0, slash);
+    }
+    if (path.size() <= root_end) {
+        return std::nullopt;
+    }
+    return std::string(path);
+}
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& io_stats) {
     const std::string paimon_fs_section = "PaimonFileSystem";
@@ -107,9 +136,11 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     selected_field_names.reserve(materialized_columns.size());
     _convert_functions.reserve(materialized_columns.size());
     _cast_exprs.resize(materialized_columns.size(), nullptr);
+    bool has_file_column = false;
     for (const auto& materialized_column : materialized_columns) {
         selected_field_names.emplace_back(materialized_column.name());
         _convert_functions.emplace_back(std::make_unique<ConvertFuncTree>());
+        has_file_column |= materialized_column.slot_desc->type().is_file_type();
     }
 
     paimon::ReadContextBuilder context_builder(table_path);
@@ -134,17 +165,23 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     }
 
     context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(kPaimonReadBatchSize));
+    // Blob-view columns must come back as BlobDescriptors: paimon_blob_converter only understands
+    // blob descriptor bytes and raw payloads
+    context_builder.AddOption(paimon::Options::BLOB_VIEW_RESOLVE_ENABLED, "true");
+    if (auto warehouse = paimon_warehouse_from_table_path(table_path)) {
+        context_builder.AddOption(paimon::Options::BLOB_VIEW_UPSTREAM_WAREHOUSE, *warehouse);
+    } else if (has_file_column) {
+        // Only worth reporting when this scan actually reads a FILE column; do_open() runs once
+        // per split, so an unconditional warning would repeat for every split of every query.
+        LOG(WARNING) << "Paimon table path " << table_path
+                     << " does not follow the <warehouse>/<db>/<table> layout; blob-view columns cannot be resolved";
+    }
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
-                              std::to_string(kPaimonParquetCacheHoleSizeLimit));
-    context_builder.AddOption("parquet.read.cache-option.range-size-limit",
-                              std::to_string(kPaimonParquetCacheRangeSizeLimit));
-    context_builder.AddOption("parquet.read.bitmap.row-range-refining-strategy",
-                              std::string(kPaimonParquetBitmapRefiningStrategy));
-    context_builder.AddOption("parquet.read.bitmap.coalesce-hole-size-limit",
-                              std::to_string(kPaimonParquetBitmapCoalesceHoleSizeLimit));
-    context_builder.EnablePrefetch(kPaimonEnablePrefetch);
+                              std::to_string(config::paimon_native_parquet_cache_hole_size_limit));
+    context_builder.AddOption("parquet.read.executor.thread-count", std::to_string(kPaimonParquetExecutorThreadCount));
+    // Prefetch is left at paimon-cpp's default (off): 0.3.0 rereads every row group on that path.
     context_builder.EnableMultiThreadRowToBatch(kPaimonEnableMultiThreadRowToBatch);
     context_builder.SetRowToBatchThreadNumber(kPaimonRowToBatchThreadNum);
     context_builder.WithMemoryPool(_memory_pool);
@@ -175,6 +212,17 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     _read_chunk_template = std::make_shared<Chunk>();
     for (size_t i = 0; i < materialized_columns.size(); ++i) {
         SlotDescriptor* slot_desc = materialized_columns[i].slot_desc;
+        if (slot_desc->type().is_file_type()) {
+            // Paimon BLOB -> FILE. paimon-cpp yields a large_binary column holding either the
+            // payload bytes or a serialized BlobDescriptor; paimon_blob_converter decodes it row
+            // by row straight into the FileColumn, so no arrow convert plan or cast applies; the
+            // "cast" is the same identity ColumnRef that create_arrow_column() uses for matching types.
+            _read_chunk_template->append_column(ColumnHelper::create_column(slot_desc->type(), /*nullable=*/true),
+                                                slot_desc->id());
+            _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
+            continue;
+        }
+
         std::shared_ptr<arrow::DataType> arrow_type;
         if (slot_desc->type().type == TYPE_DATE) {
             arrow_type = arrow::date32();
@@ -234,6 +282,18 @@ void PaimonScanner::do_close(RuntimeState*) noexcept {
     _paimon_file_system.reset();
     _memory_pool.reset();
     _pool.clear();
+}
+
+int64_t PaimonScanner::estimated_mem_usage() const {
+    // The base class reports 0 here, which the adaptive IO-task limiter reads as "no observation"
+    // and keeps its pessimistic file-length guess. _memory_pool is per-scanner, so its peak is real.
+    // Null when open() short-circuited (count / min-max optimization) and never reached do_open().
+    if (_memory_pool == nullptr) {
+        return 0;
+    }
+    const auto peak = static_cast<int64_t>(_memory_pool->MaxMemoryUsage());
+    DCHECK_GE(peak, 0);
+    return std::max<int64_t>(peak, 0);
 }
 
 void PaimonScanner::do_update_counter(HdfsScannerProfile* profile) {
@@ -331,6 +391,11 @@ Status PaimonScanner::_append_arrow_record_batch_to_chunk(ChunkPtr& chunk) {
         _convert_context.set_current_column(slot_desc->col_name(), slot_desc->type());
         Column* column = chunk->get_column_raw_ptr_by_slot_id(slot_desc->id());
         const auto arrow_column = _arrow_record_batch->GetColumnByName(std::string(materialized_columns[i].name()));
+        if (slot_desc->type().is_file_type()) {
+            RETURN_IF_ERROR(append_paimon_blob_to_file_column(arrow_column.get(), _arrow_record_batch_start_idx,
+                                                              num_rows, column));
+            continue;
+        }
         RETURN_IF_ERROR(convert_arrow_array_to_column(_convert_functions[i].get(), num_rows, arrow_column.get(), column,
                                                       _arrow_record_batch_start_idx, /*chunk_start_idx=*/0,
                                                       &_chunk_filter, &_convert_context));

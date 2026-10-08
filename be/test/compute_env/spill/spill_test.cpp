@@ -29,15 +29,19 @@
 #include "base/utility/defer_op.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
+#include "column/container_resource.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
+#include "common/config_local_io_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
@@ -67,6 +71,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_context_lifetime.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks::vectorized {
@@ -467,6 +472,64 @@ TEST_F(SpillTest, unsorted_process) {
     }
 }
 
+// Pins what spiller.h documents about the two flush-stage timers on an unordered writer. The
+// default SpilledOptions gives init_partition_nums = -1 (so a RawSpillerWriter) with
+// is_unordered = true -- the shape the nested-loop join operators use. Mem tables are still
+// flushed there, so FlushMemTableTime is attributed, but _need_compact_block() bails out on
+// is_unordered, so no compaction work is ever done even with block compaction enabled.
+TEST_F(SpillTest, unordered_writer_reports_flush_stage_but_never_compacts) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options;
+    // The default ctor delegates to SpilledOptions(-1): unordered, and not partitioned.
+    ASSERT_TRUE(spill_options.is_unordered);
+    ASSERT_EQ(-1, spill_options.init_partition_nums);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    // Enabled deliberately: it is the is_unordered gate, not this flag, that keeps compaction away.
+    spill_options.enable_block_compaction = true;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    for (size_t i = 0; i < 1024; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // Mem tables were written out, so the first stage of the flush task is attributed.
+    ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+    ASSERT_LE(metrics.flush_mem_table_timer->value(), metrics.flush_timer->value());
+    // The compaction stage never selected any block group, so nothing was merged or rewritten.
+    // compact_timer itself is not asserted to be zero: it is scoped before the _need_compact_block()
+    // early return, so entering the stage at all leaves a negligible non-zero value there.
+    ASSERT_EQ(0, metrics.compact_count->value());
+    ASSERT_EQ(0, metrics.compact_merge_timer->value());
+    ASSERT_EQ(0, metrics.compact_bytes_read->value());
+    ASSERT_EQ(0, metrics.compact_bytes_written->value());
+}
+
 struct FailedGuard {
     bool scoped_begin() const { return false; }
     void scoped_end() const {}
@@ -609,7 +672,150 @@ TEST_F(SpillTest, order_by_process) {
         }
         ASSERT_EQ(contain_rows, restored_rows);
         ASSERT_GT(metrics.compact_count->value(), 0);
+        // FlushTime must be attributable: both stages of the flush task report their own time,
+        // the merge inside compaction is separated from the IO it drives, and compaction reports
+        // the bytes it rewrote.
+        ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+        ASSERT_GT(metrics.compact_timer->value(), 0);
+        ASSERT_GT(metrics.compact_merge_timer->value(), 0);
+        ASSERT_LE(metrics.compact_merge_timer->value(), metrics.compact_timer->value());
+        ASSERT_LE(metrics.flush_mem_table_timer->value() + metrics.compact_timer->value(),
+                  metrics.flush_timer->value());
+        ASSERT_GT(metrics.compact_bytes_read->value(), 0);
+        ASSERT_GT(metrics.compact_bytes_written->value(), 0);
     }
+}
+
+// Spill input whose BinaryColumn has 64-bit offsets through the ordered spiller and check that every row comes back in
+// order as a BinaryColumn with its value. OrderedMemTable::append() copies the input into a fresh column, so the mem
+// table itself stays small and 32-bit here; the over-4GB mem table is covered by
+// ordered_mem_table_keeps_binary_over_4g_before_sort.
+TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_VARCHAR;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    const SlotId key_slot = find_first_column_ref(tuple[0]->root())->slot_id();
+    const SlotId value_slot = find_first_column_ref(tuple[1]->root())->slot_id();
+
+    // Keys start + 2 * i, each with the value "v<key>".
+    auto make_chunk = [&](int32_t start, size_t num_rows, bool large_offsets) {
+        auto keys = Int32Column::create();
+        auto values = BinaryColumn::create();
+        for (size_t i = 0; i < num_rows; i++) {
+            const int32_t key = start + 2 * static_cast<int32_t>(i);
+            const std::string value = "v" + std::to_string(key);
+            keys->append(key);
+            values->append(Slice(value));
+        }
+        if (large_offsets) {
+            ColumnTestHelper::force_large_offsets(values.get());
+        }
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(std::move(keys), key_slot);
+        chunk->append_column(std::move(values), value_slot);
+        return chunk;
+    };
+
+    auto factory = spill::make_spilled_factory();
+    SpilledOptions spill_options(&ctx->sort_exprs, &ctx->sort_descs);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 64 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    constexpr size_t kRowsPerChunk = 100;
+    // Both chunks land in one mem table; append() copies them out of their 64-bit offsets.
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, make_chunk(0, kRowsPerChunk, true), EmptyMemGuard{}));
+    ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, make_chunk(1, kRowsPerChunk, true), EmptyMemGuard{}));
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_OK(spiller->_spilled_task_status);
+
+    std::vector<int32_t> keys;
+    std::vector<std::string> values;
+    ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    while (true) {
+        auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
+        if (chunk_st.status().is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(chunk_st.status());
+        ASSERT_OK(spiller->_spilled_task_status);
+        const auto& chunk = chunk_st.value();
+        if (chunk == nullptr) {
+            continue;
+        }
+        const auto& key_column = chunk->get_column_by_slot_id(key_slot);
+        const auto& value_column = chunk->get_column_by_slot_id(value_slot);
+        const Column* value_data = ColumnHelper::get_data_column(value_column.get());
+        ASSERT_TRUE(value_data->is_binary());
+        ASSERT_FALSE(value_data->is_large_binary());
+        for (size_t i = 0; i < chunk->num_rows(); i++) {
+            keys.push_back(key_column->get(i).get_int32());
+            values.push_back(value_column->get(i).get_slice().to_string());
+        }
+    }
+
+    ASSERT_EQ(2 * kRowsPerChunk, keys.size());
+    for (size_t i = 0; i < keys.size(); i++) {
+        ASSERT_EQ(static_cast<int32_t>(i), keys[i]);
+        ASSERT_EQ("v" + std::to_string(i), values[i]);
+    }
+}
+
+// OrderedMemTable::_do_sort() used to call upgrade_if_overflow(), which turned a mem table over 4GB into
+// LargeBinaryColumn; its slices were then spilled in the 64-bit format and could not be restored into the BinaryColumn
+// of the spill schema. The check before sorting must leave such a chunk a BinaryColumn. The column borrows a 1-byte
+// buffer and reports a payload over 4GB; it is never read, so nothing close to 4GB is allocated. With the old upgrade,
+// the check would try to materialize that payload.
+TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    // Copy the limit: gtest asserts bind their arguments by reference, which would odr-use the static member.
+    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    const uint64_t element_size = (capacity_limit / 2) + 1;
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), 2 * element_size);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(element_size);
+    offsets.emplace_back(2 * element_size);
+    auto values = BinaryColumn::create(std::move(resource), std::move(offsets));
+    ASSERT_GT(values->get_immutable_bytes().size(), capacity_limit);
+    const Column* values_ptr = values.get();
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+    Chunk chunk(Columns{std::move(values)}, slot_map);
+    ASSERT_OK(spill::OrderedMemTable::check_chunk_before_sort(chunk));
+    // The chunk keeps the very same BinaryColumn: no upgrade to LargeBinaryColumn.
+    const Column* column = chunk.get_column_raw_ptr_by_index(0);
+    EXPECT_EQ(values_ptr, column);
+    EXPECT_TRUE(column->is_binary());
+    EXPECT_FALSE(column->is_large_binary());
+    EXPECT_FALSE(chunk.has_large_column());
+
+    // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
+    // allocating them.
+    auto value = BinaryColumn::create();
+    value->append(Slice("v"));
+    Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
+    auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
+    EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;
 }
 
 TEST_F(SpillTest, partition_process) {

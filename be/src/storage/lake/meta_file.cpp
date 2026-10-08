@@ -35,6 +35,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -350,6 +351,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // A rewritten segment makes this rowset's data private to this tablet, so it must not
         // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
@@ -1595,21 +1597,24 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                 const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
                 auto source_size_it = resolved_source_sizes.find(source_key);
                 if (source_size_it == resolved_source_sizes.end()) {
-                    RandomAccessFileOptions options{.skip_fill_local_cache = true};
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
-                    ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
-                                                          options, tablet_mgr->delvec_location(
-                                                                           raw.tablet_id, raw.delvec_file.name())));
-                    std::optional<StatusOr<int64_t>> source_size_override;
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
-                                             &source_size_override);
                     int64_t resolved_size = 0;
-                    if (source_size_override.has_value()) {
-                        RETURN_IF_ERROR(source_size_override->status());
-                        resolved_size = source_size_override->value();
-                    } else {
-                        ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                    {
+                        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                        RandomAccessFileOptions options{.skip_fill_local_cache = true};
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
+                        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
+                                                              options, tablet_mgr->delvec_location(
+                                                                               raw.tablet_id, raw.delvec_file.name())));
+                        std::optional<StatusOr<int64_t>> source_size_override;
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
+                                                 &source_size_override);
+                        if (source_size_override.has_value()) {
+                            RETURN_IF_ERROR(source_size_override->status());
+                            resolved_size = source_size_override->value();
+                        } else {
+                            ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                        }
                     }
                     TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size", &resolved_size);
                     RETURN_IF_ERROR(validate_source_size(resolved_size, page_end, true));
@@ -1670,6 +1675,10 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
         const auto& raw = *output_page.raw_page;
         const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
         if (!current_source.has_value() || *current_source != source_key) {
+            // A page copied through raw is never read by get_del_vec, so the read it does here is the
+            // only delvec read of that page -- account for it under the same counter, or the latency of
+            // a whole publish's delvec reads disappears exactly for the pages this path handles.
+            TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
             close_reader();
             RandomAccessFileOptions source_options{.skip_fill_local_cache = true};
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &source_options);
@@ -1680,6 +1689,13 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             [[maybe_unused]] int delta = 1;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
         }
+        // A copied page is never decoded, so get_del_vec's checksum verification never runs over these
+        // bytes -- fold the chunks the copy already holds into a running crc32c instead, which costs one
+        // more pass over bytes in hand and no extra read. Verify under exactly the condition get_del_vec
+        // does: a page whose crc32c_gen_version is not its version carries no live checksum, so there is
+        // nothing to compare against.
+        const bool verify_crc = raw.page.has_crc32c() && raw.page.crc32c_gen_version() == raw.page.version();
+        uint32_t copied_crc = 0;
         uint64_t copied = 0;
         buffer.resize(kDelvecIoChunkSize);
         while (copied < raw.page.size()) {
@@ -1690,10 +1706,44 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             Status read_status;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
             RETURN_IF_ERROR(read_status);
-            RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
-                                                          buffer.data(), static_cast<int64_t>(chunk_size)));
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
+                                                              buffer.data(), static_cast<int64_t>(chunk_size)));
+            }
+            if (verify_crc) {
+                copied_crc = crc32c::Extend(copied_crc, buffer.data(), chunk_size);
+            }
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
             copied += chunk_size;
+        }
+        if (verify_crc && copied_crc != crc32c::Unmask(raw.page.crc32c())) {
+            // Same report get_del_vec makes for a page it decodes, and it carries the same ABA caveat: a
+            // page last written by a version that did not maintain the checksum can mismatch without being
+            // corrupt, which is what enable_strict_delvec_crc_check lets an operator ride out. Under that
+            // knob the copy still goes through carrying the SOURCE's crc32c, so the mismatch stays visible
+            // to whoever reads the output rather than being laundered into a freshly computed checksum.
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch while copying page, tabletid {}, delvecfile {}, offset {}, size {}, "
+                    "expect crc32c {}, actual crc32c {}",
+                    raw.tablet_id, raw.delvec_file.name(), raw.page.offset(), raw.page.size(),
+                    crc32c::Unmask(raw.page.crc32c()), copied_crc);
+            if (config::enable_strict_delvec_crc_check) {
+                // The destination is append-only and these bytes are already in it, so this copy cannot be
+                // repaired in place. Drop the source's local cache -- a corrupted cached block is the
+                // likeliest culprit, exactly as in get_del_vec -- and fail, so the caller's retry rebuilds
+                // the output reading through to remote storage.
+                const std::string source_path = tablet_mgr->delvec_location(raw.tablet_id, raw.delvec_file.name());
+                if (auto drop_status = drop_corrupted_delvec_file_cache(source_path); !drop_status.ok()) {
+                    VLOG(2) << "skip clearing corrupted cache for " << source_path << ": " << drop_status;
+                } else {
+                    LOG(INFO) << "cleared corrupted cache for " << source_path
+                              << ", the next attempt re-reads the delvec page";
+                }
+                return Status::Corruption(
+                        fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}",
+                                    crc32c::Unmask(raw.page.crc32c()), copied_crc));
+            }
         }
     }
 
@@ -1809,6 +1859,8 @@ Status MetaFileBuilder::set_final_rowset() {
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+    // The op_writes folded here may come from different statements, some bundled and some standalone.
+    give_standalone_segments_a_bundle_offset(rowset);
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
@@ -1846,6 +1898,7 @@ Status MetaFileBuilder::set_final_rowset() {
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same

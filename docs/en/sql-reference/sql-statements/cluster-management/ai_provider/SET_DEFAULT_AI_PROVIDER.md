@@ -6,7 +6,7 @@ description: "Set an AI provider as the default for its type."
 # SET DEFAULT AI PROVIDER
 
 Marks a provider as the default for **its own type**. The registry keeps one default per type
-(`embedding` / `rerank` / `text`), so setting an embedding provider as default does not affect the
+(`embedding` / `rerank` / `chat`), so setting an embedding provider as default does not affect the
 rerank default and vice versa.
 
 ## Syntax

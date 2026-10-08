@@ -21,7 +21,6 @@
 #include <string>
 
 #include "column/vectorized_fwd.h"
-#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -35,10 +34,6 @@ class TxnLogPB_OpCompaction;
 class ParallelUpsertContext;
 class ThreadPoolToken;
 struct ParallelPublishSlot;
-
-namespace sstable {
-class Iterator;
-} // namespace sstable
 
 namespace lake {
 
@@ -217,8 +212,6 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
-    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
-
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -241,9 +234,6 @@ public:
     StatusOr<AsyncCompactCBPtr> early_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                   TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int32_t fileset_start_idx);
-
-    static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
-                                        std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 
     // Assign the generation version (PersistentIndexSstablePB.generation_version) to each
     // sstable in |new_meta|: a sstable that already carries a non-zero value is left
@@ -399,17 +389,6 @@ private:
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
-
-    // get sstable's iterator that need to compact and modify txn_log
-    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                           TxnLogPB* txn_log,
-                                           std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
-                                           bool* contain_shared_sstables);
-
-    static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
-            std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 

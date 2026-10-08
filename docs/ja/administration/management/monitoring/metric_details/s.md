@@ -46,6 +46,46 @@ description: "Alphabetical s"
 - 単位: カウント
 - 説明: 小さなファイルキャッシュの数。
 
+## `sort_key_sampling_data_page_fallback_total`
+
+- 単位: カウント
+- 説明: データページからのソートキーサンプリングがセグメントを諦め、そのセグメントの粗い `[min, max]` 範囲にフォールバックした累計回数。想定外のスキーマ、セグメント自身のスキーマと一致しない `sort_key_idxes`、ページ読み取りの失敗、行数の不足、セグメントが宣言する境界の外側にあるサンプルなどが原因です。サンプリングは fail-open のため分割が失敗することはありませんが、値の上昇は Tablet 分割と範囲分割 Compaction が意図より粗い境界で動作していることを意味します。
+
+## `sort_key_sampling_data_page_latency`
+
+- 単位: us
+- 説明: 1 セグメントのソートキーをデータページからサンプリングするのに要した時間。bvar のレイテンシ系列（平均、パーセンタイル、最大、qps、カウント）として公開されます。サンプル予算チェックを通過したすべての試行を対象とし、その後フォールバックした試行も含むため、fail-open を繰り返す遅い Tablet もここで見えます。
+
+## `sort_key_sampling_data_page_segments_total`
+
+- 単位: カウント
+- 説明: サンプリングがデータページ経路を選択したセグメントの累計数。サンプリングの形状が確定した後、最初の読み取りの前に加算されるため、その後の読み取りが失敗してフォールバックしたセグメントも計上されます。このカウンタの目的は、無償の Short Key Index 経路が「使われなかった」ことを示すことです。実際に支払った I/O は `sort_key_sampling_read_bytes_total` を参照してください。
+
+## `sort_key_sampling_read_bytes_total`
+
+- 単位: バイト
+- 説明: ソートキーのサンプリング中にセグメントのデータページから読み取った圧縮バイト数の累計。ページリーダー自身の計測値から加算されるため、実際に発生した転送のみを数え、後にフォールバックした試行の分も含みます。分割点サンプリングの I/O コストを監視するための指標です。
+
+## `sort_key_sampling_rowsets_opened_total`
+
+- 単位: カウント
+- 説明: サンプリングのためにセグメントファイルを開いた Rowset の累計数。この open は、その Rowset の少なくとも 1 つのセグメントがゼロでないサンプル予算を持つことを条件とするため、実際にサンプリングを試みた場合のみ増加します。`sort_key_sampling_samples_total` と併せて読んでください。Rowset を開いたのにサンプルが公開されない場合、サンプル予算が読み取り対象のセグメントに届いていないことを意味します。
+
+## `sort_key_sampling_samples_total`
+
+- 単位: カウント
+- 説明: いずれかの経路で公開されたソートキーサンプルの累計数。この値が増えているのに `sort_key_sampling_data_page_segments_total` が増えていない場合、サンプルは無償の Short Key Index 経路から得られています。
+
+## `sort_key_sampling_short_key_index_fallback_total`
+
+- 単位: カウント
+- 説明: Short Key Index サンプリング経路に入ったうえでセグメントを諦めた累計回数。形状がセグメント自身の行数と相互検証できない、インデックスエントリをデコードできない、サンプルが順序を崩しているかセグメントの宣言する境界の外側にある、といった場合です。諦めてもそのセグメントのサンプリングが終わるわけではありません。データページ予算が割り当てられていれば次はデータページサンプリングに進み、予算が 0 か、そちらでも何も得られなかった場合にのみ粗い `[min, max]` 範囲に戻ります。この指標が数え**ない**ケースが 2 つあります。インデックスブロックが 2 個未満のセグメントは、この指標を増やさずに経路を抜け、行粒度でサンプリングされます。また、スキーマの Short Key Index がソートキー全体をエンコードできない場合（例えば VARCHAR のソートキー）はこの経路に入らないため、そうしたテーブルではこの指標は 0 のままで、該当セグメントは `sort_key_sampling_data_page_segments_total` に現れます。
+
+## `sort_key_sampling_short_key_index_latency`
+
+- 単位: us
+- 説明: 1 セグメントのソートキーを Short Key Index からサンプリングするのに要した時間。bvar のレイテンシ系列（平均、パーセンタイル、最大、qps、カウント）として公開されます。この経路はデータページを一切読まないため、値は `sort_key_sampling_data_page_latency` を大きく下回るはずです。
+
 ## `spill_parked_with_uncovered_reason_total`
 
 - 単位: カウント
@@ -592,7 +632,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。導出ティア（derived tier。Range 分散の増分マテリアライズドビューのリフレッシュで、境界をサンプリングではなく導出で求める経路）の値：`materialized_view_target`（ターゲットが導出ティアではキーにできないマテリアライズドビュー — 増分マテリアライズドビューでない、可視 index が 2 つ以上ある、ソートキーが単一の隠し row-id 列でない、あるいはまだどの境界ソースも扱えない row-id 種別）、`row_id_span_too_small`（推定出力が小さすぎて row-id のキー空間を有効に切り分けられない — 1 タブレットあたりの行数が、ノードごとの id キャッシュが残す空白を避けきれず、分割が有益どころか不均衡になる）、`row_id_space_not_pristine`（ターゲットの自動インクリメントカウンタが既に id を払い出しており、コンピュートノードがプランナーの計算に入らない id 区間をキャッシュしている可能性がある。境界を導出できるのは未使用の id 空間の場合のみ）、`multiple_temporary_partitions`（このリフレッシュが複数の置き換えパーティションに書き込む場合。Row ID はテーブル全体で 1 つのカウンタから払い出されるため、単一パーティションの id は連続した帯になり、id 空間全体にまたがる分割では各パーティションのほとんどのタブレットが空になります。機能を有効にしてもこれは変わらないため、`disabled_by_config` とは別に報告されます）、`estimate_unavailable`（利用できる出力サイズ見積もりがなく、タブレット数を決められない）、`derivation_failed`（境界ソースが例外を送出したか、導出した境界が検証に失敗。サンプリングティアに属する `tablet_pre_split_sampler_failed{reason=sample_failed}` とは別物）、`stale_catalog_state`（導出ティアでの意味：分割点を導出してからジョブを構築するまでの間にターゲットの可視 index 集合が変化した — 上記マルチパーティション経路と同種のスナップショット競合で、別のスナップショット上で起きたもの）、`submit_failed`（導出ティアでの意味：導出した分割点を受理済みジョブにできなかった — reshard ジョブファクトリが構築を拒否したか、`TabletReshardJobMgr` が受理を拒否したか。分割点そのものを生成できなかったことを表す `derivation_failed` とは別物です。サンプリングティアの同名の値は `tablet_pre_split_sampler_failed` に記録されます。そちらではサンプラーが実際に起動しているためです）。
+- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`source_missing_sampled_column`（`FILES()` からの INSERT で、サンプリング対象のターゲット列が解決済みの INSERT 投影になく、サンプラーが投影できる FILES ソース列またはリテラルがない場合）、`unsupported_sampled_projection`（サンプリング対象のターゲット列が、セッションのタイムゾーンに依存する `from_unixtime(ts)` など、サンプラーで再現できない式または NULL で供給される場合。FILES のソース列は存在する可能性があります。`date_trunc('day', ts)` のような決定的な式はそのままサンプリングされ、この値は記録されません）、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`no_matching_partition`（手動 Range パーティションのターゲット：サンプリングしたパーティション値が、取り込みが書き込みうるどの宣言済みレンジにも含まれない。その値は破棄され、新しいパーティションの作成には使われない）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。導出ティア（derived tier。Range 分散の増分マテリアライズドビューのリフレッシュで、境界をサンプリングではなく導出で求める経路）の値：`materialized_view_target`（ターゲットが導出ティアではキーにできないマテリアライズドビュー — 増分マテリアライズドビューでない、可視 index が 2 つ以上ある、ソートキーが単一の隠し row-id 列でない、あるいはまだどの境界ソースも扱えない row-id 種別）、`row_id_span_too_small`（推定出力が小さすぎて row-id のキー空間を有効に切り分けられない — 1 タブレットあたりの行数が、ノードごとの id キャッシュが残す空白を避けきれず、分割が有益どころか不均衡になる）、`row_id_space_not_pristine`（ターゲットの自動インクリメントカウンタが既に id を払い出しており、コンピュートノードがプランナーの計算に入らない id 区間をキャッシュしている可能性がある。境界を導出できるのは未使用の id 空間の場合のみ）、`multiple_temporary_partitions`（このリフレッシュが複数の置き換えパーティションに書き込む場合。Row ID はテーブル全体で 1 つのカウンタから払い出されるため、単一パーティションの id は連続した帯になり、id 空間全体にまたがる分割では各パーティションのほとんどのタブレットが空になります。機能を有効にしてもこれは変わらないため、`disabled_by_config` とは別に報告されます）、`estimate_unavailable`（利用できる出力サイズ見積もりがなく、タブレット数を決められない。INSERT-from-table の取り込みでも、External Catalog のソーステーブルのサイズをテーブル統計から見積もれない場合にこの値が記録される）、`derivation_failed`（境界ソースが例外を送出したか、導出した境界が検証に失敗。サンプリングティアに属する `tablet_pre_split_sampler_failed{reason=sample_failed}` とは別物）、`stale_catalog_state`（導出ティアでの意味：分割点を導出してからジョブを構築するまでの間にターゲットの可視 index 集合が変化した — 上記マルチパーティション経路と同種のスナップショット競合で、別のスナップショット上で起きたもの）、`submit_failed`（導出ティアでの意味：導出した分割点を受理済みジョブにできなかった — reshard ジョブファクトリが構築を拒否したか、`TabletReshardJobMgr` が受理を拒否したか。分割点そのものを生成できなかったことを表す `derivation_failed` とは別物です。サンプリングティアの同名の値は `tablet_pre_split_sampler_failed` に記録されます。そちらではサンプラーが実際に起動しているためです）。
 - 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。導出ティアのスキップも `tablet_pre_split_sampler_failed` ではなく本カウンタに記録されます：導出ティアはデータを一切読まないためサンプラーが起動することはなく、`derivation_failed` も同様です。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
@@ -631,7 +671,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: マルチパーティション経路（P2-a）のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はサンプル数が多いパーティションを残し、サンプル数が少ない末尾を切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
+- 説明: マルチパーティション経路のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はデータ量の多いパーティション（data tier が一部のファイルだけをサンプリングし、かつパーティション値がファイルパスから取られる場合はバイト数、それ以外はサンプル数で判断）を残し、少ないものを切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

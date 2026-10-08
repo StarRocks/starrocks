@@ -138,7 +138,6 @@
 #include <climits>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -764,16 +763,6 @@ public:
     }
 };
 
-int64_t current_rss_bytes() {
-    std::ifstream statm("/proc/self/statm");
-    int64_t pages = 0;
-    int64_t resident_pages = 0;
-    if (!(statm >> pages >> resident_pages)) {
-        return -1;
-    }
-    return resident_pages * sysconf(_SC_PAGESIZE);
-}
-
 Status enable_heap_profile() {
     bool configured = false;
     size_t configured_size = sizeof(configured);
@@ -828,13 +817,13 @@ StatusOr<CompactionMeasurement> run_compaction(const BenchConfig& bench_config, 
     }
 
     std::atomic<bool> stop_sampler{false};
-    std::atomic<int64_t> process_rss_peak_bytes{current_rss_bytes()};
+    std::atomic<int64_t> process_rss_peak_bytes{MemInfo::process_resident_bytes()};
     std::thread sampler([&] {
         auto next_heap_profile_snapshot = std::chrono::steady_clock::now() + kHeapProfileSnapshotInterval;
 
         while (!stop_sampler.load(std::memory_order_acquire)) {
             const int64_t tracker_bytes = task.task_mem_tracker()->consumption();
-            const int64_t rss_bytes = current_rss_bytes();
+            const int64_t rss_bytes = MemInfo::process_resident_bytes();
             const auto now = std::chrono::steady_clock::now();
             process_rss_peak_bytes.store(std::max(process_rss_peak_bytes.load(std::memory_order_relaxed), rss_bytes),
                                          std::memory_order_relaxed);

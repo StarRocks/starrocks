@@ -134,10 +134,20 @@ Status RuntimeFilterCache::init() {
     }
 }
 void RuntimeFilterCache::_clean_thread_func(RuntimeFilterCache* cache) {
+#ifdef BE_TEST
+    // Same shape as QueryContextManager::_clean_func: the stop flag is only re-checked between sleeps
+    // and ~RuntimeFilterCache joins this thread, so shutdown blocks for the remainder of the current
+    // interval. Both pollers start during env init and share the 100ms period, so they run in phase --
+    // shortening only one of them just relocates the wait to the other and saves nothing. Shrink this
+    // one too so the pair together cost ~10ms instead of ~100ms per test process.
+    constexpr int64_t kCleanIntervalMs = 10;
+#else
+    constexpr int64_t kCleanIntervalMs = 100;
+#endif
     while (!cache->is_stopped()) {
         cache->_clean_filters();
         cache->_clean_events(false);
-        std::this_thread::sleep_for(milliseconds(100));
+        std::this_thread::sleep_for(milliseconds(kCleanIntervalMs));
     }
 }
 void RuntimeFilterCache::_clean_events(bool force) {

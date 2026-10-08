@@ -62,6 +62,19 @@
 
 namespace starrocks::lake {
 
+// Whether segment |segment_index| came with a pre-built sstable.
+//
+// Checked PER SEGMENT rather than by the array being non-empty. A single writer builds ssts for all
+// of its segments or none, but a multi-node write folds one log per writing node and each node
+// decides that on its own, so the folded log can legitimately carry an sst for some segments and an
+// empty slot for others. Reading "the array is non-empty" as "every segment has one" would send an
+// empty file name into ingest_sst. An empty name is the marker for "none for this segment", the same
+// convention del_ssts uses below.
+static bool has_prebuilt_sst(const TxnLogPB_OpWrite& op_write, int segment_index) {
+    return segment_index < op_write.ssts_size() && segment_index < op_write.sst_ranges_size() &&
+           !op_write.ssts(segment_index).name().empty();
+}
+
 static bool use_cloud_native_pk_index(const TabletMetadata& metadata) {
     return metadata.enable_persistent_index() &&
            metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
@@ -459,8 +472,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     bool skip_early_sst_compact = false;
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_meta_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
-                                             local_segments > 1 && use_cloud_native_pk_index(*metadata);
+    const bool use_parallel_partial_update =
+            is_row_mode_partial_update && local_segments > 1 && use_cloud_native_pk_index(*metadata);
 
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
@@ -533,8 +546,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             DCHECK(state.upserts(local_id) != nullptr);
             if (!has_condition_update) {
                 RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-                                           op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
-            } else if (op_write.ssts_size() > 0) {
+                                           has_prebuilt_sst(op_write, local_id), use_cloud_native_pk_index(*metadata)));
+            } else if (has_prebuilt_sst(op_write, local_id)) {
                 RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
                                                                    condition_column, state.upserts(local_id), index,
                                                                    &new_deletes));
@@ -559,7 +572,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             _index_cache.update_object_size(index_entry, index.memory_usage());
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
-            if (op_write.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {
+            if (has_prebuilt_sst(op_write, local_id) && use_cloud_native_pk_index(*metadata)) {
                 DelvecPagePB delvec_page_pb = builder->delvec_page(rowset_id + global_segment_id);
                 delvec_page_pb.set_version(metadata->version());
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
@@ -1122,12 +1135,11 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 }
 
 // Update primary index with new rows and collect rows to be deleted.
-// This method supports both serial and parallel execution modes.
 //
 // Parallel Execution:
-// When enabled (config::enable_pk_index_parallel_execution && is_cloud_native_index), this method
-// uses a thread pool to process segments concurrently, significantly improving performance
-// for large tablets during publish operations.
+// For a cloud-native index this method uses a thread pool to process segments concurrently,
+// significantly improving performance for large tablets during publish operations. A local
+// index has no parallel counterpart and runs the same code inline on the caller thread.
 //
 // Parameters:
 //   rowset_id:            Base RSSID (RowSet Segment ID) for this rowset
@@ -1139,7 +1151,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 //   is_cloud_native_index: Whether using cloud-native persistent index
 //
 // Execution Flow:
-//   1. Setup parallel execution context if enabled (allocate thread pool token)
+//   1. Setup parallel execution context for a cloud-native index (allocate thread pool token)
 //   2. For each segment:
 //      - read_only mode: Call parallel_get() to find existing rows to delete
 //      - write mode: Call parallel_upsert() to update index and find deletes
@@ -1150,11 +1162,11 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
                                  bool is_cloud_native_index) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
 
-    // Prepare parallel execution infrastructure if enabled
+    // Prepare parallel execution infrastructure
     std::unique_ptr<ThreadPoolToken> token;
 
     // Note: Only cloud-native index supports parallel_get/parallel_upsert, local index does not support it
-    if (config::enable_pk_index_parallel_execution && is_cloud_native_index) {
+    if (is_cloud_native_index) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -1317,12 +1329,9 @@ Status UpdateManager::_do_update_with_condition_parallel(const RowsetUpdateState
     std::vector<uint32_t> read_column_ids;
     read_column_ids.push_back(condition_column);
 
-    // Obtain thread pool token for parallel execution if enabled
-    std::unique_ptr<ThreadPoolToken> token;
-    if (config::enable_pk_index_parallel_execution) {
-        token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                ThreadPool::ExecutionMode::CONCURRENT);
-    }
+    // Obtain thread pool token for parallel execution
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
 
     // The helper only writes into the delete map, so the context is a pure sink here -- it carries no
     // runner, because this path's fan-out is the local one below rather than a deferred index lookup.
@@ -1497,7 +1506,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
     const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
-    if (config::enable_pk_index_parallel_execution && params.op_write.rowset().num_rows() >= min_rows_per_task) {
+    if (params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
     }
@@ -1685,11 +1694,8 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePersistentIndex& index) {
         TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
-        std::unique_ptr<ThreadPoolToken> token;
-        if (config::enable_pk_index_parallel_execution) {
-            token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                    ThreadPool::ExecutionMode::CONCURRENT);
-        }
+        auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
         TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
         st.update(
                 index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment, owned_per_segment));
@@ -2432,13 +2438,10 @@ Status UpdateManager::execute_index_major_compaction(const TabletMetadataPtr& me
     // error-propagation paths.
     FAIL_POINT_TRIGGER_EXECUTE(fail_execute_index_major_compaction,
                                { return Status::InternalError("injected index major compaction failure"); });
-    if (config::enable_pk_index_parallel_compaction) {
-        if (_parallel_compact_mgr == nullptr) {
-            return Status::InternalError("parallel compact manager is not initialized");
-        }
-        return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
+    if (_parallel_compact_mgr == nullptr) {
+        return Status::InternalError("parallel compact manager is not initialized");
     }
-    return LakePersistentIndex::major_compact(_tablet_mgr, metadata, txn_log);
+    return LakePersistentIndex::parallel_major_compact(_parallel_compact_mgr, _tablet_mgr, metadata, txn_log);
 }
 
 bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {

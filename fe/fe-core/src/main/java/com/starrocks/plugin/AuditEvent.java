@@ -180,6 +180,32 @@ public class AuditEvent {
     @AuditField(value = "TransmittedBytes")
     public long transmittedBytes = -1;
 
+    // Observed completed-task statistics, not an exactly-once billing record.
+    @AuditField(value = "AITaskCount")
+    public long aiTaskCount = -1;
+    @AuditField(value = "AIRequestCount")
+    public long aiRequestCount = -1;
+    @AuditField(value = "AIRetryCount")
+    public long aiRetryCount = -1;
+    @AuditField(value = "AITimeoutCount")
+    public long aiTimeoutCount = -1;
+    @AuditField(value = "AIErrorCount")
+    public long aiErrorCount = -1;
+    @AuditField(value = "AIHttpTimeNs")
+    public long aiHttpTimeNs = -1;
+    @AuditField(value = "AIPromptTokens")
+    public long aiPromptTokens = -1;
+    @AuditField(value = "AICompletionTokens")
+    public long aiCompletionTokens = -1;
+    @AuditField(value = "AITotalTokens")
+    public long aiTotalTokens = -1;
+    @AuditField(value = "AIPromptUsageCount")
+    public long aiPromptUsageCount = -1;
+    @AuditField(value = "AICompletionUsageCount")
+    public long aiCompletionUsageCount = -1;
+    @AuditField(value = "AITotalUsageCount")
+    public long aiTotalUsageCount = -1;
+
     @AuditField(value = "QuerySource")
     public String querySource = "";
 
@@ -554,6 +580,77 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addAITaskCount(Long value) {
+            auditEvent.aiTaskCount = addAICounter(auditEvent.aiTaskCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIRequestCount(Long value) {
+            auditEvent.aiRequestCount = addAICounter(auditEvent.aiRequestCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIRetryCount(Long value) {
+            auditEvent.aiRetryCount = addAICounter(auditEvent.aiRetryCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAITimeoutCount(Long value) {
+            auditEvent.aiTimeoutCount = addAICounter(auditEvent.aiTimeoutCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIErrorCount(Long value) {
+            auditEvent.aiErrorCount = addAICounter(auditEvent.aiErrorCount, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIHttpTimeNs(Long value) {
+            auditEvent.aiHttpTimeNs = addAICounter(auditEvent.aiHttpTimeNs, value);
+            return this;
+        }
+
+        public AuditEventBuilder addAIPromptTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiPromptUsageCount = addAICounter(auditEvent.aiPromptUsageCount, usageCount);
+                auditEvent.aiPromptTokens = addAICounter(auditEvent.aiPromptTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiPromptUsageCount = addAICounter(auditEvent.aiPromptUsageCount, 0L);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addAICompletionTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiCompletionUsageCount = addAICounter(auditEvent.aiCompletionUsageCount, usageCount);
+                auditEvent.aiCompletionTokens = addAICounter(auditEvent.aiCompletionTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiCompletionUsageCount = addAICounter(auditEvent.aiCompletionUsageCount, 0L);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addAITotalTokens(Long tokens, Long usageCount) {
+            if (tokens != null && tokens >= 0 && usageCount != null && usageCount > 0) {
+                auditEvent.aiTotalUsageCount = addAICounter(auditEvent.aiTotalUsageCount, usageCount);
+                auditEvent.aiTotalTokens = addAICounter(auditEvent.aiTotalTokens, tokens);
+            } else if (usageCount != null && usageCount == 0) {
+                auditEvent.aiTotalUsageCount = addAICounter(auditEvent.aiTotalUsageCount, 0L);
+            }
+            return this;
+        }
+
+        // -1 means unavailable; explicit zero must remain visible for AI statistics.
+        private static long addAICounter(long current, Long value) {
+            if (value == null || value < 0) {
+                return current;
+            }
+            if (current < 0) {
+                return value;
+            }
+            return Long.MAX_VALUE - current < value ? Long.MAX_VALUE : current + value;
+        }
+
         public AuditEventBuilder setQuerySource(String querySource) {
             auditEvent.querySource = querySource;
             return this;
@@ -598,6 +695,18 @@ public class AuditEvent {
             this.auditEvent.readRemoteCnt = event.readRemoteCnt;
             this.auditEvent.returnRows = event.returnRows;
             this.auditEvent.transmittedBytes = event.transmittedBytes;
+            this.auditEvent.aiTaskCount = event.aiTaskCount;
+            this.auditEvent.aiRequestCount = event.aiRequestCount;
+            this.auditEvent.aiRetryCount = event.aiRetryCount;
+            this.auditEvent.aiTimeoutCount = event.aiTimeoutCount;
+            this.auditEvent.aiErrorCount = event.aiErrorCount;
+            this.auditEvent.aiHttpTimeNs = event.aiHttpTimeNs;
+            this.auditEvent.aiPromptTokens = event.aiPromptTokens;
+            this.auditEvent.aiCompletionTokens = event.aiCompletionTokens;
+            this.auditEvent.aiTotalTokens = event.aiTotalTokens;
+            this.auditEvent.aiPromptUsageCount = event.aiPromptUsageCount;
+            this.auditEvent.aiCompletionUsageCount = event.aiCompletionUsageCount;
+            this.auditEvent.aiTotalUsageCount = event.aiTotalUsageCount;
         }
     }
 }

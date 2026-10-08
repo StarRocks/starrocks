@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -542,7 +543,32 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitTable(Table node, ParseTreeContext context) {
         TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getName()));
-        return new TableRelation(tableName);
+        TableRelation tableRelation = new TableRelation(tableName);
+        // Trino carries time travel (FOR VERSION/TIMESTAMP AS OF) on the table itself; without
+        // forwarding it the clause would be silently dropped and the query would read the latest snapshot.
+        node.getQueryPeriod().ifPresent(queryPeriod -> tableRelation.setQueryPeriod(toQueryPeriod(queryPeriod, context)));
+        return tableRelation;
+    }
+
+    // FOR TIMESTAMP/VERSION AS OF <expr>, mapped onto the same QueryPeriod the StarRocks parser builds
+    // in visitTableAtom, so analysis and planning of time travel stay dialect-independent.
+    private QueryPeriod toQueryPeriod(io.trino.sql.tree.QueryPeriod node, ParseTreeContext context) {
+        QueryPeriod.PeriodType periodType;
+        switch (node.getRangeType()) {
+            case TIMESTAMP:
+                periodType = QueryPeriod.PeriodType.TIMESTAMP;
+                break;
+            case VERSION:
+                periodType = QueryPeriod.PeriodType.VERSION;
+                break;
+            default:
+                throw trinoParserUnsupportedException("Unsupported query period type [" + node.getRangeType() + "]");
+        }
+        // Trino only builds an "AS OF" period today; anything else must not be dropped silently.
+        if (node.getEnd().isEmpty()) {
+            throw trinoParserUnsupportedException("Unsupported query period [" + node + "]");
+        }
+        return new QueryPeriod(periodType, (Expr) visit(node.getEnd().get(), context));
     }
 
     @Override

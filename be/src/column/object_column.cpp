@@ -328,12 +328,6 @@ std::string ObjectColumn<BitmapValue>::debug_item(size_t idx) const {
     return _pool[idx].to_string();
 }
 
-template <typename T>
-StatusOr<MutableColumnPtr> ObjectColumn<T>::upgrade_if_overflow() {
-    RETURN_IF_ERROR(capacity_limit_reached());
-    return nullptr;
-}
-
 template class ObjectColumn<HyperLogLog>;
 template class ObjectColumn<BitmapValue>;
 template class ObjectColumn<PercentileValue>;

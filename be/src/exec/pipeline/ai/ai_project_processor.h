@@ -25,6 +25,7 @@
 #include "column/chunk.h"
 #include "exec/pipeline/ai/ai_chunk_buffer.h"
 #include "exprs/ai/ai_function_call_expr.h"
+#include "exprs/ai/ai_function_result.h"
 #include "platform/llm/ai_runtime.h"
 #include "platform/llm/ai_task_dispatcher.h"
 
@@ -41,6 +42,10 @@ struct AIProjectPreparedOutput {
     // projected column order. Test projections may leave this false and let
     // materialization append the AI column.
     bool replace_existing = false;
+    TypeDescriptor result_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
+    std::string model_config_id = "__system_chat__";
+    AICapability capability = AICapability::CHAT;
 };
 
 struct AIProjectPreparedSubchunk {
@@ -71,6 +76,8 @@ struct AIProjectTaskRequest {
     std::string_view model;
     std::string_view prompt;
     const AIProviderOptions* options = nullptr;
+    std::string_view model_config_id = "__system_chat__";
+    AICapability capability = AICapability::CHAT;
 };
 
 class AIProjectTaskHandle {
@@ -132,6 +139,7 @@ public:
     Status set_status(int32_t driver_sequence, const Status& status);
     StatusOr<bool> lane_finished(int32_t driver_sequence) const;
     bool pending_finish(int32_t driver_sequence) const;
+    AIExecutionStatistics statistics(int32_t driver_sequence) const;
     Status set_source_finished(int32_t driver_sequence);
 
     Status attach_source_observer(int32_t driver_sequence, RuntimeState* state, PipelineObserver* observer);
@@ -153,10 +161,12 @@ private:
     Status _prepare_and_submit(RuntimeState* state, int32_t driver_sequence, const std::shared_ptr<Lane>& lane,
                                ChunkPtr slice);
     static void _complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                               size_t output_index, size_t row_index, AITaskResult result) noexcept;
+                               size_t output_index, size_t row_index, AITaskResult result,
+                               const AIExecutionStatistics& statistics) noexcept;
     static void _complete_submit_failure(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
                                          size_t output_index, size_t row_index, const Status& status);
-    static StatusOr<ChunkPtr> _materialize(const std::shared_ptr<ActiveSubchunk>& subchunk);
+    static StatusOr<ChunkPtr> _materialize(const std::shared_ptr<ActiveSubchunk>& subchunk, bool ignore_row_failures,
+                                           AIExecutionStatistics* statistics);
 
     static Status _terminal_status(const Status& driver_status, TerminalKind terminal_kind);
     static Status _row_failure_status();

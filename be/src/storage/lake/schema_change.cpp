@@ -670,7 +670,21 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 
     // convert rowsets
     auto rowsets = base_tablet.get_rowsets();
+    int64_t num_skipped_rowsets = 0;
+    // Safe only because linked schema change, which copies the source rowset (predicate included)
+    // verbatim instead of re-reading, is never selected above.
+    DCHECK(!op_schema_change->linked_segment());
     for (const auto& rowset : rowsets) {
+        // A delete-predicate rowset holds no data. The conversion read below applies its predicate
+        // to every rowset at or before it, so the rows it removes are already absent from what is
+        // rewritten. Converting it would only add a rowset with no segments, no del files and no
+        // predicate of its own -- metadata that references nothing, which range-distribution tablet
+        // merge rejects.
+        const auto& source = rowset->metadata();
+        if (source.has_delete_predicate() && source.segment_metas_size() == 0 && source.del_files_size() == 0) {
+            num_skipped_rowsets++;
+            continue;
+        }
         auto st = sc_procedure->process(rowset, op_schema_change->add_rowsets());
         if (!st.ok()) {
             std::string err_msg =
@@ -690,7 +704,8 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 
     LOG(INFO) << "finish convert historical rowsets from base tablet to new tablet. "
               << "base tablet: " << base_tablet.id() << ", new tablet: " << new_tablet.id()
-              << ", version: " << base_tablet.version();
+              << ", version: " << base_tablet.version() << ", rowsets emitted: " << op_schema_change->rowsets_size()
+              << ", rowsets skipped: " << num_skipped_rowsets;
     return Status::OK();
 }
 

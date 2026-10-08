@@ -22,8 +22,8 @@
 #include "base/logging.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
-#include "column/binary_column.h"
-#include "column/nullable_column.h"
+#include "column/column_helper.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
@@ -41,6 +41,8 @@ struct AIProjectProcessor::ResultCell {
 struct AIProjectProcessor::OutputState {
     SlotId slot_id = 0;
     bool replace_existing = false;
+    TypeDescriptor result_type;
+    AIFunctionResultKind result_kind = AIFunctionResultKind::STRING;
     std::vector<ResultCell> rows;
 };
 
@@ -61,6 +63,7 @@ struct AIProjectProcessor::Lane {
     TerminalKind terminal_kind = TerminalKind::NONE;
     size_t outstanding_callbacks = 0;
     size_t submissions_in_progress = 0;
+    AIExecutionStatistics statistics;
     bool building = false;
     bool source_finished = false;
     QueryContextLifetimeWeakPtr query_lifetime;
@@ -370,6 +373,8 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
             OutputState output;
             output.slot_id = prepared_output.slot_id;
             output.replace_existing = prepared_output.replace_existing;
+            output.result_type = prepared_output.result_type;
+            output.result_kind = prepared_output.result_kind;
             output.rows.resize(rows);
             for (size_t row_index = 0; row_index < rows; ++row_index) {
                 ResultCell& cell = output.rows[row_index];
@@ -439,16 +444,19 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
             AIProjectTaskRequest request{.task_id = submission.task_id,
                                          .model = row.model,
                                          .prompt = row.prompt,
-                                         .options = output.input.options.get()};
+                                         .options = output.input.options.get(),
+                                         .model_config_id = output.model_config_id,
+                                         .capability = output.capability};
             AITaskCallback callback;
             auto build_callback = [&] {
                 // Lane is the process-scoped async completion state. It keeps
                 // the barrier and observer valid without retaining the
                 // processor or the active subchunk directly.
                 callback = [lane, ignore_row_failures = _config.on_error == "ignore", task_id = submission.task_id,
-                            output_index = submission.output_index,
-                            row_index = submission.row_index](AITaskResult result) mutable noexcept {
-                    _complete_task(lane, ignore_row_failures, task_id, output_index, row_index, std::move(result));
+                            output_index = submission.output_index, row_index = submission.row_index](
+                                   AITaskResult result, const AIExecutionStatistics& statistics) mutable noexcept {
+                    _complete_task(lane, ignore_row_failures, task_id, output_index, row_index, std::move(result),
+                                   statistics);
                 };
             };
             _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(build_callback)*>(opaque))(); },
@@ -546,17 +554,17 @@ void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& l
                                                   const Status& status) {
     if (status.is_cancelled()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED});
+                       AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED}, {});
         return;
     }
     if (status.is_time_out()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::DEADLINE});
+                       AILifecycleCancelled{.reason = AILifecycleReason::DEADLINE}, {});
         return;
     }
     if (status.is_shutdown() || status.is_service_unavailable()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::SHUTDOWN});
+                       AILifecycleCancelled{.reason = AILifecycleReason::SHUTDOWN}, {});
         return;
     }
 
@@ -565,11 +573,12 @@ void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& l
         failure_class = AISanitizedFailureClass::LOCAL_RESOURCE;
     }
     _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                   AISanitizedRowFailure{.failure_class = failure_class});
+                   AISanitizedRowFailure{.failure_class = failure_class}, {});
 }
 
 void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                                        size_t output_index, size_t row_index, AITaskResult result) noexcept {
+                                        size_t output_index, size_t row_index, AITaskResult result,
+                                        const AIExecutionStatistics& statistics) noexcept {
     bool notify = false;
     {
         // Destroy result-owned async memory before releasing the callback
@@ -577,6 +586,10 @@ void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool 
         AITaskResult local_result(std::move(result));
         try {
             std::lock_guard lock(lane->mutex);
+            // Terminal task accounting remains visible even if cancellation
+            // already discarded this lane's output. Publish it before the
+            // callback barrier can drain and the source profile can close.
+            lane->statistics.add(statistics);
             ActiveSubchunk* subchunk = lane->active.get();
             if (!lane->source_finished && subchunk != nullptr && output_index < subchunk->outputs.size() &&
                 row_index < subchunk->outputs[output_index].rows.size()) {
@@ -704,7 +717,7 @@ bool AIProjectProcessor::can_process(int32_t driver_sequence) const {
     return has_chunk.ok() ? has_chunk.value() : true;
 }
 
-StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState*, int32_t driver_sequence) {
+StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState* state, int32_t driver_sequence) {
     ASSIGN_OR_RETURN(std::shared_ptr<Lane> lane, _lane(driver_sequence));
 
     std::shared_ptr<ActiveSubchunk> subchunk;
@@ -728,7 +741,17 @@ StatusOr<ChunkPtr> AIProjectProcessor::pull_chunk(RuntimeState*, int32_t driver_
         return _terminal_status(driver_status, terminal_kind);
     }
 
-    auto output = _materialize(subchunk);
+    AIExecutionStatistics statistics;
+    auto output = _materialize(subchunk, _config.on_error == "ignore", &statistics);
+    if (!statistics.empty()) {
+        // Typed validation runs after task completion. Publish only its additional
+        // row errors before exposing output or returning a materialization failure.
+        if (auto* query_state = state == nullptr ? nullptr : state->query_runtime_state(); query_state != nullptr) {
+            query_state->add_ai_statistics(statistics);
+        }
+        std::lock_guard lock(lane->mutex);
+        lane->statistics.add(statistics);
+    }
     if (!output.ok()) {
         {
             std::lock_guard lock(lane->mutex);
@@ -808,6 +831,14 @@ bool AIProjectProcessor::pending_finish(int32_t driver_sequence) const {
     return lane->submissions_in_progress > 0 || lane->outstanding_callbacks > 0;
 }
 
+AIExecutionStatistics AIProjectProcessor::statistics(int32_t driver_sequence) const {
+    auto lane_or = _lane(driver_sequence);
+    if (!lane_or.ok()) return {};
+    const std::shared_ptr<Lane>& lane = lane_or.value();
+    std::lock_guard lock(lane->mutex);
+    return lane->statistics;
+}
+
 Status AIProjectProcessor::set_source_finished(int32_t driver_sequence) {
     ASSIGN_OR_RETURN(std::shared_ptr<Lane> lane, _lane(driver_sequence));
 
@@ -856,25 +887,32 @@ Status AIProjectProcessor::attach_source_observer(int32_t driver_sequence, Runti
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> AIProjectProcessor::_materialize(const std::shared_ptr<ActiveSubchunk>& subchunk) {
+StatusOr<ChunkPtr> AIProjectProcessor::_materialize(const std::shared_ptr<ActiveSubchunk>& subchunk,
+                                                    bool ignore_row_failures, AIExecutionStatistics* statistics) {
     ChunkPtr output;
     TRY_CATCH_ALLOC_SCOPE_START();
     output = subchunk->prepared.output_chunk;
     for (OutputState& result : subchunk->outputs) {
-        auto values = BinaryColumn::create();
-        auto nulls = NullColumn::create();
+        auto values = ColumnHelper::create_column(result.result_type, true);
         values->reserve(result.rows.size());
-        nulls->reserve(result.rows.size());
         for (ResultCell& cell : result.rows) {
             if (cell.success.has_value()) {
-                values->append(cell.success->content());
-                nulls->append(0);
-            } else {
-                values->append_default();
-                nulls->append(1);
+                const Status status =
+                        append_ai_function_result(result.result_kind, cell.success->result(), values.get());
+                if (status.ok()) {
+                    continue;
+                }
+                if (!status.is_invalid_argument()) {
+                    return status;
+                }
+                statistics->add({.error_count = 1});
+                if (!ignore_row_failures) {
+                    return _row_failure_status();
+                }
             }
+            values->append_nulls(1);
         }
-        ColumnPtr result_column = NullableColumn::create(std::move(values), std::move(nulls));
+        ColumnPtr result_column = std::move(values);
         if (result.replace_existing) {
             if (!output->is_slot_exist(result.slot_id)) {
                 return Status::InternalError("AI project output placeholder is missing during materialization");

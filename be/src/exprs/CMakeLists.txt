@@ -50,6 +50,7 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   ai/ai_function_call_expr.cpp
+  ai/ai_function_result.cpp
   ai/ai_provider_options_builder.cpp
   ai_functions.cpp
   array_functions.cpp
@@ -85,6 +86,7 @@ set(EXPR_FILES
   function_helper.cpp
   find_in_set.cpp
   geo_functions.cpp
+  h3_functions.cpp
   gin_functions.cpp
   grouping_sets_functions.cpp
   hash_functions.cpp

@@ -21,6 +21,7 @@ set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
     ai/ai_function_call_expr_test.cpp
+    ai/ai_function_result_test.cpp
     ai/ai_provider_options_builder_test.cpp
     ai_functions_test.cpp
     arithmetic_expr_test.cpp
@@ -39,6 +40,9 @@ set(EXPR_TEST_FILES
     binary_predicate_test.cpp
     bitmap_functions_test.cpp
     geography_functions_test.cpp
+    geo_overlay_test.cpp
+    geo_buffer_function_test.cpp
+    geo_topology_simplify_function_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp
@@ -59,7 +63,6 @@ set(EXPR_TEST_FILES
     map_expr_test.cpp
     map_element_expr_test.cpp
     map_functions_test.cpp
-    multi_unnest_core_test.cpp
     ngram_search_test.cpp
     percentile_functions_test.cpp
     condition_expr_core_test.cpp
@@ -100,9 +103,11 @@ set(EXPR_TEST_FILES
     string_fn_url_extract_parameter_test.cpp
     struct_functions_test.cpp
     subfield_expr_test.cpp
+    table_function/multi_unnest_core_test.cpp
     udf/python/env_test.cpp
     unary_function_test.cpp
     unnest_core_test.cpp
+    unnest_variant_test.cpp
     vectorized_literal_test.cpp
 )
 if (STARROCKS_JIT_ENABLE)

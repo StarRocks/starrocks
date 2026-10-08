@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.utframe.UtFrameUtils;
@@ -73,23 +74,66 @@ public class AIProviderMgrTest {
         return p;
     }
 
+    private static Map<String, String> chatProps() {
+        Map<String, String> p = new LinkedHashMap<>();
+        p.put(AIProvider.PROPERTY_ENDPOINT, "https://api.anthropic.com/v1/messages");
+        p.put(AIProvider.PROPERTY_MODEL, "claude-sonnet-4-5");
+        p.put(AIProvider.PROPERTY_PROTOCOL, "anthropic");
+        return p;
+    }
+
     @Test
     public void testPerTypeDefaultsAreIndependent() throws Exception {
         AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
         mgr.createProvider("emb", AIProviderType.EMBEDDING, embProps(), null);
         mgr.createProvider("rr", AIProviderType.RERANK, rerankProps(), null);
+        mgr.createProvider("ch", AIProviderType.CHAT, chatProps(), null);
         mgr.setDefaultProvider("emb");
         mgr.setDefaultProvider("rr");
+        mgr.setDefaultProvider("ch");
 
         Assertions.assertEquals("emb", mgr.getDefaultProvider(AIProviderType.EMBEDDING).getName());
         Assertions.assertEquals("rr", mgr.getDefaultProvider(AIProviderType.RERANK).getName());
+        Assertions.assertEquals("ch", mgr.getDefaultProvider(AIProviderType.CHAT).getName());
         Assertions.assertEquals(AIProviderType.RERANK, mgr.getProvider("rr").getType());
+        Assertions.assertEquals(AIProviderType.CHAT, mgr.getProvider("ch").getType());
         Assertions.assertEquals(1, mgr.listProviders(AIProviderType.RERANK).size());
         Assertions.assertEquals(1, mgr.listProviders(AIProviderType.EMBEDDING).size());
-        // Setting the rerank default must not disturb the embedding default.
+        Assertions.assertEquals(1, mgr.listProviders(AIProviderType.CHAT).size());
+        // Setting the rerank default must not disturb the other defaults.
         mgr.setDefaultProvider("rr");
         Assertions.assertEquals("emb", mgr.getDefaultProvider(AIProviderType.EMBEDDING).getName());
+        Assertions.assertEquals("ch", mgr.getDefaultProvider(AIProviderType.CHAT).getName());
     }
+
+    @Test
+    public void testChatTypeRoundTrips() throws Exception {
+        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        mgr.createProvider("ch", AIProviderType.CHAT, chatProps(), "c");
+        mgr.setDefaultProvider("ch");
+
+        String json = GsonUtils.GSON.toJson(mgr);
+        Assertions.assertTrue(json.contains("\"t\":\"CHAT\""), json);
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(json, AIProviderMgr.class);
+        Assertions.assertEquals(AIProviderType.CHAT, restored.getProvider("ch").getType());
+        Assertions.assertEquals(AIProviderProtocol.ANTHROPIC, restored.getProvider("ch").getProtocol());
+        Assertions.assertEquals("ch", restored.getDefaultProvider(AIProviderType.CHAT).getName());
+    }
+
+    @Test
+    public void testLegacyRecordWithoutProtocolIsNormalized() {
+        // Records persisted before the protocol property existed: one untyped (embedding) and one rerank.
+        String legacy = "{"
+                + "\"idToProvider\":{"
+                + "\"id1\":{\"i\":\"id1\",\"n\":\"emb\","
+                + "  \"p\":{\"endpoint\":\"https://x/v1/embeddings\",\"model\":\"m\"},\"c\":\"\"},"
+                + "\"id2\":{\"i\":\"id2\",\"n\":\"rr\",\"t\":\"RERANK\","
+                + "  \"p\":{\"endpoint\":\"https://x/rerank\",\"model\":\"m\"},\"c\":\"\"}}}";
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(legacy, AIProviderMgr.class);
+        Assertions.assertEquals("openai", restored.getProvider("emb").getParams().get(AIProvider.PROPERTY_PROTOCOL));
+        Assertions.assertEquals("cohere", restored.getProvider("rr").getParams().get(AIProvider.PROPERTY_PROTOCOL));
+    }
+
 
     @Test
     public void testGsonRoundTripPreservesTypesAndDefaults() throws Exception {

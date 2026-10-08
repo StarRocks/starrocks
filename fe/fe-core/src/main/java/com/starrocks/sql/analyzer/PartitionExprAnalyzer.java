@@ -28,6 +28,7 @@ import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class PartitionExprAnalyzer {
@@ -128,7 +129,15 @@ public class PartitionExprAnalyzer {
                 targetColType = DateType.DATE;
             } else if (functionName.equalsIgnoreCase(FunctionSet.FROM_UNIXTIME) || functionName.equalsIgnoreCase(
                     FunctionSet.FROM_UNIXTIME_MS)) {
-                Type[] fromUnixTimeStampType = {partitionSlotRef.getType()};
+                // Resolve the overload the expression actually names. from_unixtime() also takes a
+                // format and a time zone, and asking for the one-argument signature would pin that
+                // descriptor onto a three-argument call: the extra children would survive in the
+                // expression but the function -- the one serialized to the BE and used to compute a
+                // row's partition value -- would render in the session zone and ignore them.
+                // AstBuilder has already required those arguments to be string literals.
+                Type[] fromUnixTimeStampType = new Type[functionCallExpr.getChildren().size()];
+                fromUnixTimeStampType[0] = partitionSlotRef.getType();
+                Arrays.fill(fromUnixTimeStampType, 1, fromUnixTimeStampType.length, VarcharType.VARCHAR);
                 builtinFunction = ExprUtils.getBuiltinFunction(functionCallExpr.getFunctionName(),
                         fromUnixTimeStampType, Function.CompareMode.IS_IDENTICAL);
                 if (builtinFunction == null) {

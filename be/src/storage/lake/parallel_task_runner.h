@@ -42,8 +42,8 @@ namespace starrocks::lake {
 //     always does, which is why counters such as `multi_get_us` now survive a parallel PK-index read.
 //
 // `token == nullptr` means run everything inline on the caller thread. That is how every caller
-// degrades when `enable_pk_index_parallel_execution` is off, or when the work is too small to be
-// worth a pool round-trip, so it is a first-class mode rather than an error.
+// degrades when the work is too small to be worth a pool round-trip, so it is a first-class mode
+// rather than an error.
 //
 // A task that fails does not cancel the tasks after it: several callers depend on side effects --
 // releasing per-segment state, accumulating IO stats -- that must still happen on a publish that is

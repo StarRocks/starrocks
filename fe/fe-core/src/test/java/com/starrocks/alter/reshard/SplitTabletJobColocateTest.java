@@ -37,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -72,10 +73,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Exercises the post-split colocate-range classification path on a range-colocate table.
@@ -103,12 +102,7 @@ public class SplitTabletJobColocateTest {
         starRocksAssert.withDatabase("p3_split_test").useDatabase("p3_split_test");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("p3_split_test");
 
-        new MockUp<ThreadPoolExecutor>() {
-            @Mock
-            public <T> Future<T> submit(Callable<T> task) throws Exception {
-                return CompletableFuture.completedFuture(task.call());
-            }
-        };
+        LockTestUtils.fakeSynchronousExecutorOffTheCallersThread();
 
         // The TabletReshardJobMgr daemon ticks every 10ms and runs ColocateChecker.runOneCycle,
         // which re-marks an unstable colocate group stable as soon as every peer is range-aligned.

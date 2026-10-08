@@ -348,10 +348,28 @@ setup_build_environment() {
         export BUILD_SYSTEM="${BUILD_SYSTEM:-make}"
     fi
 
+    if [[ "${MACHINE_TYPE}" == "aarch64" && -z "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" ]]; then
+        THIRD_PARTY_BUILD_WITH_ARM_CRC=ON
+        if [[ "$(sysctl -n hw.optional.armv8_crc32 2>/dev/null)" == "0" ]]; then
+            THIRD_PARTY_BUILD_WITH_ARM_CRC=OFF
+        fi
+    fi
+
+    export TP_TARGET_ARCH_FLAGS=""
+    if [[ "${MACHINE_TYPE}" == "aarch64" && "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" == "ON" ]]; then
+        export TP_TARGET_ARCH_FLAGS="-march=armv8-a+crc"
+    fi
+
     export FILE_PREFIX_MAP_OPTION="-ffile-prefix-map=${TP_SOURCE_DIR}=. -ffile-prefix-map=${TP_INSTALL_DIR}=."
     export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR}"
     export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
     export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g -stdlib=libc++ ${FILE_PREFIX_MAP_OPTION}"
+
+    if [[ -n "${TP_TARGET_ARCH_FLAGS}" ]]; then
+        export GLOBAL_CFLAGS="$(append_flags "${GLOBAL_CFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+        export GLOBAL_CXXFLAGS="$(append_flags "${GLOBAL_CXXFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+    fi
+
     export CPPFLAGS="${GLOBAL_CPPFLAGS}"
     export CFLAGS="${GLOBAL_CFLAGS}"
     export CXXFLAGS="${GLOBAL_CXXFLAGS}"
@@ -540,7 +558,7 @@ build_boost() {
         runtime-link=static \
         threading=multi \
         variant=release \
-        cxxflags="-std=c++11 -fPIC -O3 -I${TP_INCLUDE_DIR} -stdlib=libc++ -D_LIBCPP_HAS_NO_HASH_MEMORY=1" \
+        cxxflags="$(append_flags "-std=c++11 -fPIC -O3 -I${TP_INCLUDE_DIR} -stdlib=libc++ -D_LIBCPP_HAS_NO_HASH_MEMORY=1" "${TP_TARGET_ARCH_FLAGS}")" \
         linkflags="-L${TP_INSTALL_DIR}/lib -stdlib=libc++" \
         --prefix="${TP_INSTALL_DIR}" \
         --layout=system \
@@ -1050,8 +1068,8 @@ build_icu() {
         unset CPPFLAGS
         unset CXXFLAGS
         unset CFLAGS
-        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
-        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
+        export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
         ./runConfigureICU macOS --prefix="${TP_INSTALL_DIR}" --enable-static --disable-shared
         make -j"${PARALLEL}"
         make install
@@ -1580,7 +1598,7 @@ build_openssl() {
 
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
 
     LDFLAGS="-L${TP_INSTALL_DIR}/lib" \
         LIBDIR="lib" \
@@ -1656,8 +1674,31 @@ build_simdjson() {
     sync_lib64_links
 }
 
+snappy_version() {
+    local prefix="$1"
+    local header
+
+    for header in "${prefix}/include/snappy/snappy-stubs-public.h" "${prefix}/include/snappy-stubs-public.h"; do
+        [[ -f "${header}" ]] || continue
+        local major minor patch
+        major="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_MAJOR[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        minor="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_MINOR[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        patch="$(sed -n -E 's/^#define[[:space:]]+SNAPPY_PATCHLEVEL[[:space:]]+([0-9]+).*/\1/p' "${header}" | head -n 1)"
+        if [[ -n "${major}" && -n "${minor}" && -n "${patch}" ]]; then
+            echo "${major}.${minor}.${patch}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 build_snappy() {
-    if [[ -f "${TP_INSTALL_DIR}/lib/libsnappy.a" && -f "${TP_INCLUDE_DIR}/snappy.h" ]]; then
+    local expected_version="${SNAPPY_SOURCE#snappy-}"
+    local installed_version
+    installed_version="$(snappy_version "${TP_INSTALL_DIR}" || true)"
+
+    if [[ -f "${TP_INSTALL_DIR}/lib/libsnappy.a" && -f "${TP_INCLUDE_DIR}/snappy.h" && "${installed_version}" == "${expected_version}" ]]; then
         return 0
     fi
 
@@ -1673,6 +1714,7 @@ build_snappy() {
         -DCMAKE_INSTALL_LIBDIR=lib \
         -DCMAKE_INSTALL_INCLUDEDIR=include/snappy \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
         -DSNAPPY_BUILD_TESTS=OFF \
         -DSNAPPY_BUILD_BENCHMARKS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -1906,7 +1948,8 @@ build_arrow() {
     # so its presence implies libarrow_flight.a + libarrow.a; a pre-Flight
     # install or a run interrupted mid-way falls through to a full rebuild.
     if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" \
-          && -f "${TP_INSTALL_DIR}/lib/libarrow_flight_sql.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
+          && -f "${TP_INSTALL_DIR}/lib/libarrow_flight_sql.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" \
+          && -f "${TP_INCLUDE_DIR}/parquet/encryption/internal_file_decryptor.h" ]]; then
         return 0
     fi
 
@@ -2006,7 +2049,13 @@ build_arrow() {
 
     local arrow_simd_level="DEFAULT"
     local arrow_runtime_simd_level="SSE4_2"
-    if [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        # ARROW_RUNTIME_SIMD_LEVEL only accepts MAX|NONE|SSE4_2|AVX2|AVX512, and arrow
+        # consumes it exclusively in its x86 branch, so NEON is rejected by the option
+        # validator. Disable runtime dispatch here; NEON is selected at compile time.
+        arrow_simd_level="NEON"
+        arrow_runtime_simd_level="NONE"
+    elif [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
         arrow_simd_level="AVX2"
         arrow_runtime_simd_level="AVX2"
     fi
@@ -2036,6 +2085,7 @@ build_arrow() {
         -DARROW_BUILD_BENCHMARKS=OFF \
         -DARROW_GANDIVA=OFF \
         -DARROW_PARQUET=ON \
+        -DPARQUET_REQUIRE_ENCRYPTION=ON \
         -DARROW_JSON=ON \
         -DARROW_IPC=ON \
         -DARROW_USE_GLOG=OFF \
@@ -2111,6 +2161,26 @@ build_arrow() {
         mkdir -p "${TP_INSTALL_DIR}/include/zstd"
         cp ./zstd_ep-install/include/* "${TP_INSTALL_DIR}/include/zstd"
     fi
+
+    # Expose two of parquet-cpp's internal encryption headers. They are private to Arrow:
+    # ARROW_INSTALL_ALL_HEADERS skips any header whose name matches "internal", and only the
+    # high-level FileEncryption/DecryptionProperties are public. BE needs the module-level
+    # InternalFileDecryptor, Decryptor, AesDecryptor and CreateModuleAad to decrypt Parquet Modular
+    # Encryption footers, page headers, pages, page index and bloom filters inside StarRocks' own
+    # reader, which keeps its pruning optimizations. Arrow's public reader would mean giving that
+    # reader up. The write path uses only the public API and needs neither header.
+    #
+    # Being internal, these can change in any Arrow release: GetFooterDecryptorForColumn{Meta,Data}
+    # exist in 19.0.1 and are gone by 24.0.0. Arrow is pinned by version and checksum in vars.sh, the
+    # BE use is confined to formats/parquet/{metadata,page_reader}.cpp, and an API change is a compile
+    # error at the Arrow bump rather than a silent behaviour change. The symbols are already in
+    # libparquet.a; only the headers are missing.
+    mkdir -p "${TP_INCLUDE_DIR}/parquet/encryption"
+    local h
+    for h in internal_file_decryptor.h encryption_internal.h; do
+        cp -f "${TP_SOURCE_DIR}/${ARROW_SOURCE}/cpp/src/parquet/encryption/${h}" \
+            "${TP_INCLUDE_DIR}/parquet/encryption/"
+    done
 
     restore_env_var PKG_CONFIG_PATH "${old_pkg_config_path}"
 
@@ -2683,6 +2753,28 @@ build_re2() {
     sync_lib64_links
 }
 
+build_h3() {
+    check_if_source_exist "${H3_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${H3_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -S .. -B . -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DH3_ALLOC_PREFIX=starrocks_h3_ \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_BENCHMARKS=OFF \
+        -DBUILD_FUZZERS=OFF \
+        -DBUILD_FILTERS=OFF \
+        -DBUILD_GENERATORS=OFF \
+        -DENABLE_DOCS=OFF \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib
+    "${BUILD_SYSTEM}" -j"${PARALLEL}" install
+    sync_lib64_links
+}
+
 build_s2() {
     check_if_source_exist "${S2_SOURCE}"
     cd "${TP_SOURCE_DIR}/${S2_SOURCE}"
@@ -2792,7 +2884,8 @@ build_jemalloc() {
     check_if_source_exist "${JEMALLOC_SOURCE}"
     cd "${TP_SOURCE_DIR}/${JEMALLOC_SOURCE}"
     local addition_opts=" --with-lg-page=16"
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    local jemalloc_cflags="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
+    CFLAGS="${jemalloc_cflags}" \
         ./configure --prefix="${TP_INSTALL_DIR}/jemalloc" --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl ${addition_opts}
     make -j"${PARALLEL}"
     make install
@@ -2804,7 +2897,7 @@ build_jemalloc() {
         ln -sfn libjemalloc.2.dylib "${TP_INSTALL_DIR}/jemalloc/lib/libjemalloc.dylib"
     fi
 
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    CFLAGS="${jemalloc_cflags}" \
         ./configure --prefix="${TP_INSTALL_DIR}/jemalloc-debug" --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl ${addition_opts}
     make -j"${PARALLEL}"
     make install
@@ -2852,8 +2945,8 @@ build_serdes() {
     ./configure \
         --prefix="${TP_INSTALL_DIR}" \
         --libdir="${TP_INSTALL_DIR}/lib" \
-        --CFLAGS="-I ${TP_INSTALL_DIR}/include" \
-        --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+        --CFLAGS="$(append_flags "-I ${TP_INSTALL_DIR}/include" "${TP_TARGET_ARCH_FLAGS}")" \
+        --CXXFLAGS="$(append_flags "-I ${TP_INSTALL_DIR}/include" "${TP_TARGET_ARCH_FLAGS}")" \
         --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
         --enable-static \
         --disable-shared
@@ -2896,7 +2989,7 @@ build_clucene() {
         -DENABLE_COMPILE_TESTS=OFF \
         -DBOOST_ROOT="${TP_INSTALL_DIR}" \
         -DZLIB_ROOT="${TP_INSTALL_DIR}" \
-        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
+        -DCMAKE_CXX_FLAGS="$(append_flags "-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_AVX2=OFF \
@@ -3178,6 +3271,9 @@ for package in "${packages[@]}"; do
             ;;
         pulsar)
             build_formula_pulsar
+            ;;
+        h3)
+            build_h3
             ;;
         s2)
             build_s2

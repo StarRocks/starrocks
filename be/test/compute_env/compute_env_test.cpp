@@ -251,6 +251,7 @@ TEST(ComputeEnvTest, InitializesAIRuntimeFromConfigGlobals) {
     SCOPED_UPDATE(int32_t, config::ai_function_max_retries, 4);
     SCOPED_UPDATE(int32_t, config::ai_function_max_retries_on_throttle, 6);
     SCOPED_UPDATE(int32_t, config::ai_function_rate_limit_qps_chat, 17);
+    SCOPED_UPDATE(int32_t, config::ai_function_rate_limit_qps_embedding, 23);
     SCOPED_UPDATE(int32_t, config::ai_function_max_inflight, 19);
     const std::string saved_on_error = config::ai_function_on_error.value();
     config::ai_function_on_error = "fail";
@@ -270,6 +271,7 @@ TEST(ComputeEnvTest, InitializesAIRuntimeFromConfigGlobals) {
     EXPECT_EQ(6, snapshot.max_retries_on_throttle);
     EXPECT_EQ("fail", snapshot.on_error);
     EXPECT_EQ(17, snapshot.rate_limit_qps_chat);
+    EXPECT_EQ(23, snapshot.rate_limit_qps_embedding);
     EXPECT_EQ(19, snapshot.max_inflight);
 
     env.destroy();

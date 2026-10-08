@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -72,12 +73,12 @@ private:
     std::vector<DriverExpressionContexts> _drivers;
 };
 
-// Production dispatcher adapter. Endpoint and credential are copied once at
-// fragment construction. The credential is read only from the fixed BE-local
-// environment variable and never enters a plan, profile, log, or Status.
+// Production dispatcher adapter. Routes own immutable credentials for the
+// fragment. Provider keys arrive in execution configuration, never diagnostics.
 class AIProjectDispatcherSubmitter final : public AIProjectTaskSubmitter {
 public:
-    static StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> create(RuntimeState* state, std::string endpoint,
+    static StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> create(RuntimeState* state,
+                                                                          const AIProjectModelConfigs& configs,
                                                                           AIRuntimeConfig config);
 
     AIProjectDispatcherSubmitter(const AIProjectDispatcherSubmitter&) = delete;
@@ -88,16 +89,21 @@ public:
                                                           AITaskCallback&& callback) override;
 
 private:
-    AIProjectDispatcherSubmitter(std::string endpoint, std::string api_key,
-                                 std::shared_ptr<const ResolvedHttpEndpoint> resolved_endpoint,
-                                 AIWorkGroupKey workgroup_key, UniqueId query_id,
-                                 std::weak_ptr<QueryContext> query_context,
+    struct Route {
+        std::string endpoint;
+        std::string api_key;
+        std::shared_ptr<const ResolvedHttpEndpoint> resolved_endpoint;
+        AICapability capability = AICapability::CHAT;
+        int64_t attempt_timeout_ms = 0;
+        std::optional<int32_t> dimensions;
+    };
+
+    AIProjectDispatcherSubmitter(std::map<std::string, Route, std::less<>> routes, AIWorkGroupKey workgroup_key,
+                                 UniqueId query_id, std::weak_ptr<QueryContext> query_context,
                                  std::shared_ptr<AIQueryMemoryAccount> memory_account, const AIServices& services,
                                  AIRuntimeConfig config);
 
-    const std::string _endpoint;
-    const std::string _api_key;
-    const std::shared_ptr<const ResolvedHttpEndpoint> _resolved_endpoint;
+    const std::map<std::string, Route, std::less<>> _routes;
     const AIWorkGroupKey _workgroup_key;
     const UniqueId _query_id;
     const std::weak_ptr<QueryContext> _query_context;

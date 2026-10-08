@@ -92,7 +92,7 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     if (!base64_decode(opaqued_query_plan, &query_plan_info)) {
         LOG(WARNING) << "open context error: base64_decode decode opaqued_query_plan failure";
         std::stringstream msg;
-        msg << "query_plan_info: " << query_plan_info
+        msg << "query_plan_info (" << query_plan_info.size() << " bytes)"
             << " validate error, should not be modified after returned StarRocks FE processed";
         return Status::InvalidArgument(msg.str());
     }
@@ -104,13 +104,12 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     if (!st.ok()) {
         LOG(WARNING) << "open context error: deserialize TQueryPlanInfo failure";
         std::stringstream msg;
-        msg << "query_plan_info: " << query_plan_info
+        msg << "query_plan_info (" << query_plan_info.size() << " bytes)"
             << " deserialize error, should not be modified after returned StarRocks FE processed";
         return Status::InvalidArgument(msg.str());
     }
 
-    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: "
-             << apache::thrift::ThriftDebugString(t_query_plan_info);
+    VLOG_ROW << "BackendService execute open() TQueryPlanInfo: " << thrift_plan_debug_string(t_query_plan_info);
 
     *query_id = t_query_plan_info.query_id;
 
@@ -121,7 +120,7 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     if (!st.ok()) {
         LOG(WARNING) << "open context error: extract DescriptorTbl failure";
         std::stringstream msg;
-        msg << "query_plan_info: " << query_plan_info
+        msg << "query_plan_info (" << query_plan_info.size() << " bytes)"
             << " create DescriptorTbl error, should not be modified after returned StarRocks FE "
                "processed";
         return Status::InvalidArgument(msg.str());
@@ -207,8 +206,7 @@ Status QueryOrchestrator::exec_external_plan_fragment(const TScanOpenParams& par
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
     exec_fragment_params.__set_query_options(build_external_query_options(params));
-    VLOG_ROW << "external exec_plan_fragment params is "
-             << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
+    VLOG_ROW << "external exec_plan_fragment params is " << thrift_plan_debug_string(exec_fragment_params);
     FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, exec_fragment_params, exec_fragment_params);
     if (status.ok()) {

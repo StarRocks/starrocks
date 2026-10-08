@@ -204,10 +204,22 @@ public class FunctionSet {
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
+    public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_INTERSECTION = "st_intersection";
+    public static final String ST_UNION = "st_union";
+    public static final String ST_DIFFERENCE = "st_difference";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
+    public static final String H3_TOBOUNDARY = "h3_toboundary";
+    public static final String ST_SRID = "st_srid";
+    public static final String ST_SETSRID = "st_setsrid";
+    public static final String ST_TRANSFORM = "st_transform";
     public static final String ST_CONTAINS = "st_contains";
     public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
     public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
     public static final String ST_GEOMFROMTEXT = "st_geomfromtext";
+    public static final String ST_GEOMFROMWKB = "st_geomfromwkb";
     public static final String ST_LINEFROMTEXT = "st_linefromtext";
     public static final String ST_LINESTRINGFROMTEXT = "st_linestringfromtext";
     public static final String ST_POINT = "st_point";
@@ -283,6 +295,7 @@ public class FunctionSet {
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String GET_JSON_SCALAR = "get_json_scalar";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
@@ -292,6 +305,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -620,6 +634,9 @@ public class FunctionSet {
     //user and role function
     public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
 
+    // query profile function
+    public static final String GET_QUERY_PROFILE = "get_query_profile";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
@@ -755,11 +772,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    // ai_complete treats a top-level NULL options map as an empty option set.
+    // AI functions with options treat a top-level NULL map as an empty option set.
+    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE);
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE,
+                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -798,6 +817,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -1225,7 +1245,6 @@ public class FunctionSet {
     }
 
     private void addBuiltInFunction(Function fn) {
-        Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
@@ -1598,6 +1617,13 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
+        // Contract 5.4 window reservations, without overloads or BE dispatch.
+        // Analytic builtins currently resolve by name/type, not generated scalar IDs.
+        // Reserve separate IDs for explicit future signatures (no default-argument alias):
+        // Reserved 120420: ST_CoverageSimplify / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY, window.
+        // Reserved 120421: ST_CoverageSimplify / 2 (GEOMETRY, DOUBLE) -> GEOMETRY, window.
+        // Reserved 120430: ST_CoverageSimplify / 3 (GEOGRAPHY, DOUBLE, BOOLEAN) -> GEOGRAPHY, window.
+        // Reserved 120431: ST_CoverageSimplify / 3 (GEOMETRY, DOUBLE, BOOLEAN) -> GEOMETRY, window.
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));
