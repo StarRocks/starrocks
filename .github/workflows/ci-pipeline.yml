@@ -863,7 +863,7 @@ jobs:
     permissions:
       contents: read
     needs: test-checker
-    if: needs.test-checker.outputs.test_change == 'true'
+    if: needs.test-checker.outputs.sql_tester_unit_change == 'true'
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
@@ -891,25 +891,37 @@ jobs:
       PRE_COMMIT_JOB_STATUS_DICT: ${{ needs.basic-checker.outputs.PRE_COMMIT_JOB_STATUS_DICT }}
     outputs:
       test_change: ${{ steps.path-filter.outputs.test }}
+      sql_tester_unit_change: ${{ steps.path-filter.outputs.sql_tester_unit }}
       pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check Paimon fixtures
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          python3 -m unittest build-support/test_check_paimon_fixture.py -v
-          python3 build-support/check_paimon_fixture.py --base "origin/${BASE_REF}"
-
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
           filters: |
             test:
               - 'test/**'
+            sql_tester_unit:
+              - 'test/**'
+              - '.github/workflows/ci-pipeline.yml'
+            paimon_fixture:
+              - 'test/sql/test_paimon_catalog/**'
+              - 'test/lib/paimon_fixture.py'
+              - 'build-support/check_paimon_fixture.py'
+              - 'build-support/test_check_paimon_fixture.py'
+              - '.github/workflows/ci-pipeline.yml'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.paimon_fixture == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: Check Paimon fixtures
+        if: steps.path-filter.outputs.paimon_fixture == 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 -m unittest build-support/test_check_paimon_fixture.py -v
+          python3 build-support/check_paimon_fixture.py --base "origin/${BASE_REF}"
 
       - name: Check integration test results
         id: check-integration-test-results
