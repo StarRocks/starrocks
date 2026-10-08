@@ -51,6 +51,23 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
     return crc;
 }
 
+// Returns true if ARM PMULL hardware acceleration is available and enabled.
+// Returns false on non-ARM platforms, when USE_ARM_PMULL is disabled, when
+// hardware lacks HWCAP_PMULL, or when STARROCKS_DISABLE_PMULL is set.
+bool HasArmPmull();
+
+// Return the crc32c using the fallback implementation (ExtendImpl<Fast_CRC32>),
+// bypassing SIMD acceleration paths. Used for verification and equivalence testing.
+uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);
+
+inline uint32_t ValueFallback(const char* data, size_t n) {
+    return ExtendFallback(0, data, n);
+}
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+
 static const uint32_t kMaskDelta = 0xa282ead8ul;
 
 // Return a masked representation of crc.
