@@ -431,6 +431,26 @@ TEST_F(TimeFunctionsTest, weekWithModeTest) {
     }
 }
 
+// A datetime before 0000-01-01 (e.g. str_to_date('0000-01-00', '%Y-%m-%d')) used to hit a DCHECK in compute_daynr().
+TEST_F(TimeFunctionsTest, weekFunctionsYearBeforeZeroTest) {
+    TimestampValue ts;
+    ts._timestamp = timestamp::from_julian_and_time(date::from_date(0, 1, 1) - 1, 0);
+    ASSERT_FALSE(ts.is_valid());
+
+    auto tc = TimestampColumn::create();
+    tc->append(ts);
+    Columns columns;
+    columns.emplace_back(std::move(tc));
+    Columns columns_with_mode = columns;
+    columns_with_mode.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(3, 1));
+
+    ASSERT_TRUE(TimeFunctions::year_week_with_default_mode(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::year_week_with_mode(_utils->get_fn_ctx(), columns_with_mode).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_with_default_mode(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).ok());
+    ASSERT_TRUE(TimeFunctions::week_of_year_with_mode(_utils->get_fn_ctx(), columns_with_mode).ok());
+}
+
 TEST_F(TimeFunctionsTest, toDateTest) {
     const int year = 2020, month = 6, day = 18;
     auto tc = TimestampColumn::create();
