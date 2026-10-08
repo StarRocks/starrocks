@@ -1497,9 +1497,11 @@ void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumRespo
 // SOME_TABLETS_NOT_TO_BE_DELETED means some tablets in this bundle tablet meta aren't going to be deleted,
 // NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted,
 // NOT_BUNDLE_TABLET_META means this tablet meta is not the bundle tablet meta.
+// The value-initialized state (0) must be the one that deletes nothing shared: a lookup that falls
+// through to a default must err on the side of keeping files.
 enum class BundleTabletMetaState {
-    ALL_TABLETS_TO_BE_DELETED = 0,
-    SOME_TABLETS_NOT_TO_BE_DELETED = 1,
+    SOME_TABLETS_NOT_TO_BE_DELETED = 0,
+    ALL_TABLETS_TO_BE_DELETED = 1,
     NO_TABLETS_TO_BE_DELETED = 2,
     NOT_BUNDLE_TABLET_META = 3,
 };
@@ -1508,6 +1510,14 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
     // if there are some tablets in this bundle meta that are not to be deleted,
     // we can not delete the bundle file.
     return state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED;
+}
+
+// State of |version| in a tablet's listed versions. A version that is not listed cannot be proven to
+// hold no live tablet, so it is reported as SOME_TABLETS_NOT_TO_BE_DELETED, never inserted into the map.
+static BundleTabletMetaState bundle_meta_state_of(const std::map<int64_t, BundleTabletMetaState>& states,
+                                                  int64_t version) {
+    auto it = states.find(version);
+    return it == states.end() ? BundleTabletMetaState::SOME_TABLETS_NOT_TO_BE_DELETED : it->second;
 }
 
 static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
@@ -1715,6 +1725,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         for (int64_t garbage_version = *versions_to_delete.rbegin(), min_v = *versions_to_delete.begin();
              garbage_version >= min_v;
              /**/) {
+            // The directory listing taken above is the only source of truth for what still exists on
+            // remote storage. The prev_garbage_version chain links only materialized versions, so a chain
+            // version absent from the listing was reclaimed by vacuum and is this tablet's chain bottom.
+            // Do not read it: the read consults the metacache first, and a node that did not run that
+            // vacuum can still hold the reclaimed version there, which would make the walk continue
+            // through a version whose bundle state is unknown.
+            if (!versions_and_states.contains(garbage_version)) {
+                LOG(WARNING) << "Stop garbage walk of tablet_id=" << tablet_id << " at version=" << garbage_version
+                             << ": not in the metadata directory listing";
+                break;
+            }
             auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
             if (res.status().is_not_found()) {
                 break;
@@ -1734,9 +1755,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 // For range distribution tablets, always protect shared files in garbage
                 // collection. can_bundle_meta_file_to_be_deleted is unreliable after tablet
                 // split because new split tablets may still reference shared files.
-                const bool allow_delete_shared =
-                        !is_range_distribution &&
-                        can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version]);
+                const auto state = bundle_meta_state_of(versions_and_states, garbage_version);
+                const bool allow_delete_shared = !is_range_distribution && can_bundle_meta_file_to_be_deleted(state);
                 RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
                                                       allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
                                                       &dummy_file_size, TabletRetainInfo()));
@@ -1755,8 +1775,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // split-version metadata which may have been vacuumed).
             // Data files will be cleaned up by new tablets' regular vacuum.
             if (!is_range_distribution) {
-                const bool allow_delete_shared_files =
-                        can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
+                const bool allow_delete_shared_files = can_bundle_meta_file_to_be_deleted(
+                        bundle_meta_state_of(versions_and_states, latest_metadata->version()));
                 for (const auto& rowset : latest_metadata->rowsets()) {
                     for (int i = 0; i < rowset.segment_metas_size(); ++i) {
                         if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
