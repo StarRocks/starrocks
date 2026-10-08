@@ -107,7 +107,8 @@ enum TPrimitiveType {
   INT256,
   VARIANT,
   GEOGRAPHY,
-  GEOMETRY
+  GEOMETRY,
+  FILE
 }
 
 enum TTypeNodeType {

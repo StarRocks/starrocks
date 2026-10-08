@@ -69,12 +69,18 @@ public class MergeIntoAnalyzer {
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), session);
         stmt.setTableRef(tableRef);
         TableName tableName = TableName.fromTableRef(tableRef);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(session, tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        // An external target was resolved before the lock was taken, because the lock covers nothing about
+        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
+        // succeed -- falls through to the resolve this has always done.
+        Table table = session.getPreResolvedWriteTargets().take(tableName);
+        if (table == null) {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            table = MetaUtils.getSessionAwareTable(session, null, tableName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
         if (table instanceof IcebergTable icebergTable) {
             analyzeIcebergTable(stmt, icebergTable, tableName, session);
@@ -248,8 +254,14 @@ public class MergeIntoAnalyzer {
 
         // ---- BUILD FROM: source LEFT OUTER JOIN target ON merge_condition ----
 
-        // Target table relation (with alias)
+        // Target table relation (with alias). The table it stands for is already in hand, so hand it over
+        // rather than let the analyzer resolve the same name a second time: this synthetic query is
+        // analyzed with the meta lock held, and that second resolve was the last request this statement
+        // made to the iceberg catalog from inside the critical section. QueryAnalyzer takes a pre-set table
+        // for an external catalog, which is the same door the unlocked pre-pass uses for tables on the read
+        // side.
         TableRelation targetRelation = new TableRelation(tableName);
+        targetRelation.setTable(icebergTable);
         if (stmt.getTargetAlias() != null) {
             targetRelation.setAlias(new TableName(null, null, stmt.getTargetAlias()));
         }

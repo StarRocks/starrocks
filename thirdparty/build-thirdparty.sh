@@ -1079,7 +1079,7 @@ build_arrow() {
     # so disable jemalloc here and use SystemAllocator.
     #
     # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
-    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DPARQUET_REQUIRE_ENCRYPTION=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
@@ -1129,6 +1129,24 @@ build_arrow() {
     mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 
+    # Expose two of parquet-cpp's internal encryption headers. They are private to Arrow:
+    # ARROW_INSTALL_ALL_HEADERS skips any header whose name matches "internal", and only the
+    # high-level FileEncryption/DecryptionProperties are public. BE needs the module-level
+    # InternalFileDecryptor, Decryptor, AesDecryptor and CreateModuleAad to decrypt Parquet Modular
+    # Encryption footers, page headers, pages, page index and bloom filters inside StarRocks' own
+    # reader, which keeps its pruning optimizations. Arrow's public reader would mean giving that
+    # reader up. The write path uses only the public API and needs neither header.
+    #
+    # Being internal, these can change in any Arrow release: GetFooterDecryptorForColumn{Meta,Data}
+    # exist in 19.0.1 and are gone by 24.0.0. Arrow is pinned by version and checksum in vars.sh, the
+    # BE use is confined to formats/parquet/{metadata,page_reader}.cpp, and an API change is a compile
+    # error at the Arrow bump rather than a silent behaviour change. The symbols are already in
+    # libparquet.a; only the headers are missing.
+    mkdir -p ${TP_INSTALL_DIR}/include/parquet/encryption
+    for h in internal_file_decryptor.h encryption_internal.h; do
+        cp -f "$TP_SOURCE_DIR/$ARROW_SOURCE/cpp/src/parquet/encryption/$h" ${TP_INSTALL_DIR}/include/parquet/encryption/
+    done
+
     restore_compile_flags
 }
 
@@ -1160,6 +1178,29 @@ build_s2() {
     -DWITH_GLOG=ON \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
     "${s2_cmake_args[@]}" ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# H3
+build_h3() {
+    check_if_source_exist $H3_SOURCE
+    cd $TP_SOURCE_DIR/$H3_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DH3_ALLOC_PREFIX=starrocks_h3_ \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_BENCHMARKS=OFF \
+        -DBUILD_FUZZERS=OFF \
+        -DBUILD_FILTERS=OFF \
+        -DBUILD_GENERATORS=OFF \
+        -DENABLE_DOCS=OFF \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib ..
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -2071,6 +2112,50 @@ build_paimon_cpp() {
         exit 1
     fi
     restore_compile_flags
+}
+
+# libnl
+# Only nsjail uses it, and only for the macvlan support it includes unconditionally.
+build_libnl() {
+    check_if_source_exist $LIBNL_SOURCE
+    cd $TP_SOURCE_DIR/$LIBNL_SOURCE
+
+    # Its configure insists on pkg-config existing, but only consults it for optional
+    # dependencies none of which are built here, so hand it a stand-in rather than
+    # require the tool (`true` is resolved from PATH: a build sandbox may have no
+    # /bin). The objects are linked into nsjail, which is a PIE.
+    PKG_CONFIG=true \
+    CFLAGS="$(append_flags "${CFLAGS}" "-fPIC")" \
+        ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static --disable-cli
+    make -j$PARALLEL
+    make install
+}
+
+# nsjail
+build_nsjail() {
+    check_if_source_exist $NSJAIL_SOURCE
+    cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
+
+    # nsjail resolves protobuf and libnl through pkg-config, which here would find a
+    # host protobuf or nothing at all. Hand it the ones built above instead: PKG_CONFIG
+    # only has to be set for its "install pkg-config" check, NL3_EXISTS=no stops it from
+    # calling pkg-config for libnl, and the flags below are what pkg-config would have
+    # printed. protoc is taken from PATH, and the generated config parser links the
+    # static libraries, so the binary needs none of them at run time.
+    #
+    # The include directories are given with -isystem because nsjail builds with -Werror
+    # and protobuf's headers still use std::iterator, which C++17 deprecates.
+    PATH="$TP_INSTALL_DIR/bin:$PATH" \
+    LDFLAGS="$TP_LIB_DIR/libnl-route-3.a $TP_LIB_DIR/libnl-3.a" \
+        make -j$PARALLEL \
+            PKG_CONFIG=none \
+            NL3_EXISTS=no \
+            PROTOBUF_CFLAGS="-isystem $TP_INCLUDE_DIR" \
+            PROTOBUF_LIBS="$TP_LIB_DIR/libprotobuf.a" \
+            USER_DEFINES="-isystem $TP_INCLUDE_DIR/libnl3"
+
+    mkdir -p $TP_INSTALL_DIR/bin
+    cp -f nsjail $TP_INSTALL_DIR/bin/nsjail
 }
 
 # restore cxxflags/cppflags/cflags to default one

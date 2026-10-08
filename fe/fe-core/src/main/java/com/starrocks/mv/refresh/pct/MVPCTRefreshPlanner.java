@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.partitiontraits.PrefetchedPartitionInfos;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
@@ -47,7 +48,8 @@ public final class MVPCTRefreshPlanner {
      * Compute the materialized view partitions to refresh for the current task run.
      *
      * <p>This method first resolves the refresh candidate set under the MV read lock, including
-     * potential-partition expansion. If {@code skipBatchFilter} is false, it then applies
+     * potential-partition expansion. The external base tables' partition infos it compares are fetched
+     * before the lock, which does not cover them. If {@code skipBatchFilter} is false, it then applies
      * property-based and batch-size filtering outside the lock so the lock scope stays aligned
      * with the original detect-only path.
      *
@@ -59,58 +61,62 @@ public final class MVPCTRefreshPlanner {
                                                      boolean skipBatchFilter)
             throws AnalysisException, LockTimeoutException {
         PCellSortedSet mvToRefreshedPartitions;
-        Locker locker = new Locker();
-        if (!locker.tryLockTableWithIntensiveDbLock(partitioner.getDb().getId(), partitioner.getMv().getId(),
-                LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            partitioner.getLogger().warn("failed to lock database: {} in detectMVPartitionsToRefresh",
-                    partitioner.getDb().getFullName());
-            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: "
-                            + "failed to acquire read lock on database %s within %d ms "
-                            + "when detecting partitions to refresh",
-                    partitioner.getDb().getFullName(), partitioner.getMv().getName(),
-                    partitioner.getDb().getFullName(), Config.mv_refresh_try_lock_timeout_ms));
-        }
-        try {
-            if (partitioner.getMvRefreshParams().isForce()) {
-                mvToRefreshedPartitions = partitioner.getMVPartitionsToRefreshWithForce();
-            } else {
-                mvToRefreshedPartitions = partitioner.getMVPartitionsToRefreshWithCheck(snapshotBaseTables);
+        // The external partition infos change detection reads are fetched here, before the lock, and the
+        // comparison against the MV's refresh state below consumes them under it.
+        try (PrefetchedPartitionInfos ignored = partitioner.prefetchExternalPartitionInfos(snapshotBaseTables)) {
+            Locker locker = new Locker();
+            if (!locker.tryLockTableWithIntensiveDbLock(partitioner.getDb().getId(), partitioner.getMv().getId(),
+                    LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
+                partitioner.getLogger().warn("failed to lock database: {} in detectMVPartitionsToRefresh",
+                        partitioner.getDb().getFullName());
+                throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: "
+                                + "failed to acquire read lock on database %s within %d ms "
+                                + "when detecting partitions to refresh",
+                        partitioner.getDb().getFullName(), partitioner.getMv().getName(),
+                        partitioner.getDb().getFullName(), Config.mv_refresh_try_lock_timeout_ms));
             }
-            if (mvToRefreshedPartitions == null || mvToRefreshedPartitions.isEmpty()) {
-                partitioner.getLogger().info("no partitions to refresh for materialized view");
-                return mvToRefreshedPartitions;
-            }
+            try {
+                if (partitioner.getMvRefreshParams().isForce()) {
+                    mvToRefreshedPartitions = partitioner.getMVPartitionsToRefreshWithForce();
+                } else {
+                    mvToRefreshedPartitions = partitioner.getMVPartitionsToRefreshWithCheck(snapshotBaseTables);
+                }
+                if (mvToRefreshedPartitions == null || mvToRefreshedPartitions.isEmpty()) {
+                    partitioner.getLogger().info("no partitions to refresh for materialized view");
+                    return mvToRefreshedPartitions;
+                }
 
-            Map<Table, PCellSortedSet> baseChangedPartitionNames =
-                    partitioner.getBasePartitionNamesByMVPartitionNames(mvToRefreshedPartitions);
-            if (baseChangedPartitionNames.isEmpty()) {
-                partitioner.getLogger().info(
-                        "Cannot get associated base table change partitions from mv's refresh partitions {}",
-                        mvToRefreshedPartitions);
-                return mvToRefreshedPartitions;
-            }
+                Map<Table, PCellSortedSet> baseChangedPartitionNames =
+                        partitioner.getBasePartitionNamesByMVPartitionNames(mvToRefreshedPartitions);
+                if (baseChangedPartitionNames.isEmpty()) {
+                    partitioner.getLogger().info(
+                            "Cannot get associated base table change partitions from mv's refresh partitions {}",
+                            mvToRefreshedPartitions);
+                    return mvToRefreshedPartitions;
+                }
 
-            Map<Table, PCellSortedSet> baseChangedPCellsSortedSet =
-                    partitioner.toBaseTableWithSortedSet(baseChangedPartitionNames);
-            if (partitioner.isCalcPotentialRefreshPartition(baseChangedPCellsSortedSet, mvToRefreshedPartitions)) {
-                partitioner.getLogger().info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {},"
-                                + " baseChangedPartitionNames: {}",
-                        mvToRefreshedPartitions, baseChangedPCellsSortedSet);
-                PCTPartitionTopology partitionTopology = partitioner.getMvContext().getPartitionTopology();
-                PCellSortedSet potentialPartitions = PCellSortedSet.of();
-                SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshedPartitions,
-                        baseChangedPartitionNames,
-                        partitionTopology.getRefBaseTableMVIntersectedPartitions(),
-                        partitionTopology.getMvRefBaseTableIntersectedPartitions(),
-                        potentialPartitions);
-                partitioner.addMVToRefreshPotentialPartitions(potentialPartitions);
-                mvToRefreshedPartitions.addAll(partitioner.getMVToRefreshPotentialPartitions());
-                partitioner.getLogger().info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {},"
-                                + " baseChangedPartitionNames: {}",
-                        mvToRefreshedPartitions, baseChangedPartitionNames);
+                Map<Table, PCellSortedSet> baseChangedPCellsSortedSet =
+                        partitioner.toBaseTableWithSortedSet(baseChangedPartitionNames);
+                if (partitioner.isCalcPotentialRefreshPartition(baseChangedPCellsSortedSet, mvToRefreshedPartitions)) {
+                    partitioner.getLogger().info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {},"
+                                    + " baseChangedPartitionNames: {}",
+                            mvToRefreshedPartitions, baseChangedPCellsSortedSet);
+                    PCTPartitionTopology partitionTopology = partitioner.getMvContext().getPartitionTopology();
+                    PCellSortedSet potentialPartitions = PCellSortedSet.of();
+                    SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshedPartitions,
+                            baseChangedPartitionNames,
+                            partitionTopology.getRefBaseTableMVIntersectedPartitions(),
+                            partitionTopology.getMvRefBaseTableIntersectedPartitions(),
+                            potentialPartitions);
+                    partitioner.addMVToRefreshPotentialPartitions(potentialPartitions);
+                    mvToRefreshedPartitions.addAll(partitioner.getMVToRefreshPotentialPartitions());
+                    partitioner.getLogger().info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {},"
+                                    + " baseChangedPartitionNames: {}",
+                            mvToRefreshedPartitions, baseChangedPartitionNames);
+                }
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(partitioner.getDb().getId(), partitioner.getMv().getId(), LockType.READ);
             }
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(partitioner.getDb().getId(), partitioner.getMv().getId(), LockType.READ);
         }
         if (!skipBatchFilter) {
             filterMVToRefreshPartitions(mvToRefreshedPartitions);

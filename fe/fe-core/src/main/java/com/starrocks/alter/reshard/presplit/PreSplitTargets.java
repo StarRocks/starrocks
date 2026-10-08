@@ -222,6 +222,18 @@ final class PreSplitTargets {
     }
 
     /**
+     * Whether {@code partition} holds no rows, judged from its base index. The index row count alone
+     * cannot answer this: {@code TabletStatMgr} refreshes it only periodically, so for minutes after a
+     * load a partition that now holds data still reads zero, and splitting it then would reshape a
+     * populated tablet from boundaries sampled off the new load alone. A partition no load has ever
+     * committed to is still at its initial visible version, which publish advances synchronously.
+     */
+    static boolean isEmptyPartition(PhysicalPartition partition, MaterializedIndex baseIndex) {
+        return partition.getVisibleVersion() <= PhysicalPartition.PARTITION_INIT_VERSION
+                && baseIndex.getRowCount() == 0;
+    }
+
+    /**
      * Resolves every visible index of {@code table}'s {@code partition} into an
      * {@link IndexPreSplitTarget}, base index first.
      *

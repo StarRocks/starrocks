@@ -443,6 +443,7 @@ public abstract class AlterJobV2 implements Writable {
             this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
         } catch (Exception e) {
             LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+            onComputeResourceUnavailable();
             return;
         }
 
@@ -473,6 +474,16 @@ public abstract class AlterJobV2 implements Writable {
         } catch (AlterCancelException e) {
             cancelInternal(e.getMessage());
         }
+    }
+
+    /**
+     * Hook for the round that {@link #run()} is about to skip because no compute resource could be
+     * acquired. No resource means no new work can be dispatched, but a phase that is merely waiting
+     * on work it already dispatched still owns a deadline, and enforcing that deadline must not
+     * depend on the warehouse being usable - otherwise the only remaining bound is the day-long
+     * alter_table_timeout_second. Default: nothing to do.
+     */
+    protected void onComputeResourceUnavailable() {
     }
 
     protected boolean cancelInternal(String errMsg) {

@@ -1,0 +1,8 @@
+将 StarRocks 连接配置项设置为 FE 的地址：
+
+- `jdbc-url`：`jdbc:mysql://<fe_host>:<fe_query_port>`。查询端口默认为 `9030`。
+- `load-url`：`<fe_host>:<fe_http_port>`。HTTP 端口默认为 `8030`。
+
+`<fe_host>` 请使用在 FE 重启或被替换后保持不变的地址，例如 DNS 域名或 FE 前端的负载均衡器，而不是某个 FE 的 IP 地址。如果该地址不再指向 FE，Flink 作业将无法继续导入数据。
+
+Flink TaskManager 必须能够访问上述 FE 端口，以及每个 BE 或 CN 的 HTTP 端口（默认 `8040`），因为 FE 会将每个导入请求重定向到某个 BE 或 CN。

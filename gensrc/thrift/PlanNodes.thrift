@@ -711,6 +711,18 @@ struct TVectorSearchOptions {
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
   // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
   14: optional bool has_vector_range;
+  // When true, a split of this scan must land on a segment boundary. The index is searched once per
+  // segment, so a sub-segment split makes every child repeat the whole search over its own row range.
+  // FE folds the enable_vector_index_split_at_segment_boundary session variable into this flag. It
+  // constrains where an existing split cuts -- it does not select a split strategy, and is orthogonal
+  // to use_prepared_physical_split_scan.
+  15: optional bool split_at_segment_boundary;
+  // The query vector as little-endian float32, which is also the BE's in-memory layout. The FE
+  // fills this instead of `query_vector` (ordinal 4): the supported upgrade order is BE/CN first
+  // and FE second, so a BE is never older than the FE talking to it and never needs the text form.
+  // `query_vector` serves the reverse case -- a new BE against an old FE mid-upgrade -- and must
+  // not be removed nor its ordinal reused.
+  16: optional binary query_vector_f32_le;
 }
 
 enum SampleMethod {

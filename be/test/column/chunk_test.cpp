@@ -108,25 +108,6 @@ public:
 };
 
 // NOLINTNEXTLINE
-GROUP_SLOW_TEST_F(ChunkTest, test_chunk_upgrade_if_overflow) {
-    size_t row_count = 1 << 30;
-    auto c1 = BinaryColumn::create();
-    c1->resize(row_count);
-    auto c2 = BinaryColumn::create();
-    for (size_t i = 0; i < row_count; i++) {
-        c2->append(std::to_string(i));
-    }
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(c1, 1);
-    chunk->append_column(c2, 2);
-
-    Status st = chunk->upgrade_if_overflow();
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(chunk->get_column_by_slot_id(1)->is_binary());
-    ASSERT_TRUE(chunk->get_column_by_slot_id(2)->is_large_binary());
-}
-
-// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_remove_column_by_slot_id) {
     ColumnPtr c1 = ColumnTestHelper::build_column<int32_t>({1});
     ColumnPtr c2 = ColumnTestHelper::build_column<int32_t>({2});
@@ -144,36 +125,6 @@ TEST_F(ChunkTest, test_remove_column_by_slot_id) {
     ASSERT_FALSE(chunk->is_slot_exist(2));
     ASSERT_EQ(chunk->get_column_by_slot_id(3)->get(0).get_int32(), 3);
     ASSERT_EQ(chunk->get_column_by_slot_id(4)->get(0).get_int32(), 4);
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_chunk_downgrade) {
-    auto c1 = BinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = BinaryColumn::create();
-    c2->append_string("11");
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(std::move(c1), 1);
-    chunk->append_column(std::move(c2), 2);
-    ASSERT_FALSE(chunk->has_large_column());
-
-    auto ret = chunk->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(chunk->has_large_column());
-
-    auto c3 = LargeBinaryColumn::create();
-    c3->append_string("1");
-    auto c4 = LargeBinaryColumn::create();
-    c4->append_string("2");
-    chunk = std::make_shared<Chunk>();
-    chunk->append_column(std::move(c3), 1);
-    chunk->append_column(std::move(c4), 2);
-    ASSERT_TRUE(chunk->has_large_column());
-
-    ret = chunk->downgrade();
-    ASSERT_FALSE(chunk->has_large_column());
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(chunk->has_large_column());
 }
 
 // NOLINTNEXTLINE
@@ -1180,53 +1131,6 @@ TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
 
     mutable_chunk->materialized_nullable();
     mutable_chunk->check_or_die();
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_upgrade_if_overflow) {
-    size_t row_count = 1 << 20;
-    auto c1 = BinaryColumn::create();
-    c1->resize(row_count);
-    auto c2 = BinaryColumn::create();
-    for (size_t i = 0; i < row_count; i++) {
-        c2->append(std::to_string(i));
-    }
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    Status st = mutable_chunk->upgrade_if_overflow();
-    ASSERT_TRUE(st.ok());
-    ASSERT_TRUE(mutable_chunk->get_column_by_slot_id(1)->is_binary());
-    ASSERT_FALSE(mutable_chunk->get_column_by_slot_id(2)->is_large_binary());
-}
-
-// NOLINTNEXTLINE
-TEST_F(ChunkTest, test_mutable_chunk_downgrade) {
-    auto c1 = LargeBinaryColumn::create();
-    c1->append_string("1");
-    auto c2 = LargeBinaryColumn::create();
-    c2->append_string("2");
-
-    MutableColumns mutable_columns;
-    mutable_columns.push_back(Column::mutate(std::move(c1)));
-    mutable_columns.push_back(Column::mutate(std::move(c2)));
-
-    MutableChunk::SlotHashMap slot_map;
-    slot_map[1] = 0;
-    slot_map[2] = 1;
-    auto mutable_chunk = std::make_shared<MutableChunk>(std::move(mutable_columns), std::move(slot_map));
-
-    ASSERT_TRUE(mutable_chunk->has_large_column());
-    auto ret = mutable_chunk->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_FALSE(mutable_chunk->has_large_column());
 }
 
 // NOLINTNEXTLINE

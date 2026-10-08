@@ -499,7 +499,7 @@ TEST(AIProviderOptionsBuilderTest, NullAndEmptyKeysAreRejectedAtEveryMapDepth) {
 }
 
 TEST(AIProviderOptionsBuilderTest, OnlyExactCaseSensitiveTopLevelReservedKeysAreRejected) {
-    for (const std::string& reserved : {"model", "messages", "stream"}) {
+    for (const char* reserved : {"model", "messages", "stream"}) {
         auto values = BinaryColumn::create();
         values->append("reserved-value-secret");
         auto options = make_map(make_keys({reserved}), std::move(values), 1);

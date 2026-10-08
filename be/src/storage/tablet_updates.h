@@ -475,6 +475,7 @@ private:
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error(const string& msg);
+    void _mark_unusable(const string& msg);
 
     Status _get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_edit_version,
                                 std::unique_lock<std::mutex>& ul, int64_t begin_ms);

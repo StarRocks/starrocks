@@ -51,6 +51,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -757,6 +758,148 @@ public class OlapTableSinkTest {
 
         Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
                 "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * TOlapTableSink.enable_multi_node_write has to be true of every location this load will ever
+     * receive, and the one the planner builds is not all of them: automatic partitioning creates
+     * partitions DURING the load and FrontendServiceImpl.buildCreatePartitionResponse hands those
+     * back long afterwards. createLocation records the width it resolved on the transaction exactly
+     * when that can happen, and the flag is derived from that width rather than only from the
+     * location built here -- which in this test carries no multi-node tablet at all, so the flag can
+     * come from nowhere else.
+     *
+     * <p>The order is the point. A spread node list reaching BE without this flag is read as a
+     * REPLICA set, and every row is written to every node in it.
+     */
+    @Test
+    public void testMultiNodeWriteFlagFollowsTheRecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState spreadingTxn = new TransactionState();
+        // dstTable is the @Injectable OlapTable whose getId() the Expectations below pin to 1.
+        spreadingTxn.setMultiNodeWriteWidth(1L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = spreadingTxn;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertFalse(OlapTableSink.hasMultiNodeTablet(tSink.getLocation()),
+                "this location is built one node per tablet; the flag must not be coming from it");
+        Assertions.assertTrue(tSink.isEnable_multi_node_write(),
+                "a load that will spread a runtime-created partition must tell BE so before the "
+                        + "create-partition path can hand one back");
+    }
+
+    /**
+     * The width is per TABLE, not per transaction. A multi-table Broker Load plans one sink per
+     * table on a single txn id -- {@code BrokerLoadJob.buildLoadingTasksUnderReadLock} calls
+     * {@code task.prepare()} inside the per-table loop -- and only some of those tables may be
+     * eligible. An eligible table's width must not turn on this table's flag: every input to the
+     * decision (file bundling, colocate MV, and the estimated size the width is derived from) is
+     * that other table's, and nothing here established this one's eligibility.
+     */
+    @Test
+    public void testMultiNodeWriteFlagIgnoresAnotherTablesWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState otherTableSpread = new TransactionState();
+        // dstTable's id is pinned to 1 below; some other table in this transaction resolved 3.
+        otherTableSpread.setMultiNodeWriteWidth(2L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = otherTableSpread;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write(),
+                "another table's width must not enable the shard-set reading for this one");
+    }
+
+    /**
+     * The other half of the same rule: a load the planner did not record a width for spreads
+     * nothing, now or later, so the flag stays off and BE keeps the behaviour that existed before
+     * multi-node write.
+     */
+    @Test
+    public void testMultiNodeWriteFlagStaysOffWithoutARecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                    @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write());
     }
 
     /**
@@ -2088,4 +2231,50 @@ public class OlapTableSinkTest {
         Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
                 "second distributed_expr slot must resolve to shadow_k1 (new key order)");
     }
+
+    /**
+     * Streaming ingest must never spread a tablet's write, because it cannot be sized: neither
+     * StreamLoadPlanner nor LoadPlanner's streaming path sets an estimate, so nodesForEstimatedSize
+     * answers Integer.MAX_VALUE and the width would collapse to lake_multi_node_write_max_nodes.
+     * That would give the smallest and most frequent writes the widest spread -- every micro-batch
+     * cut into that many segments, each with its own partial txn log -- and stream load has no
+     * session to SET, so nothing could turn it off.
+     *
+     * The control arm is the point: the same sink, same table, same settings, differing only in the
+     * streaming flag, does spread. Without it this test would pass on any unrelated precondition.
+     */
+    @Test
+    public void testStreamingLoadNeverSpreadsAcrossNodes(@Injectable OlapTable table) {
+        new Expectations() {
+            {
+                table.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                table.isFileBundling();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        TransactionState txnState = new TransactionState();
+        txnState.setUseCombinedTxnLog(true);
+
+        OlapTableSink sink = new OlapTableSink(table, getTuple(), Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        // Pinned explicitly so the resolution never reaches ConnectContext: the knobs are not what
+        // this test is about, and a unit test has no bound session. A zero share means "no size
+        // estimate", which is exactly the state both streaming planners leave the sink in.
+        sink.setMultiNodeWriteSettings(new OlapTableSink.MultiNodeWriteSettings(
+                SessionVariable.MultiNodeTabletWriteMode.FORCE, 6, 0));
+
+        int spreadWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(6, spreadWidth,
+                "control: a non-streaming load with every precondition met spreads to the node bound");
+
+        sink.setIsStreamingLoad(true);
+        int streamingWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(OlapTableSink.NO_MULTI_NODE_WRITE, streamingWidth,
+                "a stream or routine load must stay on one node whatever the mode says");
+    }
+
 }

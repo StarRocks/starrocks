@@ -16,6 +16,7 @@ package com.starrocks.sql.ast.expression;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.DateUtils;
@@ -44,6 +45,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +56,51 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public class ExprToThriftTest {
+
+    @Test
+    public void testDateTruncMonotonicity() {
+        for (Type type : List.of(DateType.DATE, DateType.DATETIME)) {
+            List<String> units = type.isDate()
+                    ? List.of("day", "week", "month", "quarter", "year")
+                    : List.of("second", "minute", "hour", "day", "week", "month", "quarter", "year");
+            for (boolean nullable : List.of(false, true)) {
+                SlotRef slot = new SlotRef(new SlotDescriptor(new SlotId(0), "ts", type, nullable));
+                for (String unit : units) {
+                    FunctionCallExpr trunc = new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                            List.of(new StringLiteral(unit), slot));
+                    trunc.setFn(ScalarFunction.createBuiltinOperator(FunctionSet.DATE_TRUNC,
+                            Lists.newArrayList(VarcharType.VARCHAR, type), type));
+                    trunc.setType(type);
+                    trunc.setOriginType(type);
+
+                    // The BE uses this flag for expression zone-map predicates. Equality is
+                    // handled by splitting it into >= and <= when both children are monotonic.
+                    Assertions.assertTrue(convert(trunc).isIs_monotonic(), type + ": " + unit);
+                    DateLiteral bound = type.isDate() ? new DateLiteral(2024, 1, 1)
+                            : new DateLiteral(2024, 1, 1, 0, 0, 0, 0);
+                    for (BinaryType op : List.of(BinaryType.EQ, BinaryType.LT, BinaryType.LE,
+                            BinaryType.GT, BinaryType.GE)) {
+                        BinaryPredicate predicate = ExprCaseFactory.withType(
+                                new BinaryPredicate(op, trunc, bound), BooleanType.BOOLEAN);
+                        TExpr thrift = ExprToThrift.treeToThrift(predicate);
+                        Assertions.assertEquals(op.isMonotonic(), thrift.getNodes().get(0).isIs_monotonic());
+                        Assertions.assertTrue(thrift.getNodes().get(1).isIs_monotonic());
+                    }
+
+                    // A non-monotonic timestamp expression must still prevent pruning.
+                    DateLiteral future = type.isDate() ? new DateLiteral(2025, 1, 1)
+                            : new DateLiteral(2025, 1, 1, 0, 0, 0, 0);
+                    BinaryPredicate condition = ExprCaseFactory.withType(
+                            new BinaryPredicate(BinaryType.LT, slot, bound), BooleanType.BOOLEAN);
+                    CaseExpr timestamp = new CaseExpr(null, List.of(new CaseWhenClause(condition, future)), slot);
+                    timestamp.setType(type);
+                    timestamp.setOriginType(type);
+                    trunc.setChild(1, timestamp);
+                    Assertions.assertFalse(convert(trunc).isIs_monotonic());
+                }
+            }
+        }
+    }
 
     @Test
     public void testExprToThriftCoverage() {

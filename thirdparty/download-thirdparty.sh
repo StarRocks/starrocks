@@ -1051,3 +1051,18 @@ if [[ -d $TP_SOURCE_DIR/$SNAPPY_SOURCE ]] ; then
     cd -
     echo "Finished patching $SNAPPY_SOURCE"
 fi
+
+# nsjail builds the kafel seccomp policy compiler from a git submodule, which its
+# release archive does not carry: its Makefile would run `git submodule update` at
+# build time, which a source build has no repository for. Put the separately
+# downloaded kafel tree where that Makefile looks for it instead.
+if [[ -d $TP_SOURCE_DIR/$NSJAIL_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] ; then
+        rm -rf kafel
+        cp -r "$TP_SOURCE_DIR/$KAFEL_SOURCE" kafel
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $NSJAIL_SOURCE"
+fi

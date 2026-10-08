@@ -67,6 +67,9 @@ public class MVVersionManager {
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
      * @param tvrDeltaToPromote TVR version ranges to promote into the persistent baseTableInfoTvrVersionRangeMap
+     * @param externalTablePartitionNames the external base tables whose meta this run updates, mapped to their
+     *                                    partition names; produced by {@link #collectExternalTablePartitionNames}
+     *                                    outside the mv lock
      * @param isFinalBatchRun whether this run is the batch's final task run (only then is freshness confirmed)
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
@@ -74,6 +77,7 @@ public class MVVersionManager {
                                     Set<Long> refBaseTableIds,
                                     Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
                                     Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote,
+                                    Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames,
                                     boolean isFinalBatchRun) {
         MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
@@ -86,7 +90,10 @@ public class MVVersionManager {
         List<BaseTableSnapshotInfo> olapTables = snapshotInfoSplits.getOrDefault(true, List.of());
         List<BaseTableSnapshotInfo> externalTables = snapshotInfoSplits.getOrDefault(false, List.of());
         boolean isOlapTableRefreshed = updateMetaForOlapTable(refreshContext, olapTables, refBaseTableIds);
-        boolean isExternalTableRefreshed = updateMetaForExternalTable(refreshContext, externalTables, refBaseTableIds);
+        updateMetaForExternalTable(refreshContext, externalTablePartitionNames);
+        // Unchanged semantics: having any external base table at all counts as "meta changed", even when every
+        // one of them is deferred to the batch's final run.
+        boolean isExternalTableRefreshed = !externalTables.isEmpty();
 
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
@@ -261,27 +268,29 @@ public class MVVersionManager {
         return isOlapTableRefreshed;
     }
 
-    private boolean updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                               List<BaseTableSnapshotInfo> changedTablePartitionInfos,
-                                               Set<Long> refBaseTableIds) {
-        if (changedTablePartitionInfos.isEmpty()) {
-            return false;
-        }
-        logger.info("Update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
-                changedTablePartitionInfos, refBaseTableIds);
-        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
-                refreshContext.getBaseTableInfoVisibleVersionMap();
+    /**
+     * Decide which external base tables this run must update the version map for, and resolve the live partition
+     * names each one will be pruned against. This is the single place that filter lives:
+     * {@link #updateMetaForExternalTable} updates exactly what is returned here, so the two can never disagree.
+     * <p>
+     * {@link PartitionUtil#getPartitionNames} is a remote metadata call, which is why this runs before the caller
+     * takes the mv's write lock rather than inside the critical section.
+     */
+    public Map<PCTTableSnapshotInfo, List<String>> collectExternalTablePartitionNames(
+            Map<Long, BaseTableSnapshotInfo> snapshotBaseTables, Set<Long> refBaseTableIds) {
+        Map<PCTTableSnapshotInfo, List<String>> partitionNames = Maps.newLinkedHashMap();
         boolean hasNextBatchPartition = mvTaskRunContext.hasNextBatchPartition();
-        // update version map of materialized view
-        for (BaseTableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
+        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+            Table snapshotTable = snapshotInfo.getBaseTable();
+            if (snapshotTable.isNativeTableOrMaterializedView()) {
+                continue;
+            }
             if (!(snapshotInfo instanceof PCTTableSnapshotInfo)) {
                 logger.warn("Skip update meta for base table {}, because it is not a PCTTableSnapshotInfo",
-                        snapshotInfo.getBaseTable().getName());
+                        snapshotTable.getName());
                 continue;
             }
             PCTTableSnapshotInfo pctTableSnapshotInfo = (PCTTableSnapshotInfo) snapshotInfo;
-            BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
-            Table snapshotTable = snapshotInfo.getBaseTable();
             // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
             // cause wrong results for rewrite or refresh.
             // eg:
@@ -300,6 +309,26 @@ public class MVVersionManager {
                         snapshotTable.getName(), pctTableSnapshotInfo.getRefreshedPartitionInfos(), mv.getName());
                 continue;
             }
+            partitionNames.put(pctTableSnapshotInfo, PartitionUtil.getPartitionNames(snapshotTable));
+        }
+        return partitionNames;
+    }
+
+    private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
+                                            Map<PCTTableSnapshotInfo, List<String>> externalTablePartitionNames) {
+        if (externalTablePartitionNames.isEmpty()) {
+            return;
+        }
+        logger.info("Update meta for mv {} with external tables:{}", mv.getName(),
+                externalTablePartitionNames.keySet());
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
+                refreshContext.getBaseTableInfoVisibleVersionMap();
+        // update version map of materialized view
+        for (Map.Entry<PCTTableSnapshotInfo, List<String>> entry : externalTablePartitionNames.entrySet()) {
+            PCTTableSnapshotInfo pctTableSnapshotInfo = entry.getKey();
+            List<String> partitionNamesList = entry.getValue();
+            BaseTableInfo baseTableInfo = pctTableSnapshotInfo.getBaseTableInfo();
+            Table snapshotTable = pctTableSnapshotInfo.getBaseTable();
 
             // Use computeIfAbsent to avoid unnecessary map creation
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
@@ -311,8 +340,7 @@ public class MVVersionManager {
             // overwrite old partition names
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
-            // Remove partition info for partitions that no longer exist in the snapshot table
-            List<String> partitionNamesList = PartitionUtil.getPartitionNames(snapshotTable);
+            // Remove partition info for partitions that no longer exist in the snapshot table.
             if (!partitionNamesList.isEmpty()) {
                 Set<String> partitionNames = Sets.newHashSetWithExpectedSize(partitionNamesList.size());
                 partitionNames.addAll(partitionNamesList);
@@ -329,7 +357,6 @@ public class MVVersionManager {
                 currentTablePartitionInfo.clear();
             }
         }
-        return true;
     }
 
     /**

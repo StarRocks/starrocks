@@ -70,6 +70,16 @@ CONF_mBool(starlet_use_star_cache, "true");
 
 CONF_Bool(starlet_star_cache_async_init, "true");
 
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
+
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
@@ -137,6 +147,18 @@ CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+
+// Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
+// tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
+// "zstd" compresses the payload on the heartbeat thread, inside the same
+// starmgr_client_rpc_timeout_ms budget, and the FE decompresses it. "none", the default, sends the
+// heartbeat uncompressed as before.
+//
+// The FE must be able to decompress before any node is switched: an FE that predates this
+// mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this on
+// the compute nodes. An unrecognized value is reported and falls back to "none" rather than
+// keeping the node from starting.
+CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
 #endif
 

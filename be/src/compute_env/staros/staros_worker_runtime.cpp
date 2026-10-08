@@ -167,8 +167,21 @@ void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache,
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
     apply_starlet_upload_threshold_configs();
 
+    // Goes through UpdateFlagValue rather than a typed FLAGS_ assignment: starlet registers an update
+    // hook on this flag that resolves the string to the enum its heartbeat path actually reads, and
+    // only SetCommandLineOption fires that hook. Assigning the flag directly would leave the
+    // heartbeat on "none" whatever this is set to.
+    if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type",
+                                                              config::starlet_starmgr_client_compression_type.value())
+                .empty()) {
+        LOG(WARNING) << "Failed to apply BE config starlet_starmgr_client_compression_type="
+                     << config::starlet_starmgr_client_compression_type << "; worker heartbeats stay uncompressed";
+    }
+
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;
+    fslib::FLAGS_star_cache_skip_fresh_block_checksum_verification =
+            config::starlet_star_cache_skip_fresh_block_checksum_verification;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
     fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
     fslib::FLAGS_star_cache_disk_size_percent = config::starlet_star_cache_disk_size_percent;

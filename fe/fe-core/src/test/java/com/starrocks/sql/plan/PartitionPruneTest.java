@@ -208,6 +208,52 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneIsNullOnLeadingColumnKeepsItsPartition() throws Exception {
+        // A NULL sorts below every value of its own column, so (NULL, 100) lives in the partition
+        // whose lower endpoint is the -infinity sentinel. Looking the key up as (MIN, 100) asks for
+        // a partition above it instead -- here there is none, so the scan came back empty.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_lead` (\n" +
+                "  `id1` tinyint NULL,\n" +
+                "  `id2` tinyint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id1`)\n" +
+                "PARTITION BY RANGE(`id1`, `id2`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('-128', '10'),\n" +
+                "  PARTITION p1 VALUES LESS THAN ('-128', '20'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 = 100")
+                .explainContains("partitions=1/2");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 > 50")
+                .explainContains("partitions=1/2");
+        // Without a predicate on the second column nothing narrows it, which is the case that
+        // already worked; it must keep working.
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null")
+                .explainContains("partitions=1/2");
+        starRocksAssert.dropTable("t_null_range_lead");
+    }
+
+    @Test
+    public void testPruneIsNullOnTrailingColumnKeepsItsPartition() throws Exception {
+        // Same defect one column in: (5, NULL) sits just below the boundary (5, MIN), so it belongs
+        // to the partition that ends there, not to whatever starts there.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_trail` (\n" +
+                "  `a` tinyint NOT NULL,\n" +
+                "  `b` tinyint NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`a`)\n" +
+                "PARTITION BY RANGE(`a`, `b`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('5', '-128'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_trail where a = 5 and b is null")
+                .explainContains("partitions=1/1");
+        starRocksAssert.dropTable("t_null_range_trail");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
@@ -446,6 +492,33 @@ public class PartitionPruneTest extends PlanTestBase {
         // not cost the equality deduction its pruning.
         starRocksAssert.query("select count(*) from t_gen_cast where c1 = '99845' ")
                 .explainContains("partitions=1/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsNotIn() throws Exception {
+        // date_trunc() maps many source values onto one partition value, so NOT IN on the source column
+        // says nothing about the partition value: '2024-01-02 13:00:00' is not in the list below, yet
+        // its partition value '2024-01-02' is the image of a listed value. Deducing c2 NOT IN (...)
+        // pruned p0102 and p0103 with matching rows still in them. A single-value NOT IN is rewritten
+        // to NOT EQUAL, which was never deduced, so it takes two values to reach the IN branch.
+        starRocksAssert.withTable("CREATE TABLE t_gen_not_in (" +
+                " c1 datetime NOT NULL," +
+                " c2 datetime NULL AS date_trunc('day', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0101 VALUES IN ('2024-01-01 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0102 VALUES IN ('2024-01-02 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0103 VALUES IN ('2024-01-03 00:00:00')");
+
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 not in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=3/3");
+        // IN still maps through the function and prunes
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=2/3");
     }
 
     @Test

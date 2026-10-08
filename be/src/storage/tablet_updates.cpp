@@ -3534,7 +3534,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document rowset_details;
     rowset_details.SetArray();
-    for (int i = 0; i < rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
@@ -3557,21 +3557,21 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
 
     rapidjson::Document apply_rowset_details;
     apply_rowset_details.SetArray();
-    for (int i = 0; i < apply_version_rowset_ids.size(); ++i) {
+    for (size_t i = 0; i < apply_version_rowsets.size(); ++i) {
         rapidjson::Value value;
         value.SetObject();
 
         rapidjson::Value rowset_id;
-        std::string rowset_id_value = rowsets[i]->rowset_id().to_string();
+        std::string rowset_id_value = apply_version_rowsets[i]->rowset_id().to_string();
         rowset_id.SetString(rowset_id_value.c_str(), rowset_id_value.length(), root.GetAllocator());
         value.AddMember("rowset_id", rowset_id, root.GetAllocator());
 
         rapidjson::Value num_segments;
-        num_segments.SetInt64(rowsets[i]->num_segments());
+        num_segments.SetInt64(apply_version_rowsets[i]->num_segments());
         value.AddMember("num_segments", num_segments, root.GetAllocator());
 
         rapidjson::Value rowset_size;
-        rowset_size.SetInt64(rowsets[i]->data_disk_size());
+        rowset_size.SetInt64(apply_version_rowsets[i]->data_disk_size());
         value.AddMember("rowset_size", rowset_size, root.GetAllocator());
 
         apply_rowset_details.PushBack(value, apply_rowset_details.GetAllocator());
@@ -3852,6 +3852,10 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 
 void TabletUpdates::_set_error(const string& msg) {
     StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    _mark_unusable(msg);
+}
+
+void TabletUpdates::_mark_unusable(const string& msg) {
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -5218,7 +5222,9 @@ Status TabletUpdates::clear_meta() {
     auto data_store = _tablet.data_dir();
     auto meta_store = data_store->get_meta();
 
-    _set_error("clear_meta inprogress"); // Mark this tablet unusable first.
+    // This is an expected part of dropping a tablet, not a storage error. Keep the tablet unusable while its
+    // metadata is being cleared without incrementing primary_key_table_error_state_total.
+    _mark_unusable("clear_meta inprogress");
 
     // Clear permanently stored meta.
     RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id()));

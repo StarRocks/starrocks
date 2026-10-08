@@ -32,6 +32,7 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -71,6 +72,86 @@ bool rowset_holds_rows(const RowsetMetadataPB& rowset) {
 }
 
 namespace {
+
+void collect_rowset_referenced_files(const google::protobuf::RepeatedPtrField<RowsetMetadataPB>& rowsets,
+                                     std::unordered_set<std::string>* referenced_files) {
+    for (const auto& rowset : rowsets) {
+        for (const auto& segment : rowset.segment_metas()) {
+            referenced_files->insert(segment.filename());
+        }
+        for (const auto& del_file : rowset.del_files()) {
+            referenced_files->insert(del_file.name());
+        }
+    }
+}
+
+bool has_rowset_file_overlap(const RowsetMetadataPB& rowset, const std::unordered_set<std::string>& referenced_files) {
+    for (const auto& segment : rowset.segment_metas()) {
+        if (referenced_files.contains(segment.filename())) {
+            return true;
+        }
+    }
+    for (const auto& del_file : rowset.del_files()) {
+        if (referenced_files.contains(del_file.name())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void add_unreferenced_rowset_files_to_compaction_inputs(
+        RowsetMetadataPB&& old_rowset, const std::unordered_set<std::string>& referenced_files,
+        google::protobuf::RepeatedPtrField<RowsetMetadataPB>* compaction_inputs) {
+    old_rowset.clear_delete_predicate();
+    if (!has_rowset_file_overlap(old_rowset, referenced_files)) {
+        compaction_inputs->Add(std::move(old_rowset));
+        return;
+    }
+
+    RowsetMetadataPB garbage_rowset;
+    garbage_rowset.CopyFrom(old_rowset);
+    garbage_rowset.clear_deprecated_segments();
+    garbage_rowset.clear_deprecated_segment_size();
+    garbage_rowset.clear_deprecated_segment_encryption_metas();
+    garbage_rowset.clear_deprecated_bundle_file_offsets();
+    garbage_rowset.clear_deprecated_shared_segments();
+    garbage_rowset.clear_segment_metas();
+    garbage_rowset.clear_del_files();
+    garbage_rowset.clear_next_compaction_offset();
+
+    int64_t garbage_data_size = 0;
+    bool has_complete_data_size = true;
+    size_t garbage_file_count = 0;
+    for (const auto& segment : old_rowset.segment_metas()) {
+        if (referenced_files.contains(segment.filename())) {
+            continue;
+        }
+        garbage_rowset.add_segment_metas()->CopyFrom(segment);
+        if (segment.has_size()) {
+            garbage_data_size += segment.size();
+        } else {
+            has_complete_data_size = false;
+        }
+        ++garbage_file_count;
+    }
+    for (const auto& del_file : old_rowset.del_files()) {
+        if (referenced_files.contains(del_file.name())) {
+            continue;
+        }
+        garbage_rowset.add_del_files()->CopyFrom(del_file);
+        ++garbage_file_count;
+    }
+
+    if (garbage_file_count == 0) {
+        return;
+    }
+    if (has_complete_data_size) {
+        garbage_rowset.set_data_size(garbage_data_size);
+    } else {
+        garbage_rowset.clear_data_size();
+    }
+    compaction_inputs->Add(std::move(garbage_rowset));
+}
 
 // True when the caller must drop this rowset because it references nothing at all: no segments, no
 // del files, and no delete predicate. It has no rows to read and no files to keep, and
@@ -426,6 +507,10 @@ public:
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(
                     check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(check_and_recover(
@@ -674,6 +759,7 @@ private:
 
         RETURN_IF_ERROR(prepare_primary_index());
 
+        bool applied_rowsets = false;
         // Process each subtask's OpCompaction
         for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
             const auto& subtask_op = op_parallel.subtask_compactions(i);
@@ -696,6 +782,7 @@ private:
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
+            applied_rowsets = true;
         }
 
         // Apply unified SST compaction results (if any)
@@ -728,6 +815,10 @@ private:
             added->set_version(_new_version);
         }
 
+        if (applied_rowsets && op_parallel.base_compaction_time() > 0) {
+            _metadata->set_last_base_compaction_time(
+                    std::max(_metadata->last_base_compaction_time(), op_parallel.base_compaction_time()));
+        }
         return Status::OK();
     }
 
@@ -845,22 +936,19 @@ private:
                 }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                // The replacement metadata may reuse individual files from an old rowset under a different rowset id.
                 std::unordered_set<uint32_t> new_rowset_ids;
+                std::unordered_set<std::string> new_referenced_rowset_files;
                 for (const auto& rowset : _metadata->rowsets()) {
                     new_rowset_ids.insert(rowset.id());
                 }
+                collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        // Drop the delete_predicate before archiving into compaction_inputs; it is
-                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
-                        // metadata bloat here (same rationale as the compaction archival paths).
-                        old_rowset.clear_delete_predicate();
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    if (new_rowset_ids.contains(old_rowset.id())) {
+                        continue;
                     }
+                    add_unreferenced_rowset_files_to_compaction_inputs(
+                            std::move(old_rowset), new_referenced_rowset_files, _metadata->mutable_compaction_inputs());
                 }
 
                 VLOG(3) << "Apply pk replication log with tablet metadata provided. tablet_id: " << _tablet.id()
@@ -995,9 +1083,18 @@ public:
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction()));
+            if (log.op_parallel_compaction().subtask_compactions_size() > 0 &&
+                log.op_parallel_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(std::max(_metadata->last_base_compaction_time(),
+                                                                  log.op_parallel_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
@@ -1131,16 +1228,12 @@ public:
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
 
-        // Validate bundle file offsets consistency across all TxnLogs.
-        // All TxnLogs must consistently either have or lack bundle_file_offsets.
-        // Mixing bundled and non-bundled rowsets is an error because downstream readers
-        // require offsets to locate segments within bundle files. Silently dropping offsets
-        // would leave bundled segment paths without positional info, causing data corruption.
+        // Each statement of a multi-statement transaction writes its own log, bundled if the statement's
+        // share of this tablet was one segment at end of stream and standalone if it flushed mid-load, so
+        // the logs routinely disagree. Keep the offsets of the bundled ones (dropping them would lose the
+        // slice positions) and give the standalone segments offset 0, which names the same bytes.
         if (has_bundle_offsets && has_segments_without_bundle_offsets) {
-            return Status::InternalError(
-                    fmt::format("Inconsistent bundle_file_offsets across txn logs for tablet {}: "
-                                "some logs have offsets, some don't. Cannot safely merge rowsets.",
-                                _tablet.id()));
+            give_standalone_segments_a_bundle_offset(merged_rowset);
         }
 
         // Set rowset ID and update next_rowset_id
@@ -1446,22 +1539,19 @@ private:
                 }
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
-                // In lake replication scenario, we need to carefully handle compaction_inputs.
-                // The new rowsets may still reference the same rowset id as old rowsets (incremental sync).
-                // Only add rowsets whose id is NOT present in new rowsets to compaction_inputs.
-                // This ensures that files still referenced by new rowsets won't be deleted by vacuum.
+                // The replacement metadata may reuse individual files from an old rowset under a different rowset id.
                 std::unordered_set<uint32_t> new_rowset_ids;
+                std::unordered_set<std::string> new_referenced_rowset_files;
                 for (const auto& rowset : _metadata->rowsets()) {
                     new_rowset_ids.insert(rowset.id());
                 }
+                collect_rowset_referenced_files(_metadata->rowsets(), &new_referenced_rowset_files);
                 for (auto&& old_rowset : old_rowsets) {
-                    if (new_rowset_ids.count(old_rowset.id()) == 0) {
-                        // Drop the delete_predicate before archiving into compaction_inputs; it is
-                        // consumed only by vacuum/file cleanup, never by readers, so it is pure
-                        // metadata bloat here (same rationale as the compaction archival paths).
-                        old_rowset.clear_delete_predicate();
-                        _metadata->mutable_compaction_inputs()->Add(std::move(old_rowset));
+                    if (new_rowset_ids.contains(old_rowset.id())) {
+                        continue;
                     }
+                    add_unreferenced_rowset_files_to_compaction_inputs(
+                            std::move(old_rowset), new_referenced_rowset_files, _metadata->mutable_compaction_inputs());
                 }
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).

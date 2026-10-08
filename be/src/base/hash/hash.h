@@ -3,11 +3,12 @@
 #include <cstdint>
 #include <cstring>
 
+#include "base/hash/crc32c.h"
 #include "base/hash/hash_fwd.h"
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
-#if defined(__aarch64__)
-#include "arm_acle.h"
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+#include <arm_acle.h>
 #endif
 
 namespace starrocks {
@@ -164,8 +165,11 @@ using crc32c_sw_detail::crc32c_sw_u64;
 #endif
 
 inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
-#if defined(__x86_64__) && !defined(__SSE4_2__)
+#if (defined(__x86_64__) && !defined(__SSE4_2__))
     return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
+#else
+#if (defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32))
+    hash = ~starrocks::crc32c::Extend(~hash, (const char*)data, bytes);
 #else
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % 4 /*sizeof(uint32_t)*/;
@@ -175,7 +179,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     while (words--) {
 #if defined(__x86_64__)
         hash = _mm_crc32_u32(hash, unaligned_load<uint32_t>(p));
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cw(hash, unaligned_load<uint32_t>(p));
 #elif defined(__riscv)
         {
@@ -194,7 +198,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     while (bytes--) {
 #if defined(__x86_64__)
         hash = _mm_crc32_u8(hash, *p);
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cb(hash, *p);
 #elif defined(__riscv)
         hash = crc32c_sw_u8(hash, *p);
@@ -203,6 +207,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #endif
         ++p;
     }
+#endif
 
     // The lower half of the CRC hash has has poor uniformity, so swap the halves
     // for anyone who only uses the first several bits of the hash.
@@ -214,8 +219,10 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 // NOTE: don't use it, only for test purpose. please use the crc_hash_64 instead
 inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
+    // 1. Legacy x86 fallback (must remain unbroken single-stream CRC32)
     return crc32(hash, (const unsigned char*)data, length);
 #else
+    // 2. Everything else (ARM fallback + all hardware paths)
     if (UNLIKELY(length < 8)) {
         return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
@@ -224,11 +231,14 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
     uint64_t remainder = length % sizeof(uint64_t);
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
+
     while (words--) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #elif defined(__riscv)
         hash = crc32c_sw_u64(hash, unaligned_load<uint64_t>(p));
 #else
@@ -236,12 +246,15 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
 #endif
         p += sizeof(uint64_t);
     }
+
     if (remainder != 0) {
         p = end - 8;
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #elif defined(__riscv)
         hash = crc32c_sw_u64(hash, unaligned_load<uint64_t>(p));
 #else
