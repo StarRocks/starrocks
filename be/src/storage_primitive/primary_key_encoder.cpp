@@ -337,17 +337,16 @@ Status PrimaryKeyEncoder::check_delete_file_binary_column_size(const Column& col
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
-                                        PrimaryKeyEncodingType encoding_type, bool large_column) {
+                                        PrimaryKeyEncodingType encoding_type) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
         key_idxes[i] = i;
     }
-    return create_column(schema, pcolumn, key_idxes, encoding_type, large_column);
+    return create_column(schema, pcolumn, key_idxes, encoding_type);
 }
 
 Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* pcolumn,
-                                        const std::vector<ColumnId>& key_idxes, PrimaryKeyEncodingType encoding_type,
-                                        bool large_column) {
+                                        const std::vector<ColumnId>& key_idxes, PrimaryKeyEncodingType encoding_type) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
@@ -367,11 +366,7 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
             APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M)
 #undef M
         case TYPE_VARCHAR:
-            if (large_column) {
-                *pcolumn = LargeBinaryColumn::create();
-            } else {
-                *pcolumn = BinaryColumn::create();
-            }
+            *pcolumn = BinaryColumn::create();
             break;
         default:
             return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(type)));
@@ -379,11 +374,7 @@ Status PrimaryKeyEncoder::create_column(const Schema& schema, MutableColumnPtr* 
     } else {
         // composite keys encoding to binary
         // TODO(cbl): support fixed length encoded keys, e.g. (int32, int32) => int64
-        if (large_column) {
-            *pcolumn = LargeBinaryColumn::create();
-        } else {
-            *pcolumn = BinaryColumn::create();
-        }
+        *pcolumn = BinaryColumn::create();
     }
     return Status::OK();
 }
