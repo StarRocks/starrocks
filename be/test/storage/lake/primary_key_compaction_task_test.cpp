@@ -2634,7 +2634,11 @@ TEST_F(LakeCompactionStateTest, load_segments_uses_binary_column) {
         indexes[i] = i;
     }
 
-    // One load with three flushes, so the rowset has three segments.
+    // One load with three flushes, so the rowset has three segments. Load spill would instead spill each flush into a
+    // block and merge all blocks into one segment at finish, so turn it off for this load.
+    auto load_spill_backup = config::enable_load_spill;
+    config::enable_load_spill = false;
+    DeferOp restore_load_spill([&]() { config::enable_load_spill = load_spill_backup; });
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
