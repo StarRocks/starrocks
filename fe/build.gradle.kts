@@ -83,6 +83,7 @@ subprojects {
         set("spark.version", "3.5.7")
         set("staros.version", "4.2-rc5")
         set("thrift.version", "0.24.0")
+        set("zstd-jni.version", "1.5.7-6")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
         // var sync end
@@ -123,6 +124,7 @@ subprojects {
             implementation("com.github.luben:zstd-jni:${project.ext["luben.zstd.jni.version"]}")
             implementation("com.github.oshi:oshi-core:6.2.1")
             implementation("com.github.seancfoley:ipaddress:5.4.2")
+            implementation("com.github.luben:zstd-jni:${project.ext["zstd-jni.version"]}")
             implementation("com.google.cloud.bigdataoss:gcs-connector:${project.ext["gcs.connector.version"]}")
             implementation("com.google.code.gson:gson:2.8.9")
             implementation("com.google.guava:guava:32.0.1-jre")

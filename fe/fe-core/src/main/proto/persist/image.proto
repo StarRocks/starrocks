@@ -1,0 +1,99 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package starrocks.persist;
+
+option java_package = "com.starrocks.persist.proto";
+option java_multiple_files = true;
+option java_outer_classname = "ImageProto";
+
+// Container format of the FE metadata image, format version 3:
+//
+//   [MAGIC 8B][ImageHeaderPB][section 1]...[section N][FooterPB][4B len(FooterPB)][4B crc32]
+//
+// MAGIC, the two trailing big-endian 4-byte integers and the two messages defined here form the
+// skeleton of the file and are never compressed: ImageHeaderPB carries the compression algorithm,
+// so it must be readable before anything is decompressed, and FooterPB is the seek bootstrap point.
+// ImageHeaderPB is written length-delimited right after MAGIC; FooterPB is written raw and located
+// from the end of the file through len(FooterPB). The trailing crc32 covers [0, EOF-4).
+//
+// A section is written as one optional "manager message" (scalar state of the owning manager)
+// followed by any number of entries, all length-delimited. The manager message and the entries are
+// two independently decodable streams, so a loader can read the manager message on its own. Every
+// offset and length in the index is in on-disk (compressed) bytes; num_entries is a logical count.
+
+// Compression applied to section payloads. The manager message of a section and its entries are
+// each one zstd frame; frames are written with the zstd content checksum enabled, so decompressed
+// bytes are verified as well. The zero value means "not compressed", which keeps that switch
+// available without a special case.
+enum CompressionType {
+  COMPRESSION_NONE = 0;
+  COMPRESSION_ZSTD = 1;
+}
+
+// Checksum algorithm used both for the trailing whole-file checksum and for IndexEntryPB.crc32.
+enum ChecksumType {
+  CHECKSUM_UNSPECIFIED = 0;
+  CHECKSUM_CRC32 = 1;
+}
+
+// Encoding of the messages inside a section. Only protobuf exists today; the field is a hook for
+// future format evolution, and a reader skips sections whose format it does not recognize.
+enum PayloadFormat {
+  PAYLOAD_FORMAT_UNSPECIFIED = 0;
+  PAYLOAD_FORMAT_PB = 1;
+}
+
+// Container-level parameters. Written once, right after MAGIC.
+message ImageHeaderPB {
+  // Reserved. Always written as 0 today and ignored by readers. The container format generation
+  // (v3) is identified by MAGIC; this is deliberately not FeConstants.STARROCKS_META_VERSION,
+  // whose lifecycle is unrelated to the image container.
+  uint32 version = 1;
+  // Journal id this image corresponds to; the same value as in the file name image.<journal_id>.
+  int64 journal_id = 2;
+  ChecksumType checksum = 3;
+  CompressionType compression = 4;
+}
+
+// Index record of one section. Every section written to the image has one, even when it carries
+// no data: the index declares which sections this version of the writer knows about.
+message IndexEntryPB {
+  // Section type. Values are assigned from per-module numeric ranges (see SectionId) and are never
+  // reused; readers skip types they do not know.
+  uint32 type = 1;
+  // Format version of this section's payload. Readers skip sections newer than they understand.
+  uint32 version = 2;
+  PayloadFormat payload_format = 3;
+  // Absolute file offset of the section.
+  uint64 offset = 4;
+  // On-disk length of the whole section, manager message included.
+  uint64 length = 5;
+  // Number of entries in the section.
+  uint64 num_entries = 6;
+  // On-disk length of the manager message stream at the start of the section; 0 when the section
+  // has no manager message. The entries, when there are any, follow it and run to the end of the
+  // section as one stream.
+  uint64 manager_length = 7;
+  // Checksum of the section's on-disk bytes, used to locate corruption after the whole-file check
+  // fails. Explicitly optional: 0 is a valid checksum value, so presence must be distinguishable.
+  optional fixed32 crc32 = 8;
+}
+
+// The section index, in file order.
+message FooterPB {
+  repeated IndexEntryPB sections = 1;
+}
