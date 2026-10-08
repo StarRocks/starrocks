@@ -155,7 +155,6 @@ public class SqlCredentialRedactor {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
-    private static final String REDACTED_VALUE = "***";
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
@@ -225,10 +224,10 @@ public class SqlCredentialRedactor {
                 if (matcher.group(4) != null && matcher.group(5) != null) {
                     // Quoted value case
                     String valueQuote = matcher.group(4);
-                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + CredentialMask.SHORT + valueQuote;
                 } else {
                     // Unquoted value case
-                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+                    replacement = keyPrefix + key + keySuffix + " = " + CredentialMask.SHORT;
                 }
                 result.append(replacement);
             } else {
@@ -256,11 +255,11 @@ public class SqlCredentialRedactor {
             } else {
                 result.append(matcher.group(1)).append(plugin).append(matcher.group(3));
                 if (matcher.group(4) != null) {
-                    result.append('\'').append(REDACTED_VALUE).append('\'');
+                    result.append('\'').append(CredentialMask.SHORT).append('\'');
                 } else if (matcher.group(5) != null) {
-                    result.append('"').append(REDACTED_VALUE).append('"');
+                    result.append('"').append(CredentialMask.SHORT).append('"');
                 } else {
-                    result.append(REDACTED_VALUE);
+                    result.append(CredentialMask.SHORT);
                 }
             }
             lastEnd = matcher.end();
@@ -285,11 +284,11 @@ public class SqlCredentialRedactor {
 
             result.append(matcher.group(prefixGroup));
             if (matcher.group(singleQuotedGroup) != null) {
-                result.append('\'').append(REDACTED_VALUE).append('\'');
+                result.append('\'').append(CredentialMask.SHORT).append('\'');
             } else if (matcher.group(doubleQuotedGroup) != null) {
-                result.append('"').append(REDACTED_VALUE).append('"');
+                result.append('"').append(CredentialMask.SHORT).append('"');
             } else {
-                result.append(REDACTED_VALUE);
+                result.append(CredentialMask.SHORT);
             }
             if (suffixGroup > 0 && matcher.group(suffixGroup) != null) {
                 result.append(matcher.group(suffixGroup));
