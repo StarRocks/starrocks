@@ -450,7 +450,7 @@ void PrimaryKeyEncoder::encode(const Schema& schema, const Chunk& chunk, size_t 
 
 Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                           Column* dest) {
-    RETURN_ERROR_IF_FALSE(dest->is_binary() || dest->is_large_binary());
+    RETURN_ERROR_IF_FALSE(dest->is_binary());
     int ncol = schema.sort_key_idxes().size();
     std::vector<EncodeOp> ops(ncol);
     prepare_ops(schema, schema.sort_key_idxes(), chunk, &ops);
@@ -465,57 +465,29 @@ Status PrimaryKeyEncoder::encode_sort_key(const Schema& schema, const Chunk& chu
             break;
         }
     }
-    if (dest->is_binary()) {
-        auto& bdest = down_cast<BinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        std::string buff;
-        if (!has_nullable_sort_key) {
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    ops[j](offset + i, &buff);
-                }
-                bdest.append(buff);
+    auto& bdest = down_cast<BinaryColumn&>(*dest);
+    bdest.reserve(bdest.size() + len);
+    std::string buff;
+    if (!has_nullable_sort_key) {
+        for (size_t i = 0; i < len; i++) {
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                ops[j](offset + i, &buff);
             }
-        } else {
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    if (cols[j]->is_null(i)) {
-                        buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
-                    } else {
-                        buff.push_back(SORT_KEY_NORMAL_MARKER);
-                        ops[j](offset + i, &buff);
-                    }
-                }
-                bdest.append(buff);
-            }
+            bdest.append(buff);
         }
     } else {
-        auto& bdest = down_cast<LargeBinaryColumn&>(*dest);
-        bdest.reserve(bdest.size() + len);
-        std::string buff;
-        if (!has_nullable_sort_key) {
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
+        for (size_t i = 0; i < len; i++) {
+            buff.clear();
+            for (int j = 0; j < ncol; j++) {
+                if (cols[j]->is_null(i)) {
+                    buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
+                } else {
+                    buff.push_back(SORT_KEY_NORMAL_MARKER);
                     ops[j](offset + i, &buff);
                 }
-                bdest.append(buff);
             }
-        } else {
-            for (size_t i = 0; i < len; i++) {
-                buff.clear();
-                for (int j = 0; j < ncol; j++) {
-                    if (cols[j]->is_null(i)) {
-                        buff.push_back(SORT_KEY_NULL_FIRST_MARKER);
-                    } else {
-                        buff.push_back(SORT_KEY_NORMAL_MARKER);
-                        ops[j](offset + i, &buff);
-                    }
-                }
-                bdest.append(buff);
-            }
+            bdest.append(buff);
         }
     }
 
