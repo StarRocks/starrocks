@@ -435,10 +435,9 @@ TEST(FileColumnTest, test_put_mysql_row_buffer) {
     }
 }
 
-TEST(FileColumnTest, test_large_column_and_limits) {
+TEST(FileColumnTest, test_capacity_limits) {
     auto column = create_test_column();
 
-    ASSERT_FALSE(column->has_large_column());
     ASSERT_TRUE(column->capacity_limit_reached().ok());
     ASSERT_EQ(3, column->size());
     ASSERT_EQ(kRow0, column->debug_item(0));
