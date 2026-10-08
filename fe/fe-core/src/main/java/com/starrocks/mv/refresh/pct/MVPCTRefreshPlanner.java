@@ -28,8 +28,10 @@ import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.SyncPartitionUtils;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * Shared refresh-control flow for partitioned PCT refresh.
@@ -146,14 +148,20 @@ public final class MVPCTRefreshPlanner {
         if (!partitioner.getMvRefreshParams().isCanGenerateNextTaskRun() || !partitioner.isGenerateNextTaskRun()) {
             return;
         }
-        boolean hasUnsupportedTableTypeForAdaptiveRefresh = partitioner.getMv().getBaseTableTypes().stream()
-                .anyMatch(type -> !MVPCTRefreshPartitioner.isAdaptiveRefreshSupported(type));
-        if (hasUnsupportedTableTypeForAdaptiveRefresh) {
+        MaterializedView.PartitionRefreshStrategy refreshStrategy = partitioner.getMv().getPartitionRefreshStrategy();
+        List<String> unsupportedTablesForAdaptiveRefresh = partitioner.getMv().getBaseTables().stream()
+                .filter(table -> !MVPCTRefreshPartitioner.isAdaptiveRefreshSupported(table.getType()))
+                .map(table -> table.getName() + "(" + table.getType() + ")")
+                .collect(Collectors.toList());
+        if (!unsupportedTablesForAdaptiveRefresh.isEmpty()) {
+            if (refreshStrategy == MaterializedView.PartitionRefreshStrategy.ADAPTIVE) {
+                partitioner.getLogger().info("base tables {} do not support adaptive refresh, " +
+                        "fall back to STRICT refresh strategy", unsupportedTablesForAdaptiveRefresh);
+            }
             partitioner.filterPartitionByRefreshNumber(
                     mvToRefreshedPartitions, MaterializedView.PartitionRefreshStrategy.STRICT);
         } else {
-            partitioner.filterPartitionByRefreshNumber(
-                    mvToRefreshedPartitions, partitioner.getMv().getPartitionRefreshStrategy());
+            partitioner.filterPartitionByRefreshNumber(mvToRefreshedPartitions, refreshStrategy);
         }
         partitioner.getLogger().info("after filterPartitionByAdaptive, partitionsToRefresh: {}",
                 mvToRefreshedPartitions);
