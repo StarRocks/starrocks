@@ -40,6 +40,7 @@ import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceApiConverter {
+    private static final String CHILDREN = "children";
 
     /** Convert the schema read by Lance; never silently substitute a type or discard a field. */
     static List<Column> fromSchema(JsonObject schema) {
@@ -65,13 +66,13 @@ public class LanceApiConverter {
             case "list":
             case "largelist":
             case "fixedsizelist":
-                if (field.getAsJsonArray("children").size() != 1) {
+                if (field.getAsJsonArray(CHILDREN).size() != 1) {
                     throw new StarRocksConnectorException("Invalid Lance list field");
                 }
-                return new ArrayType(fromFieldType(field.getAsJsonArray("children").get(0).getAsJsonObject()));
+                return new ArrayType(fromFieldType(field.getAsJsonArray(CHILDREN).get(0).getAsJsonObject()));
             case "struct":
                 ArrayList<StructField> fields = new ArrayList<>();
-                for (JsonElement value : field.getAsJsonArray("children")) {
+                for (JsonElement value : field.getAsJsonArray(CHILDREN)) {
                     JsonObject child = value.getAsJsonObject();
                     fields.add(new StructField(child.get("name").getAsString(), fromFieldType(child)));
                 }
