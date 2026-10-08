@@ -51,6 +51,7 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataOutputViewStreamWrapper;
 import org.apache.paimon.table.source.DataSplit;
@@ -350,15 +351,12 @@ public class PaimonScanNode extends ScanNode {
         return hasFileColumn ? PaimonReaderMode.NATIVE : paimonReaderMode;
     }
 
-    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor, boolean indexedSplit,
+    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor,
                                              boolean forceJniReader, boolean jniReaderMode) {
         for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
             if (slot.getType().containsVariant()) {
                 String remediation;
-                if (indexedSplit) {
-                    remediation = "Remove the VARIANT column from the query; indexed splits currently require " +
-                            "the JNI reader.";
-                } else if (forceJniReader) {
+                if (forceJniReader) {
                     remediation = "Run SET paimon_force_jni_reader=false and retry. If the split still requires " +
                             "JNI, compact merge-on-read data or remove the VARIANT column from the query.";
                 } else if (jniReaderMode) {
@@ -370,7 +368,7 @@ public class PaimonScanNode extends ScanNode {
                 }
                 throw new StarRocksConnectorException(
                         "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
-                        "reader (merge-on-read data, system table, indexed split, paimon_reader_mode=JNI, or " +
+                        "reader (merge-on-read data, system table, paimon_reader_mode=JNI, or " +
                         "paimon_force_jni_reader=true). Reading " +
                         "VARIANT through the Paimon JNI reader is not yet supported. %s",
                         slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel(), remediation);
@@ -397,27 +395,33 @@ public class PaimonScanNode extends ScanNode {
         // Only uses for hasher in HDFSBackendSelector to select BE
         Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
         optionalDataSplit.ifPresent(dataSplit -> hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode())));
-        if (!optionalDataSplit.isPresent() || PaimonSplitUtils.isGlobalIndexSplit(split)) {
-            // paimon-cpp currently accepts DataSplit bytes only. Keep system-table and indexed
-            // splits on Paimon Java until the native IndexedSplit format is introduced.
+        if (!optionalDataSplit.isPresent()) {
+            // System-table splits do not have a native reader.
             paimonReaderMode = PaimonReaderMode.JNI;
+        } else if (PaimonSplitUtils.isGlobalIndexSplit(split) && paimonReaderMode == PaimonReaderMode.AUTO) {
+            // Raw-file scans discard index row ranges. paimon-cpp can deserialize the complete
+            // IndexedSplit and apply its row selection; explicit JNI remains a diagnostic option.
+            paimonReaderMode = PaimonReaderMode.NATIVE;
         }
 
-        // TODO We will change later
-        // Only an explicit NATIVE choice routes SDK splits to paimon-cpp; under AUTO they keep
-        // the legacy JNI reader.
+        // Ordinary SDK splits retain the legacy JNI reader under AUTO. IndexedSplit uses
+        // paimon-cpp by default so its row ranges are preserved.
         if (paimonReaderMode == PaimonReaderMode.NATIVE) {
             hdfsScanRange.setUse_paimon_jni_reader(false);
             hdfsScanRange.setUse_paimon_native_reader(true);
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-                ((DataSplit) split).serialize(new DataOutputViewStreamWrapper(outputStream));
+                DataOutputViewStreamWrapper output = new DataOutputViewStreamWrapper(outputStream);
+                if (split instanceof IndexedSplit) {
+                    ((IndexedSplit) split).serialize(output);
+                } else {
+                    ((DataSplit) split).serialize(output);
+                }
                 hdfsScanRange.setPaimon_split_info_binary(outputStream.toByteArray());
             } catch (IOException e) {
-                throw new RuntimeException("Failed to serialize Paimon data split", e);
+                throw new RuntimeException("Failed to serialize Paimon split", e);
             }
         } else {
-            checkJniReaderVariantSupport(desc, PaimonSplitUtils.isGlobalIndexSplit(split), forceJniReader,
-                    jniReaderMode);
+            checkJniReaderVariantSupport(desc, forceJniReader, jniReaderMode);
             hdfsScanRange.setUse_paimon_jni_reader(true);
             hdfsScanRange.setUse_paimon_native_reader(false);
         }

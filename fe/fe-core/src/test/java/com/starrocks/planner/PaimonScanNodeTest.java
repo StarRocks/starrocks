@@ -360,11 +360,11 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testSetupIndexedSplitUsesJniAndTracksPartition(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+    public void testSetupIndexedSplitUsesNativeAndTracksPartition(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table)
+            throws IOException {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
-        ctx.getSessionVariable().setPaimonReaderMode("NATIVE");
         ctx.setThreadLocalInfo();
         try {
             DataSplit dataSplit = createDataSplit();
@@ -389,9 +389,16 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange indexedRange = scanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertTrue(indexedRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(indexedRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(indexedRange.isSetPaimon_split_info_binary());
+            Assertions.assertFalse(indexedRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(indexedRange.isUse_paimon_native_reader());
+            Assertions.assertTrue(indexedRange.isSetPaimon_split_info_binary());
+            IndexedSplit decoded = IndexedSplit.deserialize(new DataInputViewStreamWrapper(
+                    new ByteArrayInputStream(indexedRange.getPaimon_split_info_binary())));
+            Assertions.assertEquals(dataSplit.snapshotId(), decoded.dataSplit().snapshotId());
+            Assertions.assertEquals(dataSplit.bucket(), decoded.dataSplit().bucket());
+            Assertions.assertEquals(1, decoded.rowRanges().size());
+            Assertions.assertEquals(0L, decoded.rowRanges().get(0).from);
+            Assertions.assertEquals(0L, decoded.rowRanges().get(0).to);
             Assertions.assertEquals(100L, indexedRange.getFile_length());
             Assertions.assertEquals(1, scanNode.getScanNodePredicates().getSelectedPartitionIds().size());
         } finally {
@@ -411,7 +418,7 @@ public class PaimonScanNodeTest {
             RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
                     () -> scanNode.addSDKSplitScanRangeLocations(
                             PaimonReaderMode.NATIVE, new FailingDataSplit(createDataSplit()), null, 200L));
-            Assertions.assertTrue(exception.getMessage().contains("Failed to serialize Paimon data split"));
+            Assertions.assertTrue(exception.getMessage().contains("Failed to serialize Paimon split"));
             Assertions.assertTrue(exception.getCause() instanceof IOException);
         } finally {
             ConnectContext.remove();
@@ -451,25 +458,33 @@ public class PaimonScanNodeTest {
         slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
         tuple.addSlot(slot);
         StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, false, false));
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, false));
         Assertions.assertTrue(e.getMessage().contains("VARIANT"));
         Assertions.assertTrue(e.getMessage().contains("Compact"));
         Assertions.assertFalse(e.getMessage().contains("global-index.enabled"));
     }
 
     @Test
-    public void testIndexedSplitVariantErrorDoesNotSuggestInapplicableRemediation() {
+    public void testIndexedSplitWithVariantUsesNativeReader(@Mocked PaimonTable table) {
         TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        tuple.setTable(table);
         SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
         slot.setType(com.starrocks.type.VariantType.VARIANT);
         slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
         tuple.addSlot(slot);
-        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, true, false, false));
-        Assertions.assertTrue(e.getMessage().contains("Remove the VARIANT column from the query"));
-        Assertions.assertTrue(e.getMessage().contains("indexed splits currently require the JNI reader"));
-        Assertions.assertFalse(e.getMessage().contains("global-index.enabled"));
-        Assertions.assertFalse(e.getMessage().contains("Compact"));
+        IndexedSplit split = new IndexedSplit(createDataSplit(), List.of(new Range(0L, 0L)), null);
+        PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), tuple, "XXX");
+        Assertions.assertDoesNotThrow(() -> scanNode.addSDKSplitScanRangeLocations(
+                PaimonReaderMode.AUTO, split, null, 100L));
+        THdfsScanRange range = scanNode.getScanRangeLocations(10).get(0).getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(range.isUse_paimon_native_reader());
+        Assertions.assertFalse(range.isUse_paimon_jni_reader());
+
+        // An explicit JNI choice remains available, but cannot read a VARIANT column.
+        PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), tuple, "XXX");
+        StarRocksConnectorException error = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 100L));
+        Assertions.assertTrue(error.getMessage().contains("VARIANT"));
     }
 
     @Test
@@ -480,7 +495,7 @@ public class PaimonScanNodeTest {
         slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
         tuple.addSlot(slot);
         StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, true, false));
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, true, false));
         Assertions.assertTrue(e.getMessage().contains("SET paimon_force_jni_reader=false"));
         Assertions.assertFalse(e.getMessage().contains("global-index.enabled"));
     }
@@ -493,7 +508,7 @@ public class PaimonScanNodeTest {
         slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
         tuple.addSlot(slot);
         StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, false, true));
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, true));
         Assertions.assertTrue(e.getMessage().contains("SET paimon_reader_mode=AUTO"));
         Assertions.assertFalse(e.getMessage().contains("SET paimon_force_jni_reader=false"));
     }
@@ -546,7 +561,7 @@ public class PaimonScanNodeTest {
         slot.setType(IntegerType.INT); // same constant PaimonColumnConverterTest asserts against
         slot.setColumn(new Column("i", IntegerType.INT));
         tuple.addSlot(slot);
-        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, false, false));
+        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false, false));
     }
 
     private static DataSplit createDataSplit() {
