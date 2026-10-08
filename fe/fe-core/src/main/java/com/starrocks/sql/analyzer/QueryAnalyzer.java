@@ -28,6 +28,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -720,6 +721,13 @@ public class QueryAnalyzer {
                 // External connector table has been pre-resolved in the unlocked phase.
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                }
+                // A resource-mapping Iceberg table is one object shared by every query, and it is planned without
+                // the meta lock (IcebergTable.isMetaLockTarget). Planning writes to the table it works on, so it
+                // works on a private copy. Taken before time travel binds, which reads the native table too.
+                if (table instanceof IcebergTable icebergTable
+                        && CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(icebergTable.getCatalogName())) {
+                    table = icebergTable.copyForQuery();
                 }
                 table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
@@ -2188,6 +2196,10 @@ public class QueryAnalyzer {
                         throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
                     }
                     tableRelation.setTable(table);
+                    // The masking / row-access policy lookup of this table runs under the lock, and would ask
+                    // the catalog for the database and the table again to build their TableUID.
+                    Authorizer.preResolvePolicyTarget(session,
+                            new TableName(catalogName, dbName, tableName.getTbl()), table);
                     if (table instanceof ConnectorView connectorView) {
                         // A view in an external catalog: same story as an internal one, its body is opaque
                         // until expansion. Capture it under the View the expansion will build for it.

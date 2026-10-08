@@ -198,12 +198,12 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
 
     /**
      * A resource-mapping table reports a resource_mapping_inside_catalog_* name, yet lives in an internal
-     * database and is rewritten in place by HiveTable.modifyTableSchema under lockDatabase(WRITE). This is the
-     * case that makes isMetaLockTarget() use !isExternalCatalog rather than isInternalCatalog -- the latter
-     * would answer false here and silently drop a load-bearing lock.
+     * database. The default isMetaLockTarget() would lock it (it uses !isExternalCatalog, not
+     * isInternalCatalog); HiveTable answers false itself, because a published HiveTable is never written in
+     * place -- a schema refresh swaps in new collections -- so the reference a query resolved is a snapshot.
      */
     @Test
-    public void testResourceMappingTableIsLockable() {
+    public void testResourceMappingTableIsNotALockTarget() {
         HiveTable table = HiveTable.builder()
                 .setId(1L)
                 .setTableName("tbl1")
@@ -214,7 +214,8 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
                 com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(
                         table.getCatalogName()));
         Assertions.assertFalse(com.starrocks.server.CatalogMgr.isInternalCatalog(table.getCatalogName()));
-        Assertions.assertTrue(table.isMetaLockTarget());
+        Assertions.assertFalse(com.starrocks.server.CatalogMgr.isExternalCatalog(table.getCatalogName()));
+        Assertions.assertFalse(table.isMetaLockTarget());
     }
 
     /**

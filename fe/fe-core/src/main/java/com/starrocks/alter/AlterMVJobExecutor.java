@@ -658,7 +658,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             try {
                 preResolvedActivateContext = GlobalStateMgr.getCurrentState().getAlterJobMgr()
                         .resolveActivate(mv, "", false);
-                preResolvedBaseTables = PreResolvedBaseTables.resolve(preResolvedActivateContext.baseTableInfos());
+                preResolvedBaseTables = PreResolvedBaseTables.resolveForActivation(
+                        preResolvedActivateContext.baseTableInfos());
             } catch (RuntimeException e) {
                 preResolvedActivateFailure = e;
             }

@@ -4812,7 +4812,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             Table tbl = getTable(db.getFullName(), hiveExternalTable);
             table = (HiveTable) tbl;
-            table.setNewFullSchema(columns);
+            table.replayModifyTableSchema(columns);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
