@@ -144,7 +144,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             if hasattr(self.case_info, "cleanup"):
                 for stmt in self.case_info.cleanup:
                     try:
-                        self.execute_single_statement(stmt, -1, False)
+                        self.execute_single_statement(stmt, -1, False, strict=True)
                     except Exception as e:
                         log.warning(f"cleanup stmt error: {e}")
                         cleanup_errors.append(str(e))
