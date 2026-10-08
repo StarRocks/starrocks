@@ -962,18 +962,12 @@ static bool can_bundle_meta_file_to_be_deleted(const BundleTabletMetaState& stat
     return state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED;
 }
 
-<<<<<<< HEAD
-static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
-        const std::string& meta_path, const std::vector<int64_t>& to_delete_tablet_ids) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
-=======
 // |to_delete_tablet_ids| must be sorted. If |present_tablet_ids| is not null, the tablets of
 // |to_delete_tablet_ids| found in the bundle are added to it.
 static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(const std::string& meta_path,
                                                                       const std::vector<int64_t>& to_delete_tablet_ids,
                                                                       std::unordered_set<int64_t>* present_tablet_ids) {
-    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_path));
->>>>>>> ad15561 ([BugFix] Bound lake delete_tablets bookkeeping by tablets plus versions (#80243))
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_path));
     // Read the entire file content into a string.
     ASSIGN_OR_RETURN(auto serialized_string, TabletManager::read_bundle_metadata_file_with_meter(
                                                      fs.get(), meta_path, /*skip_fill_local_cache=*/true));
