@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 #include <sys/types.h>
 
@@ -434,6 +435,14 @@ inline Status BitShufflePageDecoder<Type>::read_by_rowids(const ordinal_t first_
     }
     size_t total = *count;
     size_t read_count = 0;
+
+    // rowids are sorted (callers partition them per page with lower_bound), so checking the first
+    // element covers all of them. A violation means a caller bug; fail loudly instead of
+    // skipping, because callers pair the decoded values with per-rowid null flags.
+    if (UNLIKELY(total > 0 && rowids[0] < first_ordinal_in_page)) {
+        return Status::Corruption(
+                fmt::format("rowid {} precedes page first ordinal {}", rowids[0], first_ordinal_in_page));
+    }
 
     if constexpr (!std::is_same_v<CppType, bool>) {
         if (!column->is_nullable() && !column->is_constant()) {
