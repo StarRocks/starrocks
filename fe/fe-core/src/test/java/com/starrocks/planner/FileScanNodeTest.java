@@ -26,6 +26,7 @@ import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -475,6 +476,91 @@ public class FileScanNodeTest {
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(5).format_type);
         Assertions.assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 locationsList.get(0).scan_range.broker_scan_range.ranges.get(6).format_type);
+    }
+
+    @Test
+    public void testCsvWithEncloseOrEscapeIsNotSplit(@Mocked GlobalStateMgr globalStateMgr,
+                                                    @Mocked SystemInfoService systemInfoService,
+                                                    @Injectable Database db, @Injectable OlapTable table)
+            throws StarRocksException {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", IntegerType.BIGINT, true);
+        columns.add(c1);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
+        columns.add(c2);
+        List<String> columnNames = Lists.newArrayList("c1", "c2");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("c1");
+                result = columns.get(0);
+                table.getColumn("c2");
+                result = columns.get(1);
+            }
+        };
+
+        // Same files as case 0 of testCreateScanRangeLocations: without enclose/escape, file1 (512M+) is
+        // split into 3 ranges. With enclose or escape set, a row delimiter may sit inside a field, so each
+        // file must be read as a single range; different files are still assigned to different instances.
+        List<CsvFormat> csvFormats = Lists.newArrayList(
+                new CsvFormat((byte) '"', (byte) 0, 0, false),
+                new CsvFormat((byte) 0, (byte) '\\', 0, false),
+                new CsvFormat((byte) '"', (byte) '\\', 0, false));
+        for (CsvFormat csvFormat : csvFormats) {
+            List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+            List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+            DataDescription desc =
+                    new DataDescription("testTable", null, files, columnNames, null, null, null, false, null);
+            BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+            Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+            Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+            Deencapsulation.setField(brokerFileGroup, "csvFormat", csvFormat);
+            fileGroups.add(brokerFileGroup);
+
+            List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+            List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+            fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 536870968, true));
+            fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
+            fileStatusesList.add(fileStatusList);
+
+            DescriptorTable descTable = new DescriptorTable();
+            TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+            FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                    fileStatusesList, 2, WarehouseManager.DEFAULT_RESOURCE);
+            scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+            scanNode.init(descTable);
+            scanNode.finalizeStats();
+
+            List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+            Assertions.assertEquals(2, locationsList.size());
+            Map<String, TBrokerRangeDesc> rangeByFile = Maps.newHashMap();
+            for (TScanRangeLocations locations : locationsList) {
+                List<TBrokerRangeDesc> ranges = locations.scan_range.broker_scan_range.ranges;
+                Assertions.assertEquals(1, ranges.size());
+                rangeByFile.put(ranges.get(0).path, ranges.get(0));
+            }
+            TBrokerRangeDesc file1Range = rangeByFile.get("hdfs://127.0.0.1:9001/file1");
+            Assertions.assertEquals(0, file1Range.start_offset);
+            Assertions.assertEquals(536870968, file1Range.size);
+            TBrokerRangeDesc file2Range = rangeByFile.get("hdfs://127.0.0.1:9001/file2");
+            Assertions.assertEquals(0, file2Range.start_offset);
+            Assertions.assertEquals(268435400, file2Range.size);
+        }
     }
 
     @Test

@@ -593,8 +593,8 @@ public class FileScanNode extends LoadScanNode {
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
-                            && fileStatus.isSplitable) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance
+                    && isFileFormatSupportSplit(formatType, context.fileGroup) && fileStatus.isSplitable) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -634,9 +634,16 @@ public class FileScanNode extends LoadScanNode {
         }
     }
     
-    private boolean isFileFormatSupportSplit(TFileFormatType format) {
+    private boolean isFileFormatSupportSplit(TFileFormatType format, BrokerFileGroup fileGroup) {
         switch (format) {
             case FORMAT_CSV_PLAIN:
+                // A plain CSV file can only be split at arbitrary byte offsets when every row delimiter
+                // ends a row. Once enclose or escape is set, a row delimiter may be part of a field
+                // (enclosed, or preceded by the escape character), and a scanner that starts in the
+                // middle of the file cannot tell whether the first row delimiter it sees is a real row
+                // end. Reading such a file as a single range is the only way to keep its rows intact;
+                // different files are still assigned to different instances.
+                return fileGroup.getEnclose() == 0 && fileGroup.getEscape() == 0;
             case FORMAT_PARQUET:
             case FORMAT_ORC:
                 return true;
