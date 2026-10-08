@@ -21,7 +21,6 @@ import com.starrocks.load.Load;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,8 +60,8 @@ import java.util.List;
  * verbatim under the names the load reads them by.
  *
  * <p>Hadoop-side wiring (configuration build, broker → Hadoop file-status
- * conversion) is shared with the INSERT-from-FILES provider via
- * {@link PreSplitHadoopAccess}.
+ * conversion, concurrent footer reads) is shared with the INSERT-from-FILES
+ * provider via {@link PreSplitHadoopAccess}.
  */
 final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
 
@@ -89,10 +88,11 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
 
-        // Read every non-directory file's footer across all file groups. The
-        // pipeline picks K from total file bytes, so partial enumeration would
-        // bias the planner's quantile cuts.
-        List<RowGroupStatistics> aggregated = new ArrayList<>();
+        // Resolve every non-directory file's reader across all file groups. The pipeline picks K
+        // from total file bytes, so partial enumeration would bias the planner's quantile cuts.
+        // Format resolution runs first for every file: it touches no storage, so an unsupported
+        // format defers to the data tier without having paid for a single footer read.
+        List<PreSplitHadoopAccess.FooterRead> footerReads = new ArrayList<>();
         for (int groupIndex = 0; groupIndex < fileGroups.size(); groupIndex++) {
             BrokerFileGroup fileGroup = fileGroups.get(groupIndex);
             String declaredFormat = fileGroup.getFileFormat();
@@ -104,11 +104,11 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 // wins; otherwise the file extension), then pick the reader.
                 MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
                         Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
-                FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
+                footerReads.add(new PreSplitHadoopAccess.FooterRead(
+                        format, PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus)));
             }
         }
-        return aggregated;
+        return PreSplitHadoopAccess.readFooters(footerReads, hadoopConfig, sortKeyColumns, context.loadTimeZone());
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request)
