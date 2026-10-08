@@ -720,7 +720,7 @@ def choose_cases(record_mode=False):
 
     # Validate once during discovery, before workers execute the selected cases.
     if any("function: paimon_stage(" in str(case.sql) for case in cases.case_list):
-        paimon_fixture.load_manifest(cases.sr_lib_obj.paimon_fixture_root)
+        paimon_fixture.load_manifest(paimon_fixture.FIXTURE_ROOT)
 
     # log info: case list
     sr_sql_lib.self_print("case num: %s" % len(cases.case_list))

@@ -17,6 +17,8 @@ from pathlib import Path
 import re
 import subprocess
 
+FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "sql/test_paimon_catalog/data"
+
 
 def table_path(name):
     if not re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*", name):
@@ -98,7 +100,8 @@ class PaimonFixtureMixin:
     """Methods exposed to SQL-Tester via StarrocksSQLApiLib."""
 
     def _paimon_warehouse(self, run_id):
-        return warehouse_uri(self.oss_bucket, self.paimon_fixture_prefix, run_id)
+        prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")
+        return warehouse_uri(self.oss_bucket, prefix, run_id)
 
     def _paimon_oss(self, *args):
         # Use the runner's ossutil credentials, never put keys on the command line.
@@ -110,9 +113,7 @@ class PaimonFixtureMixin:
             raise RuntimeError("Paimon fixture OSS operation failed (%s): %s" % (args[0], result.stderr))
 
     def paimon_stage(self, run_id, tables):
-        if self.paimon_fixture_source != "repo":
-            raise ValueError("only paimon_fixture_source=repo is supported")
-        root = Path(self.paimon_fixture_root)
+        root = FIXTURE_ROOT
         # Full integrity validation runs during case discovery, before any uploads.
         manifest = json.loads((root / "MANIFEST.json").read_text())
         names = [name.strip() for name in tables.split(",")]
