@@ -325,6 +325,9 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const Schema& schema, PrimaryKe
 
 Status PrimaryKeyEncoder::check_delete_file_binary_column_size(const Column& column) {
     const auto* data_column = ColumnHelper::get_data_column(&column);
+    if (data_column->is_large_binary()) {
+        return Status::NotSupported("LargeBinaryColumn cannot be serialized with legacy BinaryColumn format");
+    }
     if (!data_column->is_binary()) {
         return Status::OK();
     }
