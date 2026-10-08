@@ -72,6 +72,7 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
                 insertFromFilesContext.wherePredicateSql(),
                 insertFromFilesContext.targetToSourceColumnNames(),
                 insertFromFilesContext.targetToConstantSql(),
+                insertFromFilesContext.targetToExpressionSql(),
                 files.scannedBytes(),
                 files.partitionSourceBytes());
     }
@@ -79,12 +80,14 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
     /**
      * A partition source is read from the path when the FILES column that feeds it is one of the
      * {@code columns_from_path} columns. An empty mapping means the projection is name-identity; a
-     * partition source fed by a literal has no FILES column at all, so it is never read from the path.
+     * partition source fed by a literal has no FILES column at all, and one computed from FILES
+     * columns is not the raw path value, so neither is ever read from the path.
      */
     private static PathPartitionValues pathPartitionValues(
             TableFunctionTable sourceTable, InsertFromFilesScanContext context, SampleRequest request) {
         List<Column> partitionSources = request.getPartitionSourceColumns();
-        if (context.targetToSourceColumnNames().isEmpty() && context.targetToConstantSql().isEmpty()) {
+        if (context.targetToSourceColumnNames().isEmpty() && context.targetToConstantSql().isEmpty()
+                && context.targetToExpressionSql().isEmpty()) {
             return PathPartitionValues.of(sourceTable.getColumnsFromPath(), partitionSources);
         }
         List<String> sourceNames = InsertSelectSourceColumns.lookup(partitionSources, context.targetToSourceColumnNames());

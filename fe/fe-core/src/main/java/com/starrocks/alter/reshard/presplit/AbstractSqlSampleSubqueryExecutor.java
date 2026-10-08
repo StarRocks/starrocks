@@ -305,12 +305,41 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private static int findProjectionOrdinal(List<String> projectedIdents, String candidate) {
         for (int ordinal = 0; ordinal < projectedIdents.size(); ordinal++) {
-            // The SQL expression can contain case-sensitive string literals.
-            if (projectedIdents.get(ordinal).equals(candidate)) {
+            if (sameProjection(projectedIdents.get(ordinal), candidate)) {
                 return ordinal;
             }
         }
         return -1;
+    }
+
+    /**
+     * Quoted identifiers match case-insensitively, as column names do. Any other projection -- a cast
+     * literal or a computed expression -- must match exactly: a string literal inside it is data, so
+     * {@code concat('A', x)} and {@code concat('a', x)} are different values.
+     */
+    private static boolean sameProjection(String projected, String candidate) {
+        return isQuotedIdentifier(projected) && isQuotedIdentifier(candidate)
+                ? projected.equalsIgnoreCase(candidate)
+                : projected.equals(candidate);
+    }
+
+    private static boolean isQuotedIdentifier(String projection) {
+        int closingQuote = projection.length() - 1;
+        if (closingQuote < 1 || projection.charAt(0) != '`' || projection.charAt(closingQuote) != '`') {
+            return false;
+        }
+        int index = 1;
+        while (index < closingQuote) {
+            if (projection.charAt(index) == '`') {
+                if (index + 1 == closingQuote || projection.charAt(index + 1) != '`') {
+                    return false;
+                }
+                index += 2;
+            } else {
+                index++;
+            }
+        }
+        return true;
     }
 
     private static String buildSampleSqlFromProjection(

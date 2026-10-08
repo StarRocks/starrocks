@@ -363,6 +363,28 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
+    @Test
+    void computedSortKeyColumnFallsBackToDataTier() throws Exception {
+        // sort_key = sort_key + 1: the file carries a like-named field whose footer min/max reads
+        // fine, but it describes the raw column, not the value the load writes.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        List<Column> sortKey = List.of(new Column("sort_key", IntegerType.BIGINT));
+        SampleRequest mixed = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null, Map.of(),
+                        Map.of("sort_key", "`sort_key` + 1")),
+                sortKey, Long.MAX_VALUE, /*seed=*/ 0L);
+        // Every output computed leaves the column mapping EMPTY, which alone reads as name-identity.
+        SampleRequest onlyComputed = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of(), /*wherePredicateSql=*/ null, Map.of(), Map.of("sort_key", "`sort_key` + 1")),
+                sortKey, Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(mixed));
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(onlyComputed));
+    }
+
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
         return PresplitTestSupport.writeParquetFixture(
                 tempDirectory,

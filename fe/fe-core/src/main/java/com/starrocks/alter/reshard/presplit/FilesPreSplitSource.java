@@ -39,7 +39,8 @@ import java.util.Map;
  * INSERT-from-FILES pre-split source. Matches {@code INSERT INTO target SELECT ... FROM FILES(...)}
  * for every projection shape the sampler can reproduce in its own
  * {@code SELECT <key> FROM FILES(<verbatim properties>)} sub-query: a bare star, an explicit column
- * list, expressions on non-key columns, and an optional WHERE clause. {@link #prepare} triggers
+ * list, expressions on non-key columns, safe deterministic expressions on key columns
+ * ({@code date_trunc('day', ts) AS dt}), and an optional WHERE clause. {@link #prepare} triggers
  * FILES() schema inference, gates the WHERE predicate, maps the projection onto the target with
  * {@link InsertSelectSourceColumns}, and builds an {@link InsertFromFilesScanContext} for the
  * shared flow.
@@ -92,10 +93,12 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
         // resolveUngated, not resolve: the gates are applied below so an UNFED sampled column can be
         // attributed, instead of being folded into resolve()'s undifferentiated projection-SHAPE null.
+        // The data tier evaluates its projections over the same FILES() rows, so a safe computed key
+        // is admitted, folded in the user's context like the WHERE clause above.
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
                 insertStmt, selectRelation, target, sourceTable,
                 filesRelation.getName(), /*sourceAlias*/ null,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
         if (resolved == null) {
             return null;
         }
@@ -129,7 +132,7 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         InsertFromFilesScanContext scanContext =
                 new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
                         context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql,
-                        resolved.targetToConstantSql());
+                        resolved.targetToConstantSql(), resolved.targetToExpressionSql());
         // Deliberately the WHOLE file byte total even when a predicate narrows the load: FILES()
         // exposes no row count, so the data tier has no denominator to turn its observed hit ratio
         // into a filtered size the way the table path does. Sizing from the full input can only
