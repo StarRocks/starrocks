@@ -1,6 +1,6 @@
 -- name: test_paimon_filesystem_catalog
 
-function: paimon_stage("${uuid0}", "paimon_test.image_blob,paimon_test.image_blob_desc,paimon_test.image_blob_view,paimon_test.scalar_types,paimon_test.variant_basic")
+function: paimon_stage("${oss_bucket}", "${uuid0}", "paimon_test.image_blob,paimon_test.image_blob_desc,paimon_test.image_blob_view,paimon_test.scalar_types,paimon_test.variant_basic")
 function: create_paimon_catalog("paimon_filesystem_catalog_${uuid0}", "filesystem", "${uuid0}")
 
 -- c_ts_ltz (TIMESTAMP WITH LOCAL TIME ZONE) renders in the session time zone; pin it.
@@ -42,6 +42,7 @@ select * from image_blob_view order by id;
 set paimon_reader_mode = jni;
 [ORDER]select * from scalar_types order by 1;
 
+function: paimon_cleanup()
 CLEANUP {
-function: paimon_cleanup("paimon_filesystem_catalog_${uuid0}", "${uuid0}")
+function: paimon_cleanup()
 } END CLEANUP
