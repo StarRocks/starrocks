@@ -90,10 +90,14 @@ public class MysqlCapability {
     private static final EnumSet<Flag> FLAG_SET = EnumSet.allOf(Flag.class);
 
     // Protocol::ColumnDefinition41 Flags uses two byte integer, so CLIENT_LONG_FLAG should be set.
+    // CLIENT_MULTI_RESULTS lets the server return more than one result set for a single query, which
+    // compliant drivers (e.g. MySQL Connector/J) only enable when the server advertises it. It is
+    // required for the optional query_id trailing result set (see enable_return_query_id).
     private static final int DEFAULT_FLAGS = Flag.CLIENT_PROTOCOL_41.getFlagBit()
             | Flag.CLIENT_CONNECT_WITH_DB.getFlagBit() | Flag.CLIENT_SECURE_CONNECTION.getFlagBit()
             | Flag.CLIENT_PLUGIN_AUTH.getFlagBit() | Flag.CLIENT_LONG_FLAG.getFlagBit()
-            | Flag.CLIENT_CONNECT_ATTRS.getFlagBit() | Flag.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA.getFlagBit();
+            | Flag.CLIENT_CONNECT_ATTRS.getFlagBit() | Flag.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA.getFlagBit()
+            | Flag.CLIENT_MULTI_RESULTS.getFlagBit();
     public static final MysqlCapability DEFAULT_CAPABILITY = new MysqlCapability(DEFAULT_FLAGS);
 
     private int flags;
@@ -129,6 +133,10 @@ public class MysqlCapability {
 
     public boolean isDeprecateEof() {
         return (flags & Flag.CLIENT_DEPRECATE_EOF.getFlagBit()) != 0;
+    }
+
+    public boolean isMultiResults() {
+        return (flags & Flag.CLIENT_MULTI_RESULTS.getFlagBit()) != 0;
     }
 
     public boolean isProtocol41() {

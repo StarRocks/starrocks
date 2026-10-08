@@ -267,6 +267,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String ENABLE_RETURN_QUERY_ID = "enable_return_query_id";
     public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
@@ -1494,6 +1495,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    // When true, the server appends a trailing result set holding this query's query_id after the
+    // query's own result, so a client can read it in the same round trip (JDBC Statement.getMoreResults()
+    // / pymysql cursor.nextset()) instead of a separate, pool-unsafe SELECT last_query_id(). Opt-in; off
+    // by default so existing clients are unaffected. Requires the server to advertise CLIENT_MULTI_RESULTS.
+    @VariableMgr.VarAttr(name = ENABLE_RETURN_QUERY_ID)
+    private boolean enableReturnQueryId = false;
 
     // When true and a profile is built for the query, the EXPLAIN COSTS text
     // of the executed plan is embedded in the profile's Summary section.
@@ -4315,6 +4323,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableProfile() {
         return enableProfile;
+    }
+
+    public boolean isEnableReturnQueryId() {
+        return enableReturnQueryId;
     }
 
     public void setEnableProfile(boolean enableProfile) {
