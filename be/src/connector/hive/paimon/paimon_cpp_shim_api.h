@@ -34,4 +34,8 @@ class HdfsScanner;
 #define STARROCKS_PAIMON_CREATE_SCANNER_SYMBOL "starrocks_paimon_create_scanner"
 using StarRocksPaimonCreateScannerFn = starrocks::HdfsScanner* (*)();
 
+// Creates the virtual-table scanner used for distributed global-index evaluation.
+#define STARROCKS_PAIMON_CREATE_GLOBAL_INDEX_SCANNER_SYMBOL "starrocks_paimon_create_global_index_scanner"
+using StarRocksPaimonCreateGlobalIndexScannerFn = starrocks::HdfsScanner* (*)();
+
 } // namespace starrocks

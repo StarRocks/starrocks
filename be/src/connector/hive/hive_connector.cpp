@@ -931,6 +931,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = new CacheSelectScanner();
     } else if (_scanner_ctx.format_scan_context.options.use_partition_column_value_only) {
         scanner = new HdfsPartitionScanner();
+    } else if (scan_range.__isset.paimon_global_index_scan_range) {
+        // The virtual index table uses the Paimon descriptor for cloud credentials and
+        // table metadata, but has its own result-producing scanner.
+        ASSIGN_OR_RETURN(scanner, create_paimon_global_index_scanner());
     } else if (use_paimon_native_reader) {
         // Loads the paimon-cpp shim on first use; fails the query with an
         // actionable error (suggesting paimon_reader_mode='JNI') when the

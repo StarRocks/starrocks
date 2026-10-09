@@ -40,6 +40,9 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
@@ -100,6 +103,8 @@ import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.fs.Path;
+import org.apache.paimon.globalindex.GlobalIndexResult;
+import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
@@ -140,6 +145,7 @@ import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.JsonSerdeUtil;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.apache.paimon.utils.SerializationUtils;
 import org.apache.paimon.utils.SnapshotManager;
 import org.assertj.core.api.Assertions;
@@ -166,6 +172,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1045,6 +1052,118 @@ public class PaimonMetadataTest {
 
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
+    }
+
+    @Test
+    public void testSnapshotBoundGlobalIndexResultToIndexedSplit() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_global_index_");
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            Schema schema = Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("payload", DataTypes.STRING())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true")
+                    .build();
+            Identifier identifier = Identifier.create("test_db", "indexed_table");
+            catalog.createTable(identifier, schema, false);
+
+            PaimonMetadata localMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable starRocksTable =
+                    (PaimonTable) localMetadata.getTable(connectContext, "test_db", "indexed_table");
+            List<String> fields = List.of("id", "payload");
+
+            GetRemoteFilesParams emptyParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(-1L))
+                    .build();
+            List<Split> emptySplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, emptyParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertTrue(emptySplits.isEmpty());
+
+            org.apache.paimon.table.Table table = catalog.getTable(identifier);
+            BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder();
+            try (BatchTableWrite write = writeBuilder.newWrite()) {
+                write.write(GenericRow.of(1, BinaryString.fromString("one")));
+                write.write(GenericRow.of(2, BinaryString.fromString("two")));
+                try (BatchTableCommit commit = writeBuilder.newCommit()) {
+                    commit.commit(write.prepareCommit());
+                }
+            }
+
+            long snapshotId = table.latestSnapshot().orElseThrow().id();
+            ConnectorIndexMetadata indexMetadata = localMetadata.getIndexMetadata(starRocksTable);
+            assertTrue(indexMetadata.isEmpty());
+            assertTrue(localMetadata.getIndexShards(
+                    starRocksTable, -1L, Map.of("id", ConnectorIndexType.RANGE)).isEmpty());
+            assertTrue(localMetadata.getIndexShards(
+                    starRocksTable, snapshotId, Map.of()).isEmpty());
+            List<ConnectorIndexShard> uncoveredShards = localMetadata.getIndexShards(
+                    starRocksTable, snapshotId, Map.of("id", ConnectorIndexType.RANGE));
+            assertTrue(uncoveredShards.isEmpty());
+
+            GetRemoteFilesParams disabledIndexParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .setDisableGlobalIndex(true)
+                    .build();
+            List<Split> disabledIndexSplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, disabledIndexParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertFalse(disabledIndexSplits.isEmpty());
+            assertTrue(disabledIndexSplits.stream().allMatch(DataSplit.class::isInstance));
+            assertEquals(2L, PaimonMetadata.getRowCount(disabledIndexSplits));
+
+            RoaringNavigableMap64 selectedRows = new RoaringNavigableMap64();
+            selectedRows.add(0L);
+            PaimonGlobalIndexResult indexResult = new PaimonGlobalIndexResult(
+                    snapshotId, GlobalIndexResult.create(selectedRows));
+            GetRemoteFilesParams indexedParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .setConnectorIndexResult(indexResult)
+                    .build();
+
+            List<Split> indexedSplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, indexedParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertFalse(indexedSplits.isEmpty());
+            assertTrue(indexedSplits.stream().allMatch(IndexedSplit.class::isInstance));
+            assertEquals(1L, PaimonMetadata.getRowCount(indexedSplits));
+            assertTrue(indexedSplits.stream()
+                    .map(IndexedSplit.class::cast)
+                    .allMatch(split -> split.dataSplit().snapshotId() == snapshotId));
+
+            GetRemoteFilesParams staleResultParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .setConnectorIndexResult(new PaimonGlobalIndexResult(
+                            snapshotId + 1, GlobalIndexResult.create(selectedRows)))
+                    .build();
+            List<Split> staleResultSplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, staleResultParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertTrue(staleResultSplits.stream().allMatch(DataSplit.class::isInstance));
+            assertEquals(2L, PaimonMetadata.getRowCount(staleResultSplits));
+
+            GetRemoteFilesParams fallbackParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .build();
+            List<Split> fallbackSplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, fallbackParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertFalse(fallbackSplits.isEmpty());
+            assertTrue(fallbackSplits.stream().allMatch(DataSplit.class::isInstance));
+            assertEquals(2L, PaimonMetadata.getRowCount(fallbackSplits));
+
+            catalog.dropTable(identifier, true);
+            catalog.dropDatabase("test_db", true, true);
+        }
         Files.delete(tmpDir);
     }
 

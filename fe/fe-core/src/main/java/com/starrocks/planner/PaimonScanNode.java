@@ -26,7 +26,10 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.PaimonGlobalIndexService;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -130,21 +133,52 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
+        setupScanRangeLocations(tupleDescriptor, predicate, limit, null);
+    }
+
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit,
+                                        @Nullable IndexCondition indexCondition) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+        int globalIndexScanStage = ConnectContext.get().getSessionVariable().getPaimonGlobalIndexScanStage();
+        boolean disableGlobalIndex = globalIndexScanStage == 0;
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
                 .setLimit(limit)
+                .setDisableGlobalIndex(disableGlobalIndex)
                 .build();
+        long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
+        if (globalIndexScanStage == 2 && indexCondition != null
+                && !indexCondition.getRequiredIndexes().isEmpty() && snapshotId >= 0) {
+            try {
+                params.setConnectorIndexResult(
+                        new PaimonGlobalIndexService(paimonTable, indexCondition, snapshotId).evaluate());
+            } catch (RuntimeException e) {
+                // Index execution is an optimization. The original predicate is still attached to
+                // the normal scan, so failure safely falls back to Paimon's regular split planning.
+                LOG.warn("Failed to evaluate Paimon Global Index at snapshot {}; falling back to a normal scan",
+                        snapshotId, e);
+            }
+        }
         List<RemoteFileInfo> fileInfos;
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
-            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        try {
+            fileInfos = getRemoteFiles(params);
+        } catch (RuntimeException e) {
+            if (params.getConnectorIndexResult() == null) {
+                throw e;
+            }
+            // Applying the row-id result is part of the optional index path too. Retry without it
+            // if Paimon rejects the result or an IndexedSplit cannot be planned.
+            LOG.warn("Failed to apply Paimon Global Index result at snapshot {}; "
+                    + "falling back to a normal scan", snapshotId, e);
+            GetRemoteFilesParams fallbackParams = params.copy();
+            fallbackParams.setConnectorIndexResult(null);
+            fileInfos = getRemoteFiles(fallbackParams);
         }
 
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        PaimonSplitsInfo splitsInfo = getSplitsInfo(fileInfos);
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
@@ -162,28 +196,37 @@ public class PaimonScanNode extends ScanNode {
         paimonReaderMode = resolveAutoReaderModeForFileColumns(tupleDescriptor, paimonReaderMode);
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            if (split instanceof DataSplit dataSplit) {
-                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-                if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
-                    List<RawFile> rawFiles = optionalRawFiles.get();
-                    boolean supportedDataFileFormat =
-                            rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
-                    if (supportedDataFileFormat) {
-                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
-                        for (int i = 0; i < rawFiles.size(); i++) {
-                            if (deletionFiles.isPresent()) {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
-                            } else {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+            Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+            if (optionalDataSplit.isPresent()) {
+                DataSplit dataSplit = optionalDataSplit.get();
+                if (PaimonSplitUtils.isGlobalIndexSplit(split)) {
+                    // IndexedSplit row ranges must stay attached to the SDK split. The Java reader
+                    // can consume them directly; raw-file conversion would lose the row selection.
+                    long totalFileLength = getTotalFileLength(dataSplit);
+                    addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, totalFileLength);
+                } else {
+                    Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                    if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
+                        List<RawFile> rawFiles = optionalRawFiles.get();
+                        boolean supportedDataFileFormat =
+                                rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                        if (supportedDataFileFormat) {
+                            Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                            for (int i = 0; i < rawFiles.size(); i++) {
+                                if (deletionFiles.isPresent()) {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                                } else {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                                }
                             }
+                        } else {
+                            long totalFileLength = getTotalFileLength(dataSplit);
+                            addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
                         addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                     }
-                } else {
-                    long totalFileLength = getTotalFileLength(dataSplit);
-                    addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                 }
                 selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
             } else {
@@ -196,6 +239,21 @@ public class PaimonScanNode extends ScanNode {
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
         traceReaderMetrics();
         traceDeletionVectorMetrics();
+    }
+
+    private List<RemoteFileInfo> getRemoteFiles(GetRemoteFilesParams params) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL,
+                paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        }
+    }
+
+    private static PaimonSplitsInfo getSplitsInfo(List<RemoteFileInfo> fileInfos) {
+        if (fileInfos.isEmpty() || fileInfos.get(0).getFiles().isEmpty()) {
+            throw new StarRocksConnectorException("Paimon metadata returned no RemoteFileInfo descriptor");
+        }
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+        return remoteFileDesc.getPaimonSplitsInfo();
     }
 
     private void traceReaderMetrics() {
@@ -362,10 +420,11 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setLength(totalFileLength);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
         // Only uses for hasher in HDFSBackendSelector to select BE
-        if (split instanceof DataSplit dataSplit) {
-            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
-        } else {
-            // For splits that are not DataSplit, we have to fall back to JNI
+        Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+        optionalDataSplit.ifPresent(dataSplit -> hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode())));
+        if (!optionalDataSplit.isPresent() || PaimonSplitUtils.isGlobalIndexSplit(split)) {
+            // paimon-cpp currently accepts DataSplit bytes only. Keep system-table and indexed
+            // splits on Paimon Java until the native IndexedSplit format is introduced.
             paimonReaderMode = PaimonReaderMode.JNI;
         }
 

@@ -77,6 +77,29 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testPaimonGlobalIndexScanStage() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(1, sessionVariable.getPaimonGlobalIndexScanStage());
+
+        for (int stage = 0; stage <= 2; stage++) {
+            String converted = VariableVarConverters.convert(
+                    SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, String.valueOf(stage));
+            Assertions.assertEquals(String.valueOf(stage), converted);
+            sessionVariable.setPaimonGlobalIndexScanStage(Integer.parseInt(converted));
+            Assertions.assertEquals(stage, sessionVariable.getPaimonGlobalIndexScanStage());
+        }
+
+        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
+                SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, "-1"));
+        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
+                SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, "3"));
+        Assertions.assertThrows(DdlException.class, () -> VariableVarConverters.convert(
+                SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, "invalid"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setPaimonGlobalIndexScanStage(3));
+    }
+
+    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();
