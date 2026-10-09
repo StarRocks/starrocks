@@ -82,22 +82,7 @@ under the License.
         <async-profiler.version>4.0</async-profiler.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
-<<<<<<< HEAD
-        <lz4-java.version>1.10.1</lz4-java.version>
-=======
         <lz4-java.version>1.11.4</lz4-java.version>
-        <async-profiler.version>4.0</async-profiler.version>
-        <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
-        <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
-             (ASM frame merge AIOOBE on delta-kernel Metadata, VerifyError on iceberg REST catalog
-             classes). 1.49.4 cannot redefine sealed JDK classes (java.net.InetAddress on JDK 19+),
-             so tests must not JMockit-mock those; use Mockito for them instead. -->
-        <jmockit.version>1.49.4</jmockit.version>
-        <!-- Mockito 5.x ships a Byte Buddy that understands Java 21 class files;
-             keep byte-buddy and byte-buddy-agent on the version mockito-core declares -->
-        <mockito.version>5.23.0</mockito.version>
-        <bytebuddy.version>1.17.7</bytebuddy.version>
->>>>>>> 5ea19aa ([BugFix][CVE] bump lz4-java to 1.11.4 (#80319))
         <bouncycastle.version>1.86</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
         <httpclient5.version>5.6.4</httpclient5.version>
