@@ -92,7 +92,6 @@ using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;
 using Decimal256Column = DecimalV3Column<int256_t>;
 using BinaryColumn = BinaryColumnBase<uint32_t>;
-using LargeBinaryColumn = BinaryColumnBase<uint64_t>;
 
 class ColumnVisitor;
 class ColumnVisitorMutable;

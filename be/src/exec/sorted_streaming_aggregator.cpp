@@ -91,9 +91,6 @@ public:
 
         return Status::OK();
     }
-    Status do_visit(const LargeBinaryColumn& column) {
-        return Status::NotSupported("Unsupported large binary column in column wise comparator");
-    }
 
     // For types with expensive comparison operations, always check the previous comparison result
     // in _cmp_vector before performing the current comparison.
