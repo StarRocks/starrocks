@@ -700,13 +700,6 @@ PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
     EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
 }
 
-PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("foo"); // 3 bytes
-    col->append_string("bar"); // 3 bytes
-    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
-}
-
 // ---- append(const Column& src, size_t offset, size_t count) ----
 
 // Same type: BinaryColumn -> BinaryColumn
@@ -716,30 +709,6 @@ PARALLEL_TEST(BinaryColumnTest, test_append_same_type_binary) {
     dst->append(*src, 1, 2); // append "bb", "cc"
 
     EXPECT_EQ("['xx', 'bb', 'cc']", dst->debug_string());
-}
-
-// Same type: LargeBinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_same_type_large_binary) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("aa");
-    src->append_string("bb");
-    src->append_string("cc");
-
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("xx");
-    dst->append(*src, 0, 2); // append "aa", "bb"
-
-    EXPECT_EQ("['xx', 'aa', 'bb']", dst->debug_string());
-}
-
-// Cross type: BinaryColumn -> LargeBinaryColumn
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_binary_to_large) {
-    auto src = ColumnTestHelper::build_column<Slice>({"hello", "world", "foo"});
-    auto dst = LargeBinaryColumn::create();
-    dst->append_string("bar");
-    dst->append(*src, 1, 2); // append "world", "foo"
-
-    EXPECT_EQ("['bar', 'world', 'foo']", dst->debug_string());
 }
 
 // Append from offset=0 into an empty dst
@@ -760,10 +729,10 @@ PARALLEL_TEST(BinaryColumnTest, test_append_zero_count) {
     EXPECT_EQ("['y']", dst->debug_string());
 }
 
-// Cross type (unsupported): LargeBinaryColumn -> BinaryColumn must be rejected.
-PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupported) {
-    auto src = LargeBinaryColumn::create();
-    src->append_string("hello");
+// Cross type (unsupported): a non-binary column -> BinaryColumn must be rejected.
+PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_non_binary_unsupported) {
+    auto src = Int32Column::create();
+    src->append(1);
     auto dst = BinaryColumn::create();
     dst->append_string("bar");
     ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
