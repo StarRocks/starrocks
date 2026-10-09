@@ -22,8 +22,13 @@ namespace starrocks {
 class MemSpaceMonitor {
 public:
     MemSpaceMonitor(DataCache* datacache) : _datacache(datacache) {}
+    // Stops the monitor thread if it is still running, so destroying a started monitor
+    // without an explicit stop() (e.g. exit(1) during BE startup) never terminates.
+    ~MemSpaceMonitor();
 
+    // Idempotent: a second start() on a running monitor is a no-op.
     void start();
+    // Idempotent: safe to call before start() or more than once.
     void stop();
 
 private:
@@ -32,6 +37,7 @@ private:
 
     DataCache* _datacache = nullptr;
     std::thread _adjust_datacache_thread;
-    std::atomic<bool> _stopped = false;
+    // Starts as stopped; start() flips it to false before spawning the thread.
+    std::atomic<bool> _stopped = true;
 };
 } // namespace starrocks
