@@ -29,9 +29,14 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionAlreadyCommitException;
+import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import io.netty.handler.codec.http.DefaultHttpHeaders;
@@ -45,6 +50,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class StreamLoadMultiStmtTaskTest {
     private Database db;
@@ -713,6 +719,233 @@ public class StreamLoadMultiStmtTaskTest {
         Assertions.assertTrue(resp.stateOK());
         Assertions.assertEquals("COMMITED", multiTask.getStateName());
         Assertions.assertEquals("COMMITED", sub.getStateName());
+    }
+
+    // Mocks a commit that reaches commitStmt: every sub-task dispatches its channel, its coordinator
+    // finishes and its load is added to the transaction. commitStmt is replaced by commitStmtBehavior.
+    private void mockCommitUpToCommitStmt(long txnId, Consumer<com.starrocks.qe.ConnectContext> commitStmtBehavior) {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(txnId);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+            }
+
+            @Mock
+            public void commitStmt(com.starrocks.qe.ConnectContext context,
+                                   com.starrocks.sql.ast.txn.CommitStmt stmt) {
+                commitStmtBehavior.accept(context);
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(TransactionResult resp) {
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+        };
+    }
+
+    // Like TransactionStmtExecutor.commitStmt when the commit fails: it reports the error through the
+    // context state and resets the context's txnId (it also clears the explicit transaction state, which
+    // these tests never create).
+    private static Consumer<com.starrocks.qe.ConnectContext> commitStmtFailsWith(String error) {
+        return ctx -> {
+            ctx.getState().setError(error);
+            ctx.setTxnId(0);
+        };
+    }
+
+    // Fakes the transaction manager's view of the transaction: getTransactionState returns txnState, and
+    // abortTransaction, after failing its first failedAborts calls, behaves like DatabaseTransactionMgr's:
+    // it aborts a PREPARE or PREPARED transaction and throws for a committed or final one. Every call is
+    // recorded in aborts as "txnId:reason", and the tablets it is passed in abortedTablets.
+    private void fakeTxnManager(TransactionState txnState, int failedAborts, List<String> aborts,
+                                List<TabletCommitInfo> abortedTablets) {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason,
+                                         List<TabletCommitInfo> finishedTablets,
+                                         List<TabletFailInfo> failedTablets,
+                                         TxnCommitAttachment txnCommitAttachment) throws StarRocksException {
+                aborts.add(transactionId + ":" + reason);
+                abortedTablets.addAll(finishedTablets);
+                if (aborts.size() <= failedAborts) {
+                    throw new StarRocksException("abort failed for test");
+                }
+                if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                    throw new TransactionAlreadyCommitException("transaction " + transactionId + " is committed");
+                }
+                if (!txnState.isRunning()) {
+                    throw new TransactionNotFoundException(transactionId);
+                }
+                txnState.setTransactionStatus(TransactionStatus.ABORTED);
+            }
+        };
+    }
+
+    private static TransactionState txnStateWithStatus(TransactionStatus status) {
+        TransactionState txnState = new TransactionState();
+        txnState.setTransactionStatus(status);
+        return txnState;
+    }
+
+    // ---- commitStmt reports a failed commit through the context state instead of throwing. The
+    // response must carry the failure: with an OK response the client treats the transaction as
+    // committed although it is rolled back ----
+    @Test
+    public void testCommitTxnReportsCommitStmtError() throws Exception {
+        mockCommitUpToCommitStmt(895L, commitStmtFailsWith("commit failed for test"));
+        fakeTxnManager(txnStateWithStatus(TransactionStatus.PREPARED), 0, new ArrayList<>(), new ArrayList<>());
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("commit failed for test"), resp.msg);
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+        Assertions.assertEquals("CANCELLED", sub.getStateName());
+    }
+
+    // ---- Once commitStmt has cleared the explicit transaction state, rollbackStmt does nothing: the
+    // failed commit must abort the transaction in the transaction manager, with the sub-tasks' tablets,
+    // instead of leaving it PREPARED until the transaction timeout ----
+    @Test
+    public void testCommitTxnAbortsTxnInTxnManagerWhenCommitStmtFails() throws Exception {
+        mockCommitUpToCommitStmt(896L, commitStmtFailsWith("commit rate exceeded for test"));
+        TransactionState txnState = txnStateWithStatus(TransactionStatus.PREPARED);
+        List<String> aborts = new ArrayList<>();
+        List<TabletCommitInfo> abortedTablets = new ArrayList<>();
+        fakeTxnManager(txnState, 0, aborts, abortedTablets);
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        List<TabletCommitInfo> tablets = List.of(new TabletCommitInfo(10L, 20L));
+        sub.getTxnStateItem().setTabletCommitInfos(tablets);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertEquals(List.of("896:commit failed: commit rate exceeded for test"), aborts);
+        Assertions.assertEquals(tablets, abortedTablets);
+        Assertions.assertEquals(TransactionStatus.ABORTED, txnState.getTransactionStatus());
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    // ---- A commitStmt error does not always mean the commit failed: it may come after the transaction
+    // was committed. The commit is then reported as successful and the task is COMMITED, not rolled back ----
+    @Test
+    public void testCommitTxnSucceedsWhenTxnCommittedDespiteCommitStmtError() throws Exception {
+        mockCommitUpToCommitStmt(897L, commitStmtFailsWith("error after commit for test"));
+        List<String> aborts = new ArrayList<>();
+        fakeTxnManager(txnStateWithStatus(TransactionStatus.VISIBLE), 0, aborts, new ArrayList<>());
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertTrue(resp.stateOK(), resp.msg);
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("FINISHED", sub.getStateName());
+        Assertions.assertTrue(aborts.isEmpty(), aborts.toString());
+    }
+
+    // ---- The same holds for an unchecked exception escaping commitStmt after the commit ----
+    @Test
+    public void testCommitTxnSucceedsWhenCommitStmtThrowsAfterCommit() throws Exception {
+        mockCommitUpToCommitStmt(898L, ctx -> {
+            ctx.setTxnId(0);
+            throw new IllegalStateException("thrown after commit for test");
+        });
+        List<String> aborts = new ArrayList<>();
+        fakeTxnManager(txnStateWithStatus(TransactionStatus.COMMITTED), 0, aborts, new ArrayList<>());
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        Assertions.assertDoesNotThrow(() -> multiTask.commitTxn(new DefaultHttpHeaders(), resp));
+
+        Assertions.assertTrue(resp.stateOK(), resp.msg);
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+        Assertions.assertTrue(aborts.isEmpty(), aborts.toString());
+    }
+
+    // ---- A commit that failed because the transaction was already aborted (e.g. by the transaction
+    // timeout checker) ends CANCELLED: the abort finds no running transaction, and the reconcile reads
+    // ABORTED from the transaction manager instead of relying on the cleared explicit state ----
+    @Test
+    public void testCommitTxnCancelledWhenTxnAlreadyAborted() throws Exception {
+        mockCommitUpToCommitStmt(899L, commitStmtFailsWith("transaction already aborted for test"));
+        fakeTxnManager(txnStateWithStatus(TransactionStatus.ABORTED), 0, new ArrayList<>(), new ArrayList<>());
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("transaction already aborted for test"), resp.msg);
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    // ---- If that abort fails, the task stays ABORTING while the transaction is still PREPARED, and the
+    // background retry aborts it in the transaction manager again ----
+    @Test
+    public void testRetryAbortAfterCommitStmtFailureAbortsTxnInTxnManager() throws Exception {
+        mockCommitUpToCommitStmt(900L, commitStmtFailsWith("commit failed for test"));
+        TransactionState txnState = txnStateWithStatus(TransactionStatus.PREPARED);
+        List<String> aborts = new ArrayList<>();
+        fakeTxnManager(txnState, 1, aborts, new ArrayList<>());
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertEquals(1, aborts.size());
+        Assertions.assertEquals("ABORTING", multiTask.getStateName());
+
+        Assertions.assertTrue(multiTask.retryAbortIfNeeded(Long.MAX_VALUE));
+        Assertions.assertEquals(2, aborts.size());
+        Assertions.assertEquals(TransactionStatus.ABORTED, txnState.getTransactionStatus());
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
     }
 
     // ---- Reconcile finding the txn committed must not leave sub-tasks CANCELLED ----

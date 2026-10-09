@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -38,6 +39,8 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -63,6 +66,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *     +--[commitTxn]-------------------------> COMMITING
  *     |                                            |
  *     |                                            +--[success]---------> COMMITED
+ *     |                                            +--[fail, txn found committed]--> COMMITED
  *     |                                            +--[fail]------------> ABORTING
  *     |
  *     +--[manualCancel / timeout / exception]----> ABORTING
@@ -157,6 +161,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     @SerializedName(value = "abortReason")
     private String abortReason = "";
     private String lastAbortErrorMsg = "";
+    // Set right before commitStmt runs. Whatever its outcome, commitStmt clears the explicit transaction
+    // state and resets the context's txnId, so rollbackStmt can no longer reach the transaction (it takes
+    // its "not after begin" branch and does nothing): from then on the rollback aborts the transaction in
+    // the transaction manager, where it is registered since the first load, and reconciles against it.
+    private volatile boolean explicitTxnStateCleared = false;
 
     public StreamLoadMultiStmtTask(long id, Database db, String label, String user, String clientIp,
                           long timeoutMs, long createTimeMs, ComputeResource computeResource) {
@@ -222,7 +231,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
         boolean rollbackSuccess = false;
         try {
-            TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            if (explicitTxnStateCleared) {
+                abortTxnInTxnManager();
+            } else {
+                TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            }
             rollbackSuccess = true;
         } catch (Exception e) {
             this.lastAbortErrorMsg = e.getMessage();
@@ -266,6 +279,31 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     /**
+     * Abort the transaction in the transaction manager once commitStmt has cleared the explicit
+     * transaction state (see explicitTxnStateCleared). Without this the transaction, registered since
+     * the first load, would stay PREPARE or PREPARED until the transaction timeout, holding its tables
+     * against schema changes. The sub-tasks' tablets are passed along, as rollbackStmt passes those of
+     * the explicit state's items, so the abort can clean up the data the loads wrote. A transaction
+     * that is already final or committed makes the abort throw; reconcileWithTxnManager then reads its
+     * status.
+     */
+    private void abortTxnInTxnManager() throws StarRocksException {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        List<TabletFailInfo> failInfos = Lists.newArrayList();
+        for (StreamLoadTask task : taskMaps.values()) {
+            ExplicitTxnState.ExplicitTxnStateItem item = task.getTxnStateItem();
+            if (item.getTabletCommitInfos() != null) {
+                commitInfos.addAll(item.getTabletCommitInfos());
+            }
+            if (item.getTabletFailInfos() != null) {
+                failInfos.addAll(item.getTabletFailInfos());
+            }
+        }
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                dbId, txnId, abortReason, commitInfos, failInfos, null);
+    }
+
+    /**
      * Check the actual transaction status in the transaction manager to handle cases
      * where rollbackStmt fails but the transaction has already reached a final state.
      *
@@ -275,13 +313,25 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         try {
             GlobalTransactionMgr txnMgr =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-            ExplicitTxnState explicitState = txnMgr.getExplicitTxnState(txnId);
-            if (explicitState == null) {
-                LOG.info("ExplicitTxnState already cleared for txnId: {}, label: {}, " +
-                        "treating as aborted", txnId, label);
-                return true;
+            TransactionState txnState;
+            if (explicitTxnStateCleared) {
+                // The explicit state is gone whatever happened to the transaction, so only the
+                // transaction manager can tell whether it is still running.
+                txnState = txnMgr.getTransactionState(dbId, txnId);
+                if (txnState == null) {
+                    LOG.info("Transaction not found in transaction manager, txnId: {}, label: {}, " +
+                            "treating as aborted", txnId, label);
+                    return true;
+                }
+            } else {
+                ExplicitTxnState explicitState = txnMgr.getExplicitTxnState(txnId);
+                if (explicitState == null) {
+                    LOG.info("ExplicitTxnState already cleared for txnId: {}, label: {}, " +
+                            "treating as aborted", txnId, label);
+                    return true;
+                }
+                txnState = explicitState.getTransactionState();
             }
-            TransactionState txnState = explicitState.getTransactionState();
             if (txnState != null) {
                 TransactionStatus status = txnState.getTransactionStatus();
                 if (status == TransactionStatus.ABORTED || status == TransactionStatus.VISIBLE
@@ -486,11 +536,22 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             if (commitErrorMsg != null) {
                 return;
             }
-            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-            if (context.getState().isError()) {
-                commitErrorMsg = context.getState().getErrorMessage();
-            } else {
+            explicitTxnStateCleared = true;
+            String commitStmtError = executeCommitStmt();
+            if (commitStmtError == null) {
                 success = true;
+            } else if (isTxnCommittedInTxnManager()) {
+                // commitStmt failed after the transaction was committed: its data is or becomes
+                // visible. Reporting a failure would make the client load the data again, and the
+                // rollback would mark the task CANCELLED while the transaction is VISIBLE.
+                LOG.warn("Commit reported an error but transaction {} is committed, label: {}, error: {}",
+                        txnId, label, commitStmtError);
+                success = true;
+            } else {
+                // commitStmt reports a failed commit through the context state instead of throwing.
+                // The client must get it: an OK response makes it treat the transaction as committed.
+                commitErrorMsg = commitStmtError;
+                resp.setErrorMsg(commitStmtError);
             }
         } catch (Exception e) {
             commitErrorMsg = e.getMessage();
@@ -518,6 +579,37 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 tryRollbackNow();
             }
         }
+    }
+
+    /**
+     * Run commitStmt and return its error, or null if it succeeded. commitStmt reports a failed commit
+     * through the context state rather than by throwing; an unchecked exception escaping it, possibly
+     * thrown after the transaction was committed, is returned the same way, so the caller checks the
+     * transaction status in both cases.
+     */
+    private String executeCommitStmt() {
+        String error;
+        try {
+            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+            if (!context.getState().isError()) {
+                return null;
+            }
+            error = context.getState().getErrorMessage();
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to commit transaction {}, label: {}", txnId, label, e);
+            error = e.getMessage();
+        }
+        return Strings.isNullOrEmpty(error) ? "commit failed" : error;
+    }
+
+    private boolean isTxnCommittedInTxnManager() {
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            return false;
+        }
+        TransactionStatus status = txnState.getTransactionStatus();
+        return status == TransactionStatus.COMMITTED || status == TransactionStatus.VISIBLE;
     }
 
     /**
