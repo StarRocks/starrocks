@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <cmath>
 #include <limits>
 #include <thread>
@@ -2208,6 +2209,138 @@ TEST_F(geographyFunctionsTest, h3CellAndArrayContract) {
     EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(-1, 1)}).ok());
     EXPECT_FALSE(GeoFunctions::h3_to_parent(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(4, 1)}).ok());
     EXPECT_FALSE(GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(2, 1)}).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3FromGeoNullableEmptyAndVaryingResolutions) {
+    auto points = geography({"POINT (0 0)", nullptr, "POINT EMPTY", "POINT (180 90)", "POINT (-180 -90)"});
+    auto resolutions = Int32Column::create();
+    for (int resolution : {3, 9, 11, 7, 15}) resolutions->append(resolution);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    auto result = GeoFunctions::h3_from_geo(context.get(), {points, resolutions});
+    ASSERT_TRUE(result.ok()) << result.status();
+    ColumnViewer<TYPE_BIGINT> output(*result);
+    EXPECT_TRUE(output.is_null(1));
+    EXPECT_TRUE(output.is_null(2));
+    const std::array<LatLng, 3> coordinates = {{{0, 0}, {M_PI_2, M_PI}, {-M_PI_2, -M_PI}}};
+    const std::array<int, 3> rows = {0, 3, 4};
+    for (size_t i = 0; i < rows.size(); ++i) {
+        H3Index expected = 0;
+        ASSERT_EQ(E_SUCCESS, latLngToCell(&coordinates[i], resolutions->get_data()[rows[i]], &expected));
+        EXPECT_EQ(static_cast<int64_t>(expected), output.value(rows[i]));
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3FromGeoPreparedPointAcrossResolutions) {
+    auto point = ConstColumn::create(geography({"POINT (30 60)"}), 3);
+    auto resolutions = Int32Column::create();
+    for (int resolution : {3, 9, 11}) resolutions->append(resolution);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    context->set_constant_columns({point, nullptr});
+    ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    for (int repeat = 0; repeat < 2; ++repeat) {
+        auto result = GeoFunctions::h3_from_geo(context.get(), {point, resolutions});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_FALSE((*result)->is_constant());
+        ColumnViewer<TYPE_BIGINT> output(*result);
+        const LatLng coordinate{M_PI / 3, M_PI / 6};
+        for (size_t row = 0; row < 3; ++row) {
+            H3Index expected = 0;
+            ASSERT_EQ(E_SUCCESS, latLngToCell(&coordinate, resolutions->get_data()[row], &expected));
+            EXPECT_EQ(static_cast<int64_t>(expected), output.value(row));
+        }
+    }
+    auto constant =
+            GeoFunctions::h3_from_geo(context.get(), {point, ColumnHelper::create_const_column<TYPE_INT>(9, 3)});
+    ASSERT_TRUE(constant.ok()) << constant.status();
+    EXPECT_TRUE((*constant)->is_constant());
+    EXPECT_EQ(3, (*constant)->size());
+    ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3FromGeoRetainsCoordinateAndTypeValidation) {
+    for (const char* wkt : {"POINT (181 0)", "POINT (0 91)", "LINESTRING (0 0, 1 1)"}) {
+        SCOPED_TRACE(wkt);
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkt(wkt, &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        std::string bytes;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        // Producer validation metadata must not bypass H3's coordinate/type checks.
+        GeoColumnDescriptor descriptor{
+                geography_type().geo_type.value(),
+                {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+        auto input = GeoColumn::create(descriptor);
+        input->append_wkb(Slice(bytes));
+        auto result = GeoFunctions::h3_from_geo(nullptr, {input, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_invalid_argument()) << result.status();
+    }
+    auto empty = geography({"POINT EMPTY"});
+    EXPECT_FALSE(GeoFunctions::h3_from_geo(nullptr, {empty, ColumnHelper::create_const_column<TYPE_INT>(16, 1)}).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3FromGeoPointBytesInBothOrdersAndMalformedPayloads) {
+    const auto from_bytes = [&](const std::string& bytes) {
+        GeoColumnDescriptor descriptor{
+                geography_type().geo_type.value(),
+                {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+        auto column = GeoColumn::create(descriptor);
+        column->append_wkb(Slice(bytes));
+        return GeoFunctions::h3_from_geo(nullptr, {column, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
+    };
+    WkbGeometry point;
+    ASSERT_TRUE(WkbCodec::parse_wkt("POINT (37.62 55.75)", &point).ok());
+    std::string little;
+    ASSERT_TRUE(WkbCodec::to_wkb(point, &little).ok());
+    auto expected = from_bytes(little);
+    ASSERT_TRUE(expected.ok());
+    auto big = little;
+    big[0] = 0;
+    std::reverse(big.begin() + 1, big.begin() + 5);
+    std::reverse(big.begin() + 5, big.begin() + 13);
+    std::reverse(big.begin() + 13, big.end());
+    auto actual = from_bytes(big);
+    ASSERT_TRUE(actual.ok()) << actual.status();
+    EXPECT_EQ(ColumnViewer<TYPE_BIGINT>(*expected).value(0), ColumnViewer<TYPE_BIGINT>(*actual).value(0));
+
+    for (const auto& bytes : {little.substr(0, 20), little + '\0', std::string()}) {
+        EXPECT_FALSE(from_bytes(bytes).ok());
+    }
+    auto bad_order = little;
+    bad_order[0] = 2;
+    EXPECT_FALSE(from_bytes(bad_order).ok());
+    auto ewkb = little;
+    ewkb[4] = static_cast<char>(0x20);
+    EXPECT_FALSE(from_bytes(ewkb).ok());
+
+    point.coordinates[0].x = std::numeric_limits<double>::quiet_NaN();
+    // Encode a partial-NaN tuple directly: it must not be treated as POINT EMPTY.
+    const uint64_t nan_bits = std::bit_cast<uint64_t>(point.coordinates[0].x);
+    for (size_t i = 0; i < 8; ++i) little[5 + i] = static_cast<char>(nan_bits >> (8 * i));
+    EXPECT_FALSE(from_bytes(little).ok());
+    for (size_t i = 0; i < 8; ++i) little[13 + i] = static_cast<char>(nan_bits >> (8 * i));
+    auto empty = from_bytes(little);
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_TRUE(ColumnViewer<TYPE_BIGINT>(*empty).is_null(0));
+}
+
+TEST_F(geographyFunctionsTest, h3FromGeoRetainsCancellationAndQueryErrors) {
+    auto points = geography({"POINT (0 0)"});
+    auto resolution = ColumnHelper::create_const_column<TYPE_INT>(9, 1);
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
+            &state, nullptr, TypeDescriptor(TYPE_BIGINT), {geography_type(), TypeDescriptor(TYPE_INT)}));
+    state.set_is_cancelled(true);
+    auto cancelled = GeoFunctions::h3_from_geo(context.get(), {points, resolution});
+    ASSERT_FALSE(cancelled.ok());
+    EXPECT_TRUE(cancelled.status().is_cancelled()) << cancelled.status();
+    state.set_is_cancelled(false);
+    state.set_process_status(Status::MemoryLimitExceeded("test H3 query memory limit"));
+    auto limited = GeoFunctions::h3_from_geo(context.get(), {points, resolution});
+    ASSERT_FALSE(limited.ok());
+    EXPECT_TRUE(limited.status().is_mem_limit_exceeded()) << limited.status();
 }
 
 TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {

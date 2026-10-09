@@ -19,6 +19,7 @@
 #endif
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -196,6 +197,34 @@ StatusOr<WkbGeometry> h3_parse_geo(const H3GeoInput& input, size_t row, bool pol
     WkbGeometry geometry;
     RETURN_IF_ERROR(WkbCodec::parse_wkb(wkb, &geometry, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
     return geometry;
+}
+
+struct H3Point {
+    WkbCoordinate coordinate;
+    bool empty = false;
+};
+
+StatusOr<H3Point> h3_parse_point(Slice wkb) {
+    // Keep structural validation independent of producer metadata. For an XY
+    // POINT it also guarantees both coordinates exist at these fixed offsets.
+    ASSIGN_OR_RETURN(const auto info, inspect_geo_wkb(wkb));
+    if (info.dimension != GEO_DIMENSION_XY || info.geometry_type != 1) {
+        return Status::InvalidArgument("H3_FromGeo requires XY POINT");
+    }
+    const bool little_endian = wkb.data[0] == 1;
+    const auto read_coordinate = [&](size_t offset) {
+        uint64_t bits;
+        std::memcpy(&bits, wkb.data + offset, sizeof(bits));
+        if (little_endian != (std::endian::native == std::endian::little)) bits = std::byteswap(bits);
+        return std::bit_cast<double>(bits);
+    };
+    const WkbCoordinate coordinate{read_coordinate(5), read_coordinate(13)};
+    if (std::isnan(coordinate.x) && std::isnan(coordinate.y)) return H3Point{coordinate, true};
+    if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y) || coordinate.x < -180 || coordinate.x > 180 ||
+        coordinate.y < -90 || coordinate.y > 90) {
+        return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
+    }
+    return H3Point{coordinate, false};
 }
 
 struct H3PreparedGeo {
@@ -377,31 +406,41 @@ StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext* context, const Co
                                                         context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     std::optional<WkbGeometry> local;
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        // Point conversion has bounded per-row work and temporary storage.
+        // Poll once per batch instead of contending on RuntimeState's status
+        // mutex twice per point across all pipeline drivers.
+        if ((row & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
             continue;
         }
         const int resolution = resolutions.value(row);
         RETURN_IF_ERROR(validate_h3_resolution(resolution));
-        WkbGeometry varying;
-        ASSIGN_OR_RETURN(const auto* point, h3_geometry(input, row, false, limits, prepared, &local, &varying));
-        if (point->empty) {
+        H3Point point;
+        if (input.constant) {
+            WkbGeometry varying;
+            ASSIGN_OR_RETURN(const auto* geometry, h3_geometry(input, row, false, limits, prepared, &local, &varying));
+            point.empty = geometry->empty;
+            if (!point.empty) point.coordinate = geometry->coordinates[0];
+        } else {
+            ASSIGN_OR_RETURN(point, h3_parse_point(input.wkb(row)));
+        }
+        if (point.empty) {
             result.append_null();
             continue;
         }
-        ASSIGN_OR_RETURN(const bool valid, spherical_is_valid(*point));
-        if (!valid) return Status::InvalidArgument("H3_FromGeo requires a valid GEOGRAPHY POINT");
-        const LatLng latlng{point->coordinates[0].y * kRadiansPerDegree, point->coordinates[0].x * kRadiansPerDegree};
+        // Both decode paths have already checked finite CRS84 coordinates.
+        // H3 does not need a geometry tree or an intermediate S2Point.
+        const LatLng latlng{point.coordinate.y * kRadiansPerDegree, point.coordinate.x * kRadiansPerDegree};
         H3Index cell = 0;
         const H3Error error = latLngToCell(&latlng, resolution, &cell);
-        RETURN_IF_ERROR(h3_checkpoint(context));
         if (error != E_SUCCESS) return h3_error("H3_FromGeo", error);
         if (!isValidCell(cell) || cell > static_cast<H3Index>(std::numeric_limits<int64_t>::max())) {
             return Status::InternalError("H3_FromGeo returned invalid cell");
         }
         result.append(static_cast<int64_t>(cell));
     }
+    RETURN_IF_ERROR(h3_checkpoint(context));
     ColumnPtr output = result.build(false);
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
