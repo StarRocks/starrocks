@@ -158,8 +158,7 @@ public class PaimonScanNode extends ScanNode {
 
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         PaimonReaderMode paimonReaderMode = sessionVariable.getPaimonReaderMode();
-        boolean forceJniReader = sessionVariable.getPaimonForceJNIReader();
-        if (forceJniReader) {
+        if (sessionVariable.getPaimonForceJNIReader()) {
             paimonReaderMode = PaimonReaderMode.JNI;
         }
         paimonReaderMode = resolveAutoReaderModeForFileColumns(tupleDescriptor, paimonReaderMode);
@@ -381,14 +380,13 @@ public class PaimonScanNode extends ScanNode {
         if (!optionalDataSplit.isPresent()) {
             // System-table splits do not have a native reader.
             paimonReaderMode = PaimonReaderMode.JNI;
-        } else if (PaimonSplitUtils.isGlobalIndexSplit(split) && paimonReaderMode == PaimonReaderMode.AUTO) {
-            // Raw-file scans discard index row ranges. paimon-cpp can deserialize the complete
-            // IndexedSplit and apply its row selection; explicit JNI remains a diagnostic option.
+        } else if (PaimonSplitUtils.isGlobalIndexSplit(split)) {
+            // Global-index row ranges require paimon-cpp, regardless of the requested reader mode.
             paimonReaderMode = PaimonReaderMode.NATIVE;
         }
 
-        // Ordinary SDK splits retain the legacy JNI reader under AUTO. IndexedSplit uses
-        // paimon-cpp by default so its row ranges are preserved.
+        // Ordinary SDK splits retain the legacy JNI reader under AUTO. IndexedSplit always uses
+        // paimon-cpp so its row ranges are preserved.
         if (paimonReaderMode == PaimonReaderMode.NATIVE) {
             hdfsScanRange.setUse_paimon_jni_reader(false);
             hdfsScanRange.setUse_paimon_native_reader(true);

@@ -17,6 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
@@ -360,11 +361,12 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testSetupIndexedSplitUsesNativeAndTracksPartition(
+    public void testSetupIndexedSplitIgnoresForcedJniAndTracksPartition(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table)
             throws IOException {
         ConnectContext ctx = new ConnectContext();
         ctx.setSessionVariable(new SessionVariable());
+        Deencapsulation.setField(ctx.getSessionVariable(), "paimonForceJNIReader", true);
         ctx.setThreadLocalInfo();
         try {
             DataSplit dataSplit = createDataSplit();
@@ -483,11 +485,14 @@ public class PaimonScanNodeTest {
         Assertions.assertTrue(range.isUse_paimon_native_reader());
         Assertions.assertFalse(range.isUse_paimon_jni_reader());
 
-        // An explicit JNI choice remains available, but cannot read a VARIANT column.
+        // An indexed split must use the native reader even when JNI is requested explicitly.
         PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), tuple, "XXX");
-        StarRocksConnectorException error = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 100L));
-        Assertions.assertTrue(error.getMessage().contains("VARIANT"));
+        jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 100L);
+        THdfsScanRange jniRange = jniScanNode.getScanRangeLocations(10).get(0)
+                .getScan_range().getHdfs_scan_range();
+        Assertions.assertTrue(jniRange.isUse_paimon_native_reader());
+        Assertions.assertFalse(jniRange.isUse_paimon_jni_reader());
+        Assertions.assertTrue(jniRange.isSetPaimon_split_info_binary());
     }
 
     @Test
