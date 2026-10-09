@@ -16,27 +16,88 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.mockito.MockedStatic;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AbstractSqlSampleSubqueryExecutorTest {
+
+    @Test
+    void loadTimeZoneReachesTheSamplePlanAfterWarehouseSwitchAndKeepsTheTimeout() {
+        SessionVariable initialDefaults = new SessionVariable();
+        initialDefaults.setTimeZone("UTC");
+        SessionVariable warehouseDefaults = new SessionVariable();
+        warehouseDefaults.setTimeZone("Asia/Shanghai");
+        AtomicReference<SessionVariable> current = new AtomicReference<>(initialDefaults);
+        ConnectContext sampleContext = mock(ConnectContext.class);
+        when(sampleContext.getSessionVariable()).thenAnswer(ignored -> current.get());
+        doAnswer(ignored -> {
+            current.set((SessionVariable) warehouseDefaults.clone());
+            return null;
+        }).when(sampleContext).setCurrentWarehouseId(4242L);
+        doAnswer(invocation -> {
+            current.set(invocation.getArgument(0));
+            return null;
+        }).when(sampleContext).setSessionVariable(any());
+        ComputeResource resource = mock(ComputeResource.class);
+        when(resource.getWarehouseId()).thenReturn(4242L);
+        AtomicReference<String> plannedTimeZone = new AtomicReference<>();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor();
+        SampleRequest request = new SampleRequest(new InsertFromTableScanContext(
+                mock(OlapTable.class), "`db`.`src`", Map.of("k", "k"), null, resource, 1024L, 100L,
+                Map.of(), "America/Los_Angeles"), List.of(bigintColumn("k")), Long.MAX_VALUE, 0L)
+                .withQueryTimeoutSeconds(137);
+
+        try (MockedStatic<StatisticUtils> statistics = mockStatic(StatisticUtils.class);
+                MockedStatic<StatementPlanner> planner = mockStatic(StatementPlanner.class)) {
+            statistics.when(StatisticUtils::buildConnectContext).thenReturn(sampleContext);
+            planner.when(() -> StatementPlanner.plan(any(), eq(sampleContext), eq(TResultSinkType.HTTP_PROTOCAL)))
+                    .thenAnswer(ignored -> {
+                        plannedTimeZone.set(sampleContext.getSessionVariable().getTimeZone());
+                        Assertions.assertEquals(137, sampleContext.getSessionVariable().getQueryTimeoutS());
+                        Assertions.assertFalse(sampleContext.getSessionVariable().isEnableMaterializedViewRewrite());
+                        Assertions.assertFalse(sampleContext.getSessionVariable().isEnableSyncMaterializedViewRewrite());
+                        throw new SemanticException("stop before executing the sample plan");
+                    });
+
+            Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+        }
+
+        Assertions.assertEquals("America/Los_Angeles", plannedTimeZone.get());
+        // This must hold even when SimpleExecutor ignores SET_VAR hints (as on branch-26.2).
+        Assertions.assertEquals("America/Los_Angeles", sampleContext.getSessionVariable().getTimeZone());
+        Assertions.assertEquals("Asia/Shanghai", warehouseDefaults.getTimeZone(), "warehouse defaults stay untouched");
+        Assertions.assertEquals("UTC", initialDefaults.getTimeZone());
+    }
 
     /**
      * Regression guard: {@code ConnectContext.setCurrentWarehouseId} delegates to

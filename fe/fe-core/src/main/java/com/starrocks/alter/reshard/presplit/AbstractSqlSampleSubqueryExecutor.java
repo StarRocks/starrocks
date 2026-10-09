@@ -89,6 +89,12 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     interface SampleQueryRunner {
         List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
                 throws StarRocksException;
+
+        // Existing test stubs return canned batches; the production runner also applies the load time zone.
+        default List<TResultBatch> run(String sampleSql, ComputeResource computeResource,
+                                     int queryTimeoutSeconds, String loadTimeZone) throws StarRocksException {
+            return run(sampleSql, computeResource, queryTimeoutSeconds);
+        }
     }
 
     /**
@@ -190,8 +196,18 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private static SampleQueryRunner defaultRunner(String executorName) {
         Objects.requireNonNull(executorName, "executorName");
         SimpleExecutor simpleExecutor = new SimpleExecutor(executorName, TResultSinkType.HTTP_PROTOCAL);
-        return (sampleSql, computeResource, queryTimeoutSeconds) ->
-                runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds);
+        return new SampleQueryRunner() {
+            @Override
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
+                return run(sampleSql, computeResource, queryTimeoutSeconds, null);
+            }
+
+            @Override
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource,
+                                          int queryTimeoutSeconds, String loadTimeZone) {
+                return runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone);
+            }
+        };
     }
 
     /**
@@ -213,9 +229,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 spec.partitionProjectionIdents());
         String sampleSql = buildSampleSqlFromProjection(
                 spec.fromClauseSql(), spec.whereClauseSqlOrNull(), projectionLayout.projectedIdents(),
-                samplingRate, rowLimit, request.getSeed());
+                samplingRate, rowLimit, request.getSeed(), request.getScanContext().loadTimeZone());
         List<TResultBatch> resultBatches = runSampleQuery(
-                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds());
+                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds(), request.getScanContext().loadTimeZone());
         List<SampleRow> rows = decodeRows(
                 resultBatches, spec.sortKeyColumns(), secondaryIndexSortKeys, spec.partitionSourceColumns(),
                 projectionLayout);
@@ -313,7 +329,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 sortKeyProjectionIdents, secondaryProjectionIdents, partitionProjectionIdents);
         return buildSampleSqlFromProjection(
                 fromClauseSql, whereClauseSqlOrNull, projectionLayout.projectedIdents(),
-                samplingRate, rowLimit, seed);
+                samplingRate, rowLimit, seed, null);
     }
 
     /**
@@ -384,22 +400,28 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private static String buildSampleSqlFromProjection(
             String fromClauseSql, String whereClauseSqlOrNull, List<String> projectedIdents,
-            double samplingRate, int rowLimit, long seed) {
+            double samplingRate, int rowLimit, long seed, String loadTimeZone) {
         String projection = String.join(", ", projectedIdents);
         long orderShuffleSeed = seed ^ 0x5A5A5A5A5A5A5A5AL;
         String randFilter = "rand(" + seed + ") < " + Double.toString(samplingRate);
         String whereClause = whereClauseSqlOrNull == null
                 ? randFilter
                 : "(" + whereClauseSqlOrNull + ") AND " + randFilter;
+        // SimpleExecutor applies query-scope hints before planning, after configureSampleContext
+        // switches warehouses (which replaces session variables). This overrides global/warehouse
+        // defaults for UTC-adjusted timestamps and keeps the data and meta tiers in the load's zone.
+        String timeZoneHint = loadTimeZone == null ? ""
+                : "/*+ SET_VAR(time_zone='" + SqlUtils.escapeSqlString(loadTimeZone) + "') */ ";
         return String.format(
-                "SELECT %s FROM %s WHERE %s ORDER BY rand(%d) LIMIT %d",
-                projection, fromClauseSql, whereClause, orderShuffleSeed, rowLimit);
+                "SELECT %s%s FROM %s WHERE %s ORDER BY rand(%d) LIMIT %d",
+                timeZoneHint, projection, fromClauseSql, whereClause, orderShuffleSeed, rowLimit);
     }
 
     private List<TResultBatch> runSampleQuery(
-            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) throws StarRocksException {
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+            String loadTimeZone) throws StarRocksException {
         try {
-            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds);
+            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone);
         } catch (RuntimeException runtimeFailure) {
             throw new StarRocksException(
                     errorPrefix + "sample sub-query failed: " + runtimeFailure.getMessage(), runtimeFailure);
@@ -416,10 +438,10 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      */
     private static List<TResultBatch> runViaSimpleExecutor(
             SimpleExecutor simpleExecutor, String sampleSql, ComputeResource computeResource,
-            int queryTimeoutSeconds) {
+            int queryTimeoutSeconds, String loadTimeZone) {
         ConnectContext priorContext = ConnectContext.get();
         ConnectContext sampleContext = configureSampleContext(
-                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds);
+                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds, loadTimeZone);
         sampleContext.setThreadLocalInfo();
         try {
             return simpleExecutor.executeDQL(sampleSql, sampleContext);
@@ -451,6 +473,12 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     @VisibleForTesting
     static ConnectContext configureSampleContext(
             ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
+        return configureSampleContext(context, computeResource, queryTimeoutSeconds, null);
+    }
+
+    @VisibleForTesting
+    static ConnectContext configureSampleContext(
+            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds, String loadTimeZone) {
         // setCurrentWarehouseId delegates to setCurrentWarehouse, which REPLACES the session-variable
         // object with a fresh warehouse-defaulted one (re-applying only tracked SET variables). The
         // pre-submit-budget query_timeout is applied via a direct setter (not a tracked SET), so it
@@ -459,6 +487,11 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         // pre-submit budget instead of failing fast and falling back.
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
+        // Warehouse switching replaces the session defaults. Apply the captured load time zone
+        // afterward, even on branches whose SimpleExecutor does not apply SET_VAR hints.
+        if (loadTimeZone != null) {
+            context.getSessionVariable().setTimeZone(loadTimeZone);
+        }
         // Pin the sample scan to the BASE index. setCurrentWarehouseId above re-clones the session
         // variable, so (like the query_timeout below) disable BOTH async and sync MV/rollup rewrite
         // AFTER the switch or the disable is dropped. Without this, once the table carries sibling

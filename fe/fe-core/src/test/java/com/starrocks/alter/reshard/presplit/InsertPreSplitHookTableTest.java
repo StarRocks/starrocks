@@ -731,6 +731,7 @@ public class InsertPreSplitHookTableTest {
     public void prepareSizesAnExternalSourceFromItsStatistics() throws Exception {
         try (SourceFixture fixture = sourceFixture()) {
             fixture.withExternalSource(connectorStatistics(1_000_000d, 8d, Statistics.StatsSource.TABLE_METADATA));
+            when(fixture.context.getSessionVariable().getTimeZone()).thenReturn("America/Los_Angeles");
 
             PreSplitFlow.Prepared prepared = fixture.prepare();
 
@@ -738,6 +739,7 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = (InsertFromTableScanContext) prepared.scanContext();
             Assertions.assertEquals(16_000_000L, scanContext.sourceTotalBytes());
             Assertions.assertEquals(1_000_000L, scanContext.sourceTotalRows());
+            Assertions.assertEquals("America/Los_Angeles", scanContext.loadTimeZone());
             Assertions.assertEquals(16_000_000L, prepared.estimatedBytes());
             Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
         }

@@ -44,6 +44,7 @@ import java.util.Objects;
  * query globals use). The meta-tier readers use it to reproduce the BE's
  * offset for a UTC-adjusted / TIMESTAMP_INSTANT value; a non-fixed / null
  * zone -> data tier.
+ * The data-tier query uses the same zone through a {@code SET_VAR} hint.
  *
  * <p>{@code targetBaseSchema} is the target table's base schema as the hook
  * snapshotted it. Only the CSV data tier reads it: a file group that declares
