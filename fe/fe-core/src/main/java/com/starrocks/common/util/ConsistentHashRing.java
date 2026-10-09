@@ -32,6 +32,11 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     HashFunction hashFunction;
 
     TreeMap<Long, VNode> hashRing = new TreeMap<>();
+    // Physical nodes currently on the ring. A node is spread across `virtualNumber`
+    // virtual nodes, so the ring can never hand back more distinct nodes than this set
+    // holds; `get` uses its size to stop walking instead of scanning for nodes that do
+    // not exist.
+    Set<N> physicalNodes = new HashSet<>();
     Funnel<K> keyFunnel;
     Funnel<N> nodeFunnel;
     int virtualNumber;
@@ -86,6 +91,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void addNode(N node) {
+        physicalNodes.add(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
             long hash = vnode.hashValue();
@@ -97,6 +103,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void removeNode(N node) {
+        physicalNodes.remove(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
             long hash = vnode.hashValue();
@@ -106,17 +113,15 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         }
     }
 
-    private void collectNodes(SortedMap<Long, VNode> map, List<N> ans, int distinctNumber) {
-        Set<N> visited = new HashSet<>(ans);
+    private void collectNodes(SortedMap<Long, VNode> map, List<N> ans, Set<N> visited, int target) {
         for (Map.Entry<Long, VNode> entry : map.entrySet()) {
             VNode vnode = entry.getValue();
-            if (visited.contains(vnode.node)) {
+            if (!visited.add(vnode.node)) {
                 continue;
             }
-            visited.add(vnode.node);
             ans.add(vnode.node);
-            if (ans.size() == distinctNumber) {
-                break;
+            if (ans.size() == target) {
+                return;
             }
         }
     }
@@ -124,15 +129,23 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     @Override
     public List<N> get(K key, int distinctNumber) {
         List<N> ans = new ArrayList<>();
+        // Never ask for more distinct nodes than the ring actually has: with a larger
+        // target the walk can never reach it and scans every virtual node in vain.
+        int target = Math.min(distinctNumber, physicalNodes.size());
+        if (target <= 0) {
+            return ans;
+        }
+
         Hasher hasher = hashFunction.newHasher();
         long hash = hasher.putObject(key, keyFunnel).hash().asLong();
 
-        // search from `hash` to end.
-        collectNodes(hashRing.tailMap(hash, true), ans, distinctNumber);
-        if (ans.size() < distinctNumber) {
-            // search from begin to end.
-            // so we walk this ring twice at most.
-            collectNodes(hashRing, ans, distinctNumber);
+        // Walk the ring clockwise once, wrapping around: [hash, end] then [begin, hash).
+        // `visited` is shared so the wrap-around segment does not re-scan the tail and a
+        // node selected in the first segment is not added twice.
+        Set<N> visited = new HashSet<>();
+        collectNodes(hashRing.tailMap(hash, true), ans, visited, target);
+        if (ans.size() < target) {
+            collectNodes(hashRing.headMap(hash, false), ans, visited, target);
         }
         return ans;
     }
