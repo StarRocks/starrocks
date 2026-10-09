@@ -123,7 +123,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             // generate a placeholder column for scan node.
             // ___count___ must be the column name for backend code.
             String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Column c = new Column(metaColumnName, NullType.NULL);
+            Column c = new Column(metaColumnName, IntegerType.BIGINT);
             c.setIsAllowNull(true);
             ColumnRefOperator placeholderColumn =
                     columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());
