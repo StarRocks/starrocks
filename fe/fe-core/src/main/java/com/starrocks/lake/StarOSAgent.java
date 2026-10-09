@@ -619,6 +619,48 @@ public class StarOSAgent {
         }
     }
 
+    @FunctionalInterface
+    private interface CreateShardCall {
+        List<ShardInfo> call(List<CreateShardInfo> createShardInfos) throws StarClientException;
+    }
+
+    /**
+     * Send {@code createShardInfos} through {@code call}, replaying the identical request once if it fails
+     * without a StarMgr status.
+     *
+     * <p>StarClient reports every gRPC-level failure, such as DEADLINE_EXCEEDED, as {@link StatusCode#GRPC},
+     * and such a failure leaves the outcome unknown: StarMgr may have committed the shards and then outlasted
+     * the client deadline, for example while waiting best-effort for their placement. The replay is sent only
+     * when every entry carries a caller-assigned shard id. StarMgr answers ids it already holds with the
+     * existing shards, so such a replay is safe and normally returns promptly; an entry without an id would
+     * get a fresh one and create a second shard. A StarMgr status is a definite answer and is not retried,
+     * and neither is a call whose thread has been interrupted. An unresponsive StarMgr fails both attempts,
+     * so the worst-case wait is two write deadlines.
+     */
+    private List<ShardInfo> createShardRetryOnTransportError(List<CreateShardInfo> createShardInfos,
+                                                             CreateShardCall call) throws StarClientException {
+        try {
+            return call.call(createShardInfos);
+        } catch (StarClientException firstError) {
+            boolean everyShardIdAssigned = createShardInfos.stream()
+                    .allMatch(createShardInfo -> createShardInfo.getShardId() != Constant.DEFAULT_ID);
+            if (firstError.getCode() != StatusCode.GRPC || Thread.currentThread().isInterrupted()
+                    || !everyShardIdAssigned) {
+                throw firstError;
+            }
+            List<ShardInfo> shardInfos;
+            try {
+                shardInfos = call.call(createShardInfos);
+            } catch (StarClientException retryError) {
+                throw new StarClientException(retryError.getCode(), "the outcome of the first attempt is unknown ("
+                        + firstError.getMessage() + ") and replaying it failed: " + retryError.getMessage());
+            }
+            LOG.warn("Creating {} shards failed without a StarMgr status; replaying the request with the same shard"
+                    + " ids succeeded. first attempt: {}", createShardInfos.size(), firstError.getMessage());
+            return shardInfos;
+        }
+    }
+
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
@@ -691,7 +733,8 @@ public class StarOSAgent {
                 }
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList, metaGroupId);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos, metaGroupId));
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
@@ -754,7 +797,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            List<ShardInfo> shardInfos = client.createShard(serviceId, createShardInfoList);
+            List<ShardInfo> shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create per-new-shard split shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -814,7 +858,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -843,7 +888,8 @@ public class StarOSAgent {
 
             builder.setShardId(vTabletId);
             createShardInfoList.add(builder.build());
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos != null && shardInfos.size() == 1);
             LOG.debug("Create virtual shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
