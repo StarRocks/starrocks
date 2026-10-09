@@ -1030,6 +1030,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
+    private boolean isFirstStageAggregation(CallOperator agg, ColumnRefOperator key) {
+        return !agg.getArguments().isEmpty()
+                && (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
+    }
+
     private boolean shouldProcessAggFunction(CallOperator agg, DecodeInfo info, boolean isFirstStage) {
         ColumnRefSet supportColumns = new ColumnRefSet();
         supportColumns.union(info.getInputStringColumns());
@@ -1069,8 +1074,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             CallOperator agg = aggregate.getAggregations().get(key);
-            final boolean isFirstStage = !agg.getArguments().isEmpty() &&
-                    (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
+            final boolean isFirstStage = isFirstStageAggregation(agg, key);
             if (!shouldProcessAggFunction(agg, info, isFirstStage)) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
@@ -1080,10 +1084,45 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
         }
 
-        if (!disableColumns.isEmpty()) {
-            info.decodeStringColumns.union(info.inputStringColumns);
-            info.decodeStringColumns.intersect(disableColumns);
-            info.inputStringColumns.except(info.decodeStringColumns);
+        // Judge every function again once the decode set is known, and keep going until nothing
+        // changes. The loop above asks shouldProcessAggFunction about each function in isolation,
+        // against the input columns as they stood BEFORE any disable was known, so a function can be
+        // accepted and then have the column it reads decoded on behalf of a sibling in the same
+        // operator:
+        //
+        //   select g, min(s), group_concat(s, ' ') from t where s is null or s != 'x' group by g
+        //
+        // group_concat is not in LOW_CARD_AGGREGATE_FUNCTIONS, so it decodes `s`; min(s) was already
+        // accepted and stayed registered as producing a dictionary value although its input is now
+        // materialised as strings. The plan then carried min typed INT under a VARCHAR column ref:
+        //
+        //   Invalid plan: the type of arg N: min is defined as VARCHAR, but the actual type is INT
+        //
+        // Re-asking the same question is what makes this safe rather than a second, hand-written
+        // rule: an accepted array_agg disables its own non-string first argument just above, and a
+        // rule phrased as "a function that reads a disabled column is disabled" would switch that
+        // array_agg off, which is the sort-only encoding it is supposed to keep.
+        while (true) {
+            if (!disableColumns.isEmpty()) {
+                info.decodeStringColumns.union(info.inputStringColumns);
+                info.decodeStringColumns.intersect(disableColumns);
+                info.inputStringColumns.except(info.decodeStringColumns);
+            }
+            boolean disableGrew = false;
+            for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
+                if (disableColumns.contains(key)) {
+                    continue;
+                }
+                CallOperator agg = aggregate.getAggregations().get(key);
+                if (!shouldProcessAggFunction(agg, info, isFirstStageAggregation(agg, key))) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                    disableGrew = true;
+                }
+            }
+            if (!disableGrew) {
+                break;
+            }
         }
 
         info.outputStringColumns.clear();
