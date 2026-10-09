@@ -158,7 +158,6 @@ public class PaimonScanNode extends ScanNode {
 
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         PaimonReaderMode paimonReaderMode = sessionVariable.getPaimonReaderMode();
-        boolean jniReaderMode = paimonReaderMode == PaimonReaderMode.JNI;
         boolean forceJniReader = sessionVariable.getPaimonForceJNIReader();
         if (forceJniReader) {
             paimonReaderMode = PaimonReaderMode.JNI;
@@ -173,7 +172,7 @@ public class PaimonScanNode extends ScanNode {
                     // Keep row ranges attached to the SDK split. Raw-file conversion would lose
                     // the global-index row selection.
                     addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo,
-                            getTotalFileLength(dataSplit), forceJniReader, jniReaderMode);
+                            getTotalFileLength(dataSplit));
                 } else {
                     Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
                     if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
@@ -191,19 +190,18 @@ public class PaimonScanNode extends ScanNode {
                             }
                         } else {
                             addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo,
-                                    getTotalFileLength(dataSplit), forceJniReader, jniReaderMode);
+                                    getTotalFileLength(dataSplit));
                         }
                     } else {
                         addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo,
-                                getTotalFileLength(dataSplit), forceJniReader, jniReaderMode);
+                                getTotalFileLength(dataSplit));
                     }
                 }
                 selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
             } else {
                 // paimon system table
                 long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
-                addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, length, forceJniReader,
-                        jniReaderMode);
+                addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, length);
             }
 
         }
@@ -351,27 +349,17 @@ public class PaimonScanNode extends ScanNode {
         return hasFileColumn ? PaimonReaderMode.NATIVE : paimonReaderMode;
     }
 
-    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor,
-                                             boolean forceJniReader, boolean jniReaderMode) {
+    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor) {
         for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
             if (slot.getType().containsVariant()) {
-                String remediation;
-                if (forceJniReader) {
-                    remediation = "Run SET paimon_force_jni_reader=false and retry. If the split still requires " +
-                            "JNI, compact merge-on-read data or remove the VARIANT column from the query.";
-                } else if (jniReaderMode) {
-                    remediation = "Run SET paimon_reader_mode=AUTO and retry. If the split still requires " +
-                            "JNI, compact merge-on-read data or remove the VARIANT column from the query.";
-                } else {
-                    remediation = "Compact the Paimon table if it uses merge-on-read, or remove the VARIANT " +
-                            "column from the query.";
-                }
                 throw new StarRocksConnectorException(
                         "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
-                        "reader (merge-on-read data, system table, paimon_reader_mode=JNI, or " +
-                        "paimon_force_jni_reader=true). Reading " +
-                        "VARIANT through the Paimon JNI reader is not yet supported. %s",
-                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel(), remediation);
+                        "reader. Reading VARIANT through the Paimon JNI reader is not yet supported. " +
+                        "If JNI was forced, run SET paimon_force_jni_reader=false; also run " +
+                        "SET paimon_reader_mode=AUTO if that mode was selected. " +
+                        "For merge-on-read data, compact the Paimon table. " +
+                        "You can also exclude the VARIANT column from the query.",
+                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
             }
         }
     }
@@ -379,11 +367,6 @@ public class PaimonScanNode extends ScanNode {
     // Split in the function will read by paimon-java or paimon-cpp
     public void addSDKSplitScanRangeLocations(PaimonReaderMode paimonReaderMode, Split split, String predicateInfo,
                                               long totalFileLength) {
-        addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, totalFileLength, false, false);
-    }
-
-    private void addSDKSplitScanRangeLocations(PaimonReaderMode paimonReaderMode, Split split, String predicateInfo,
-                                               long totalFileLength, boolean forceJniReader, boolean jniReaderMode) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -421,7 +404,7 @@ public class PaimonScanNode extends ScanNode {
                 throw new RuntimeException("Failed to serialize Paimon split", e);
             }
         } else {
-            checkJniReaderVariantSupport(desc, forceJniReader, jniReaderMode);
+            checkJniReaderVariantSupport(desc);
             hdfsScanRange.setUse_paimon_jni_reader(true);
             hdfsScanRange.setUse_paimon_native_reader(false);
         }
