@@ -297,7 +297,9 @@ public class RuntimeTypeAdapterTypes {
                 .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
                 .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
                 .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
-                .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo");
+                .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo")
+                .registerSubtype(com.starrocks.lake.RecycleLakeDeletedPartitionInfo.class,
+                        "RecycleLakeDeletedPartitionInfo");
 
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(RecyclePartitionInfoV2.class,
                 recycle_partition_info_v_2_adapter_factory);
