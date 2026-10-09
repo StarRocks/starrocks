@@ -762,6 +762,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_iceberg_v3_deletion_vector
+
+* **Description**: Whether to enable reading Iceberg v3 merge-on-read deletion vectors. When set to `false`, queries that encounter deletion vectors fail with an error.
+* **Default**: true
+* **Data type**: Boolean
+* **Scope**: Session, Global
+
 ### enable_incremental_mv
 
 * **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.

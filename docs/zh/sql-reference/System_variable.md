@@ -649,6 +649,13 @@ FROM test;
 * 默认值：false，表示不开启。
 * 引入版本：v3.1.4
 
+### enable_iceberg_v3_deletion_vector
+
+* 描述：是否启用 Iceberg v3 读时合并（merge-on-read）删除向量的读取。设置为 `false` 时，查询遇到删除向量会报错并失败。
+* 默认值：true
+* 类型：Boolean
+* 作用域：Session、Global
+
 ### enable_incremental_mv
 
 * **描述**: 会话变量，用于控制服务器是否会为使用增量刷新（incremental refresh）的物化视图规划并保留内存中的计划。当启用时，对于刷新方案为增量刷新的物化视图创建语句，系统会为视图查询构建逻辑和物理计划并设置会话的 `enableMVPlanner` 标志（`setMVPlanner(true)`）。禁用时，增量刷新物化视图的规划将被跳过。
