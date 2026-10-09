@@ -46,6 +46,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -57,6 +58,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             OperatorType.LOGICAL_ICEBERG_SCAN,
             OperatorType.LOGICAL_FILE_SCAN
     );
+
+    /**
+     * The COUNT(*) placeholder, which the backend recognizes by this name. A COUNT(col) placeholder appends the
+     * counted column's name for readability and is recognized by slot id instead.
+     */
+    private static final String COUNT_PLACEHOLDER = "___count___";
 
     public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =
             new RewriteSimpleAggToHDFSScanRule(false);
@@ -228,7 +235,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
     /**
      * COUNT(col) is answered from Iceberg manifest null counts, so it qualifies only on an Iceberg scan, for a
-     * scalar column that is read from the data files rather than being a partition column.
+     * scalar column that is read from the data files rather than being a partition column. A column named like
+     * a placeholder is never counted this way, since the backend would take ___count___ itself for the COUNT(*)
+     * marker and a counted column could share a name with another column's placeholder.
      */
     private static boolean isCountOfDataColumn(CallOperator aggregator, LogicalScanOperator scanOperator) {
         if (!(scanOperator instanceof LogicalIcebergScanOperator) || !isPlainCount(aggregator)
@@ -237,7 +246,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         }
         Column column = scanOperator.getColRefToColumnMetaMap().get((ColumnRefOperator) aggregator.getArguments().get(0));
         return column != null && column.getType().isScalarType()
-                && !scanOperator.getPartitionColumns().contains(column.getName());
+                && !scanOperator.getPartitionColumns().contains(column.getName())
+                && !column.getName().toLowerCase(Locale.ROOT).startsWith(COUNT_PLACEHOLDER);
     }
 
     private static boolean isPlainCount(CallOperator aggregator) {
@@ -276,12 +286,6 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
      * collecting the aggregate calls and scan columns that needs. Counts sharing a placeholder share one sum.
      */
     private static final class CountRewrite {
-        /**
-         * The COUNT(*) placeholder, which the backend recognizes by this name. A COUNT(col) placeholder appends the
-         * counted column's name for readability and is recognized by slot id instead.
-         */
-        private static final String COUNT_PLACEHOLDER = "___count___";
-
         private final LogicalScanOperator scanOperator;
         private final ColumnRefFactory columnRefFactory;
         private final int tableRelationId;

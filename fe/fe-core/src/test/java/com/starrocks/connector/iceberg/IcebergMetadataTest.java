@@ -1904,6 +1904,32 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetRemoteFilesKeepsStatsOfSelectedColumns() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_3).commit();
+        mockedNativeTableB.refresh();
+
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+        List<RemoteFileInfo> res = metadata.getRemoteFiles(icebergTable,
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                        .setPredicate(predicate).setEnableColumnStats(true).setFieldNames(Lists.newArrayList("k1"))
+                        .setLimit(10).build());
+
+        // The cached split task keeps the selected k1's null count for min/max and COUNT(col) and drops k2's.
+        Assertions.assertEquals(1, res.size());
+        DataFile file = ((IcebergRemoteFileInfo) res.get(0)).getFileScanTask().file();
+        Assertions.assertEquals(Map.of(1, 0L), file.nullValueCounts());
+    }
+
+    @Test
     public void testGetRemoteFile() throws IOException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
         List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
