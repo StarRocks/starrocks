@@ -172,9 +172,8 @@ public:
 
     Status do_visit(FileColumn* dst) { return generic_visit(dst); }
 
-    template <typename T>
-    Status do_visit(BinaryColumnBase<T>* dst) {
-        using ColumnType = BinaryColumnBase<T>;
+    Status do_visit(BinaryColumn* dst) {
+        using ColumnType = BinaryColumn;
 
         auto& offsets = dst->get_offset();
         auto& bytes = dst->get_bytes();
@@ -192,8 +191,8 @@ public:
             }
         } else {
             for (auto& p : _perm) {
-                Slice slice = down_cast<const BinaryColumnBase<T>*>(_columns[PermTraits::chunk(p)])
-                                      ->get_slice(PermTraits::index(p));
+                Slice slice =
+                        down_cast<const BinaryColumn*>(_columns[PermTraits::chunk(p)])->get_slice(PermTraits::index(p));
                 added_bytes += slice.get_size();
                 slices.push_back(slice);
             }

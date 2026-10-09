@@ -271,12 +271,13 @@ public:
 
 class BinaryColumnSerde {
 public:
-    template <typename T>
-    static int64_t max_serialized_size(const BinaryColumnBase<T>& column, const int encode_level) {
+    // The wire format stores the byte size, the offsets byte size and the offsets as uint32_t, even when the
+    // in-memory offsets have been promoted to 64 bits. is_payload_size_representable() rejects columns that do not fit.
+    static int64_t max_serialized_size(const BinaryColumn& column, const int encode_level) {
         auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
-        int64_t res = sizeof(T) * 2;
-        int64_t offsets_size = offsets.size() * sizeof(T);
+        int64_t res = sizeof(uint32_t) * 2;
+        int64_t offsets_size = offsets.size() * sizeof(uint32_t);
         if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
                    std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size)));
@@ -291,19 +292,14 @@ public:
         return res;
     }
 
-    template <typename T>
-    static StatusOr<uint8_t*> serialize(const BinaryColumnBase<T>& column, uint8_t* buff, const int encode_level) {
+    static StatusOr<uint8_t*> serialize(const BinaryColumn& column, uint8_t* buff, const int encode_level) {
         RETURN_IF_ERROR(column.is_payload_size_representable());
 
         auto bytes = column.get_immutable_bytes();
         const auto& offsets = column.get_offset();
 
-        T bytes_size = bytes.size() * sizeof(uint8_t);
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            buff = write_little_endian_32(bytes_size, buff);
-        } else {
-            buff = write_little_endian_64(bytes_size, buff);
-        }
+        uint32_t bytes_size = bytes.size() * sizeof(uint8_t);
+        buff = write_little_endian_32(bytes_size, buff);
         if (is_string_encoding_enabled(encode_level) && bytes_size >= ENCODE_SIZE_LIMIT &&
             bytes_size <= LZ4_MAX_INPUT_SIZE) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
@@ -311,43 +307,27 @@ public:
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
 
-        T offsets_size = offsets.size() * sizeof(T);
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            buff = write_little_endian_32(offsets_size, buff);
-        } else {
-            buff = write_little_endian_64(offsets_size, buff);
-        }
+        uint32_t offsets_size = offsets.size() * sizeof(uint32_t);
+        buff = write_little_endian_32(offsets_size, buff);
         if (is_integer_encoding_enabled(encode_level) && offsets_size >= ENCODE_SIZE_LIMIT) {
-            if (sizeof(T) == 4) { // only support sorted 32-bit integers
-                buff = offsets.visit_storage([&](const auto& offsets_buf) {
-                    auto offset_data = _get_offsets_data<T>(offsets_buf);
-                    return encode_integers<true>(offset_data.data(), offsets_size, buff, encode_level);
-                });
-            } else {
-                buff = offsets.visit_storage([&](const auto& offsets_buf) {
-                    auto offset_data = _get_offsets_data<T>(offsets_buf);
-                    return encode_integers<false>(offset_data.data(), offsets_size, buff, encode_level);
-                });
-            }
+            buff = offsets.visit_storage([&](const auto& offsets_buf) {
+                auto offset_data = _get_offsets_data<uint32_t>(offsets_buf);
+                return encode_integers<true>(offset_data.data(), offsets_size, buff, encode_level);
+            });
         } else {
             buff = offsets.visit_storage([&](const auto& offsets_buf) {
-                auto offset_data = _get_offsets_data<T>(offsets_buf);
+                auto offset_data = _get_offsets_data<uint32_t>(offsets_buf);
                 return write_raw(offset_data.data(), offsets_size, buff);
             });
         }
         return buff;
     }
 
-    template <typename T>
-    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, BinaryColumnBase<T>* column,
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, BinaryColumn* column,
                                                 const int encode_level) {
         // deserialize bytes
-        T bytes_size = 0;
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &bytes_size));
-        } else {
-            ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &bytes_size));
-        }
+        uint32_t bytes_size = 0;
+        ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &bytes_size));
         column->get_bytes().resize(bytes_size);
 
         auto* bytes_data = column->get_bytes().data();
@@ -358,26 +338,17 @@ public:
             ASSIGN_OR_RETURN(buff, read_raw(buff, end, bytes_data, bytes_size));
         }
 
-        T offset_bytes_size = 0;
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &offset_bytes_size));
-        } else {
-            ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &offset_bytes_size));
-        }
-        Buffer<T> offsets;
-        raw::make_room(&offsets, offset_bytes_size / sizeof(T));
+        uint32_t offset_bytes_size = 0;
+        ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &offset_bytes_size));
+        Buffer<uint32_t> offsets;
+        raw::make_room(&offsets, offset_bytes_size / sizeof(uint32_t));
 
         if (is_integer_encoding_enabled(encode_level) && offset_bytes_size >= ENCODE_SIZE_LIMIT) {
-            constexpr bool is_i32 = sizeof(T) == 4;
-            ASSIGN_OR_RETURN(buff, decode_integers<is_i32>(buff, end, offsets.data(), offset_bytes_size));
+            ASSIGN_OR_RETURN(buff, decode_integers<true>(buff, end, offsets.data(), offset_bytes_size));
         } else {
             ASSIGN_OR_RETURN(buff, read_raw(buff, end, offsets.data(), offset_bytes_size));
         }
-        if constexpr (std::is_same_v<T, uint32_t>) {
-            column->get_offset().set_small_buffer(std::move(offsets));
-        } else {
-            column->get_offset().set_large_buffer(std::move(offsets));
-        }
+        column->get_offset().set_small_buffer(std::move(offsets));
         return buff;
     }
 
@@ -1068,8 +1039,7 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         _size += BinaryColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
@@ -1146,8 +1116,7 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         ASSIGN_OR_RETURN(_cur, BinaryColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
@@ -1237,8 +1206,7 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(BinaryColumnBase<T>* column) {
+    Status do_visit(BinaryColumn* column) {
         ASSIGN_OR_RETURN(_cur, BinaryColumnSerde::deserialize(_cur, _end, column, _encode_level));
         return Status::OK();
     }

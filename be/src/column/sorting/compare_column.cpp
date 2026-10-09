@@ -622,8 +622,7 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         const auto lhs_datas = column.immutable_data();
         Slice rhs_data = _rhs_value.get<Slice>();
 
@@ -754,8 +753,7 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status do_visit(const BinaryColumnBase<T>& column) {
+    Status do_visit(const BinaryColumn& column) {
         auto data = column.immutable_data();
         ImmutableNullData null_data;
         if (_nullable_column != nullptr) {
