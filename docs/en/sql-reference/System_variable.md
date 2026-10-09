@@ -730,17 +730,17 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to place the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this keeps the gather fragment within the labels of the scanned data. The guarantee holds when `choose_execute_instances_mode` is `LOCALITY` (default). With `AUTO` or `ADAPTIVE_INCREASE`, intermediate fragments may be scheduled on additional BEs outside the label. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.1
+
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
 * **Default**: true
 * **Introduced in**: v3.3.0
-
-### enable_gather_fragment_child_affinity
-
-* **Description**: Whether to assign the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) to a worker already used by one of its child fragments, instead of selecting via global round-robin across all BEs. When enabled, the gather fragment inherits the label constraints of its child fragments, which are already constrained to labeled BEs through data locality. This preserves physical label isolation (via `labels.location`) end-to-end for SELECT queries. Set to `false` to revert to legacy round-robin behavior.
-* **Default**: false
-* **Introduced in**: v4.1
 
 ### enable_global_runtime_filter
 
