@@ -55,6 +55,25 @@ class BrokerLoadSampleSubqueryExecutorTest {
     private long savedByteLimit;
     private int savedMinFiles;
 
+    @Test
+    void sampleSqlCarriesTheBrokerLoadTimeZone() throws Exception {
+        BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
+                new BrokerDesc(Map.of()), List.of(mockFileGroup("parquet")),
+                List.of(List.of(brokerFileStatus("s3://b/a.parquet", 1024L))),
+                Mockito.mock(ComputeResource.class), "America/Los_Angeles");
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, resource, timeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(scanContext, List.of(bigintColumn("sort_key")), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT /*+ SET_VAR(time_zone='America/Los_Angeles') */ `sort_key` FROM FILES("), capturedSql.toString());
+    }
+
     @BeforeEach
     void saveScanLimits() {
         savedByteLimit = Config.tablet_pre_split_data_tier_scan_byte_limit;
@@ -502,7 +521,8 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
-        Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "SELECT /*+ SET_VAR(time_zone='UTC') */ `tenant`, `position` FROM FILES"),
                 "both sort-key columns must appear in the projection: " + capturedSql);
         List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
@@ -535,7 +555,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
         Assertions.assertTrue(capturedSql.toString().contains(
-                        "SELECT `dt`, `exp_id`, `bucket_id` FROM FILES"),
+                        "SELECT /*+ SET_VAR(time_zone='UTC') */ `dt`, `exp_id`, `bucket_id` FROM FILES"),
                 "the overlapping partition column must be projected only once: " + capturedSql);
         Assertions.assertFalse(capturedSql.toString().contains("`bucket_id`, `dt` FROM FILES"),
                 "the partition projection must reuse the earlier dt result: " + capturedSql);

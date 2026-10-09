@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.type.DateType;
@@ -33,6 +34,28 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintCol
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
 
 class InsertFromTableSampleSubqueryExecutorTest {
+
+    @Test
+    void externalTimestampSampleSqlCarriesTheLoadTimeZone() throws Exception {
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                Mockito.mock(IcebergTable.class), "`iceberg`.`db`.`src`", Map.of("ts", "ts"),
+                "`ts` >= '2026-09-15 17:00:00'", Mockito.mock(ComputeResource.class), 1024L, 100L,
+                Map.of(), "America/Los_Angeles");
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, resource, timeout) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(scanContext, List.of(new Column("ts", DateType.DATETIME)),
+                Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT /*+ SET_VAR(time_zone='America/Los_Angeles') */ `ts` FROM `iceberg`.`db`.`src`"),
+                capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("WHERE (`ts` >= '2026-09-15 17:00:00') AND"));
+    }
 
     // ---------------------------------------------------------------------------
     // SQL-shape tests

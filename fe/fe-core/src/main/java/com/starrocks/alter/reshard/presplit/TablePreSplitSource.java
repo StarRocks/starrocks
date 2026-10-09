@@ -158,7 +158,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource(),
                 estimates.totalBytes(), estimates.totalRows(),
-                resolved.targetToConstantSql());
+                resolved.targetToConstantSql(), context.getSessionVariable().getTimeZone());
         long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);
