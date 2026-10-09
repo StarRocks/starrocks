@@ -1092,9 +1092,13 @@ public class StmtExecutor {
 
             // For follower: verify sql in BlackList before forward to leader
             // For leader: if this is a proxy sql, no need to verify sql in BlackList because every fe has its own blacklist
+            // EXPLAIN ANALYZE actually executes the inner query, so it must not bypass the blacklist the way
+            // plain EXPLAIN (plan-only, never executed) legitimately does. Otherwise a blacklisted statement
+            // can run by prefixing it with "EXPLAIN ANALYZE ".
+            boolean isBlacklistCheckExemptExplain = parsedStmt.isExplain() && !parsedStmt.isExplainAnalyze();
             if ((parsedStmt instanceof QueryStatement || parsedStmt instanceof InsertStmt
                     || parsedStmt instanceof CreateTableAsSelectStmt)
-                    && Config.enable_sql_blacklist && !parsedStmt.isExplain() && !isProxy) {
+                    && Config.enable_sql_blacklist && !isBlacklistCheckExemptExplain && !isProxy) {
                 OriginStatement origStmt = parsedStmt.getOrigStmt();
                 if (context.isStatisticsConnection() || context.isStatisticsJob()) {
                     // For statistics connection or job, we trust it and skip sql blacklist check
