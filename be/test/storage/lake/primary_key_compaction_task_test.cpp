@@ -2672,7 +2672,6 @@ TEST_F(LakeCompactionStateTest, load_segments_uses_binary_column) {
             const auto& pks = state.pk_cols[i];
             ASSERT_NE(nullptr, pks) << "segment " << i;
             EXPECT_TRUE(pks->is_binary()) << "segment " << i << " is " << pks->get_name();
-            EXPECT_FALSE(pks->is_large_binary()) << "segment " << i;
             ASSERT_EQ(static_cast<size_t>(kRowsPerSegment), pks->size()) << "segment " << i;
             for (int j = 0; j < kRowsPerSegment; j++) {
                 ASSERT_EQ(make_key(i * kRowsPerSegment + j), pks->get(j).get_slice().to_string())

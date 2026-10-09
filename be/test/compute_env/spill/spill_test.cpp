@@ -762,7 +762,6 @@ TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
         const auto& value_column = chunk->get_column_by_slot_id(value_slot);
         const Column* value_data = ColumnHelper::get_data_column(value_column.get());
         ASSERT_TRUE(value_data->is_binary());
-        ASSERT_FALSE(value_data->is_large_binary());
         for (size_t i = 0; i < chunk->num_rows(); i++) {
             keys.push_back(key_column->get(i).get_int32());
             values.push_back(value_column->get(i).get_slice().to_string());
@@ -806,7 +805,6 @@ TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
     const Column* column = chunk.get_column_raw_ptr_by_index(0);
     EXPECT_EQ(values_ptr, column);
     EXPECT_TRUE(column->is_binary());
-    EXPECT_FALSE(column->is_large_binary());
 
     // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
     // allocating them.

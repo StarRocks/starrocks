@@ -41,10 +41,7 @@ class BinaryImmContainer {
 public:
     BinaryImmContainer() = default;
 
-    template <typename T>
-    explicit BinaryImmContainer(const BinaryColumnBase<T>& column) {
-        init(column);
-    }
+    explicit BinaryImmContainer(const BinaryColumn& column) : _column(&column) {}
 
     Slice operator[](size_t index) const;
 
@@ -53,11 +50,7 @@ public:
     size_t immutable_bytes_size() const;
 
 private:
-    template <typename T>
-    void init(const BinaryColumnBase<T>& column);
-
-    const Column* _column = nullptr;
-    bool _is_large = false;
+    const BinaryColumn* _column = nullptr;
 };
 
 // Serialize the |idx|-th binary value as [uint32_t length][bytes] into |pos| and return the
@@ -85,8 +78,7 @@ public:
     /*
      * Use AdaptiveOffsets instead of Buffer<T> to store offsets, which can automatically promote to uint64_t
      * when the offset value exceeds UINT32_MAX.
-     * For the compatibility reason, we still reserve the binaryColumn/LargeBinaryColumn interface for the callers,
-     * But we will re-implement them using the newly added AdaptiveOffsets.
+     * BinaryColumn therefore covers payloads over 4GB as well.
      *
      * Important NOTE: Even upgrade offset from Buffer<T> -> AdaptiveOffsets, max size of single element is still 2^32 !!!!
     */
@@ -172,7 +164,6 @@ public:
     }
 
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
-    bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
     size_t size() const override { return _offsets.size() - 1; }
 
@@ -463,14 +454,10 @@ private:
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
-using LargeOffsets = BinaryColumnBase<uint64_t>::Offsets;
 
 inline Slice BinaryImmContainer::operator[](size_t index) const {
     DCHECK(_column != nullptr);
-    if (_is_large) {
-        return down_cast<const LargeBinaryColumn*>(_column)->get_slice(index);
-    }
-    return down_cast<const BinaryColumn*>(_column)->get_slice(index);
+    return _column->get_slice(index);
 }
 
 inline size_t BinaryImmContainer::size() const {
@@ -481,16 +468,7 @@ inline size_t BinaryImmContainer::immutable_bytes_size() const {
     if (_column == nullptr) {
         return 0;
     }
-    if (_is_large) {
-        return down_cast<const LargeBinaryColumn*>(_column)->get_immutable_bytes().size();
-    }
-    return down_cast<const BinaryColumn*>(_column)->get_immutable_bytes().size();
-}
-
-template <typename T>
-inline void BinaryImmContainer::init(const BinaryColumnBase<T>& column) {
-    _column = &column;
-    _is_large = std::is_same_v<T, uint64_t>;
+    return _column->get_immutable_bytes().size();
 }
 
 } // namespace starrocks
