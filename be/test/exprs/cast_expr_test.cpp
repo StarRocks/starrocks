@@ -839,7 +839,7 @@ TEST_F(VectorizedCastExprTest, explicitCharCastPreservesUnicodeNullsAndConstants
     MockExpr constant(child_node, const_builder.build(true));
     expr->_children[0] = &constant;
     ObjectPool pool;
-    Expr* cloned = expr->clone(&pool);
+    Expr* cloned = Expr::copy(&pool, expr.get());
     result = cloned->evaluate(nullptr, nullptr);
     ASSERT_TRUE(result->is_constant());
     ColumnViewer<TYPE_VARCHAR> const_viewer(result);
