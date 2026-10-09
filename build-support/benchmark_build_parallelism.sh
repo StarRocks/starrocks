@@ -35,7 +35,7 @@ echo "Uncapped Thread Count (After): -j${uncapped_parallel}"
 echo "Throughput Multiplier:         $(( uncapped_parallel * 100 / legacy_parallel ))%"
 echo "=========================================================="
 
-if [[ "$1" == "--dry-run-check" ]]; then
+if [[ "${1:-}" == "--dry-run-check" ]]; then
     echo "[PASS] Validation succeeded."
     exit 0
 fi
