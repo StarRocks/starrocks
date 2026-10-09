@@ -72,7 +72,7 @@ void AggregateFuncResolver::register_window() {
                                                          AggregateFactory::MakeSessionNumberWindowFunction<TYPE_INT>());
 
     add_aggregate_mapping_notnull<TYPE_GEOMETRY, TYPE_GEOMETRY>("st_coveragesimplify", true,
-                                                               AggregateFactory::MakeCoverageWindowFunction());
+                                                                AggregateFactory::MakeCoverageWindowFunction());
 }
 
 } // namespace starrocks
