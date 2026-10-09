@@ -30,11 +30,13 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -124,6 +126,37 @@ public class LanceBackendSelectorTest {
         }
         Assertions.assertEquals(eligible, assignedQueries.keySet());
         assignedQueries.values().forEach(count -> Assertions.assertEquals(2, count.intValue()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"warehouses", "worker-sets", "shared-workers"})
+    public void testInterleavedPoolsRotateIndependently(String mode) throws Exception {
+        Map<Long, Integer> firstAssignments = new HashMap<>();
+        Map<Long, Integer> secondAssignments = new HashMap<>();
+        for (int query = 0; query < 4; query++) {
+            for (int pool = 0; pool < 2; pool++) {
+                long firstId = mode.equals("shared-workers") || pool == 0 ? 101 : 201;
+                ImmutableMap<Long, ComputeNode> eligible = workers(firstId);
+                ComputeResource resource = mock(ComputeResource.class);
+                when(resource.getWarehouseId()).thenReturn(mode.equals("worker-sets") ? 1001L : 1001L + pool);
+                when(resource.getWorkerGroupId()).thenReturn(mode.equals("worker-sets") ? 2001L : 2001L + pool);
+                WorkerProvider provider = new DefaultSharedDataWorkerProvider(eligible, eligible, resource);
+                LanceScanNode scan = newScan("s3://bucket/vectors.lance");
+                FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+                HDFSBackendSelector selector = new HDFSBackendSelector(scan, scan.getScanRangeLocations(0),
+                        assignment, provider, false, false, false, context(false));
+                selector.computeScanRangeAssignment();
+                Assertions.assertEquals(1, assignment.size());
+                long selected = assignment.keySet().iterator().next();
+                Assertions.assertTrue(eligible.containsKey(selected));
+                Assertions.assertTrue(provider.isWorkerSelected(selected));
+                (pool == 0 ? firstAssignments : secondAssignments).merge(selected, 1, Integer::sum);
+            }
+        }
+        for (Map<Long, Integer> assignments : List.of(firstAssignments, secondAssignments)) {
+            Assertions.assertEquals(2, assignments.size());
+            assignments.values().forEach(count -> Assertions.assertEquals(2, count.intValue()));
+        }
     }
 
     @Test
