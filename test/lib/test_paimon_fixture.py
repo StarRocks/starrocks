@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from lib import choose_cases, paimon_fixture
+from lib import choose_cases, sr_sql_lib
 
 
 class PaimonFixtureTest(unittest.TestCase):
@@ -30,10 +30,10 @@ class PaimonFixtureTest(unittest.TestCase):
         self.root = Path(tmp.name)
         (self.root / "db.db/t").mkdir(parents=True)
         (self.root / "db.db/t/data").write_bytes(b"fixture")
-        root_patch = patch.object(paimon_fixture, "FIXTURE_ROOT", self.root)
+        root_patch = patch.object(sr_sql_lib, "PAIMON_FIXTURE_ROOT", self.root)
         root_patch.start()
         self.addCleanup(root_patch.stop)
-        self.client = paimon_fixture.PaimonFixtureMixin()
+        self.client = object.__new__(sr_sql_lib.StarrocksSQLApiLib)
         self.client.oss_bucket = "bucket"
         self.client.oss_endpoint = "endpoint"
         self.client.oss_ak = "test-key"
@@ -160,7 +160,7 @@ class PaimonFixtureTest(unittest.TestCase):
                     if failure == "cleanup" and args[0] == "rm":
                         raise RuntimeError("cleanup failed")
                 runner._paimon_oss = oss
-                with patch.object(paimon_fixture, "FIXTURE_ROOT", case_path.parents[1] / "data"), \
+                with patch.object(sr_sql_lib, "PAIMON_FIXTURE_ROOT", case_path.parents[1] / "data"), \
                         patch.object(module, "self_print"), patch.object(module, "log"):
                     result = unittest.TestResult()
                     nose.case.FunctionTestCase(runner.test_paimon_reader_modes, tearDown=runner.tearDown).run(result)

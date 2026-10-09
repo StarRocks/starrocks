@@ -48,6 +48,7 @@ import ast
 import time
 import unittest
 import uuid
+from pathlib import Path
 from typing import List, Dict
 
 from fuzzywuzzy import fuzz
@@ -63,7 +64,6 @@ from timeout_decorator import timeout, TimeoutError
 from dbutils.pooled_db import PooledDB
 
 from lib import skip
-from lib.paimon_fixture import PaimonFixtureMixin
 from lib.result_format import format_cell
 from lib import data_delete_lib
 from lib import data_insert_lib
@@ -77,6 +77,8 @@ from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
 from lib.arrow_sql_lib import ArrowSqlLib
 from lib import *
+
+PAIMON_FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "sql/test_paimon_catalog/data"
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
@@ -212,7 +214,7 @@ TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
-class StarrocksSQLApiLib(PaimonFixtureMixin):
+class StarrocksSQLApiLib:
     """api lib"""
 
     version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -767,6 +769,127 @@ class StarrocksSQLApiLib(PaimonFixtureMixin):
         ) % (catalog_name, warehouse)
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
+
+    @staticmethod
+    def _paimon_table_path(name):
+        if not re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*", name):
+            raise ValueError("invalid fixture table: %s" % name)
+        database, table = name.split(".")
+        return "%s.db/%s" % (database, table)
+
+
+    @staticmethod
+    def _paimon_warehouse_uri(bucket, prefix, run_id):
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]+[a-z0-9]", bucket):
+            raise ValueError("invalid OSS bucket")
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", run_id):
+            raise ValueError("invalid fixture run ID")
+        if not prefix or any(not re.fullmatch(r"[A-Za-z0-9_-]+", part) for part in prefix.split("/")):
+            raise ValueError("invalid fixture OSS prefix")
+        return "oss://%s/%s/%s/" % (bucket, prefix, run_id)
+
+
+    def _paimon_warehouse(self, run_id):
+        prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")
+        return self._paimon_warehouse_uri(self.oss_bucket, prefix, run_id)
+
+    def _paimon_oss(self, *args):
+        # Use the runner's ossutil credentials, never put keys on the command line.
+        result = subprocess.run(
+            ["ossutil64", *args, "-e", self.oss_endpoint],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120,
+        )
+        if result.returncode:
+            raise RuntimeError("Paimon fixture OSS operation failed (%s): %s" % (args[0], result.stderr))
+
+    def paimon_stage(self, bucket, run_id, tables):
+        # The explicit bucket argument lets existing component filtering detect OSS usage.
+        names = [name.strip() for name in tables.split(",")]
+        paths = [self._paimon_table_path(name) for name in names]
+        for relative in paths:
+            directory = PAIMON_FIXTURE_ROOT / relative
+            if not directory.is_dir() or directory.is_symlink():
+                raise ValueError("missing or invalid fixture directory: %s" % relative)
+        prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")
+        warehouse = self._paimon_warehouse_uri(bucket, prefix, run_id)
+        self.paimon_cleanup()
+        # Save the resolved target before uploading so CLEANUP can remove partial uploads.
+        self._paimon_cleanup_warehouse = warehouse
+        self._paimon_cleanup_catalog = None
+        for relative in paths:
+            self._paimon_oss("cp", "-r", "-f", str(PAIMON_FIXTURE_ROOT / relative) + "/", warehouse + relative + "/")
+
+    def create_paimon_catalog(self, catalog, catalog_type, run_id):
+        if catalog_type != "filesystem":
+            raise ValueError("fixture catalogs must use filesystem")
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", catalog):
+            raise ValueError("invalid fixture catalog name")
+        self._paimon_cleanup_catalog = catalog
+        properties = {
+            "type": "paimon", "paimon.catalog.type": "filesystem",
+            "paimon.catalog.warehouse": self._paimon_warehouse(run_id),
+            "aws.s3.access_key": self.oss_ak, "aws.s3.secret_key": self.oss_sk,
+            "aws.s3.endpoint": self.oss_endpoint,
+        }
+        properties_sql = ",".join("%s=%s" % (json.dumps(k), json.dumps(v)) for k, v in properties.items())
+        result = self.execute_sql("CREATE EXTERNAL CATALOG `%s` PROPERTIES (%s)" % (catalog, properties_sql))
+        if not result["status"]:
+            # Catalog SQL contains credentials; do not include it in the failure message.
+            raise RuntimeError("failed to create Paimon fixture catalog %s" % catalog)
+
+    def paimon_cleanup(self):
+        warehouse = getattr(self, "_paimon_cleanup_warehouse", None)
+        if warehouse is None:
+            return
+        catalog = self._paimon_cleanup_catalog
+        try:
+            if catalog is not None:
+                self.execute_sql("SET CATALOG default_catalog")
+                result = self.execute_sql("DROP CATALOG IF EXISTS `%s`" % catalog)
+                if not result["status"]:
+                    raise RuntimeError("failed to drop Paimon fixture catalog %s" % catalog)
+        finally:
+            self._paimon_oss("rm", "-r", "-f", warehouse)
+        self._paimon_cleanup_warehouse = None
+        self._paimon_cleanup_catalog = None
+
+    def assert_paimon_reader(self, query, table, expected):
+        """Assert FE scan routing using existing per-table EXTERNAL trace counters."""
+        counters = {"native": "paimonNativeReaderReadNum", "jni": "jniReaderReadNum",
+                    "starrocks": "starRocksNativeReaderReadNum"}
+        if expected not in counters:
+            raise ValueError("expected reader must be native, jni, or starrocks")
+        result = self.execute_sql("TRACE VALUES EXTERNAL " + query, True)
+        if not result["status"]:
+            raise AssertionError("Paimon reader trace failed: %s" % result.get("msg"))
+        trace = "\n".join(str(value) for row in result["result"] for value in row)
+        for reader, counter in counters.items():
+            key = "Paimon.metadata.reader.%s.%s" % (table, counter)
+            values = re.findall(re.escape(key) + r"\s*:\s*(\d+)", trace)
+            if not values or any((int(value) > 0) != (reader == expected) for value in values):
+                raise AssertionError("expected %s reader for %s; trace:\n%s" % (expected, table, trace))
+
+    def assert_paimon_native_profile(self, query):
+        """Verify an executed paimon-cpp scan, using the existing BE profile section."""
+        settings = self.execute_sql("SELECT @@enable_profile, @@enable_async_profile", True)
+        if not settings["status"]:
+            raise AssertionError("cannot read profile settings")
+        enabled, asynchronous = settings["result"][0]
+        try:
+            for sql in ("SET enable_profile = true", "SET enable_async_profile = false", query):
+                result = self.execute_sql(sql, True)
+                if not result["status"]:
+                    raise AssertionError("Paimon profile query failed: %s" % result.get("msg"))
+            query_id = self.execute_sql("SELECT last_query_id()", True)["result"][0][0]
+            result = self.execute_sql("SELECT get_query_profile('%s')" % query_id, True)
+            if not result["status"]:
+                raise AssertionError("cannot read Paimon query profile")
+            profile = "\n".join(str(value) for row in result["result"] for value in row)
+            if not re.search(r"^\s*-\s*PaimonNativeReader:", profile, re.MULTILINE):
+                raise AssertionError("executed query has no PaimonNativeReader profile section")
+        finally:
+            self.execute_sql("SET enable_profile = %s" % str(enabled).lower(), True)
+            self.execute_sql("SET enable_async_profile = %s" % str(asynchronous).lower(), True)
 
     def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
                                   tolerate_exist=False):
