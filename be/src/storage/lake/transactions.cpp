@@ -848,6 +848,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built persistent index sstables, one per segment (empty name = segment had no sstable)
+        for (const auto& sst : txn_log.op_write().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
         // pre-built tombstone sstables (empty name = del file had no sstable)
         for (const auto& del_sst : txn_log.op_write().del_ssts()) {
             if (!del_sst.name().empty()) {
@@ -872,6 +878,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
+        // pre-built persistent index sstables of the new segments
+        for (const auto& sst : txn_log.op_compaction().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
         for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
@@ -888,6 +900,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             }
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
+            }
+            for (const auto& sst : op_write.ssts()) {
+                if (!sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+                }
             }
             for (const auto& del_sst : op_write.del_ssts()) {
                 if (!del_sst.name().empty()) {

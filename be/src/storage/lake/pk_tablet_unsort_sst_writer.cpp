@@ -53,10 +53,11 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
         _encryption_meta = std::move(pair.encryption_meta);
     }
     if (location_provider && fs) {
-        ASSIGN_OR_RETURN(_wf,
-                         fs->new_writable_file(wopts, location_provider->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(_wf, fs->new_writable_file(
+                                      wopts, location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     } else {
-        ASSIGN_OR_RETURN(_wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(
+                _wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     }
     _map.clear();
     _deleted_rowids.clear();
@@ -217,8 +218,8 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
         encryption_meta = std::move(pair.encryption_meta);
     }
     const std::string location = (_location_provider && _fs)
-                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename())
-                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename());
+                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))
+                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id));
     std::unique_ptr<WritableFile> wf;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(wf, _fs->new_writable_file(wopts, location));

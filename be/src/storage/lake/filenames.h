@@ -163,6 +163,19 @@ inline std::string gen_vector_index_filename_for_segment(const SegmentMetadataPB
     return gen_vector_index_filename(segment_meta.filename(), resolve_segment_vector_index_uid(segment_meta), index_id);
 }
 
+inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {
+    constexpr static int kBase = 16;
+    if (UNLIKELY(file_name.size() < 17 || file_name[16] != '_')) {
+        return {};
+    }
+    StringParser::ParseResult res;
+    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
+    if (UNLIKELY(res != StringParser::PARSE_SUCCESS)) {
+        return {};
+    }
+    return txn_id;
+}
+
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
 inline std::string extract_uuid_from(std::string_view file_name) {
     if (file_name.empty()) {
@@ -176,8 +189,8 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
     std::string_view extension = file_name.substr(dot_pos);
 
-    // sst file: uuid.sst
-    if (extension == ".sst") {
+    // sst file without a txn id: uuid.sst
+    if (extension == ".sst" && !extract_txn_id_prefix(file_name).has_value()) {
         return std::string(file_name.substr(0, dot_pos));
     }
 
@@ -193,7 +206,7 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
     // check extension
     if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols" &&
-        extension != ".idx") {
+        extension != ".idx" && extension != ".sst") {
         return {};
     }
 
@@ -211,13 +224,13 @@ inline std::string extract_uuid_from(std::string_view file_name) {
 
 // Helper function to generate a new filename from old filename, which is used in shared-data cross cluster migration
 inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_name) {
-    if (is_sst(old_file_name)) {
-        // sst file's name will keep no change,
+    if (is_sst(old_file_name) && !extract_txn_id_prefix(old_file_name).has_value()) {
+        // an sst file without a txn id keeps its name unchanged
         return std::string(old_file_name);
     }
 
     if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
-                 !is_cols(old_file_name) && !is_idx(old_file_name))) {
+                 !is_cols(old_file_name) && !is_idx(old_file_name) && !is_sst(old_file_name))) {
         // not a valid file
         return {};
     }
@@ -240,21 +253,18 @@ inline std::string gen_del_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.del", txn_id, generate_uuid_string());
 }
 
-inline std::string gen_sst_filename() {
-    return fmt::format("{}.sst", generate_uuid_string());
+// A persistent-index sstable written by a load or compaction transaction: {txn_id}_{uuid}.sst. Like the segments
+// it indexes, nothing but that transaction's txn log references it before the publish, so the txn-id prefix lets
+// full vacuum reclaim it once the transaction has finished and no metadata references it.
+inline std::string gen_sst_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.sst", txn_id, generate_uuid_string());
 }
 
-inline std::optional<int64_t> extract_txn_id_prefix(std::string_view file_name) {
-    constexpr static int kBase = 16;
-    if (UNLIKELY(file_name.size() < 17 || file_name[16] != '_')) {
-        return {};
-    }
-    StringParser::ParseResult res;
-    auto txn_id = StringParser::string_to_int<int64_t>(file_name.data(), 16, kBase, &res);
-    if (UNLIKELY(res != StringParser::PARSE_SUCCESS)) {
-        return {};
-    }
-    return txn_id;
+// A persistent-index sstable built from the index itself (memtable flush, index compaction): {uuid}.sst. It may
+// first be referenced by the metadata of a later publish than the one that built it, so no txn id bounds its
+// lifetime, and full vacuum never deletes a file named this way.
+inline std::string gen_sst_filename() {
+    return fmt::format("{}.sst", generate_uuid_string());
 }
 
 inline std::string schema_filename(int64_t schema_id) {
