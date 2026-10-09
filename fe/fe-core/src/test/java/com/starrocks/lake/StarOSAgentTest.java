@@ -43,6 +43,7 @@ import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.staros.util.Constant;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -535,6 +536,178 @@ public class StarOSAgentTest {
                 "a new shard with an empty group list must be rejected");
         Assertions.assertTrue(empty.getMessage().contains("Missing group ids for new shard 201"),
                 "expected the missing-group-ids cause, got: " + empty.getMessage());
+    }
+
+    /**
+     * Stubs both client.createShard overloads so that attempt {@code i} of a request fails with
+     * {@code failures[i]} and the first attempt past the array succeeds. Every attempt's payload is
+     * recorded; a test that issues several requests clears the list between them.
+     */
+    private List<List<CreateShardInfo>> installCreateShardAttempts(StatusCode... failures) {
+        List<List<CreateShardInfo>> attempts = new ArrayList<>();
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos)
+                    throws StarClientException {
+                return answerCreateShardAttempt(attempts, createShardInfos, failures);
+            }
+
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos,
+                                               long metaGroupId) throws StarClientException {
+                return answerCreateShardAttempt(attempts, createShardInfos, failures);
+            }
+        };
+        return attempts;
+    }
+
+    private static List<ShardInfo> answerCreateShardAttempt(List<List<CreateShardInfo>> attempts,
+                                                            List<CreateShardInfo> createShardInfos,
+                                                            StatusCode[] failures) throws StarClientException {
+        attempts.add(new ArrayList<>(createShardInfos));
+        int attempt = attempts.size() - 1;
+        if (attempt < failures.length) {
+            throw new StarClientException(failures[attempt], "attempt " + attempt + " failed");
+        }
+        List<ShardInfo> shardInfos = new ArrayList<>(createShardInfos.size());
+        for (CreateShardInfo createShardInfo : createShardInfos) {
+            shardInfos.add(ShardInfo.newBuilder().setShardId(createShardInfo.getShardId()).build());
+        }
+        return shardInfos;
+    }
+
+    private static void assertReplayedOnce(List<List<CreateShardInfo>> attempts, String caller) {
+        Assertions.assertEquals(2, attempts.size(), caller + " must replay the request exactly once");
+        Assertions.assertEquals(attempts.get(0), attempts.get(1), caller + " must replay the identical request");
+    }
+
+    /**
+     * Create one split shard (new shard 101 out of old shard 11) through the agent.
+     */
+    private void createOneSplitShard() throws DdlException {
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, 11L);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(700L));
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, FilePathInfo.newBuilder().build(),
+                FileCacheInfo.newBuilder().build(), Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE,
+                false);
+    }
+
+    /**
+     * Every createShard caller replays the identical request once on a transport-level failure; see
+     * StarOSAgent#createShardRetryOnTransportError for why that is safe.
+     */
+    @Test
+    public void testCreateShardRetriesOnceOnTransportError() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+
+        createOneSplitShard();
+        assertReplayedOnce(attempts, "split");
+
+        attempts.clear();
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L, 12L));
+        Map<Long, List<Long>> mergeGroupIds = new LinkedHashMap<>();
+        mergeGroupIds.put(201L, Lists.newArrayList(700L));
+        starosAgent.createShardsForMerge(newToOldShardIds, mergeGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE);
+        assertReplayedOnce(attempts, "merge");
+
+        attempts.clear();
+        starosAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, 700L, Collections.emptyMap(), 301L,
+                WarehouseManager.DEFAULT_RESOURCE);
+        assertReplayedOnce(attempts, "virtual shard creation");
+    }
+
+    /**
+     * createShards generates its shard ids itself, so the replay must reuse the ids of the first
+     * attempt; fresh ids would create a second set of shards next to the ones StarMgr may have
+     * committed.
+     */
+    @Test
+    public void testCreateShardsRetryReusesShardIds() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        AtomicLong counter = new AtomicLong(1024);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return counter.getAndAdd(10);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        List<Long> shardIds = starosAgent.createShards(2, FilePathInfo.newBuilder().build(),
+                FileCacheInfo.newBuilder().build(), 333, null, Collections.emptyMap(),
+                WarehouseManager.DEFAULT_RESOURCE);
+
+        Assertions.assertEquals(Lists.newArrayList(1024L, 1034L), shardIds);
+        assertReplayedOnce(attempts, "createShards");
+    }
+
+    @Test
+    public void testCreateShardDoesNotRetryNonTransportError() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.INVALID_ARGUMENT);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        Assertions.assertEquals(1, attempts.size(), "a definite StarMgr answer must not be retried");
+    }
+
+    @Test
+    public void testCreateShardReportsBothErrorsWhenRetryFails() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC, StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException exception =
+                ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        assertReplayedOnce(attempts, "split");
+        Assertions.assertTrue(exception.getMessage().contains("attempt 1 failed"), exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("outcome of the first attempt is unknown"),
+                exception.getMessage());
+    }
+
+    /**
+     * The replay would still send the request even though the caller has been asked to stop, so an
+     * interrupted thread gets the first failure instead.
+     */
+    @Test
+    public void testCreateShardDoesNotReplayOnInterruptedThread() {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        Thread.currentThread().interrupt();
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        } finally {
+            Thread.interrupted();
+        }
+        Assertions.assertEquals(1, attempts.size(), "an interrupted caller must not start another request");
+    }
+
+    /**
+     * StarMgr assigns a fresh id to an entry that carries none, so replaying such a request would create a
+     * second shard; it gets the first failure instead.
+     */
+    @Test
+    public void testCreateShardDoesNotReplayEntryWithoutShardId() {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, 11L);
+        newToOldShardId.put(Constant.DEFAULT_ID, 12L);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(700L));
+        newShardIdToGroupIds.put(Constant.DEFAULT_ID, Lists.newArrayList(700L));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed",
+                () -> starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds,
+                        FilePathInfo.newBuilder().build(), FileCacheInfo.newBuilder().build(),
+                        Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false));
+        Assertions.assertEquals(1, attempts.size(), "a request with an id-less entry must not be replayed");
     }
 
     @Test
