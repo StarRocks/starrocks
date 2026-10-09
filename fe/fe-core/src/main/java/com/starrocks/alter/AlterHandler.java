@@ -78,8 +78,7 @@ public abstract class AlterHandler extends LeaderDaemon {
      */
     protected ReentrantLock lock = new ReentrantLock();
 
-    // Not final: shutdownNow() in onStopped() interrupts in-flight AlterReplicaTask
-    // submissions; start() rebuilds the pool when the next leader takes over.
+    // Leader-session pool: onStopped drains it; start rebuilds it on re-election.
     protected volatile ThreadPoolExecutor executor;
 
     protected void lock() {
@@ -240,11 +239,9 @@ public abstract class AlterHandler extends LeaderDaemon {
         // jobs from the same map. Subclasses can override onStopped() to drop derived caches
         // (e.g. tableNotFinalStateJobMap) that are recomputable from alterJobsV2; just
         // remember to call super.onStopped() so the executor shutdown still runs.
-        // shutdownNow() interrupts in-flight AlterReplicaTask submissions; wait until the executor
-        // actually terminates so this worker does not clear isRunning while a finish-report task is
-        // still running (the re-activation gate reads isRunning as the single quiescence signal), and
-        // so the reset below cannot race an in-flight task's job-state mutation.
-        shutdownNowAndAwaitTermination("AlterHandler." + getName() + ".executor", executor);
+        // Wait for finish-report bodies without interrupting them. The reset below must not race
+        // their job-state mutations, and the session remains registered until cleanup completes.
+        shutdownAndAwaitTermination("AlterHandler." + getName() + ".executor", executor);
         // The jobs themselves survive in memory across an in-place demote / re-elect cycle,
         // unlike a restart which reloads them from the image/journal. Reset each non-final
         // job to its last durable state (drop unlogged in-memory transitions and leader-
@@ -254,11 +251,7 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     private void resetJobsToLastDurableState() {
         for (AlterJobV2 job : alterJobsV2.values()) {
-            try {
-                job.resetToLastDurableState();
-            } catch (Throwable t) {
-                LOG.warn("reset alter job {} on leader handoff failed", job.getJobId(), t);
-            }
+            job.resetToLastDurableState();
         }
     }
 
@@ -282,7 +275,11 @@ public abstract class AlterHandler extends LeaderDaemon {
     public abstract void cancel(CancelStmt stmt) throws DdlException;
 
     public void handleFinishAlterTask(AlterReplicaTask task) throws RejectedExecutionException {
-        executor.submit(task);
+        executor.submit(() -> {
+            if (!shouldStop()) {
+                task.run();
+            }
+        });
     }
 
     // replay the alter job v2

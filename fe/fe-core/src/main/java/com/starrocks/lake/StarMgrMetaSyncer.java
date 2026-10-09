@@ -728,7 +728,7 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
         long start = System.currentTimeMillis();
         acquireBackgroundComputeResource();
         // Shard/tablet/worker deletion is an irreversible external side effect (object-store data and
-        // starMgr shards). If this node started demoting mid-cycle (the interrupt may be eaten), skip the
+        // starMgr shards). If this node started demoting mid-cycle, skip the
         // destructive phase so it cannot reap shards using this node's now-stale metadata during the
         // follower window; the re-elected leader re-runs the sync from its own durable state.
         if (isCapturedLeaseValid()) {

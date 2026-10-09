@@ -1656,7 +1656,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：秒
 - 変更可能：Yes
-- 説明：Leader の降格中に、journal writer を封印（seal）して停止し、進行中の leader WAL 適用が排出されるのを待つために使用されるタイムアウト時間です。この時間内に journal writer を封印できない場合、古い Leader の書き込みが WAL 適用フェンスをすり抜けるのを許す代わりに、降格ステージは失敗し、FE プロセスがクリーンな再起動のために終了されます。降格時に journal writer の封印や進行中の適用の排出に既定値を超える時間が恒常的にかかる場合は、この値を大きくしてください。
+- 説明：Leader の降格時に、進行中の WAL 適用の完了と journal writer の封印および停止を待つタイムアウトです。Follower の replay 前に必要な SchemaChange、Rollup、RoutineLoad の状態リセットには、同じタイムアウトが別途適用されます。その他の Leader ワーカースレッドとスレッドプールは非同期で終了し、この FE が再び Leader になる前に終了を確認します。降格は協調的な停止要求を使用し、実行中の業務スレッドを interrupt しません。journal の封印または必要な状態リセットがタイムアウトした場合、あるいはクリーンアップに失敗した場合、FE プロセスはクリーンな再起動のために終了します。
 - 導入時期：v4.2.0
 
 ### `lock_checker_interval_second`

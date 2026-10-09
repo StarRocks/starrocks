@@ -16,6 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.planner.LoadScanNode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -74,6 +75,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     // Not final: recreated by {@link #start()} if a previous {@link #stop()} shut it down,
     // so the assigner is reusable across leader demotion / re-election cycles.
     private volatile ExecutorService singleExecutor;
+    private volatile boolean stopRequested;
 
     // Registered load. load id -> LoadMeta
     private final ConcurrentHashMap<Long, LoadMeta> registeredLoadMetas;
@@ -114,39 +116,28 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
         // cleanliness gate has already guaranteed the previous worker terminated before start() runs.
         singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 1, "coordinator-be-assigner", true);
+        stopRequested = false;
         singleExecutor.submit(this::runSchedule);
         LOG.info("Start coordinator be assigner");
     }
 
     @Override
     public synchronized void stop() {
-        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns; runSchedule
-        // treats InterruptedException as an exit signal. Wait until the worker actually exits (no
-        // deadline) so BatchWriteMgr.onStopped() - which calls this before it lets the batch-write
-        // daemon clear isRunning - does not report the daemon quiescent while this worker is still
-        // alive, and so the state clears below always run against a terminated schedule loop.
-        if (singleExecutor != null) {
-            singleExecutor.shutdownNow();
-            boolean terminated = false;
-            while (!terminated) {
-                try {
-                    terminated = singleExecutor.awaitTermination(1, TimeUnit.MINUTES);
-                    if (!terminated) {
-                        LOG.warn("coordinator-be-assigner worker has not exited after shutdownNow; still waiting");
-                    }
-                } catch (InterruptedException ie) {
-                    Thread.interrupted();
-                }
-            }
+        // Wake the queue without interrupting an in-flight assignment. Serialize admission with stop
+        // so every queued task is either executed or completed exceptionally during cleanup.
+        synchronized (taskPriorityQueue) {
+            stopRequested = true;
+            taskPriorityQueue.add(new Task(-1L, EventType.STOP, () -> { }));
         }
-        // Now that the schedule loop has terminated, drop the leader-session state it owned.
-        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
-        // job before calling stop(), but those tasks are discarded by shutdownNow(); without
-        // an explicit clear here, warehouseMetas / registeredLoadMetas / taskPriorityQueue
-        // would survive into the next leader session and let stale load ownership leak into
-        // new backend assignments. Safe to mutate without further locking because the only
-        // writer (runSchedule) has just terminated.
-        taskPriorityQueue.clear();
+        if (singleExecutor != null) {
+            LeaderDaemon.shutdownAndAwaitTermination("coordinator-be-assigner", singleExecutor);
+        }
+        // The loop has actually terminated. Settle queued futures before dropping its assignments,
+        // so callers cannot hang on a registration that will never run.
+        Task task;
+        while ((task = taskPriorityQueue.poll()) != null) {
+            task.finish(new RejectedExecutionException("coordinator backend assigner is stopping"));
+        }
         registeredLoadMetas.clear();
         warehouseMetas.clear();
         numPendingTasksForDetectUnavailableNodes.set(0);
@@ -157,7 +148,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
      * If no tasks are available, it performs a periodical check.
      */
     private void runSchedule() {
-        while (true) {
+        while (!stopRequested) {
             Task task;
             try {
                 int checkIntervalMs;
@@ -171,17 +162,17 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException ie) {
-                // shutdownNow() interrupts this thread on leader demotion; exit the schedule
-                // loop so the worker can be replaced by a fresh one on the next start().
-                Thread.currentThread().interrupt();
-                LOG.info("Coordinator be assigner interrupted, exiting");
-                return;
             } catch (Throwable throwable) {
                 LOG.warn("Failed to poll task queue", throwable);
                 continue;
             }
 
+            if (stopRequested) {
+                if (task != null) {
+                    task.finish(new RejectedExecutionException("coordinator backend assigner is stopping"));
+                }
+                return;
+            }
             if (task == null) {
                 if (isPeriodicalCheckRunning.compareAndSet(false, true)) {
                     runPeriodicalCheck();
@@ -233,7 +224,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     EventType.REGISTER_LOAD,
                     () -> this.runRegisterLoadTask(loadMeta)
             );
-            taskPriorityQueue.add(task);
+            enqueueTask(task);
 
             long startTime = System.currentTimeMillis();
             try {
@@ -248,7 +239,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     loadId, (System.currentTimeMillis() - startTime));
         } finally {
             if (!success) {
-                registeredLoadMetas.remove(loadId);
+                registeredLoadMetas.remove(loadId, loadMeta);
             }
         }
     }
@@ -266,7 +257,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                 taskIdAllocator.incrementAndGet(),
                 EventType.UNREGISTER_LOAD,
                 () -> this.runUnregisterLoadTask(loadMeta));
-        taskPriorityQueue.add(task);
+        enqueueTask(task);
         LOG.info("Success to submit task to deallocate nodes, load id: {}, task id: {}",
                 loadMeta.loadId, task.getTaskId());
     }
@@ -294,24 +285,35 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
             }
         }
 
-        // if there are unavailable nodes, submit an EventType.DETECT_UNAVAILABLE_NODES task
-        if (!unavailableNodes.isEmpty()) {
-            // avoid submitting too many tasks if there are some pending tasks
-            if (numPendingTasksForDetectUnavailableNodes.incrementAndGet() > 3) {
-                numPendingTasksForDetectUnavailableNodes.decrementAndGet();
-            } else {
-                Task task = new Task(
-                        taskIdAllocator.incrementAndGet(),
-                        EventType.DETECT_UNAVAILABLE_NODES,
-                        () -> this.runDetectUnavailableNodesTask(loadMeta));
-                taskPriorityQueue.add(task);
-                LOG.info("Submit task after finding unavailable nodes, load id: {}, task id: {}, " +
-                        "pending task num: {}", loadMeta.loadId, task.getTaskId(),
+        // Serialize the detect counter with stop admission, so a late caller cannot decrement a
+        // counter already reset for the next session.
+        synchronized (taskPriorityQueue) {
+            if (!stopRequested && !unavailableNodes.isEmpty()) {
+                if (numPendingTasksForDetectUnavailableNodes.incrementAndGet() > 3) {
+                    numPendingTasksForDetectUnavailableNodes.decrementAndGet();
+                } else {
+                    Task task = new Task(
+                            taskIdAllocator.incrementAndGet(),
+                            EventType.DETECT_UNAVAILABLE_NODES,
+                            () -> this.runDetectUnavailableNodesTask(loadMeta));
+                    enqueueTask(task);
+                    LOG.info("Submit task after finding unavailable nodes, load id: {}, task id: {}, "
+                                    + "pending task num: {}", loadMeta.loadId, task.getTaskId(),
                             numPendingTasksForDetectUnavailableNodes.get());
+                }
             }
         }
 
         return Optional.of(availableNodes);
+    }
+
+    private void enqueueTask(Task task) {
+        synchronized (taskPriorityQueue) {
+            if (stopRequested) {
+                throw new RejectedExecutionException("coordinator backend assigner is stopping");
+            }
+            taskPriorityQueue.add(task);
+        }
     }
 
     // Execute EventType.REGISTER_LOAD task which assigns nodes to the load
@@ -850,6 +852,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // The event type that trigger an assignment
     enum EventType {
+        STOP(-1),
         // register a load
         REGISTER_LOAD(0),
         // detect unavailable nodes

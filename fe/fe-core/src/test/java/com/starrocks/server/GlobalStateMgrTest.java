@@ -451,9 +451,9 @@ public class GlobalStateMgrTest {
 
         globalStateMgr.executeLeaderDemotionStages(FrontendNodeType.FOLLOWER);
 
-        // Combined effect of the six stages, in their load-bearing order: admission + lease dropped
+        // Combined effect of the seven stages, in their load-bearing order: admission + lease dropped
         // and the WAL gate closed (stage 1), watermark advanced onto replayedJournalId (stage 3),
-        // feType flipped (stage 5), role INACTIVE with no pending target (stage 6).
+        // journal-visible resets finished (stage 5), feType flipped (stage 6), role INACTIVE (stage 7).
         Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
         Assertions.assertEquals(FrontendNodeType.FOLLOWER, globalStateMgr.getFeType());
         Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());

@@ -81,7 +81,7 @@ public class ReplicationMgr extends LeaderDaemon {
             try {
                 job.resetLeaderSessionTaskState();
             } catch (Throwable t) {
-                LOG.warn("reset replication job {} task state on leader handoff failed", job.getJobId(), t);
+                throw new IllegalStateException("Failed to reset replication job " + job.getJobId(), t);
             }
         }
     }

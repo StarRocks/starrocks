@@ -915,7 +915,8 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             CompletableFuture<Boolean> future = asyncDeleteForPartitions.get(partitionInfo);
             if (future == null) {
                 asyncDeleteForPartitions.put(partitionInfo,
-                        CompletableFuture.supplyAsync(partitionInfo::delete, getAsyncRemovePartitionExecutor()));
+                        CompletableFuture.supplyAsync(() -> !shouldStop() && partitionInfo.delete(),
+                                getAsyncRemovePartitionExecutor()));
             } else if (future.isDone()) {
                 try {
                     finished = future.get();
@@ -1342,7 +1343,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         // the next leader re-drives erasure from its own durable recycle-bin state.
         ExecutorService executor = asyncRemovePartitionExecutor;
         if (executor != null) {
-            shutdownNowAndAwaitTermination("CatalogRecycleBin.asyncRemovePartitionExecutor", executor);
+            shutdownAndAwaitTermination("CatalogRecycleBin.asyncRemovePartitionExecutor", executor);
             asyncRemovePartitionExecutor = null;
         }
         synchronized (this) {

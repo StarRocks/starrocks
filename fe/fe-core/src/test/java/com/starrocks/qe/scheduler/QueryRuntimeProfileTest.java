@@ -80,6 +80,22 @@ public class QueryRuntimeProfileTest {
     }
 
     @Test
+    public void testProfileCanFinishAfterInterruptedWait() {
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.attachInstances(java.util.List.of(connectContext.getExecutionId()));
+        try {
+            Thread.currentThread().interrupt();
+            Assertions.assertFalse(profile.waitForProfileFinished(1, java.util.concurrent.TimeUnit.SECONDS));
+            Assertions.assertFalse(Thread.currentThread().isInterrupted());
+            Assertions.assertFalse(profile.isFinished());
+            profile.finishInstance(connectContext.getExecutionId());
+            Assertions.assertTrue(profile.waitForProfileFinished(1, java.util.concurrent.TimeUnit.SECONDS));
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     public void testBuildNonPipelineQueryProfile() {
         new Expectations() {
             {

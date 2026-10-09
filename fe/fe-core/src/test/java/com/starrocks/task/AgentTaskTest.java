@@ -48,6 +48,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.AggregateType;
@@ -71,6 +72,7 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -515,6 +517,48 @@ public class AgentTaskTest {
     }
 
     @Test
+    public void testQueuedAgentSendsKeepTheirSubmissionLease() {
+        GlobalStateMgr state = new GlobalStateMgr(new NodeMgr()) { };
+        Deencapsulation.setField(state, "activeLeaderLease", new LeaderLease(10L, 1L));
+        List<Runnable> queued = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger lookups = new java.util.concurrent.atomic.AtomicInteger();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+
+            @Mock
+            public NodeMgr getNodeMgr() {
+                lookups.incrementAndGet();
+                throw new IllegalStateException("stale work must not look up or contact a backend");
+            }
+        };
+        new MockUp<java.util.concurrent.ThreadPoolExecutor>() {
+            @Mock
+            public void execute(Invocation invocation, Runnable task) {
+                if (invocation.getInvokedInstance() == AgentTaskExecutor.EXECUTOR) {
+                    queued.add(task);
+                } else {
+                    invocation.proceed(task);
+                }
+            }
+        };
+        AgentBatchTask batch = new AgentBatchTask();
+        batch.addTask(createReplicaTask);
+        AgentTaskExecutor.submit(batch);
+        java.util.concurrent.CompletableFuture<Boolean> tabletSend =
+                TabletTaskExecutor.sendTask(backendId1, List.of(createReplicaTask));
+        Assertions.assertEquals(2, queued.size());
+
+        // A new term is active before the shared process-wide executor picks up either old send.
+        Deencapsulation.setField(state, "activeLeaderLease", new LeaderLease(11L, 3L));
+        queued.forEach(Runnable::run);
+        Assertions.assertEquals(0, lookups.get());
+        Assertions.assertTrue(tabletSend.isCompletedExceptionally());
+    }
+
+    @Test
     public void testBatchTaskRunSkipsDispatchWhenDisallowed() {
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -531,7 +575,9 @@ public class AgentTaskTest {
         batch.addTask(createReplicaTask);
         // The pre-loop dispatch fence must exit before any backend lookup or submit_tasks RPC -
         // this is the check that actually blocks destructive stale-session RPCs during demotion.
-        Assertions.assertDoesNotThrow(batch::run);
+        Assertions.assertDoesNotThrow(() -> {
+            batch.run();
+        });
     }
 
     @Test

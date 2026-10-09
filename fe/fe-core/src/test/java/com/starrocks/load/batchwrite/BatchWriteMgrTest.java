@@ -510,8 +510,7 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         @SuppressWarnings("unchecked")
         Map<BatchWriteId, MergeCommitJob> jobs = (Map<BatchWriteId, MergeCommitJob>)
                 FieldUtils.readField(batchWriteMgr, "mergeCommitJobs", true);
-        // Seed two jobs through the public API so onStopped() actually walks the map and
-        // calls coordinatorBackendAssigner.unregisterBatchWrite for each entry.
+        // Seed jobs through the public API to check both assignment and job state are released.
         StreamLoadKvParams params1 = new StreamLoadKvParams(new HashMap<>() {
             {
                 put(HTTP_BATCH_WRITE_INTERVAL_MS, "1000");
@@ -548,10 +547,9 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
     }
 
     @Test
-    public void testOnStoppedSwallowsAssignerStopFailure() throws Exception {
-        // The per-handler try/catch around coordinatorBackendAssigner.stop() must absorb
-        // any failure so the rest of the drain (mergeCommitJobs clear and threadPoolExecutor
-        // shutdown) still runs.
+    public void testOnStoppedPropagatesAssignerStopFailure() throws Exception {
+        // Cleanup failure must reach LeaderDaemon's fatal handler, without pretending to quiesce.
+        BatchWriteMgr failingMgr = new BatchWriteMgr();
         CoordinatorBackendAssigner throwingAssigner = new CoordinatorBackendAssigner() {
             @Override
             public void start() {
@@ -575,13 +573,15 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
                 return Optional.empty();
             }
         };
-        FieldUtils.writeField(batchWriteMgr, "coordinatorBackendAssigner", throwingAssigner, true);
+        FieldUtils.writeField(failingMgr, "coordinatorBackendAssigner", throwingAssigner, true);
 
         ThreadPoolExecutor poolBeforeStop = (ThreadPoolExecutor)
-                FieldUtils.readField(batchWriteMgr, "threadPoolExecutor", true);
+                FieldUtils.readField(failingMgr, "threadPoolExecutor", true);
 
-        // Should not throw despite assigner.stop() throwing.
-        MethodUtils.invokeMethod(batchWriteMgr, true, "onStopped");
+        java.lang.reflect.InvocationTargetException failure = org.junit.jupiter.api.Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> MethodUtils.invokeMethod(failingMgr, true, "onStopped"));
+        assertEquals("simulated assigner stop failure", failure.getCause().getMessage());
 
         assertTrue(poolBeforeStop.isShutdown(),
                 "threadPoolExecutor must still be shut down even when assigner.stop() throws");

@@ -218,10 +218,8 @@ public class ConsistencyCheckerTest {
     }
 
     @Test
-    public void testOnStoppedSwallowsClearException() throws Exception {
-        // A misbehaving CheckConsistencyJob.clear() must not abort the demotion drain - the
-        // remaining jobs still need to be removed and the watermark/counters still need to be
-        // reset. Exercises the per-job catch around job.clear().
+    public void testOnStoppedPropagatesClearException() throws Exception {
+        // A partial cleanup must reach LeaderDaemon's fatal handler and retain the failed job.
         ConsistencyChecker checker = new ConsistencyChecker();
 
         @SuppressWarnings("unchecked")
@@ -237,9 +235,10 @@ public class ConsistencyCheckerTest {
         jobs.put(201L, throwingJob);
         jobs.put(202L, new CheckConsistencyJob(202L));
 
-        MethodUtils.invokeMethod(checker, true, "onStopped");
-
-        Assertions.assertTrue(jobs.isEmpty(),
-                "jobs map must be cleared even when an individual job's clear() throws");
+        java.lang.reflect.InvocationTargetException failure = Assertions.assertThrows(
+                java.lang.reflect.InvocationTargetException.class,
+                () -> MethodUtils.invokeMethod(checker, true, "onStopped"));
+        Assertions.assertTrue(failure.getCause().getMessage().contains("201"));
+        Assertions.assertTrue(jobs.containsKey(201L));
     }
 }
