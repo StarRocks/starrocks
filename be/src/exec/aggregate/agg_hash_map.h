@@ -61,6 +61,16 @@ template <PhmapSeed seed>
 using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
 using Int16AggHashMap = SmallFixedSizeHashMap<int16_t, AggDataPtr, seed>;
+// 65 536-cell direct-array hash map keyed by uint16 -- backing for INT
+// GROUP BY when FE-supplied min/max says max-min fits in 16 bits.
+// Unsigned key so (value - min) does not sign-extend on narrowing.
+template <PhmapSeed seed>
+using RangeUInt16AggHashMap = SmallFixedSizeHashMap<uint16_t, AggDataPtr, seed>;
+// 256-cell direct-array hash map keyed by uint8 -- backing for INT GROUP BY
+// when FE-supplied min/max says max-min fits in 8 bits (range <= 256).
+// Shares AggHashMapWithCompressibleInt32Key with the uint16 variant.
+template <PhmapSeed seed>
+using RangeUInt8AggHashMap = SmallFixedSizeHashMap<uint8_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr, StdHashWithSeed<int32_t, seed>>;
 template <PhmapSeed seed>
@@ -451,6 +461,173 @@ template <LogicalType logical_type, typename HashMap>
 using AggHashMapWithOneNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, false>;
 template <LogicalType logical_type, typename HashMap>
 using AggHashMapWithOneNullableNumberKey = AggHashMapWithOneNumberKeyWithNullable<logical_type, HashMap, true>;
+
+// GROUP BY on a single INT-typed column where FE supplies min/max via
+// group_by_min_max and max-min fits in 16 bits.  Skips the slice_cx4
+// rewrite (phmap-backed, with per-row bitcompress_serialize) by
+// narrowing (value - min) -> uint16 inline and looking up in a
+// 65 536-cell SmallFixedSizeHashMap.  Mirrors the wrapper shape used
+// by AggHashMapWithLowCardDictKey; differs in that the input column
+// can be any signed integer that fits in int32 and the min offset is
+// runtime-supplied by the aggregator from bases[0].
+template <typename HashMap, bool is_nullable>
+struct AggHashMapWithCompressibleInt32Key
+        : public AggHashMapWithKey<HashMap, AggHashMapWithCompressibleInt32Key<HashMap, is_nullable>> {
+    using Self = AggHashMapWithCompressibleInt32Key<HashMap, is_nullable>;
+    using Base = AggHashMapWithKey<HashMap, Self>;
+    using KeyType = typename HashMap::key_type;
+    using Iterator = typename HashMap::iterator;
+    using ColumnType = Int32Column;
+    using FieldType = int32_t;
+    using ResultVector = Buffer<KeyType>;
+
+    static_assert(std::is_unsigned_v<KeyType>,
+                  "compressible-int wrapper needs unsigned key so (value - min) survives the narrowing cast");
+
+    template <class... Args>
+    AggHashMapWithCompressibleInt32Key(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+    // Min offset captured from FE's group_by_min_max stats.  Aggregator
+    // calls set_min(bases[0]) in _build_hash_variant after the route
+    // decision in _try_to_apply_compressed_key_opt picks this variant.
+    int32_t min_value = 0;
+    void set_min(int32_t v) { min_value = v; }
+
+    AggDataPtr get_null_key_data() { return null_key_data; }
+    void set_null_key_data(AggDataPtr data) { null_key_data = data; }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        auto* key_column = key_columns[0].get();
+        if constexpr (is_nullable) {
+            return this->template compute_agg_states_nullable<Func, HTBuildOp>(
+                    chunk_size, key_column, pool, std::forward<Func>(allocate_func), agg_states, extra);
+        } else {
+            return this->template compute_agg_states_non_nullable<Func, HTBuildOp>(
+                    chunk_size, key_column, pool, std::forward<Func>(allocate_func), agg_states, extra);
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_non_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
+                                                         Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                         ExtraAggParam* extra) {
+        DCHECK(!key_column->is_nullable());
+        const auto* column = down_cast<const ColumnType*>(key_column);
+        const auto container = column->immutable_data();
+        size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        for (size_t i = 0; i < chunk_size; i++) {
+            const KeyType key = static_cast<KeyType>(container[i] - min_value);
+            if constexpr (HTBuildOp::process_limit) {
+                if (hash_table_size < extra->limits) {
+                    _emplace_key(key, (*agg_states)[i], allocate_func, [&]() { hash_table_size++; });
+                } else {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
+                }
+            } else if constexpr (HTBuildOp::allocate) {
+                _emplace_key(key, (*agg_states)[i], allocate_func,
+                             FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+            } else if constexpr (HTBuildOp::fill_not_found) {
+                _find_key((*agg_states)[i], (*not_founds)[i], key);
+            }
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename HTBuildOp>
+    ALWAYS_NOINLINE void compute_agg_states_nullable(size_t chunk_size, const Column* key_column, MemPool* pool,
+                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                     ExtraAggParam* extra) {
+        if (key_column->only_null()) {
+            if (null_key_data == nullptr) {
+                null_key_data = allocate_func(nullptr);
+            }
+            for (size_t i = 0; i < chunk_size; i++) {
+                (*agg_states)[i] = null_key_data;
+            }
+            return;
+        }
+        DCHECK(key_column->is_nullable());
+        const auto* nullable_column = down_cast<const NullableColumn*>(key_column);
+        const auto* data_column = down_cast<const ColumnType*>(nullable_column->data_column().get());
+        if (!nullable_column->has_null()) {
+            return compute_agg_states_non_nullable<Func, HTBuildOp>(
+                    chunk_size, data_column, pool, std::forward<Func>(allocate_func), agg_states, extra);
+        }
+        const auto container = data_column->immutable_data();
+        const auto& null_data = nullable_column->null_column_data();
+        size_t hash_table_size = this->hash_map.size();
+        auto* __restrict not_founds = extra->not_founds;
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (null_data[i]) {
+                if (UNLIKELY(null_key_data == nullptr)) {
+                    null_key_data = allocate_func(nullptr);
+                }
+                (*agg_states)[i] = null_key_data;
+            } else {
+                const KeyType key = static_cast<KeyType>(container[i] - min_value);
+                if constexpr (HTBuildOp::process_limit) {
+                    if (hash_table_size < extra->limits) {
+                        _emplace_key(key, (*agg_states)[i], allocate_func, [&]() { hash_table_size++; });
+                    } else {
+                        _find_key((*agg_states)[i], (*not_founds)[i], key);
+                    }
+                } else if constexpr (HTBuildOp::allocate) {
+                    _emplace_key(key, (*agg_states)[i], allocate_func,
+                                 FillNotFounds<HTBuildOp::fill_not_found>(not_founds, i));
+                } else if constexpr (HTBuildOp::fill_not_found) {
+                    _find_key((*agg_states)[i], (*not_founds)[i], key);
+                }
+            }
+        }
+    }
+
+    template <AllocFunc<Self> Func, typename EmplaceCallBack>
+    ALWAYS_INLINE void _emplace_key(KeyType key, AggDataPtr& target_state, Func&& allocate_func,
+                                    EmplaceCallBack&& callback) {
+        auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            callback();
+            AggDataPtr pv = allocate_func(key);
+            ctor(key, pv);
+        });
+        target_state = iter->second;
+    }
+
+    ALWAYS_INLINE void _find_key(AggDataPtr& target_state, uint8_t& not_found, KeyType key) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
+            target_state = iter->second;
+        } else {
+            not_found = 1;
+        }
+    }
+
+    void insert_keys_to_columns(const ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
+        ColumnType* column = nullptr;
+        if constexpr (is_nullable) {
+            auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
+            column = down_cast<ColumnType*>(nullable_column->data_column_raw_ptr());
+            nullable_column->null_column_data().resize(chunk_size);
+        } else {
+            DCHECK(!null_key_data);
+            column = down_cast<ColumnType*>(key_columns[0].get());
+        }
+        auto& data = column->get_data();
+        data.reserve(data.size() + chunk_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            data.push_back(static_cast<int32_t>(keys[i]) + min_value);
+        }
+    }
+
+    static constexpr bool has_single_null_key = is_nullable;
+    AggDataPtr null_key_data = nullptr;
+    ResultVector results;
+};
+
+template <typename HashMap>
+using AggHashMapWithOneCompressibleInt32Key = AggHashMapWithCompressibleInt32Key<HashMap, false>;
+template <typename HashMap>
+using AggHashMapWithOneNullableCompressibleInt32Key = AggHashMapWithCompressibleInt32Key<HashMap, true>;
 
 template <typename HashMap, bool is_nullable>
 struct AggHashMapWithOneStringKeyWithNullable
