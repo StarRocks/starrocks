@@ -41,11 +41,10 @@ append_runtime_library_path() {
 
 if starrocks_is_darwin; then
     starrocks_setup_darwin_build_env
-    PARALLEL=$(starrocks_detect_parallelism)
 else
     . ${STARROCKS_HOME}/env.sh
-    PARALLEL=$(starrocks_detect_ut_parallelism)
 fi
+PARALLEL=$(starrocks_detect_ut_parallelism)
 
 # Check args
 usage() {
