@@ -18,8 +18,92 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+bool SpillProcessChannel::_add_spill_task_locked(SpillProcessTask&& task) {
+    // _mutex is held by the caller. Mutate only; the notify is the caller's job
+    // (the public wrapper after it releases the lock, or execute() after its own
+    // single lock). The channel lock orders enqueues against close(): a concurrent
+    // close drains the queue and zeroes the count under the same lock, so an
+    // enqueue cannot slip between the drain and the zeroing (a count with no
+    // consumer would park a sink on WAIT_CHANNEL forever).
+    if (_is_closed) {
+        // The channel is already torn down (cancel path); the task is dropped,
+        // nothing was published.
+        return false;
+    }
+    DCHECK(!_is_finishing.load());
+    _is_working.store(true);
+    _task_count.fetch_add(1);
+    if (!_spill_tasks.put(std::move(task))) {
+        _task_count.fetch_sub(1);
+        return false;
+    }
+    return true;
+}
+
+bool SpillProcessChannel::_add_last_task_locked(SpillProcessTask&& task) {
+    // _mutex is held by the caller; mutate only, no notify (see _add_spill_task_locked).
+    if (_is_closed) {
+        return false;
+    }
+    DCHECK(!_is_finishing.load());
+    _is_working.store(true);
+    _task_count.fetch_add(1);
+    task.mark_final();
+    if (!_spill_tasks.put(std::move(task))) {
+        _task_count.fetch_sub(1);
+        return false;
+    }
+    // Terminal flag is published under the lock so a source woken by the post-lock
+    // notify observes is_finishing.
+    _is_finishing.store(true);
+    return true;
+}
+
+bool SpillProcessChannel::add_spill_task(SpillProcessTask&& task) {
+    std::shared_ptr<spill::Spiller> spiller_copy;
+    bool ok;
+    {
+        std::lock_guard guard(_mutex);
+        ok = _add_spill_task_locked(std::move(task));
+        if (!ok) {
+            return false;
+        }
+        spiller_copy = _spiller;
+    }
+    // Callers enqueue directly (aggregator, sorter, hash joiner) without going
+    // through execute(), so the enqueue itself must wake the spill-process
+    // source: it sleeps on an empty channel and no spiller IO exists yet to
+    // wake it. Count and task are published before the notify; the notify runs
+    // outside the lock (try_schedule re-evaluates predicates).
+    if (spiller_copy != nullptr) {
+        spiller_copy->notify_source_observers();
+    }
+    return true;
+}
+
+bool SpillProcessChannel::add_last_task(SpillProcessTask&& task) {
+    std::shared_ptr<spill::Spiller> spiller_copy;
+    bool ok;
+    {
+        std::lock_guard guard(_mutex);
+        ok = _add_last_task_locked(std::move(task));
+        if (!ok) {
+            return false;
+        }
+        spiller_copy = _spiller;
+    }
+    if (spiller_copy != nullptr) {
+        spiller_copy->notify_source_observers();
+    }
+    return true;
+}
+
+>>>>>>> 67bfaf0 ([BugFix] Do not run a queued spill data task when closing the spill channel (#80252))
 void SpillProcessTask::reset() {
     _task = {};
+    _is_final = false;
 }
 
 SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequence) {
@@ -60,9 +144,46 @@ Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
 }
 
 void SpillProcessChannel::close() {
+<<<<<<< HEAD
     std::lock_guard guard(_mutex);
     if (!_is_finishing) {
         return;
+=======
+    std::shared_ptr<spill::Spiller> spiller_copy;
+    {
+        std::lock_guard guard(_mutex);
+        if (_is_closed) {
+            return;
+        }
+
+        // Drain every queued task under the lock. Popping leaves the last task in `task` for the
+        // orderly-finishing handoff below; the earlier tasks are released as `task` is overwritten, running
+        // their destructors so the operator and spiller they captured are freed even on a cancel close.
+        SpillProcessTask task;
+        while (!_spill_tasks.empty()) {
+            if (_spill_tasks.try_get(&task)) {
+                _task_count.fetch_sub(1);
+            }
+        }
+
+        // Run the last task only if it is the terminal handoff (add_last_task / execute()). _is_finishing
+        // alone is not enough: a cancelled sink still calls set_finishing() without enqueuing a final task,
+        // leaving a data task (e.g. the sorter's chunk iterator) at the tail. Such a task reads state owned
+        // by the sink, which may already be closed and freed at this point; running it is a use-after-free,
+        // and its output would be discarded anyway.
+        if (_is_finishing && task && task.is_final()) {
+            (void)task();
+        }
+        // Account for any task still pinned in _current_task as well; the
+        // channel is closing, so the aggregate must land at zero. This must
+        // happen on the cancel path too: a sink driver in another pipeline
+        // parks on has_task() through its WAIT_CHANNEL block, and nobody else
+        // clears the count once this source is torn down.
+        _task_count.store(0);
+
+        spiller_copy = std::move(_spiller);
+        _is_closed = true;
+>>>>>>> 67bfaf0 ([BugFix] Do not run a queued spill data task when closing the spill channel (#80252))
     }
 
     SpillProcessTask task;
