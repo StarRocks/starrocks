@@ -101,5 +101,58 @@ class TestBuildParallelism(unittest.TestCase):
         p = self.run_bash(cmd, {"PARALLEL": ""})
         self.assertEqual(p, "1")
 
+    def test_run_be_ut_detect_parallelism(self):
+        # 1. Verify -j is documented in run-be-ut.sh help
+        res = subprocess.run(
+            ["bash", "-c", "./run-be-ut.sh --help || true"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertIn("-j", res.stdout)
+        self.assertIn("build parallel", res.stdout)
+
+        # 2. Verify run-be-ut.sh contains the uncapped parallelism call and diagnostic logging
+        run_be_ut_path = os.path.join(REPO_ROOT, "run-be-ut.sh")
+        with open(run_be_ut_path, "r") as f:
+            content = f.read()
+        self.assertIn("PARALLEL=$(starrocks_detect_ut_parallelism)", content)
+        self.assertIn(
+            'echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: $(starrocks_detect_linker_type), RAM: $(starrocks_detect_total_ram_gb) GiB)"',
+            content
+        )
+
+        # 3. Verify preamble execution wires up starrocks_detect_ut_parallelism
+        cmd_init = """
+        export STARROCKS_HOME="${PWD}"
+        . "${STARROCKS_HOME}/build-support/build_helpers.sh"
+        starrocks_detect_ut_parallelism() { echo 42; }
+        if starrocks_is_darwin; then
+            PARALLEL=999
+        else
+            . "${STARROCKS_HOME}/env.sh" >/dev/null 2>&1
+            PARALLEL=$(starrocks_detect_ut_parallelism)
+        fi
+        echo "INIT_PARALLEL=${PARALLEL}"
+        """
+        out_init = self.run_bash(cmd_init)
+        self.assertEqual(out_init.splitlines()[-1].strip(), "INIT_PARALLEL=42")
+
+        # 4. Verify CLI flag -j overrides PARALLEL during argument parsing
+        cmd_flag = """
+        export STARROCKS_HOME="${PWD}"
+        eval "$(awk '/^done$/ {print; exit} {print}' run-be-ut.sh)"
+        echo "FLAG_PARALLEL=${PARALLEL}"
+        """
+        res_flag = subprocess.run(
+            ["bash", "-c", cmd_flag, "_", "-j", "11"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        self.assertIn("FLAG_PARALLEL=11", res_flag.stdout)
+
 if __name__ == "__main__":
     unittest.main()
