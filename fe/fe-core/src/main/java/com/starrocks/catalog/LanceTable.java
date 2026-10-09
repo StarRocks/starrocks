@@ -34,10 +34,10 @@ public class LanceTable extends Table {
     }
 
     public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
-        this(id, catalogName, name, schema, uri, "");
+        this(id, catalogName, "", name, schema, uri);
     }
 
-    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri, String dbName) {
+    public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
         this.catalogName = catalogName;
@@ -54,13 +54,18 @@ public class LanceTable extends Table {
         return dbName == null ? "" : dbName;
     }
 
+    @Override
+    public String getCatalogTableName() {
+        return getName();
+    }
+
     public String getUri() {
         return uri;
     }
 
     @Override
     public String getTableLocation() {
-        return uri;
+        return getUri();
     }
 
     @Override
@@ -71,10 +76,10 @@ public class LanceTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TLanceTable tLanceTable = new TLanceTable();
-        tLanceTable.setLance_dataset_uri(uri);
+        tLanceTable.setLance_dataset_uri(getUri());
 
         TTableDescriptor tTableDescriptor =
-                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, name, getCatalogDBName());
+                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, getCatalogTableName(), getCatalogDBName());
         tTableDescriptor.setLanceTable(tLanceTable);
         return tTableDescriptor;
     }

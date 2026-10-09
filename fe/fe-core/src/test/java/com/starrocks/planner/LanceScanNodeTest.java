@@ -201,8 +201,8 @@ public class LanceScanNodeTest {
 
     @Test
     public void testDatasetUriIsSerializedInTableDescriptor() {
-        LanceTable table = new LanceTable(42, "lance_catalog", "vectors",
-                List.of(new Column("id", IntegerType.INT)), "s3://bucket/vectors.lance", "vectors_db");
+        LanceTable table = new LanceTable(42, "lance_catalog", "vectors_db", "vectors",
+                List.of(new Column("id", IntegerType.INT)), "s3://bucket/vectors.lance");
         TTableDescriptor thrift = table.toThrift(List.of());
         Assertions.assertEquals(42, thrift.getId());
         Assertions.assertEquals(TTableType.LANCE_TABLE, thrift.getTableType());
