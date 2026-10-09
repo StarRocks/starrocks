@@ -1,3 +1,4 @@
+-- name: test_mv_join_derivabllity_rewrite
 
 
 CREATE TABLE IF NOT EXISTS `customer` (
