@@ -1009,6 +1009,13 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
              (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
+    if (dst_column->empty() && !src_column->only_null()) {
+        // TypeDescriptor does not carry physical storage metadata. Preserve it
+        // from the first evaluated column before buffering values (e.g. GEO XY).
+        auto* dst_data = ColumnHelper::get_data_column(dst_column);
+        auto empty = ColumnHelper::get_data_column(src_column.get())->clone_empty();
+        dst_data->swap_column(*empty);
+    }
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
@@ -1533,7 +1540,9 @@ void Analytor::_init_window_result_columns() {
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOMETRY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOGRAPHY) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);
