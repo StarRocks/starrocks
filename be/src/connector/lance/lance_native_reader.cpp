@@ -44,11 +44,51 @@ Status lance_error_status(char* error) {
     sr_lance_free_error(error);
     return Status::IOError(message);
 }
+// Build the conversion plan in descriptor order. The struct converter reads arrays
+// by field name, while the generic plan builder pairs the source types positionally.
+StatusOr<std::shared_ptr<arrow::DataType>> project_lance_type(const std::shared_ptr<arrow::DataType>& source,
+                                                              const TypeDescriptor& target) {
+    if (target.type == TYPE_STRUCT && source->id() == arrow::Type::STRUCT) {
+        const auto& struct_type = static_cast<const arrow::StructType&>(*source);
+        std::vector<std::shared_ptr<arrow::Field>> fields;
+        for (size_t i = 0; i < target.children.size(); ++i) {
+            auto field = struct_type.GetFieldByName(target.field_names[i]);
+            if (field == nullptr) {
+                return Status::DataQualityError("Missing projected Lance struct field: " + target.field_names[i]);
+            }
+            ASSIGN_OR_RETURN(auto child, project_lance_type(field->type(), target.children[i]));
+            fields.push_back(field->WithType(std::move(child)));
+        }
+        return arrow::struct_(std::move(fields));
+    }
+    if (target.type == TYPE_ARRAY && target.children.size() == 1 &&
+        (source->id() == arrow::Type::LIST || source->id() == arrow::Type::LARGE_LIST ||
+         source->id() == arrow::Type::FIXED_SIZE_LIST)) {
+        ASSIGN_OR_RETURN(auto child, project_lance_type(source->field(0)->type(), target.children[0]));
+        auto field = source->field(0)->WithType(std::move(child));
+        if (source->id() == arrow::Type::LIST) return arrow::list(std::move(field));
+        if (source->id() == arrow::Type::LARGE_LIST) return arrow::large_list(std::move(field));
+        return arrow::fixed_size_list(std::move(field),
+                                      static_cast<const arrow::FixedSizeListType&>(*source).list_size());
+    }
+    return source;
+}
 // The generic load converter permits narrowing integer casts. A stale external
 // schema must fail a query instead of silently truncating dataset values.
 Status validate_integer_width(const arrow::DataType* source, const TypeDescriptor& target) {
     if (target.type == TYPE_ARRAY && target.children.size() == 1 && source->num_fields() == 1) {
         return validate_integer_width(source->field(0)->type().get(), target.children[0]);
+    }
+    if (target.type == TYPE_STRUCT && source->id() == arrow::Type::STRUCT) {
+        const auto* struct_type = static_cast<const arrow::StructType*>(source);
+        for (size_t i = 0; i < target.children.size(); ++i) {
+            auto field = struct_type->GetFieldByName(target.field_names[i]);
+            if (field == nullptr) {
+                return Status::DataQualityError("Missing projected Lance struct field: " + target.field_names[i]);
+            }
+            RETURN_IF_ERROR(validate_integer_width(field->type().get(), target.children[i]));
+        }
+        return Status::OK();
     }
     int target_bits;
     switch (target.type) {
@@ -164,6 +204,12 @@ void configure_lance_temporal(const arrow::DataType* source, const TypeDescripto
             plan->func = convert_lance_temporal<TYPE_DATETIME>;
     } else if (target.type == TYPE_ARRAY && plan->children.size() == 1) {
         configure_lance_temporal(source->field(0)->type().get(), target.children[0], plan->children[0].get());
+    } else if (target.type == TYPE_STRUCT && source->id() == arrow::Type::STRUCT) {
+        const auto* struct_type = static_cast<const arrow::StructType*>(source);
+        for (size_t i = 0; i < target.children.size(); ++i) {
+            auto field = struct_type->GetFieldByName(target.field_names[i]);
+            configure_lance_temporal(field->type().get(), target.children[i], plan->children[i].get());
+        }
     }
 }
 
@@ -294,13 +340,14 @@ Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescript
         if (!slot_desc->is_nullable() && array->null_count() != 0) {
             return Status::DataQualityError("Null in non-nullable Lance column: " + std::string(slot_desc->col_name()));
         }
-        RETURN_IF_ERROR(validate_integer_width(array->type().get(), slot_desc->type()));
+        ASSIGN_OR_RETURN(auto projected_type, project_lance_type(array->type(), slot_desc->type()));
+        RETURN_IF_ERROR(validate_integer_width(projected_type.get(), slot_desc->type()));
         ConvertFuncTree conv_func;
         Expr* cast_expr = nullptr;
         MutableColumnPtr column;
         RETURN_IF_ERROR(
-                create_arrow_column(array->type().get(), slot_desc, &column, &conv_func, &cast_expr, pool, true));
-        configure_lance_temporal(array->type().get(), slot_desc->type(), &conv_func);
+                create_arrow_column(projected_type.get(), slot_desc, &column, &conv_func, &cast_expr, pool, true));
+        configure_lance_temporal(projected_type.get(), slot_desc->type(), &conv_func);
         conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
         RETURN_IF_ERROR(convert_arrow_array_to_column(&conv_func, batch->num_rows(), array.get(), column.get(), 0, 0,
                                                       &chunk_filter, &conv_ctx));
