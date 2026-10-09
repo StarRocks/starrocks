@@ -1,0 +1,38 @@
+name: ISSUE JIRA SYNC
+
+# Create a CelerData Jira issue (project RB) for every newly opened issue.
+# All logic lives in ci-tool (scripts/sync-issue-to-jira.py); this file only wires the event.
+# Switches (repository variables): ISSUE_JIRA_SYNC_ENABLED=true turns it on (unset = off),
+# JIRA_DRY_RUN=true prints instead of writing to Jira.
+
+on:
+  issues:
+    types:
+      - opened
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: [self-hosted, quick]
+    if: github.repository == 'StarRocks/starrocks'
+    env:
+      ISSUE_JIRA_SYNC_ENABLED: ${{ vars.ISSUE_JIRA_SYNC_ENABLED }}
+      JIRA_DRY_RUN: ${{ vars.JIRA_DRY_RUN }}
+      JIRA_SERVER: ${{ vars.JIRA_SERVER }}
+      JIRA_USERNAME: ${{ vars.JIRA_USERNAME }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_URL: ${{ github.event.issue.html_url }}
+      ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+      # Issue title/body are attacker-controlled: only ever passed through env, never
+      # interpolated into the run script.
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      ISSUE_LABELS: ${{ toJson(github.event.issue.labels.*.name) }}
+    steps:
+      - name: Sync Issue To Jira
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          python3 scripts/sync-issue-to-jira.py
