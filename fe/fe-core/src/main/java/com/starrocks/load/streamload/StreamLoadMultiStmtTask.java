@@ -490,6 +490,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         // Phase 2: Execute time-consuming operations (without lock)
         boolean success = false;
         String commitErrorMsg = null;
+        boolean commitStmtFailed = false;
         try {
             LOG.info("commit {} sub tasks", taskMaps.size());
             // Fire every table's channel first. prepareChannel only dispatches the
@@ -549,9 +550,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 success = true;
             } else {
                 // commitStmt reports a failed commit through the context state instead of throwing.
-                // The client must get it: an OK response makes it treat the transaction as committed.
+                // The response is set below, once the rollback has settled the outcome.
                 commitErrorMsg = commitStmtError;
-                resp.setErrorMsg(commitStmtError);
+                commitStmtFailed = true;
             }
         } catch (Exception e) {
             commitErrorMsg = e.getMessage();
@@ -577,6 +578,12 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                     writeUnlock();
                 }
                 tryRollbackNow();
+                // The client must get a failed commit: an OK response makes it treat the transaction
+                // as committed. The response follows the outcome the rollback settled: if it found the
+                // transaction committed, the task is COMMITED and the response stays OK.
+                if (commitStmtFailed && this.state != State.COMMITED) {
+                    resp.setErrorMsg(commitErrorMsg);
+                }
             }
         }
     }

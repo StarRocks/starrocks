@@ -948,6 +948,39 @@ public class StreamLoadMultiStmtTaskTest {
         Assertions.assertEquals("CANCELLED", multiTask.getStateName());
     }
 
+    // ---- The response follows the outcome the rollback settles: if the abort finds the transaction
+    // committed after commitTxn read it as PREPARED, the task is COMMITED and the response stays OK ----
+    @Test
+    public void testCommitTxnStaysOkWhenAbortFindsTxnCommitted() throws Exception {
+        mockCommitUpToCommitStmt(901L, commitStmtFailsWith("commit failed for test"));
+        TransactionState txnState = txnStateWithStatus(TransactionStatus.PREPARED);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return txnState;
+            }
+
+            @Mock
+            public void abortTransaction(long dbId, long transactionId, String reason,
+                                         List<TabletCommitInfo> finishedTablets,
+                                         List<TabletFailInfo> failedTablets,
+                                         TxnCommitAttachment txnCommitAttachment) throws StarRocksException {
+                txnState.setTransactionStatus(TransactionStatus.COMMITTED);
+                throw new TransactionAlreadyCommitException("transaction " + transactionId + " is committed");
+            }
+        };
+
+        multiTask.beginTxn(new TransactionResult());
+        StreamLoadTask sub = addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertTrue(resp.stateOK(), resp.msg);
+        Assertions.assertEquals("COMMITED", multiTask.getStateName());
+        Assertions.assertEquals("COMMITED", sub.getStateName());
+    }
+
     // ---- Reconcile finding the txn committed must not leave sub-tasks CANCELLED ----
     @Test
     public void testReconcileCommittedPropagatesToSubTasksInsteadOfCancel() throws Exception {
