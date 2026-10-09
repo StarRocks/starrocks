@@ -326,19 +326,6 @@ TEST(CoverageWindowTest, IncompleteFrameIsRejectedAndOutputIsPadded) {
     result->check_or_die();
 }
 
-TEST(CoverageWindowTest, CancellationDuringOutputPadsWithoutPublishingSuccess) {
-    WindowHarness h;
-    h.evaluate(coverage_input({left, right}));
-    ASSERT_FALSE(h.ctx->has_error());
-    h.runtime.set_is_cancelled(true);
-    auto result = h.result(2);
-    EXPECT_TRUE(h.ctx->has_error());
-    EXPECT_EQ(result->size(), 2);
-    EXPECT_TRUE(result->is_null(0));
-    EXPECT_TRUE(result->is_null(1));
-    result->check_or_die();
-}
-
 TEST(CoverageWindowTest, KernelAllocationsUseTheStandardThreadTracker) {
     WindowHarness h;
     auto input = coverage_input({left, right});

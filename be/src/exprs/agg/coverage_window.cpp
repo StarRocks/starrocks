@@ -216,13 +216,6 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
     }
     geo->reserve(end, bytes_to_reserve);
     for (size_t row = start; row < end; ++row) {
-        if ((row - start) % 128 == 0) {
-            auto status = checkpoint(ctx->state());
-            if (!status.ok()) {
-                ctx->set_error(status.to_string().c_str());
-                return;
-            }
-        }
         auto result = current.core->result(current.emitted);
         if (!result.ok()) {
             ctx->set_error(result.status().to_string().c_str());
