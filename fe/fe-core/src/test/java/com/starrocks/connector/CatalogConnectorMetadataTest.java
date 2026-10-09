@@ -21,6 +21,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -39,6 +40,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CatalogConnectorMetadataTest {
@@ -163,6 +165,42 @@ public class CatalogConnectorMetadataTest {
         Table table = catalogConnectorMetadata.getTable(new ConnectContext(), "test_db", "test_tbl");
         assertNull(table);
         assertNotNull(catalogConnectorMetadata.getTable(new ConnectContext(), InfoSchemaDb.DATABASE_NAME, "tables"));
+    }
+
+    @Test
+    void testPaimonIndexTableResolution(@Mocked ConnectorMetadata connectorMetadata,
+                                        @Mocked Table baseTable, @Mocked Table suffixedTable) {
+        new Expectations() {{
+                connectorMetadata.getTableType();
+                result = Table.TableType.PAIMON;
+                minTimes = 1;
+
+                connectorMetadata.getTable((ConnectContext) any, "test_db", "orders");
+                result = baseTable;
+                connectorMetadata.tableExists((ConnectContext) any, "test_db", "orders");
+                result = true;
+
+                connectorMetadata.getTable((ConnectContext) any, "test_db", "events");
+                result = null;
+                connectorMetadata.getTable((ConnectContext) any, "test_db", "events$global_index");
+                result = suffixedTable;
+                connectorMetadata.tableExists((ConnectContext) any, "test_db", "events");
+                result = false;
+                connectorMetadata.tableExists((ConnectContext) any, "test_db", "events$global_index");
+                result = true;
+            }};
+
+        CatalogConnectorMetadata metadata = new CatalogConnectorMetadata(
+                connectorMetadata, informationSchemaMetadata, metaMetadata);
+        ConnectContext context = new ConnectContext();
+
+        Table virtualTable = metadata.getTable(context, "test_db", "orders$global_index");
+        assertTrue(virtualTable instanceof IndexTable);
+        assertSame(baseTable, ((IndexTable) virtualTable).getInnerTable());
+        assertTrue(metadata.tableExists(context, "test_db", "orders$global_index"));
+
+        assertSame(suffixedTable, metadata.getTable(context, "test_db", "events$global_index"));
+        assertTrue(metadata.tableExists(context, "test_db", "events$global_index"));
     }
 
     @Test

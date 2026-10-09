@@ -22,6 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.RowOutputInfo;
@@ -53,6 +54,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     protected TvrVersionRange tvrVersionRange;
     protected DataCacheOptions dataCacheOptions = null;
     protected boolean enableGlobalLateMaterialization = false;
+    protected IndexCondition indexCondition;
 
     protected PhysicalScanOperator(OperatorType type) {
         super(type);
@@ -112,6 +114,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
                 scanOperator.getPredicate(), scanOperator.getProjection(), scanOperator.getTvrVersionRange());
         this.scanOptimizeOption = scanOperator.getScanOptimizeOption().copy();
         this.columnAccessPaths = ImmutableList.copyOf(scanOperator.getColumnAccessPaths());
+        this.indexCondition = scanOperator.getIndexCondition();
     }
 
     public List<ColumnRefOperator> getOutputColumns() {
@@ -154,6 +157,10 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return table;
     }
 
+    public IndexCondition getIndexCondition() {
+        return indexCondition;
+    }
+
     public ScanOperatorPredicates getScanOperatorPredicates() throws AnalysisException {
         throw new AnalysisException("Operation getScanOperatorPredicates() is not supported by this ScanOperator.");
     }
@@ -182,6 +189,9 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet set = super.getUsedColumns();
         colRefToColumnMetaMap.keySet().forEach(set::union);
+        if (indexCondition != null) {
+            set.union(indexCondition.getUsedColumns());
+        }
         return set;
     }
 
@@ -203,12 +213,13 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
 
         PhysicalScanOperator that = (PhysicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
-                Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap());
+                Objects.equals(colRefToColumnMetaMap, that.getColRefToColumnMetaMap()) &&
+                Objects.equals(indexCondition, that.indexCondition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
+        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet(), indexCondition);
     }
 
     public abstract static class Builder<O extends PhysicalScanOperator, B extends PhysicalScanOperator.Builder>
@@ -223,6 +234,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
             builder.scanOptimizeOption = operator.scanOptimizeOption;
             builder.tvrVersionRange = operator.tvrVersionRange;
             builder.enableGlobalLateMaterialization = operator.enableGlobalLateMaterialization;
+            builder.indexCondition = operator.indexCondition;
             return (B) this;
         }
 
