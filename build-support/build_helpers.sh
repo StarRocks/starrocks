@@ -47,7 +47,7 @@ starrocks_detect_total_ram_gb() {
             return 0
         fi
     elif [[ -r /proc/meminfo ]]; then
-        ram_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+        ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
         if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
             echo "$(( ram_kb / 1024 / 1024 ))"
             return 0
@@ -72,15 +72,17 @@ starrocks_detect_linker_type() {
 
     # Inspect the default system ld flavor
     local ld_version_output
-    ld_version_output="$(ld -v 2>&1 || true)"
-    case "${ld_version_output}" in
-        *LLD*|*lld*|*mold*|*GNU\ gold*)
-            echo "modern"
-            ;;
-        *)
-            echo "legacy"
-            ;;
-    esac
+    if command -v ld >/dev/null 2>&1; then
+        ld_version_output="$(ld -v 2>&1 || true)"
+        case "${ld_version_output}" in
+            *LLD*|*lld*|*mold*|*GNU\ gold*)
+                echo "modern"
+                return 0
+                ;;
+        esac
+    fi
+    
+    echo "legacy"
 }
 
 starrocks_detect_ut_parallelism() {
@@ -102,8 +104,8 @@ starrocks_detect_ut_parallelism() {
         cpus=1
     fi
 
-    local linker_type
-    linker_type="$(starrocks_detect_linker_type)"
+    local linker_type="${1:-}"
+    [[ -z "${linker_type}" ]] && linker_type="$(starrocks_detect_linker_type)"
 
     # 3. Legacy GNU BFD: preserve conservative 25% CPU throttle to avoid linker OOM
     if [[ "${linker_type}" == "legacy" ]]; then
@@ -114,8 +116,8 @@ starrocks_detect_ut_parallelism() {
 
     # 4. Modern linkers (LLD, mold, gold): scale up to CPU count, capped by RAM availability
     # Peak template instantiation and LLD link uses ~1.5 - 2.0 GiB per concurrent job.
-    local ram_gb
-    ram_gb="$(starrocks_detect_total_ram_gb)"
+    local ram_gb="${2:-}"
+    [[ -z "${ram_gb}" ]] && ram_gb="$(starrocks_detect_total_ram_gb)"
     local target_parallel="${cpus}"
 
     if [[ -n "${ram_gb}" && "${ram_gb}" =~ ^[0-9]+$ && "${ram_gb}" -gt 0 ]]; then

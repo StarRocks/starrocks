@@ -141,9 +141,9 @@ class TestBuildParallelism(unittest.TestCase):
         run_be_ut_path = os.path.join(REPO_ROOT, "run-be-ut.sh")
         with open(run_be_ut_path, "r") as f:
             content = f.read()
-        self.assertIn("PARALLEL=$(starrocks_detect_ut_parallelism)", content)
+        self.assertIn('PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"', content)
         self.assertIn(
-            'echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: $(starrocks_detect_linker_type), RAM: $(starrocks_detect_total_ram_gb) GiB)"',
+            'echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: ${SR_LINKER_TYPE}, RAM: ${SR_RAM_GB} GiB)"',
             content
         )
 
