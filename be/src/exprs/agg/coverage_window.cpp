@@ -201,13 +201,6 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
     // the kernel in the column or repeatedly growing the payload buffer.
     size_t bytes_to_reserve = geo->byte_size();
     for (size_t index = 0; index < end - start; ++index) {
-        if (index % 128 == 0) {
-            auto status = checkpoint(ctx->state());
-            if (!status.ok()) {
-                ctx->set_error(status.to_string().c_str());
-                return;
-            }
-        }
         auto result = current.core->result(current.emitted + index);
         if (!result.ok()) {
             ctx->set_error(result.status().to_string().c_str());
