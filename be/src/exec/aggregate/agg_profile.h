@@ -41,6 +41,10 @@ struct AggStatistics {
         udaf_load_timer = ADD_TIMER(runtime_profile, "UdafLoadTime");
         udaf_cache_hit_count = ADD_COUNTER(runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
         udaf_cache_populate_count = ADD_COUNTER(runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
+
+        // Consecutive keys cache statistics
+        consecutive_keys_cache_hits = ADD_COUNTER(runtime_profile, "ConsecutiveKeysCacheHits", TUnit::UNIT);
+        consecutive_keys_cache_misses = ADD_COUNTER(runtime_profile, "ConsecutiveKeysCacheMisses", TUnit::UNIT);
     }
 
     // timer for build hash table and compute aggregate function
@@ -78,5 +82,9 @@ struct AggStatistics {
     RuntimeProfile::Counter* udaf_load_timer{};
     RuntimeProfile::Counter* udaf_cache_hit_count{};
     RuntimeProfile::Counter* udaf_cache_populate_count{};
+
+    // Consecutive keys cache statistics - tracks cache hits when consecutive rows have the same key
+    RuntimeProfile::Counter* consecutive_keys_cache_hits{};
+    RuntimeProfile::Counter* consecutive_keys_cache_misses{};
 };
 } // namespace starrocks
