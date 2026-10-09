@@ -49,7 +49,18 @@ starrocks_detect_total_ram_gb() {
     elif [[ -r /proc/meminfo ]]; then
         ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
         if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
-            echo "$(( ram_kb / 1024 / 1024 ))"
+            local ram_gb_host=$(( ram_kb / 1024 / 1024 ))
+            local cgroup_bytes=""
+            cgroup_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+
+            if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+                local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+                if [[ "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
+                    echo "${cgroup_gb}"
+                    return 0
+                fi
+            fi
+            echo "${ram_gb_host}"
             return 0
         fi
     fi
