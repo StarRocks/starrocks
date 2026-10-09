@@ -43,6 +43,7 @@ import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
@@ -142,6 +143,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.GrantType;
@@ -300,6 +302,7 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
         checkSelectTableAction(context, statement, Lists.newArrayList());
+        checkFileTableFunctionCredentialPrivilege(context, statement);
 
         List<HintNode> hintNodes = null;
         if (statement.getQueryRelation() instanceof SelectRelation) {
@@ -329,6 +332,12 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
+        // INSERT INTO FILES(...) writes through the BE's storage credentials, exactly like a files() scan.
+        // The properties come straight from the statement (the target table is not resolved yet), so the
+        // ambient-credential check has to be done here rather than through the source query relation.
+        if (statement.useTableFunctionAsTargetTable()) {
+            checkFileTableFunctionPropertiesPrivilege(context, statement.getTableFunctionProperties());
+        }
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             TableRef tableRef = statement.getTableRef();
@@ -491,6 +500,63 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
     public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
         checkNativeQueryCatalogUsage(context, statement);
         ColumnPrivilege.check(context, statement, excludeTables);
+    }
+
+    /**
+     * A files() table function does not read from a StarRocks table, so it carries no table-level privilege
+     * to check against: the normal scan path grants access only because the caller holds SELECT on the
+     * referenced table, and files() has no such table. When the function is told to authenticate with the
+     * BE's ambient credentials (instance profile / SDK default credential chain) the BE then reads or writes
+     * object storage with its own IAM identity, so any authenticated user could reach any object that role
+     * can reach. Gate exactly those statements behind the global FILE system privilege -- the same one that
+     * guards CREATE/DROP FILE -- while leaving files() calls that supply their own credentials untouched.
+     */
+    private void checkFileTableFunctionCredentialPrivilege(ConnectContext context, QueryStatement statement) {
+        if (statement == null) {
+            return;
+        }
+        List<FileTableFunctionRelation> relations = Lists.newArrayList();
+        new FileTableFunctionRelationCollector(relations).visit(statement);
+        for (FileTableFunctionRelation relation : relations) {
+            checkFileTableFunctionPropertiesPrivilege(context, relation.getProperties());
+        }
+    }
+
+    private void checkFileTableFunctionPropertiesPrivilege(ConnectContext context, Map<String, String> properties) {
+        if (properties == null) {
+            return;
+        }
+        boolean useInstanceProfile =
+                Boolean.parseBoolean(properties.getOrDefault(CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE,
+                        "false"));
+        boolean useAwsSdkDefaultBehavior =
+                Boolean.parseBoolean(properties.getOrDefault(
+                        CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
+        if (!useInstanceProfile && !useAwsSdkDefaultBehavior) {
+            return;
+        }
+        try {
+            Authorizer.checkSystemAction(context, PrivilegeType.FILE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.FILE.name(), ObjectType.SYSTEM.name(), null);
+        }
+    }
+
+    private static class FileTableFunctionRelationCollector extends AstTraverser<Void, Void> {
+        private final List<FileTableFunctionRelation> relations;
+
+        private FileTableFunctionRelationCollector(List<FileTableFunctionRelation> relations) {
+            this.relations = relations;
+        }
+
+        @Override
+        public Void visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            relations.add(node);
+            return null;
+        }
     }
 
     private void checkNativeQueryCatalogUsage(ConnectContext context, QueryStatement statement) {
