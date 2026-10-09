@@ -1,0 +1,52 @@
+-- name: test_multi_column_not_in_null
+
+-- Regression for row-value (multi-column) NOT IN with NULLs in a tuple column.
+-- (a,b) NOT IN (subquery) must apply SQL three-valued logic per column: a NULL on either
+-- side of a column comparison makes that row's tuple comparison UNKNOWN (not a definite
+-- mismatch), so the outer row must be DROPPED, not returned. Previously the multi-column
+-- path lowered to a single multi-key NULL_AWARE_LEFT_ANTI_JOIN that treated a NULL in one
+-- column as "no match" and wrongly returned such rows.
+
+CREATE TABLE o2 (a INT, b INT) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE o3 (a INT, b INT, c INT) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE i_null (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE i_null3 (x INT, y INT, z INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE i_nonull (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE i_allnull (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE i_empty (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE nn0 (a INT NOT NULL, b INT NOT NULL) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+CREATE TABLE nn1 (x INT NOT NULL, y INT NOT NULL) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+
+INSERT INTO o2 VALUES (1,1),(2,2);
+INSERT INTO o3 VALUES (1,1,1),(2,2,2);
+INSERT INTO i_null VALUES (1,NULL);
+INSERT INTO i_null3 VALUES (1,NULL,1);
+INSERT INTO i_nonull VALUES (1,1);
+INSERT INTO i_allnull VALUES (NULL,NULL);
+
+-- BUG CASE: (1,1) vs (1,NULL) = 1=1 AND 1=NULL = TRUE AND UNKNOWN = UNKNOWN -> drop (1,1);
+-- (2,2) vs (1,NULL): a=x is 2=1 = definite mismatch -> keep. Expected: only (2,2).
+select a,b from o2 where (a,b) not in (select x,y from i_null) order by a,b;
+
+-- 3-column variant: (1,1,1) vs (1,NULL,1) -> UNKNOWN -> drop; (2,2,2) -> keep.
+select a,b,c from o3 where (a,b,c) not in (select x,y,z from i_null3) order by a,b,c;
+
+-- no NULLs in subquery: plain anti-join semantics. (1,1) matches -> drop; (2,2) -> keep.
+select a,b from o2 where (a,b) not in (select x,y from i_nonull) order by a,b;
+
+-- subquery has a (NULL,NULL) row: every outer row's comparison is UNKNOWN -> all dropped (empty).
+select a,b from o2 where (a,b) not in (select x,y from i_allnull) order by a,b;
+
+-- empty subquery: NOT IN (empty) is TRUE for all outer rows -> keep everything.
+select a,b from o2 where (a,b) not in (select x,y from i_empty) order by a,b;
+
+-- positive multi-column IN is unaffected (unchanged path): (1,1) IN (1,NULL) is UNKNOWN -> not selected;
+-- so against i_null both rows are excluded -> empty.
+select a,b from o2 where (a,b) in (select x,y from i_null) order by a,b;
+-- positive IN against a real match: (1,1) IN (1,1) -> selected.
+select a,b from o2 where (a,b) in (select x,y from i_nonull) order by a,b;
+
+-- NOT NULL columns: no NULLs possible, must keep exact anti-join semantics and stay correct.
+INSERT INTO nn0 VALUES (1,1),(2,2),(3,3);
+INSERT INTO nn1 VALUES (1,1),(2,2);
+select a,b from nn0 where (a,b) not in (select x,y from nn1) order by a,b;
