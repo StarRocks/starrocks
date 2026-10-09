@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 53
 description: "联合简化窗口分区中的原生平面多边形，并保持覆盖拓扑。"
 ---
 

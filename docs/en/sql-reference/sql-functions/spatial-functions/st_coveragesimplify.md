@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 53
 description: "Jointly simplifies a window partition of native planar polygons while preserving coverage topology."
 ---
 
