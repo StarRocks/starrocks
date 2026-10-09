@@ -4,6 +4,9 @@ name: ISSUE JIRA SYNC
 # All logic lives in ci-tool (scripts/sync-issue-to-jira.py); this file only wires the event.
 # Switches (repository variables): ISSUE_JIRA_SYNC_ENABLED=true turns it on (unset = off),
 # JIRA_DRY_RUN=true prints instead of writing to Jira.
+# Issues opened by other workflows with GITHUB_TOKEN (e.g. ci-doc-needs-update.yml's
+# "Docs needed" and the weekly doc-feedback issue) do not trigger this, by design: they
+# are doc-team reminders with their own workflow, not RD work for Jira.
 
 on:
   issues:
