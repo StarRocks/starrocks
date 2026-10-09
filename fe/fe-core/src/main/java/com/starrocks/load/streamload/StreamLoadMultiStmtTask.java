@@ -504,7 +504,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
             for (StreamLoadTask task : taskMaps.values()) {
                 task.prepareChannel(0, task.getTableName(), headers, resp);
                 if (!resp.stateOK()) {
-                    commitErrorMsg = "prepareChannel failed";
+                    commitErrorMsg = tableLoadErrorMsg(task, resp.msg);
+                    resp.setErrorMsg(commitErrorMsg);
                     break;
                 }
                 dispatched.add(task);
@@ -521,8 +522,8 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                     task.waitCoordFinish(waitResp);
                     if (!waitResp.stateOK()) {
                         if (commitErrorMsg == null) {
-                            commitErrorMsg = "waitCoordFinish failed";
-                            resp.setErrorMsg(waitResp.msg);
+                            commitErrorMsg = tableLoadErrorMsg(task, waitResp.msg);
+                            resp.setErrorMsg(commitErrorMsg);
                         }
                         // waitCoordFinish already aborted the shared transaction on failure
                         // (cancelTask -> abortTransaction). Stop draining: calling loadData for
@@ -586,6 +587,12 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 }
             }
         }
+    }
+
+    // All tables of the transaction share its label, so an error of one table's load must name the table:
+    // otherwise the client cannot tell which table failed.
+    private static String tableLoadErrorMsg(StreamLoadTask task, String errorMsg) {
+        return String.format("Failed to load table %s: %s", task.getTableName(), errorMsg);
     }
 
     /**

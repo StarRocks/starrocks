@@ -981,6 +981,98 @@ public class StreamLoadMultiStmtTaskTest {
         Assertions.assertEquals("COMMITED", sub.getStateName());
     }
 
+    // Mocks a commit in which only failingTable's load fails, when its channel is prepared (failChannel) or
+    // when its coordinator is waited for, with an error that does not name the table.
+    private void mockCommitWithFailingTable(long txnId, String failingTable, boolean failChannel, String error) {
+        new MockUp<TransactionStmtExecutor>() {
+            @Mock
+            public void beginStmt(com.starrocks.qe.ConnectContext ctx,
+                                  com.starrocks.sql.ast.txn.BeginStmt stmt,
+                                  TransactionState.LoadJobSourceType sourceType,
+                                  String labelOverride) {
+                ctx.setTxnId(txnId);
+            }
+
+            @Mock
+            public void loadData(long dbId, long tableId,
+                                 ExplicitTxnState.ExplicitTxnStateItem item,
+                                 com.starrocks.qe.ConnectContext context) {
+            }
+
+            @Mock
+            public void rollbackStmt(com.starrocks.qe.ConnectContext ctx,
+                                     com.starrocks.sql.ast.txn.RollbackStmt stmt) {
+            }
+        };
+        new MockUp<StreamLoadTask>() {
+            @Mock
+            public void prepareChannel(int channelId, String tableName, HttpHeaders headers,
+                                       TransactionResult resp) {
+                if (failChannel && failingTable.equals(tableName)) {
+                    resp.setErrorMsg(error);
+                }
+            }
+
+            @Mock
+            public boolean checkNeedPrepareTxn() {
+                return true;
+            }
+
+            @Mock
+            public void waitCoordFinish(Invocation inv, TransactionResult resp) {
+                StreamLoadTask self = inv.getInvokedInstance();
+                if (!failChannel && failingTable.equals(self.getTableName())) {
+                    resp.setErrorMsg(error);
+                }
+            }
+
+            @Mock
+            public OlapTable getTable() {
+                return new OlapTable();
+            }
+
+            @Mock
+            public void cancelCoordinatorOnly(String reason) {
+            }
+        };
+    }
+
+    // ---- All tables of a shared transaction have its label, so a commit that fails because of one
+    // table's load must name that table: the client cannot tell otherwise ----
+    @Test
+    public void testCommitTxnErrorNamesTableWhoseLoadFailed() throws Exception {
+        mockCommitWithFailingTable(902L, "tbl2", false, "abnormal data more than max filter rate");
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("table tbl2"), resp.msg);
+        Assertions.assertTrue(resp.msg.contains("abnormal data more than max filter rate"), resp.msg);
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
+    @Test
+    public void testCommitTxnErrorNamesTableWhoseChannelFailed() throws Exception {
+        mockCommitWithFailingTable(903L, "tbl2", true, "channel failed for test");
+
+        multiTask.beginTxn(new TransactionResult());
+        addSubTask("tbl1", StreamLoadTask.State.PREPARING);
+        addSubTask("tbl2", StreamLoadTask.State.PREPARING);
+
+        TransactionResult resp = new TransactionResult();
+        multiTask.commitTxn(new DefaultHttpHeaders(), resp);
+
+        Assertions.assertFalse(resp.stateOK());
+        Assertions.assertTrue(resp.msg.contains("table tbl2"), resp.msg);
+        Assertions.assertTrue(resp.msg.contains("channel failed for test"), resp.msg);
+        Assertions.assertEquals("CANCELLED", multiTask.getStateName());
+    }
+
     // ---- Reconcile finding the txn committed must not leave sub-tasks CANCELLED ----
     @Test
     public void testReconcileCommittedPropagatesToSubTasksInsteadOfCancel() throws Exception {
