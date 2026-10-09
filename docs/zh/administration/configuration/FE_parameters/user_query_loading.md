@@ -107,7 +107,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 未显式指定模型时使用的默认模型，包括 FILE 重载。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_chat_provider`
@@ -115,9 +115,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`qwen_compatible`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible` 或 `qwen_compatible`；空值或其他值都会导致分析失败。两种协议均支持文本和 inline 图片 FILE 输入；只有 `qwen_compatible` 支持 inline MP4 视频。所选模型必须支持输入模态。协议不会根据 endpoint 或模型名称推断。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +143,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`dashscope_multimodal`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为用于文本的 `openai_compatible`，或用于文本以及 inline JPEG、PNG、WebP 图片 FILE 的 `dashscope_multimodal`。所选模型必须支持输入模态。不支持视频 FILE 向量化。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置，也不会根据 endpoint 或模型名称推断协议。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
 ### `brpc_send_plan_fragment_timeout_ms`

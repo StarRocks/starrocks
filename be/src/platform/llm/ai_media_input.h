@@ -14,20 +14,25 @@
 
 #pragma once
 
-#include "platform/llm/ai_provider.h"
+#include <cstddef>
+#include <cstdint>
+#include <string>
+#include <string_view>
+
+#include "base/statusor.h"
 
 namespace starrocks {
 
-class OpenAICompatibleProvider final : public AIProvider {
-public:
-    explicit OpenAICompatibleProvider(bool supports_video = false) : _supports_video(supports_video) {}
+inline constexpr int64_t kDefaultAIMaxInputFileBytes = 10485760;
 
-    StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
-    AIProviderParseResult parse_response(std::string_view body,
-                                         AICapability capability = AICapability::CHAT) const override;
-
-private:
-    bool _supports_video;
+struct AIMediaInput {
+    std::string mime_type;
+    std::string bytes;
 };
+
+// Inspects bounded container headers, not a full codec decode. Enforces the raw byte limit before copying.
+// These helpers consume bytes only and never read files or fetch URLs.
+StatusOr<AIMediaInput> prepare_inline_ai_media(std::string_view bytes, std::string_view content_type, size_t max_bytes);
+StatusOr<std::string> encode_ai_media_data_uri(const AIMediaInput& media);
 
 } // namespace starrocks

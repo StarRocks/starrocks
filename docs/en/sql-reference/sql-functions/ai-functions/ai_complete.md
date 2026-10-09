@@ -5,11 +5,11 @@ description: "Calls a configured SYSTEM OpenAI-compatible chat endpoint and retu
 
 # ai_complete
 
-Calls the administrator-configured SYSTEM chat model and returns its generated text. StarRocks sends a non-streaming
-OpenAI-compatible chat-completions request from a BE.
+Calls the administrator-configured SYSTEM chat model with a prompt and an optional inline FILE, and returns its
+generated text. StarRocks sends a non-streaming OpenAI-compatible chat-completions request from a BE.
 
 :::warning
-This function sends the model name, prompt, and options to the configured endpoint. Use only a trusted endpoint,
+This function sends the model name, prompt, FILE content if supplied, and options to the configured endpoint. Use only a trusted endpoint,
 which must use HTTPS, and do not include secrets or sensitive data unless the provider is approved to receive them. Calls can
 leave the StarRocks cluster, incur provider charges, and be retained under the provider's data-handling policy.
 :::
@@ -21,11 +21,16 @@ ai_complete(<prompt>)
 ai_complete(<prompt>, <options>)
 ai_complete(<model>, <prompt>)
 ai_complete(<model>, <prompt>, <options>)
+ai_complete(<prompt>, <file>)
+ai_complete(<prompt>, <file>, <options>)
+ai_complete(<model>, <prompt>, <file>)
+ai_complete(<model>, <prompt>, <file>, <options>)
 ```
 
 ## Parameters
 
 - `prompt`: A VARCHAR expression containing the user prompt. An empty string is valid.
+- `file`: An optional typed FILE expression containing a supported inline image or video. See [FILE inputs](#file-inputs).
 - `model`: A VARCHAR expression that selects the model for this call. When omitted, StarRocks uses
   [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model).
   An explicit model can vary by row, but a constant model cannot be empty or contain only whitespace.
@@ -42,6 +47,26 @@ ai_complete(<model>, <prompt>, <options>)
   StarRocks constructs these fields and always sends a non-streaming request.
 - A bare NULL in the two-argument form resolves as `ai_complete(<model>, NULL)`. To pass NULL as `options`, cast it to
   a MAP type, for example `CAST(NULL AS MAP<VARCHAR, JSON>)`.
+
+### FILE inputs
+
+`file` is a typed FILE expression, not a URL string. The FILE overloads accept inline JPEG, PNG, or WebP images
+and send the prompt and image as content parts. With the explicitly configured `qwen_compatible` chat protocol,
+inline MP4 video is also accepted; the selected model must support the input modality. The `openai_compatible` protocol rejects video.
+These overloads do not change the FILE type, add a FILE constructor, or fetch URI references.
+There is no implicit conversion between FILE and URL or VARCHAR inputs, and no media-to-text fallback.
+
+Only the FILE `inline` field may carry content; `uri`, `offset`, and `size` must be NULL.
+When present, `content_type` must match the detected format. Detection checks bounded container headers, not full
+codec validity; the provider performs decoding. `checksum` is metadata and is not verified by these functions.
+The BE parameter [ai_function_max_input_file_bytes](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)
+limits raw bytes per FILE before AI-owned payload copying and Base64 encoding; its default is 10485760 bytes (10 MiB).
+Invalid or oversized inline content and unsupported media/protocol combinations follow `ai_function_on_error` as row-level failures.
+Reference FILE inputs explicitly fail with `NotSupported`, including with `on_error=ignore`, until an authorized FILE reader is available.
+NULL FILE inputs return NULL without a provider request. Upgrade all FE and BE nodes before using FILE overloads.
+For compatibility, `ai_complete(model, prompt, NULL)` still selects the text overload with NULL options (treated as an empty MAP), not a NULL FILE. A FILE-typed column selects the FILE overload; its NULL values return NULL without a request.
+
+FILE content is sent to the configured model endpoint, subject to the same data-egress warning as the prompt.
 
 ## Return value
 
@@ -66,13 +91,13 @@ For AI query optimization, see [Reducing AI input rows](ai_functions.mdx#reducin
 ### FE SYSTEM model configuration
 
 An administrator configures the SYSTEM model with these mutable FE parameters. The endpoint and provider are required
-for every call. The default model is required only for prompt-only overloads.
+for every call. The default model is required for every overload without an explicit model, including FILE overloads.
 
 | Parameter | Default | Requirement |
 |-----------|---------|-------------|
 | [`ai_default_chat_endpoint`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_endpoint) | Empty string | Required. A complete HTTPS POST URL for the chat-completions endpoint. |
-| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | Empty string | Required for prompt-only overloads; optional when every call supplies an explicit model. |
-| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | Empty string | Required. The only valid value is `openai_compatible`. |
+| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | Empty string | Required without an explicit model, including FILE overloads; optional when every call supplies a model. |
+| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | Empty string | Required. `openai_compatible` or `qwen_compatible`. |
 
 Each query plan captures a snapshot of these values. Dynamic updates apply only to queries analyzed and planned after
 the update; plans that have already been constructed retain their captured snapshot.
@@ -153,6 +178,13 @@ EXPLAIN SELECT ai_complete(
 );
 ```
 
+For an existing table `media_inputs` whose `image_file` column has type FILE and contains inline images, use a model
+that supports image input:
+
+```sql
+EXPLAIN SELECT ai_complete('Describe this image.', image_file) FROM media_inputs;
+```
+
 A NULL prompt does not submit a provider request:
 
 ```sql
@@ -161,7 +193,7 @@ SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
 
 ## Related functions
 
-See [AI text functions](ai_text_functions.md) for task-specific chat helpers, [ai_embed](ai_embed.md) for text embeddings, and [AI provider functions](ai_custom_functions.md) for calls through a registered provider. The four existing `ai_complete` forms and their SYSTEM chat routing are unchanged. Setting a default AI provider does not reroute `ai_complete`; its explicit `model` argument still selects a remote model name.
+See [AI text functions](ai_text_functions.md) for task-specific chat helpers, [ai_embed](ai_embed.md) for text or image embeddings, and [AI provider functions](ai_custom_functions.md) for calls through a registered provider. The four existing text-only `ai_complete` forms and their SYSTEM chat routing are unchanged. Setting a default AI provider does not reroute `ai_complete`; its explicit `model` argument still selects a remote model name.
 
 ## Keywords
 

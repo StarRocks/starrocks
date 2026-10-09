@@ -5,10 +5,10 @@ description: "调用已配置的 SYSTEM OpenAI 兼容聊天端点，并返回生
 
 # ai_complete
 
-调用管理员配置的 SYSTEM 聊天模型，并返回模型生成的文本。StarRocks 从 BE 发出非流式的 OpenAI 兼容聊天补全请求。
+使用提示词及可选的 inline FILE 调用管理员配置的 SYSTEM 聊天模型，并返回模型生成的文本。StarRocks 从 BE 发出非流式的 OpenAI 兼容聊天补全请求。
 
 :::warning
-此函数会将模型名称、提示词和选项发送到已配置的端点。请仅使用可信的 HTTPS 端点；除非提供商已获准接收，否则不要发送密钥或敏感数据。请求可能离开 StarRocks 集群、产生提供商费用，并按提供商的数据处理政策保留。
+此函数会将模型名称、提示词、传入的 FILE 内容和选项发送到已配置的端点。请仅使用可信的 HTTPS 端点；除非提供商已获准接收，否则不要发送密钥或敏感数据。请求可能离开 StarRocks 集群、产生提供商费用，并按提供商的数据处理政策保留。
 :::
 
 ## 语法
@@ -18,11 +18,16 @@ ai_complete(<prompt>)
 ai_complete(<prompt>, <options>)
 ai_complete(<model>, <prompt>)
 ai_complete(<model>, <prompt>, <options>)
+ai_complete(<prompt>, <file>)
+ai_complete(<prompt>, <file>, <options>)
+ai_complete(<model>, <prompt>, <file>)
+ai_complete(<model>, <prompt>, <file>, <options>)
 ```
 
 ## 参数
 
 - `prompt`：包含用户提示词的 VARCHAR 表达式。允许使用空字符串。
+- `file`：可选的 FILE 类型表达式，包含受支持的 inline 图片或视频。参见 [FILE 输入](#file-输入)。
 - `model`：为本次调用选择模型的 VARCHAR 表达式。省略时，StarRocks 使用
   [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model)。显式模型可以逐行变化，但常量模型不能是空字符串或仅包含空白字符。
 - `options`：可选的常量 MAP，用于向提供商请求添加其他字段。带类型的 NULL MAP 会被视为空 MAP。
@@ -34,6 +39,23 @@ ai_complete(<model>, <prompt>, <options>)
 - 区分大小写的顶层键 `model`、`messages` 和 `stream` 为保留键，不能指定。StarRocks 会构造这些字段，并始终发送非流式请求。
 - 双参数形式中的裸 NULL 会解析为 `ai_complete(<model>, NULL)`。如需将 NULL 作为 `options` 传入，请将其转换为 MAP 类型，例如
   `CAST(NULL AS MAP<VARCHAR, JSON>)`。
+
+### FILE 输入
+
+`file` 必须是 FILE 类型表达式，而非 URL 字符串。FILE 重载接受 inline JPEG、PNG 或 WebP 图片，将 prompt 和图片作为内容片段发送。
+显式配置 `qwen_compatible` 聊天协议时，还支持 inline MP4 视频；所选模型必须支持输入模态。`openai_compatible` 协议拒绝视频。
+本功能不改变 FILE 类型，不新增 FILE 构造函数，也不读取 URI 引用。
+FILE 与 URL 或 VARCHAR 输入之间不会隐式转换，也不会将媒体回退为文本。
+
+内容只能来自 FILE 的 `inline` 字段；`uri`、`offset` 和 `size` 必须为 NULL。
+`content_type` 非空时必须与检测到的格式一致。检测只检查有限长度的容器头，不保证完整编解码有效性，最终由提供商解码。
+`checksum` 仅作为元数据，本函数不校验它。
+BE 参数 [ai_function_max_input_file_bytes](../../../administration/configuration/BE_parameters/query_loading.md#ai_function_max_input_file_bytes)
+在 AI 自身复制载荷和进行 Base64 编码前限制每个 FILE 的原始字节数，默认值为 10485760 字节（10 MiB）。
+无效或超大 inline 内容、不支持的媒体与协议组合均作为行级失败，遵循 `ai_function_on_error`。
+在授权 FILE reader 可用前，引用型 FILE 明确报 `NotSupported`，包括 `on_error=ignore` 时。NULL FILE 不发送请求，直接返回 NULL。
+为保持兼容，`ai_complete(model, prompt, NULL)` 仍选择文本重载，将裸 NULL 作为 options（视为空 MAP），而非 NULL FILE。传入 FILE 类型列会选择 FILE 重载，其 NULL 值不发送请求，直接返回 NULL。
+使用 FILE 重载前需升级所有 FE 和 BE 节点。文件内容会发送至已配置的模型端点，与 prompt 遵循相同的数据出域安全要求。
 
 ## 返回值
 
@@ -54,13 +76,13 @@ AI 查询优化建议参见 [减少 AI 输入行数](ai_functions.mdx#reducing-a
 
 ### FE SYSTEM 模型配置
 
-管理员使用以下可动态修改的 FE 参数配置 SYSTEM 模型。每次调用都必须配置 endpoint 和 provider；仅传入 prompt 的重载才必须配置默认模型。
+管理员使用以下可动态修改的 FE 参数配置 SYSTEM 模型。每次调用都必须配置 endpoint 和 provider；所有未显式指定模型的重载（包括 FILE 重载）都必须配置默认模型。
 
 | 参数 | 默认值 | 要求 |
 |------|--------|------|
 | [`ai_default_chat_endpoint`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_endpoint) | 空字符串 | 必填。聊天补全端点的完整 HTTPS POST URL。 |
-| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | 空字符串 | 仅传入 prompt 的重载必须配置；如果每次调用都显式指定模型，则可不配置。 |
-| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | 空字符串 | 必填。唯一有效值为 `openai_compatible`。 |
+| [`ai_default_chat_model`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_model) | 空字符串 | 未显式指定模型时必须配置，包括 FILE 重载；如果每次调用都指定模型，则可不配置。 |
+| [`ai_default_chat_provider`](../../../administration/configuration/FE_parameters/user_query_loading.md#ai_default_chat_provider) | 空字符串 | 必填。有效值为 `openai_compatible` 或 `qwen_compatible`。 |
 
 每个查询计划都会捕获这些值的快照。动态更新仅对更新后新分析和新规划的查询生效；已经构造的计划会保留其捕获的快照。
 
@@ -120,6 +142,12 @@ EXPLAIN SELECT ai_complete(
 );
 ```
 
+对于已有表 `media_inputs` 中包含 inline 图片的 FILE 类型列 `image_file`，请使用支持图片输入的模型：
+
+```sql
+EXPLAIN SELECT ai_complete('Describe this image.', image_file) FROM media_inputs;
+```
+
 NULL 提示词不会提交提供商请求：
 
 ```sql
@@ -128,7 +156,7 @@ SELECT ai_complete(CAST(NULL AS VARCHAR)) AS answer;
 
 ## 相关函数
 
-任务型聊天辅助函数参见 [AI 文本函数](ai_text_functions.md)，文本向量参见 [ai_embed](ai_embed.md)，通过已注册 provider 调用服务参见 [AI provider 函数](ai_custom_functions.md)。已有 `ai_complete` 的四种形式及其 SYSTEM 聊天路由保持不变。设置默认 AI provider 不改变 `ai_complete` 的路由；显式 `model` 参数仍选择远端模型名。
+任务型聊天辅助函数参见 [AI 文本函数](ai_text_functions.md)，文本或图片向量参见 [ai_embed](ai_embed.md)，通过已注册 provider 调用服务参见 [AI provider 函数](ai_custom_functions.md)。已有 `ai_complete` 的四种纯文本形式及其 SYSTEM 聊天路由保持不变。设置默认 AI provider 不改变 `ai_complete` 的路由；显式 `model` 参数仍选择远端模型名。
 
 ## 关键字
 

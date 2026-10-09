@@ -111,6 +111,16 @@ These mutable positive BE settings limit one H3 function row. Exceeding a settin
 - Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
 - Introduced in: -
 
+### ai_function_max_input_file_bytes
+
+- Default: 10485760
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum raw byte size of each inline FILE passed to `ai_complete` or `ai_embed`, checked before AI-owned payload copying and Base64 encoding. The default is 10 MiB. Increase it only when the selected provider and model accept larger inputs. This limit does not control scan or chunk materialization; query memory tracking still applies to those allocations and to AI payloads. Invalid or oversized inline inputs follow `ai_function_on_error`. A newly opened AI fragment/operator captures this value in its immutable runtime snapshot; an already-open fragment retains its snapshot. Changes require no BE restart.
+- Introduced in: -
+
 ### ai_function_worker_thread_num
 
 - Default: 16

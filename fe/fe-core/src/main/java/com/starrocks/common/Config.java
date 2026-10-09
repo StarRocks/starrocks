@@ -5460,18 +5460,18 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
     public static String ai_default_chat_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
     public static String ai_default_chat_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
     public static String ai_default_chat_provider = "";
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
     public static String ai_default_embedding_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
     public static String ai_default_embedding_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
     public static String ai_default_embedding_provider = "";
 
     /**

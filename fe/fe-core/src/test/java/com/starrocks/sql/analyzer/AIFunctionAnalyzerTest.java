@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.Config;
@@ -22,9 +23,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.CastExpr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
@@ -37,6 +42,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+
+import java.util.Arrays;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -93,6 +100,94 @@ public class AIFunctionAnalyzerTest {
     @Test
     public void testEmbeddingRequiresIndependentEndpoint() {
         analyzeFail("select ai_embed('prompt')", "ai_default_embedding_endpoint");
+    }
+
+    @Test
+    public void testTypedFileOverloadsAndOptions() {
+        Config.ai_default_chat_provider = "qwen_compatible";
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = "dashscope_multimodal";
+        Expr prompt = new StringLiteral("describe");
+        Expr model = new StringLiteral("model");
+        Expr options = ((SelectRelation) ((QueryStatement) analyzeSuccess("select map{'temperature': 0.5}"))
+                .getQueryRelation()).getOutputExpression().get(0);
+        SlotRef file = fileSlot();
+        assertTypedFunctionId("ai_complete", 200104, prompt, file);
+        assertTypedFunctionId("ai_complete", 200105, prompt, file, options);
+        assertTypedFunctionId("ai_complete", 200106, model, prompt, file);
+        assertTypedFunctionId("ai_complete", 200107, model, prompt, file, options);
+        assertTypedFunctionId("ai_complete", 200105, prompt, file, new NullLiteral());
+        assertTypedFunctionId("ai_complete", 200106, model, prompt, NullLiteral.create(FileType.FILE));
+        assertTypedFunctionId("ai_embed", 200134, file);
+        assertTypedFunctionId("ai_embed", 200135, file, options);
+        assertTypedFunctionId("ai_embed", 200136, model, file);
+        assertTypedFunctionId("ai_embed", 200137, model, file, options);
+        Assertions.assertThrows(SemanticException.class, () -> analyzeTypedFunction("ai_custom_query", model, file));
+        Assertions.assertThrows(SemanticException.class, () -> analyzeTypedFunction("ai_custom_embedding", model, file));
+        Config.ai_default_chat_model = "";
+        Config.ai_default_embedding_model = "";
+        assertTypedFunctionId("ai_complete", 200106, model, prompt, file);
+        assertTypedFunctionId("ai_embed", 200136, model, file);
+        Assertions.assertThrows(SemanticException.class, () -> analyzeTypedFunction("ai_complete", prompt, file));
+        Assertions.assertThrows(SemanticException.class, () -> analyzeTypedFunction("ai_embed", file));
+    }
+
+    @Test
+    public void testBareNullRetainsTextOverloadIds() {
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = "openai_compatible";
+        assertFunctionId("select ai_complete(NULL)", 200100);
+        assertFunctionId("select ai_complete('x', NULL)", 200102);
+        assertFunctionId("select ai_complete('x', NULL, map{})", 200103);
+        assertFunctionId("select ai_complete('model', 'prompt', NULL)", 200103);
+        assertFunctionId("select ai_complete(NULL, NULL, NULL)", 200103);
+        assertFunctionId("select ai_complete(1, 2, NULL)", 200103);
+        assertFunctionId("select ai_embed(NULL)", 200130);
+        assertFunctionId("select ai_embed('x', NULL)", 200132);
+        assertFunctionId("select ai_embed('x', NULL, map{})", 200133);
+        assertFunctionId("select ai_embed('model', 'text', NULL)", 200133);
+    }
+
+    @Test
+    public void testFileOptionsRetainConstantAndReservedKeyValidation() {
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/embeddings";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = "dashscope_multimodal";
+        Expr reserved = ((SelectRelation) ((QueryStatement) analyzeSuccess("select map{'model': 'override'}"))
+                .getQueryRelation()).getOutputExpression().get(0);
+        SlotRef varyingOptions = new SlotRef(null, "options", "options");
+        varyingOptions.setType(new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR));
+        for (Expr options : new Expr[] {reserved, varyingOptions}) {
+            String message = options == reserved ? "reserved option key" : "constant option MAP";
+            SemanticException completeError = Assertions.assertThrows(SemanticException.class,
+                    () -> analyzeTypedFunction("ai_complete", new StringLiteral("prompt"), fileSlot(), options));
+            Assertions.assertTrue(completeError.getMessage().contains(message));
+            SemanticException embeddingError = Assertions.assertThrows(SemanticException.class,
+                    () -> analyzeTypedFunction("ai_embed", fileSlot(), options));
+            Assertions.assertTrue(embeddingError.getMessage().contains(message));
+        }
+    }
+
+    private static SlotRef fileSlot() {
+        SlotRef slot = new SlotRef(null, "file", "file");
+        slot.setType(FileType.FILE);
+        return slot;
+    }
+
+    private static FunctionCallExpr analyzeTypedFunction(String name, Expr... arguments) {
+        FunctionCallExpr call = new FunctionCallExpr(name, Arrays.asList(arguments));
+        new ExpressionAnalyzer.Visitor(new AnalyzeState(), AnalyzeTestUtil.getConnectContext())
+                .visitFunctionCall(call, new Scope(RelationId.anonymous(), new RelationFields()));
+        return call;
+    }
+
+    private static void assertTypedFunctionId(String name, long expectedId, Expr... arguments) {
+        Function function = analyzeTypedFunction(name, arguments).getFn();
+        Assertions.assertEquals(expectedId, function.getFunctionId());
+        Assertions.assertTrue(function.isAi());
+        Assertions.assertTrue(Arrays.asList(function.getArgs()).contains(FileType.FILE));
     }
 
     @ParameterizedTest

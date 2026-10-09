@@ -78,55 +78,13 @@ bool has_invalid_api_key_byte(std::string_view api_key) {
     return false;
 }
 
-bool is_safe_identifier(std::string_view identifier) {
-    if (identifier.empty() || identifier.size() > 128) {
-        return false;
-    }
-    for (unsigned char byte : identifier) {
-        const bool safe = (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') ||
-                          (byte >= '0' && byte <= '9') || byte == '.' || byte == '_' || byte == '-';
-        if (!safe) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::string ascii_lower(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for (unsigned char byte : value) {
-        result.push_back(byte >= 'A' && byte <= 'Z' ? static_cast<char>(byte - 'A' + 'a') : static_cast<char>(byte));
-    }
-    return result;
-}
-
-AIProviderErrorCode classify_identifier(std::string_view identifier) {
-    const std::string value = ascii_lower(identifier);
-    if (value == "rate_limit_exceeded") return AIProviderErrorCode::RATE_LIMIT_EXCEEDED;
-    if (value == "too_many_requests") return AIProviderErrorCode::TOO_MANY_REQUESTS;
-    if (value == "server_error") return AIProviderErrorCode::SERVER_ERROR;
-    if (value == "internal_error") return AIProviderErrorCode::INTERNAL_ERROR;
-    if (value == "service_unavailable") return AIProviderErrorCode::SERVICE_UNAVAILABLE;
-    if (value == "timeout") return AIProviderErrorCode::TIMEOUT;
-    if (value == "api_connection_error") return AIProviderErrorCode::API_CONNECTION_ERROR;
-    if (value.starts_with("throttling.")) return AIProviderErrorCode::THROTTLING;
-    if (value.starts_with("ratelimit.")) return AIProviderErrorCode::RATE_LIMIT;
-    if (value.starts_with("internalerror.")) return AIProviderErrorCode::INTERNAL_ERROR;
-    if (value.starts_with("serviceunavailable.")) return AIProviderErrorCode::SERVICE_UNAVAILABLE;
-    return AIProviderErrorCode::UNKNOWN;
-}
-
 std::optional<AIProviderErrorCode> classify_member(const rapidjson::Value& envelope, const char* name) {
     const auto member = envelope.FindMember(name);
     if (member == envelope.MemberEnd() || !member->value.IsString()) {
         return std::nullopt;
     }
     const std::string_view value(member->value.GetString(), member->value.GetStringLength());
-    if (!is_safe_identifier(value)) {
-        return std::nullopt;
-    }
-    return classify_identifier(value);
+    return parse_ai_provider_error_code(value);
 }
 
 AIProviderErrorCode classify_error(const rapidjson::Value& envelope) {
@@ -149,6 +107,21 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
         return Status::InvalidArgument("AI provider API key is invalid");
     }
 
+    std::string media_uri;
+    const char* media_part_type = "image_url";
+    if (request.media != nullptr) {
+        if (request.capability != AICapability::CHAT) {
+            return Status::NotSupported("OpenAI-compatible embedding does not support FILE input");
+        }
+        if (request.media->mime_type == "video/mp4") {
+            if (!_supports_video) return Status::NotSupported("AI protocol does not support video input");
+            media_part_type = "video_url";
+        }
+        auto encoded = encode_ai_media_data_uri(*request.media);
+        if (!encoded.ok()) return encoded.status();
+        media_uri = std::move(*encoded);
+    }
+
     rapidjson::StringBuffer buffer;
     RequestWriter writer(buffer);
     if (!writer.StartObject() || !writer.Key("model") || !writer.String(request.model.data(), request.model.size())) {
@@ -159,9 +132,20 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
         if (!writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
             !writer.String("system") || !writer.Key("content") ||
             !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() ||
-            !writer.StartObject() || !writer.Key("role") || !writer.String("user") || !writer.Key("content") ||
-            !writer.String(request.prompt.data(), request.prompt.size()) || !writer.EndObject() || !writer.EndArray() ||
-            !writer.Key("stream") || !writer.Bool(false)) {
+            !writer.StartObject() || !writer.Key("role") || !writer.String("user") || !writer.Key("content")) {
+            return invalid_request();
+        }
+        if (request.media == nullptr) {
+            if (!writer.String(request.prompt.data(), request.prompt.size())) return invalid_request();
+        } else if (!writer.StartArray() || !writer.StartObject() || !writer.Key("type") || !writer.String("text") ||
+                   !writer.Key("text") || !writer.String(request.prompt.data(), request.prompt.size()) ||
+                   !writer.EndObject() || !writer.StartObject() || !writer.Key("type") ||
+                   !writer.String(media_part_type) || !writer.Key(media_part_type) || !writer.StartObject() ||
+                   !writer.Key("url") || !writer.String(media_uri.data(), media_uri.size()) || !writer.EndObject() ||
+                   !writer.EndObject() || !writer.EndArray()) {
+            return invalid_request();
+        }
+        if (!writer.EndObject() || !writer.EndArray() || !writer.Key("stream") || !writer.Bool(false)) {
             return invalid_request();
         }
         break;

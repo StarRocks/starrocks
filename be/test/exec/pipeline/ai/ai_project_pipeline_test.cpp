@@ -36,6 +36,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
+#include "column/file_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -86,6 +87,7 @@ constexpr int64_t kAICompleteModelPromptFid = 200102;
 constexpr TSlotId kPromptSlotId = 1;
 constexpr TSlotId kCommonSlotId = 2;
 constexpr TSlotId kAnswerSlotId = 3;
+constexpr TSlotId kFileSlotId = 6;
 constexpr int64_t kLimit = 5;
 constexpr size_t kUpstreamDop = 6;
 constexpr size_t kBuilderDop = 9;
@@ -185,6 +187,30 @@ TExpr make_ai_complete_with_explicit_model(TTupleId tuple_id, TSlotId prompt_slo
     expression.nodes.emplace_back(std::move(call));
     expression.nodes.emplace_back(std::move(model));
     expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    return expression;
+}
+
+TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
+    auto expression = make_ai_complete(tuple_id, kPromptSlotId);
+    const auto file_type = TypeDescriptor(TYPE_FILE).to_thrift();
+    auto file = make_slot_ref(tuple_id, kFileSlotId).nodes.front();
+    file.__set_type(file_type);
+    auto& call = expression.nodes.front();
+    if (embedding) {
+        const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_FLOAT)).to_thrift();
+        call.fn.name.__set_function_name("ai_embed");
+        call.fn.__set_fid(200134);
+        call.fn.__set_arg_types({file_type});
+        call.fn.__set_ret_type(result_type);
+        call.__set_type(result_type);
+        call.__set_ai_model_config_id("__system_embedding__");
+        expression.nodes[1] = std::move(file);
+    } else {
+        call.fn.__set_fid(200104);
+        call.fn.__set_arg_types({varchar_type().to_thrift(), file_type});
+        call.__set_num_children(2);
+        expression.nodes.emplace_back(std::move(file));
+    }
     return expression;
 }
 
@@ -572,6 +598,24 @@ ChunkPtr make_prompt_chunk(size_t begin, size_t rows, std::optional<size_t> null
     return chunk;
 }
 
+ChunkPtr make_file_chunk(std::string_view bytes, size_t rows = 1, std::optional<size_t> null_row = std::nullopt) {
+    auto chunk = make_prompt_chunk(0, rows, null_row);
+    auto files = FileColumn::create();
+    auto nulls = NullColumn::create();
+    for (size_t row = 0; row < rows; ++row) {
+        if (null_row.has_value() && *null_row == row) {
+            files->append_default();
+            nulls->append(1);
+        } else {
+            files->append_datum(
+                    FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(bytes.data(), bytes.size())));
+            nulls->append(0);
+        }
+    }
+    chunk->append_column(NullableColumn::create(std::move(files), std::move(nulls)), kFileSlotId);
+    return chunk;
+}
+
 std::optional<std::string> nullable_string(const ChunkPtr& chunk, SlotId slot_id, size_t row) {
     const auto& nullable = down_cast<const NullableColumn&>(*chunk->get_column_by_slot_id(slot_id));
     if (nullable.is_null(row)) {
@@ -599,6 +643,12 @@ protected:
                                .type(varchar_type())
                                .nullable(true)
                                .column_name("answer")
+                               .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kFileSlotId)
+                               .type(TypeDescriptor(TYPE_FILE))
+                               .nullable(true)
+                               .column_name("file")
                                .build());
         tuple.build(&table);
 
@@ -736,6 +786,15 @@ protected:
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_file_projection(size_t max_input_file_bytes) {
+        ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(make_ai_file_call(_tuple_id, false)));
+        AIProjectProjectionSpec spec(
+                _runtime_state.get(),
+                {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
+                system_model_configs());
+        return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
+    }
+
     void set_query_deadline_ns(int64_t deadline_ns) {
         ASSERT_GT(deadline_ns, 0);
         ASSERT_EQ(0, deadline_ns % 1'000'000);
@@ -870,6 +929,14 @@ TEST_F(AIProjectNodeProviderRoutesTest, AcceptsSystemAndProviderRoutesWithMatchi
     ASSERT_OK(initialize_after_wire_round_trip(make_mixed_route_node()));
 }
 
+TEST_F(AIProjectNodeProviderRoutesTest, AcceptsSystemMultimodalProtocolsAlongsideProviderRoutes) {
+    auto node = make_mixed_route_node();
+    auto& configs = node.ai_project_node.ai_model_configs;
+    configs.at("__system_chat__").chat.__set_provider("qwen_compatible");
+    configs.at("__system_embedding__").embedding.__set_provider("dashscope_multimodal");
+    ASSERT_OK(initialize_after_wire_round_trip(node));
+}
+
 TEST_F(AIProjectNodeProviderRoutesTest, PreservesLegacyAICompleteWireContract) {
     ASSERT_OK(initialize_after_wire_round_trip(make_ai_node(_tuple_id)));
 }
@@ -916,6 +983,24 @@ TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
              }},
             {"unknown provider",
              [](auto& project) { project.ai_model_configs.at("provider:chat").chat.__set_provider("unknown"); }},
+            {"unknown system protocol",
+             [](auto& project) { project.ai_model_configs.at("__system_chat__").chat.__set_provider("unknown"); }},
+            {"system chat protocol capability mismatch",
+             [](auto& project) {
+                 project.ai_model_configs.at("__system_chat__").chat.__set_provider("dashscope_multimodal");
+             }},
+            {"system embedding protocol capability mismatch",
+             [](auto& project) {
+                 project.ai_model_configs.at("__system_embedding__").embedding.__set_provider("qwen_compatible");
+             }},
+            {"named provider chat protocol remains openai compatible",
+             [](auto& project) {
+                 project.ai_model_configs.at("provider:chat").chat.__set_provider("qwen_compatible");
+             }},
+            {"named provider embedding protocol remains openai compatible",
+             [](auto& project) {
+                 project.ai_model_configs.at("provider:embedding").embedding.__set_provider("dashscope_multimodal");
+             }},
             {"blank provider model",
              [](auto& project) { project.ai_model_configs.at("provider:chat").chat.__set_model(" \t"); }},
             {"api key with newline",
@@ -1666,6 +1751,131 @@ TEST_F(AIProjectPipelineTest, MixedSystemAndProviderRoutesKeepCredentialsAndType
     EXPECT_FLOAT_EQ(0.25f, array.elements_column()->get(0).get_float());
     EXPECT_FLOAT_EQ(-0.5f, array.elements_column()->get(1).get_float());
     processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, MixedTextAndFileRoutesUseTheirOwnRequestAndResponseProtocols) {
+    set_query_deadline_ns(120'000'000'000);
+    ScopedEnvironment chat_key{std::string(kApiKeyEnvironment), std::string(kSecretSentinel)};
+    const std::string embed_endpoint = "https://127.0.0.1/multimodal/embeddings";
+    ScopedEnvironment embed_binding{"AI_FUNCTION_EMBEDDING_ENDPOINT", embed_endpoint};
+    ScopedEnvironment embed_key{"AI_FUNCTION_EMBEDDING_API_KEY", "embedding-secret"};
+    auto configs = system_model_configs();
+    configs.emplace("__system_embedding__", AIProjectModelConfig{.endpoint = embed_endpoint,
+                                                                 .model = "multimodal-embedding",
+                                                                 .capability = AICapability::TEXT_EMBEDDING,
+                                                                 .protocol = "dashscope_multimodal"});
+    auto text = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
+    auto image = create_expr_context(make_ai_file_call(_tuple_id, false));
+    auto embedding = create_expr_context(make_ai_file_call(_tuple_id, true));
+    ASSERT_TRUE(text.ok()) << text.status();
+    ASSERT_TRUE(image.ok()) << image.status();
+    ASSERT_TRUE(embedding.ok()) << embedding.status();
+    AIProjectProjectionSpec spec(
+            _runtime_state.get(),
+            {{.slot_id = 3, .expr_ctx = text.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
+             {.slot_id = 4, .expr_ctx = image.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
+             {.slot_id = 5, .expr_ctx = embedding.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
+            {}, configs);
+    auto config = _config_source->snapshot();
+    config.on_error = "fail";
+    auto projection = AIProjectExpressionProjection::create(std::move(spec), config.max_input_file_bytes);
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    ASSERT_TRUE(buffer.ok()) << buffer.status();
+    auto processor_or = AIProjectProcessor::create(buffer.value(), projection.value(), submitter.value(), config);
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    const std::string png("\x89PNG\r\n\x1a\n", 8);
+    auto input = make_file_chunk(png, 2, 1);
+    auto admitted = buffer.value()->try_put(0, input);
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(buffer.value()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    input.reset();
+    _control.run_until_idle();
+    ASSERT_EQ(3, _http.pending_count());
+    size_t image_requests = 0;
+    size_t text_requests = 0;
+    size_t embedding_requests = 0;
+    while (_http.pending_count() != 0) {
+        const auto& request = _http.request();
+        if (request.url == embed_endpoint) {
+            ++embedding_requests;
+            EXPECT_NE(std::string::npos, request.body.find("\"contents\":[{\"image\":"));
+            EXPECT_NE(std::string::npos, request.body.find("data:image/png;base64,iVBORw0KGgo="));
+            EXPECT_EQ(std::string::npos, request.body.find("\"messages\""));
+            _http.complete_next(R"({"output":{"embeddings":[{"index":0,"embedding":[0.25,-0.5]}]}})");
+        } else if (request.body.find("\"image_url\"") != std::string::npos) {
+            ++image_requests;
+            EXPECT_EQ(kEndpointSentinel, request.url);
+            EXPECT_NE(std::string::npos, request.body.find("data:image/png;base64,iVBORw0KGgo="));
+            EXPECT_NE(std::string::npos, request.body.find("prompt-0"));
+            _http.complete_next(R"({"choices":[{"message":{"content":"image answer"}}]})");
+        } else {
+            ++text_requests;
+            EXPECT_EQ(kEndpointSentinel, request.url);
+            EXPECT_NE(std::string::npos, request.body.find("\"content\":\"prompt-0\""));
+            _http.complete_next(R"({"choices":[{"message":{"content":"text answer"}}]})");
+        }
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    EXPECT_EQ(1, image_requests);
+    EXPECT_EQ(1, text_requests);
+    EXPECT_EQ(1, embedding_requests);
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    ASSERT_EQ(2, output.value()->num_rows());
+    EXPECT_EQ("text answer", nullable_string(output.value(), 3, 0));
+    EXPECT_EQ("image answer", nullable_string(output.value(), 4, 0));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 1));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 1));
+    const auto& vectors = down_cast<const NullableColumn&>(*output.value()->get_column_by_slot_id(5));
+    EXPECT_TRUE(vectors.is_null(1));
+    const auto& array = down_cast<const ArrayColumn&>(*vectors.data_column());
+    ASSERT_EQ(2, array.elements_column()->size());
+    EXPECT_FLOAT_EQ(0.25f, array.elements_column()->get(0).get_float());
+    EXPECT_FLOAT_EQ(-0.5f, array.elements_column()->get(1).get_float());
+    EXPECT_EQ(3, processor->statistics(0).task_count);
+    EXPECT_EQ(3, processor->statistics(0).request_count);
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntimeUpdate) {
+    const std::string png("\x89PNG\r\n\x1a\n", 8);
+    auto config = _config_source->snapshot();
+    config.max_input_file_bytes = png.size();
+    ASSERT_OK(_config_source->update(config));
+    auto original = create_file_projection(_config_source->snapshot().max_input_file_bytes);
+    ASSERT_TRUE(original.ok()) << original.status();
+    config.max_input_file_bytes = png.size() - 1;
+    ASSERT_OK(_config_source->update(config));
+    auto updated = create_file_projection(_config_source->snapshot().max_input_file_bytes);
+    ASSERT_TRUE(updated.ok()) << updated.status();
+    ASSERT_OK(original.value()->prepare(_runtime_state.get(), 1));
+    ASSERT_OK(updated.value()->prepare(_runtime_state.get(), 1));
+    auto input = make_file_chunk(png);
+    auto accepted = original.value()->prepare_subchunk(_runtime_state.get(), 0, input);
+    auto rejected = updated.value()->prepare_subchunk(_runtime_state.get(), 0, input);
+    ASSERT_TRUE(accepted.ok()) << accepted.status();
+    ASSERT_TRUE(rejected.ok()) << rejected.status();
+    ASSERT_EQ(1, accepted->ai_outputs.size());
+    ASSERT_EQ(1, rejected->ai_outputs.size());
+    const auto& accepted_row = accepted->ai_outputs.front().input.rows.front();
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, accepted_row.action);
+    ASSERT_TRUE(accepted_row.media.has_value());
+    input.reset();
+    EXPECT_EQ(png, accepted_row.media->bytes);
+    const auto& rejected_row = rejected->ai_outputs.front().input.rows.front();
+    EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rejected_row.action);
+    EXPECT_FALSE(rejected_row.media.has_value());
+    original.value()->close(_runtime_state.get());
+    updated.value()->close(_runtime_state.get());
 }
 
 TEST_F(AIProjectPipelineTest, OperatorCreateIsAllocationOnlyAndPrepareConfiguresFinalDopOnce) {

@@ -140,6 +140,7 @@ public:
             input_row.action = row_actions.empty() ? AIFunctionRowAction::DISPATCH : row_actions.at(row);
             input_row.model = "model";
             input_row.prompt = prompts.get_slice(row).to_string();
+            input_row.media = media;
             output.input.rows.emplace_back(std::move(input_row));
         }
         prepared.ai_outputs.emplace_back(std::move(output));
@@ -154,6 +155,7 @@ public:
     std::optional<size_t> output_chunk_rows;
     bool output_chunk_contains_ai_slot = false;
     std::vector<AIFunctionRowAction> row_actions;
+    std::optional<AIMediaInput> media;
     size_t prepare_calls = 0;
     std::vector<int32_t> observed_driver_sequences;
     std::vector<size_t> observed_rows;
@@ -265,6 +267,9 @@ public:
         auto handle_state = std::make_shared<ManualHandleState>();
         handle_states.emplace_back(handle_state);
         submitted_prompts.emplace_back(request.prompt);
+        if (request.media != nullptr) {
+            submitted_media.emplace_back(*request.media);
+        }
 
         {
             std::unique_lock lock(block_mutex);
@@ -366,6 +371,7 @@ public:
     SubmitException submit_exception = SubmitException::NONE;
     size_t submit_calls = 0;
     std::vector<std::string> submitted_prompts;
+    std::vector<AIMediaInput> submitted_media;
     std::vector<std::shared_ptr<ManualHandleState>> handle_states;
     std::unordered_map<uint64_t, Pending> pending;
 
@@ -1006,6 +1012,36 @@ TEST(AIProjectProcessorTest, EarlyFinishCancelsExactlyOnceButWaitsForEveryCallba
         EXPECT_EQ(driver_thread, submitter->handle_states[row]->destroy_thread);
     }
 
+    submitter->complete_remaining_as_cancelled();
+    EXPECT_FALSE(processor->pending_finish(0));
+    EXPECT_FALSE(processor->has_output(0));
+    EXPECT_TRUE(processor->status(0).ok());
+    EXPECT_TRUE(buffer->all_sources_finished());
+}
+
+TEST(AIProjectProcessorTest, MediaIsConsumedBeforeSourceFinishAndCancellationDrainsOnce) {
+    auto buffer = make_input_buffer();
+    auto projection = std::make_shared<RecordingProjection>();
+    const std::string png("\x89PNG\r\n\x1a\n", 8);
+    projection->media = AIMediaInput{.mime_type = "image/png", .bytes = png};
+    projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::SQL_NULL};
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto processor = make_processor(buffer, projection, submitter);
+    ASSERT_NE(nullptr, processor);
+    put_and_finish(buffer, make_input_chunk(0, 2));
+
+    RuntimeState state;
+    ASSERT_OK(processor->try_process(&state, 0));
+    ASSERT_EQ(1, submitter->pending_count());
+    ASSERT_EQ(1, submitter->submitted_media.size());
+    projection->media.reset();
+    EXPECT_EQ("image/png", submitter->submitted_media.front().mime_type);
+    EXPECT_EQ(png, submitter->submitted_media.front().bytes);
+
+    ASSERT_OK(processor->set_source_finished(0));
+    ASSERT_OK(processor->set_source_finished(0));
+    EXPECT_EQ(1, submitter->cancel_calls("prompt-0"));
+    EXPECT_TRUE(processor->pending_finish(0));
     submitter->complete_remaining_as_cancelled();
     EXPECT_FALSE(processor->pending_finish(0));
     EXPECT_FALSE(processor->has_output(0));
