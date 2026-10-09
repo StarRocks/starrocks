@@ -1,0 +1,32 @@
+-- name: test_set_operation_with_non_nullable_json
+create table t1 (
+  `k` int not null,
+  `j` json not null
+) duplicate key(`k`)
+distributed by hash(`k`) buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+create table t2 (
+  `k` int not null,
+  `j` json not null
+) duplicate key(`k`)
+distributed by hash(`k`) buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+insert into t1 values (1, parse_json('{"a": 1}')), (2, parse_json('{"b": 2}')), (3, parse_json('[1, 2, 3]'));
+-- result:
+-- !result
+insert into t2 values (1, parse_json('{"a": 1}')), (2, parse_json('{"c": 3}')), (3, parse_json('[1, 2, 3]'));
+-- result:
+-- !result
+select k, j from t1 intersect select k, j from t2 order by k;
+-- result:
+1	{"a": 1}
+3	[1, 2, 3]
+-- !result
+select k, j from t1 except select k, j from t2 order by k;
+-- result:
+2	{"b": 2}
+-- !result
