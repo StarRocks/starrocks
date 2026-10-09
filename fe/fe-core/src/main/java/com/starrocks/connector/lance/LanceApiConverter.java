@@ -26,6 +26,8 @@ import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static com.starrocks.type.BooleanType.BOOLEAN;
 import static com.starrocks.type.DateType.DATE;
@@ -48,9 +50,14 @@ public class LanceApiConverter {
             throw new StarRocksConnectorException("Lance dataset has no schema");
         }
         List<Column> columns = new ArrayList<>();
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         for (JsonElement value : schema.getAsJsonArray("fields")) {
             JsonObject field = value.getAsJsonObject();
-            columns.add(new Column(field.get("name").getAsString(), fromFieldType(field),
+            String name = field.get("name").getAsString();
+            if (!names.add(name)) {
+                throw new StarRocksConnectorException("Ambiguous Lance column name: " + name);
+            }
+            columns.add(new Column(name, fromFieldType(field),
                     field.get("nullable").getAsBoolean()));
         }
         if (columns.isEmpty()) {

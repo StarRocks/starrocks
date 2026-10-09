@@ -506,7 +506,7 @@ struct THdfsScanRange {
     38: optional bool use_avro_jni_reader
 
     // Deprecated: native Lance plans identify the reader with file_format=LANCE. Keep ordinal 39 reserved.
-    39: optional bool use_lance_jni_reader
+    39: optional bool deprecated_use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
 
