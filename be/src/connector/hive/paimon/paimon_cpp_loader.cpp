@@ -55,8 +55,7 @@ Status load_shim_locked() {
     if (const Status st = dynamic_open(path.c_str(), &handle); !st.ok()) {
         return Status::InternalError(fmt::format(
                 "Paimon native reader is unavailable: {}. Either this BE was packaged without paimon-cpp or the "
-                "paimon libraries were removed from be/lib/paimon-cpp-lib. Global-index splits require paimon-cpp "
-                "and cannot use the JNI reader. For non-indexed Paimon scans, set session variable "
+                "paimon libraries were removed from be/lib/paimon-cpp-lib. Set session variable "
                 "paimon_reader_mode=JNI to use the JNI reader instead.",
                 st.message()));
     }
