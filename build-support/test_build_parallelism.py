@@ -65,6 +65,17 @@ class TestBuildParallelism(unittest.TestCase):
         )
         self.assertEqual(linker_type, "modern")
 
+    def test_detect_linker_type_cmake_gold_fallback(self):
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        uname() { echo "x86_64"; }
+        gcc() { echo "14.3.0"; }
+        ldd() { echo "ldd (GNU libc) 2.17"; }
+        starrocks_detect_linker_type
+        """
+        linker_type = self.run_bash(cmd, {"STARROCKS_LINKER": ""})
+        self.assertEqual(linker_type, "modern")
+
     def test_detect_total_ram_gb_unreadable_fallback(self):
         cmd = """
         starrocks_is_darwin() { return 1; }
