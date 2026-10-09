@@ -203,6 +203,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 .map(predicate -> queryColumnRefRewriter.rewrite(predicate))
                 .collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        boolean hasOriginalPredicate = MvUtils.getScanOperator(queryExpression).stream()
+                .anyMatch(scan -> scan.hasPredicateForMvRewrite()
+                        && !scan.getPredicateForMvRewrite().equals(scan.getPredicate()));
 
         for (MaterializationContext mvContext : mvCandidateContexts) {
             // initialize query's compensate type based on query and mv's partition refresh status
@@ -211,30 +214,45 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 continue;
             }
 
-            PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, mvContext, queryExpression,
-                    queryColumnRefFactory, queryColumnRefRewriter, this);
-            if (queryPredicateSplit == null) {
-                continue;
-            }
-            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
-                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+            OptExpression candidate = null;
+            MvRewriteContext mvRewriteContext = null;
+            // Preserve CASE matching first; only fall back when an equivalent normalized predicate exists.
+            int attempts = hasOriginalPredicate ? 2 : 1;
+            for (int attempt = 0; attempt < attempts; attempt++) {
+                OptExpression rewriteExpression = queryExpression;
+                if (hasOriginalPredicate) {
+                    // Rewriters may change operators/rule bits even on failure. Isolate both attempts.
+                    rewriteExpression = MvUtils.cloneExpression(queryExpression);
+                    deriveLogicalProperty(rewriteExpression);
+                }
+                PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, mvContext, rewriteExpression,
+                        queryColumnRefFactory, queryColumnRefRewriter, this, attempt == 0);
+                if (queryPredicateSplit == null) {
+                    continue;
+                }
+                mvRewriteContext = new MvRewriteContext(mvContext, queryTables, rewriteExpression,
+                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+                mvRewriteContext.setUseOriginalPredicate(attempt == 0);
 
-            IMaterializedViewRewriter mvRewriter = createRewriter(context, mvRewriteContext);
-            if (mvRewriter == null) {
-                logMVRewrite(mvRewriteContext, "create materialized view rewriter failed");
-                continue;
-            }
+                IMaterializedViewRewriter mvRewriter = createRewriter(context, mvRewriteContext);
+                if (mvRewriter == null) {
+                    logMVRewrite(mvRewriteContext, "create materialized view rewriter failed");
+                    continue;
+                }
 
-            // rewrite query
-            OptExpression candidate = mvRewriter.doRewrite(mvRewriteContext);
-            if (candidate == null) {
-                logMVRewrite(mvRewriteContext, "doRewrite phase failed");
-                continue;
-            }
+                candidate = mvRewriter.doRewrite(mvRewriteContext);
+                if (candidate == null) {
+                    logMVRewrite(mvRewriteContext, "doRewrite phase failed");
+                    continue;
+                }
 
-            candidate = mvRewriter.postRewrite(context, mvRewriteContext, candidate);
-            if (candidate == null) {
+                candidate = mvRewriter.postRewrite(context, mvRewriteContext, candidate);
+                if (candidate != null) {
+                    break;
+                }
                 logMVRewrite(mvRewriteContext, "doPostAfterRewrite phase failed");
+            }
+            if (candidate == null) {
                 continue;
             }
 

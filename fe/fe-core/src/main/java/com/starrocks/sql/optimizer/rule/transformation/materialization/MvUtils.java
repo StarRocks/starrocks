@@ -719,6 +719,10 @@ public class MvUtils {
     // which scan node will exclude IsNullPredicateOperator predicates if it's not null
     // and its column ref is in the join's keys
     public static Set<ScalarOperator> getPredicateForRewrite(OptExpression root) {
+        return getPredicateForRewrite(root, true);
+    }
+
+    private static Set<ScalarOperator> getPredicateForRewrite(OptExpression root, boolean useOriginalPredicate) {
         Set<ScalarOperator> result = Sets.newHashSet();
         OptExpressionVisitor predicateVisitor = new OptExpressionVisitor<Object, ColumnRefSet>() {
             @Override
@@ -730,7 +734,10 @@ public class MvUtils {
             }
 
             public Object visitLogicalTableScan(OptExpression optExpression, ColumnRefSet context) {
-                List<ScalarOperator> conjuncts = Utils.extractConjuncts(optExpression.getOp().getPredicate());
+                LogicalScanOperator scanOperator = optExpression.getOp().cast();
+                ScalarOperator predicate = useOriginalPredicate ?
+                        scanOperator.getPredicateForMvRewrite() : scanOperator.getPredicate();
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
                 for (ScalarOperator conjunct : conjuncts) {
                     if (!isValidPredicate(conjunct)) {
                         continue;
@@ -1488,6 +1495,17 @@ public class MvUtils {
                                                         ColumnRefFactory queryColumnRefFactory,
                                                         ReplaceColumnRefRewriter queryColumnRefRewriter,
                                                         Rule rule) {
+        return getQuerySplitPredicate(optimizerContext, mvContext, queryExpression, queryColumnRefFactory,
+                queryColumnRefRewriter, rule, true);
+    }
+
+    public static PredicateSplit getQuerySplitPredicate(OptimizerContext optimizerContext,
+                                                        MaterializationContext mvContext,
+                                                        OptExpression queryExpression,
+                                                        ColumnRefFactory queryColumnRefFactory,
+                                                        ReplaceColumnRefRewriter queryColumnRefRewriter,
+                                                        Rule rule,
+                                                        boolean useOriginalPredicate) {
         // Cache partition predicate predicates because it's expensive time costing if there are too many
         // materialized views or
         // query expressions are too complex.
@@ -1499,7 +1517,7 @@ public class MvUtils {
             return null;
         }
 
-        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression, useOriginalPredicate);
         // only add valid predicates into query split predicate
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));

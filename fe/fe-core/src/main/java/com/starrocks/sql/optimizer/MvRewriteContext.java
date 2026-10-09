@@ -53,6 +53,8 @@ public class MvRewriteContext {
     private List<TableScanDesc> mvTableScanDescs;
 
     private AggregatePushDownContext aggregatePushDownContext;
+    // Preserve the outer attempt's predicate choice when rebuilding predicates after aggregate pushdown.
+    private boolean useOriginalPredicate = true;
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -158,5 +160,13 @@ public class MvRewriteContext {
 
     public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
         this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+
+    public boolean isUseOriginalPredicate() {
+        return useOriginalPredicate;
+    }
+
+    public void setUseOriginalPredicate(boolean useOriginalPredicate) {
+        this.useOriginalPredicate = useOriginalPredicate;
     }
 }
