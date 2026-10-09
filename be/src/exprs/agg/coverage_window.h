@@ -18,6 +18,12 @@
 #include "geo/geo_coverage_simplify.h"
 
 namespace starrocks {
+namespace coverage_window_detail {
+// BinaryColumn limits each value to 32 bits, but its adaptive offsets allow
+// the aggregate payload to exceed that range.
+StatusOr<size_t> output_reserve_size(size_t current_bytes, size_t value_bytes);
+} // namespace coverage_window_detail
+
 struct CoverageWindowState {
     std::unique_ptr<GeoCoverageSimplify> core;
     GeoCoverageLimits limits;

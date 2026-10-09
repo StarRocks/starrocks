@@ -77,6 +77,14 @@ StatusOr<std::optional<bool>> boundary(FunctionContext* ctx) {
 }
 } // namespace
 
+StatusOr<size_t> coverage_window_detail::output_reserve_size(size_t current_bytes, size_t value_bytes) {
+    if (value_bytes > std::numeric_limits<uint32_t>::max())
+        return Status::MemoryLimitExceeded("ST_CoverageSimplify output WKB exceeds native value size limit");
+    if (value_bytes > std::numeric_limits<size_t>::max() - current_bytes)
+        return Status::MemoryLimitExceeded("ST_CoverageSimplify output chunk size overflow");
+    return current_bytes + value_bytes;
+}
+
 Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowState& state) const {
     const auto& args = ctx->get_arg_types();
     const auto& result = ctx->get_return_type();
@@ -191,12 +199,20 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
         ctx->set_error("ST_CoverageSimplify positional window mapping mismatch");
         return;
     }
+    if (geo->size() == 0) {
+        // The generic result allocator has no storage metadata. Only this
+        // adapter can certify the kernel's validated XY output. Keep the
+        // destination object so Analytor's ordinary column ownership applies.
+        auto validated = GeoColumn::create(
+                GeoColumnDescriptor{geo->descriptor().type,
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+        geo->swap_column(*validated);
+    }
     // start/end are chunk-local destination positions. emitted is the ordinal
     // in this partition, independent of chunk boundaries and buffer contraction.
     // Reserve owned WKB storage once for this output range, without retaining
     // the kernel in the column or repeatedly growing the payload buffer.
     size_t bytes_to_reserve = geo->byte_size();
-    const auto maximum = std::numeric_limits<uint32_t>::max();
     for (size_t index = 0; index < end - start; ++index) {
         if (index % 128 == 0) {
             auto status = checkpoint(ctx->state());
@@ -211,11 +227,12 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
             return;
         }
         const size_t bytes = *result ? result->value().size : 0;
-        if (bytes_to_reserve > maximum || bytes > maximum - bytes_to_reserve) {
-            ctx->set_error("ST_CoverageSimplify output chunk exceeds native offset range");
+        auto reserve_size = coverage_window_detail::output_reserve_size(bytes_to_reserve, bytes);
+        if (!reserve_size.ok()) {
+            ctx->set_error(reserve_size.status().to_string().c_str());
             return;
         }
-        bytes_to_reserve += bytes;
+        bytes_to_reserve = *reserve_size;
     }
     geo->reserve(end, bytes_to_reserve);
     for (size_t row = start; row < end; ++row) {

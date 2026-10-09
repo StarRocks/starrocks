@@ -23,11 +23,13 @@
 
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_expr_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
+#include "exprs/geo_functions.h"
 #include "geo/wkb.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -139,6 +141,19 @@ TEST(CoverageWindowTest, FullPartitionEmitsDistinctRowsAcrossChunks) {
         EXPECT_EQ(output_text(second, 0), "POLYGON ((4 0, 4 8, 8 8, 8 0, 4 0))");
         EXPECT_EQ(output_text(second, 1), "MULTIPOLYGON EMPTY");
         EXPECT_EQ(geo_data(first)->descriptor().type, *type.geo_type);
+        for (const auto& column : {first, second}) {
+            EXPECT_EQ(geo_data(column)->descriptor().storage.dimension, GEO_DIMENSION_XY);
+            EXPECT_EQ(geo_data(column)->descriptor().storage.validation_state,
+                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
+            auto area = GeoFunctions::st_geometry_area(nullptr, {column});
+            ASSERT_TRUE(area.ok()) << area.status();
+            ColumnViewer<TYPE_DOUBLE> values(*area);
+            EXPECT_DOUBLE_EQ(values.value(0), 32);
+            EXPECT_EQ(values.is_null(1), column.get() == first.get());
+            if (column.get() == second.get()) {
+                EXPECT_DOUBLE_EQ(values.value(1), 0);
+            }
+        }
         first->check_or_die();
         second->check_or_die();
     }
@@ -160,6 +175,46 @@ TEST(CoverageWindowTest, MultiplePartitionsShareAChunkWithoutDeduplicatingRows) 
     EXPECT_TRUE(result->is_null(3));
     EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0); // Zero tolerance validates without simplifying.
     result->check_or_die();
+}
+
+TEST(CoverageWindowTest, NullPartitionBeforeGeometryKeepsValidatedStorage) {
+    WindowHarness h(1);
+    auto input = coverage_input({std::nullopt, left, right});
+    auto result = ColumnHelper::create_column(coverage_type(), true);
+    h.evaluate(input, 0, 1);
+    h.fn.get_values(h.ctx.get(), h.storage.data(), result.get(), 0, 1);
+    h.fn.reset(h.ctx.get(), {}, h.storage.data());
+    h.evaluate(input, 1, 3);
+    h.fn.get_values(h.ctx.get(), h.storage.data(), result.get(), 1, 3);
+    ASSERT_FALSE(h.ctx->has_error()) << h.ctx->error_msg();
+    EXPECT_EQ(geo_data(result)->descriptor().storage.dimension, GEO_DIMENSION_XY);
+    auto area = GeoFunctions::st_geometry_area(nullptr, {result});
+    ASSERT_TRUE(area.ok()) << area.status();
+    ColumnViewer<TYPE_DOUBLE> values(*area);
+    EXPECT_TRUE(values.is_null(0));
+    EXPECT_FALSE(values.is_null(1));
+    EXPECT_FALSE(values.is_null(2));
+    EXPECT_GT(values.value(1), 0);
+    EXPECT_GT(values.value(2), 0);
+    result->check_or_die();
+}
+
+TEST(CoverageWindowTest, OutputReservationUsesAdaptiveOffsetsWithoutSizeOverflow) {
+    const size_t maximum_value = std::numeric_limits<uint32_t>::max();
+    auto exact = coverage_window_detail::output_reserve_size(0, maximum_value);
+    ASSERT_TRUE(exact.ok());
+    EXPECT_EQ(*exact, maximum_value);
+    if (std::numeric_limits<size_t>::max() > maximum_value) {
+        auto wide = coverage_window_detail::output_reserve_size(maximum_value, maximum_value);
+        ASSERT_TRUE(wide.ok());
+        EXPECT_EQ(*wide, maximum_value * 2);
+        EXPECT_FALSE(coverage_window_detail::output_reserve_size(0, maximum_value + 1).ok());
+    }
+    const size_t maximum_chunk = std::numeric_limits<size_t>::max();
+    auto last = coverage_window_detail::output_reserve_size(maximum_chunk - 1, 1);
+    ASSERT_TRUE(last.ok());
+    EXPECT_EQ(*last, maximum_chunk);
+    EXPECT_FALSE(coverage_window_detail::output_reserve_size(maximum_chunk, 1).ok());
 }
 
 TEST(CoverageWindowTest, NullParametersSkipInvalidTopologyAndDefaultIsTrue) {

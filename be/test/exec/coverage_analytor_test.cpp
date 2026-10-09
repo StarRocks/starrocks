@@ -20,10 +20,12 @@
 #include <optional>
 
 #include "base/utility/defer_op.h"
+#include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_flow_fwd.h"
 #include "exec/analytor.h"
+#include "exprs/geo_functions.h"
 #include "geo/wkb.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
@@ -71,7 +73,8 @@ const std::string right = "POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))";
 Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& keys,
                                const std::vector<std::optional<std::string>>& input, bool null_parameter,
                                std::vector<std::pair<int32_t, std::string>>* output, double tolerance = 0,
-                               bool spill = false, bool companion = false, bool exceeded_query_limit = false) {
+                               bool spill = false, bool companion = false, bool exceeded_query_limit = false,
+                               std::vector<std::optional<double>>* areas = nullptr) {
     ObjectPool pool;
     auto type = coverage_type();
     TDescriptorTableBuilder builder;
@@ -173,11 +176,18 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
     auto release = DeferOp([&] {
         if (exceeded_query_limit) query->release(2);
     });
-    auto collect = [&] {
+    auto collect = [&]() -> Status {
         while (auto chunk = processor.poll_chunk_buffer()) {
             auto result = chunk->get_column_by_slot_id(out->slots()[0]->id());
             auto ids = chunk->get_column_by_slot_id(in->slots()[2]->id());
             result->check_or_die();
+            const auto* geo =
+                    down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+            EXPECT_EQ(geo->descriptor().type, *type.geo_type);
+            EXPECT_EQ(geo->descriptor().storage.dimension, GEO_DIMENSION_XY);
+            EXPECT_EQ(geo->descriptor().storage.validation_state, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
+            ASSIGN_OR_RETURN(auto measured, GeoFunctions::st_geometry_area(nullptr, {result}));
+            ColumnViewer<TYPE_DOUBLE> area(measured);
             for (size_t row = 0; row < chunk->num_rows(); ++row) {
                 const auto id = ids->get(row).get_int32();
                 if (companion) {
@@ -187,8 +197,11 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
                     EXPECT_EQ(result_count->get(row).get_int64(), count);
                 }
                 output->emplace_back(id, output_text(result, row));
+                EXPECT_EQ(area.is_null(row), result->is_null(row));
+                if (areas) areas->push_back(area.is_null(row) ? std::nullopt : std::optional<double>{area.value(row)});
             }
         }
+        return Status::OK();
     };
     for (size_t first = 0; first < input.size(); first += chunk_rows) {
         size_t count = std::min(chunk_rows, input.size() - first);
@@ -203,10 +216,10 @@ Status drive_coverage_analytor(size_t chunk_rows, const std::vector<int32_t>& ke
         chunk->append_column(std::move(partition), in->slots()[1]->id());
         chunk->append_column(std::move(ids), in->slots()[2]->id());
         RETURN_IF_ERROR(processor.process(&state, chunk));
-        collect();
+        RETURN_IF_ERROR(collect());
     }
     RETURN_IF_ERROR(processor.finish_process(&state));
-    collect();
+    RETURN_IF_ERROR(collect());
     return Status::OK();
 }
 TEST(CoverageAnalytorTest, WholePartitionsAcrossAndInsideChunksKeepRowIdentity) {
@@ -232,6 +245,24 @@ TEST(CoverageAnalytorTest, OverAllRowsAndNullParameterUseTheRealExecutor) {
         EXPECT_EQ(output[0].second, null ? "NULL" : output_text(coverage_input({left}), 0));
         EXPECT_EQ(output[1].second, "NULL");
         EXPECT_EQ(output[2].second, null ? "NULL" : output_text(coverage_input({right}), 0));
+    }
+}
+
+TEST(CoverageAnalytorTest, WindowResultsFeedAreaAcrossNullPartitionsAndChunks) {
+    const std::vector<std::optional<std::string>> input{std::nullopt, left, right, "MULTIPOLYGON EMPTY", left, right};
+    const std::vector<int32_t> keys{0, 1, 1, 1, 2, 2};
+    for (size_t rows : {size_t(1), size_t(3), size_t(6)}) {
+        std::vector<std::pair<int32_t, std::string>> output;
+        std::vector<std::optional<double>> areas;
+        auto status = drive_coverage_analytor(rows, keys, input, false, &output, 1, false, false, false, &areas);
+        ASSERT_TRUE(status.ok()) << status;
+        ASSERT_EQ(areas.size(), input.size());
+        EXPECT_FALSE(areas[0]);
+        EXPECT_EQ(areas[3], 0);
+        for (size_t row : {size_t(1), size_t(2), size_t(4), size_t(5)}) {
+            ASSERT_TRUE(areas[row]);
+            EXPECT_GT(*areas[row], 0);
+        }
     }
 }
 
