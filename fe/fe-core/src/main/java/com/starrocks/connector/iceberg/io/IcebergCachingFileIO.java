@@ -267,6 +267,9 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     // Configuration carries no per-catalog secret and a shared FileSystem is safe.
     private static final Set<String> AMBIENT_GCS_AUTH_TYPES = Set.of("COMPUTE_ENGINE", "APPLICATION_DEFAULT");
 
+    // Hadoop's FileSystem cache key has no room for a per-catalog endpoint, so a custom one stays isolated.
+    private static final String GCS_ENDPOINT_KEY = "fs.gs.endpoint";
+
     private static void disableSharedFileSystemCache(Configuration conf, String path) {
         String scheme = new Path(path).toUri().getScheme();
         if (scheme == null) {
@@ -285,7 +288,8 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     private static boolean usesAmbientGcsCredential(Configuration conf) {
         String authType = conf.get(GCPCloudConfigurationProvider.AUTH_TYPE_KEY);
         return (authType == null || AMBIENT_GCS_AUTH_TYPES.contains(authType))
-                && conf.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY) == null;
+                && conf.get(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY) == null
+                && conf.get(GCS_ENDPOINT_KEY) == null;
     }
 
     private static class CacheEntry {

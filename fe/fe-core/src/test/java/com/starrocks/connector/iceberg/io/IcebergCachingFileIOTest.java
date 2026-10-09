@@ -181,6 +181,10 @@ public class IcebergCachingFileIOTest {
         Assertions.assertTrue(buildConf(baseConf(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
                 "sa@project.iam.gserviceaccount.com"), new HashMap<>(), path).getBoolean(flag, false));
 
+        Configuration customEndpoint = baseConf(GCPCloudConfigurationProvider.AUTH_TYPE_KEY, "COMPUTE_ENGINE");
+        customEndpoint.set("fs.gs.endpoint", "https://storage.example.com");
+        Assertions.assertTrue(buildConf(customEndpoint, new HashMap<>(), path).getBoolean(flag, false));
+
         Map<String, String> vendedToken = new HashMap<>();
         vendedToken.put(GCS_ACCESS_TOKEN, "token");
         Assertions.assertTrue(buildConf(vendedToken, path).getBoolean(flag, false));
