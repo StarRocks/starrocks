@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -eo pipefail
+set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.."; pwd)"
 cd "${REPO_ROOT}"
