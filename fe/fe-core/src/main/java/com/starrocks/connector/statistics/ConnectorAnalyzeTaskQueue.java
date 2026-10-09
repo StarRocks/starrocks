@@ -25,7 +25,10 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class ConnectorAnalyzeTaskQueue {
@@ -44,9 +47,12 @@ public class ConnectorAnalyzeTaskQueue {
     private final Executor taskRunPool;
 
     public ConnectorAnalyzeTaskQueue() {
-        this(ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
+        this(ThreadPoolManager.newDaemonThreadPool(
                 Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
                 Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1),
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(Math.max(Config.connector_table_query_trigger_analyze_max_running_task_num, 1)),
+                new ThreadPoolExecutor.AbortPolicy(),
                 "connector-trigger-analyze-pool", true));
     }
 
@@ -126,17 +132,6 @@ public class ConnectorAnalyzeTaskQueue {
                 Map.Entry<String, ConnectorAnalyzeTask> entry = iterator.next();
                 String tableUUID = entry.getKey();
                 ConnectorAnalyzeTask task = entry.getValue();
-<<<<<<< HEAD
-                removePendingTasks.add(entry.getKey());
-                runningTasks.put(entry.getKey(), task);
-                CompletableFuture.supplyAsync(task::run, taskRunPool).whenComplete((result, e) -> {
-                    if (e != null) {
-                        LOG.warn("Table {} analyze task failed", entry.getKey(), e);
-                    }
-                    runningTasks.remove(entry.getKey());
-                });
-                if (isMaxRunningConcurrencyReached()) {
-=======
                 if (runningTasks.containsKey(tableUUID)) {
                     // keep the task pending until the running task of the same table finishes,
                     // otherwise the running entry would be overwritten and removed by the running task
@@ -147,16 +142,15 @@ public class ConnectorAnalyzeTaskQueue {
                 try {
                     CompletableFuture.supplyAsync(task::run, taskRunPool).whenComplete((result, e) -> {
                         if (e != null) {
-                            LOG.warn("[ExternalStats] trigger fail | table_uuid={} error={}", tableUUID, e.getMessage(), e);
+                            LOG.warn("Table {} analyze task failed", tableUUID, e);
                         }
                         runningTasks.remove(tableUUID, task);
                     });
                 } catch (RejectedExecutionException e) {
                     // keep the task pending and retry in the next round
                     runningTasks.remove(tableUUID, task);
-                    LOG.warn("[ExternalStats] trigger delay | table_uuid={} reason=pool_rejected running={}",
+                    LOG.warn("Table {} analyze task is rejected by the pool, retry later, current running: {}",
                             tableUUID, runningTasks.size());
->>>>>>> 8d53044 ([BugFix] Fix leaked running task and dead scheduler in connector query-triggered analyze (#80329))
                     break;
                 }
                 iterator.remove();

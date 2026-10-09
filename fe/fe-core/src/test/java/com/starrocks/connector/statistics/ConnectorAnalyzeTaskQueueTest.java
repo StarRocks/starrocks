@@ -33,7 +33,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntSupplier;
@@ -160,7 +162,8 @@ public class ConnectorAnalyzeTaskQueueTest {
         String tableUUID = tableTriple.getRight().getUUID();
         int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
-        ExecutorService pool = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(2, 2,
+        ExecutorService pool = ThreadPoolManager.newDaemonThreadPool(2, 2, 60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(2), new ThreadPoolExecutor.AbortPolicy(),
                 "connector-trigger-analyze-test-pool", false);
         try {
             ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(pool);
