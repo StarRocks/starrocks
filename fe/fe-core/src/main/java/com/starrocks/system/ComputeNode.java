@@ -81,6 +81,11 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
     private volatile long lastUpdateMs;
     @SerializedName("lastStartTime")
     private volatile long lastStartTime;
+    // Exclusive txn-id watermark while SHUTDOWN: last observed SHUTDOWN peekNext.
+    // Abort uses txnId < watermark and matching backendId. Ids at/after watermark
+    // are not aborted. 0 means unset. Persisted for leader failover.
+    @SerializedName("stiw")
+    private volatile long shutdownTxnIdWatermark;
     @SerializedName("isAlive")
     private AtomicBoolean isAlive;
 
@@ -395,6 +400,14 @@ public class ComputeNode implements IComputable, Writable, GsonPostProcessable {
 
     public void setLastStartTime(long currentTime) {
         this.lastStartTime = currentTime;
+    }
+
+    public long getShutdownTxnIdWatermark() {
+        return shutdownTxnIdWatermark;
+    }
+
+    public void setShutdownTxnIdWatermark(long watermark) {
+        this.shutdownTxnIdWatermark = watermark;
     }
 
     public long getLastMissingHeartbeatTime() {

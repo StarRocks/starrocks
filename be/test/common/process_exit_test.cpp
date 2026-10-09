@@ -17,22 +17,49 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <thread>
 
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/status.h"
 
 namespace starrocks {
 
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_quick_exit;
-
+extern std::atomic<bool> k_starrocks_force_reject;
+extern std::atomic<bool> k_starrocks_be_crashing;
+extern std::atomic<int64_t> k_starrocks_exit_start_ms;
+extern std::atomic<int64_t> k_starrocks_fe_aware_shutdown_ms;
 using namespace ::testing;
 
 class ProcessExitTest : public testing::Test {
+    void SetUp() override {
+        _old_reject_delay_ms = config::graceful_exit_reject_delay_ms;
+        _old_reject_fallback_ms = config::graceful_exit_reject_fallback_ms;
+        _old_wait_for_frontend_heartbeat = config::graceful_exit_wait_for_frontend_heartbeat;
+        config::graceful_exit_wait_for_frontend_heartbeat = true;
+        config::graceful_exit_reject_delay_ms = 5000;
+        config::graceful_exit_reject_fallback_ms = 15000;
+    }
     void TearDown() override {
-        // restore the flags
+        config::graceful_exit_wait_for_frontend_heartbeat = _old_wait_for_frontend_heartbeat;
+        config::graceful_exit_reject_delay_ms = _old_reject_delay_ms;
+        config::graceful_exit_reject_fallback_ms = _old_reject_fallback_ms;
         k_starrocks_exit.store(false);
         k_starrocks_quick_exit.store(false);
+        k_starrocks_force_reject.store(false);
+        k_starrocks_be_crashing.store(false);
+        k_starrocks_exit_start_ms.store(0);
+        clear_frontend_aware_of_exit();
     }
+
+private:
+    int64_t _old_reject_fallback_ms;
+    int64_t _old_reject_delay_ms;
+    bool _old_wait_for_frontend_heartbeat;
 };
 
 TEST_F(ProcessExitTest, testExitFlag) {
@@ -72,4 +99,181 @@ TEST_F(ProcessExitTest, testQuickExitFlag) {
     EXPECT_TRUE(process_exit_in_progress());
     EXPECT_TRUE(process_quick_exit_in_progress());
 }
+
+TEST_F(ProcessExitTest, testShouldAcceptNotExiting) {
+    EXPECT_TRUE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testShouldNotAcceptForceReject) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_force_reject.store(true);
+    EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testForceRejectExecPlanFragment) {
+    ASSERT_TRUE(set_process_exit());
+    force_reject_exec_plan_fragment();
+    EXPECT_TRUE(k_starrocks_force_reject.load());
+}
+
+TEST_F(ProcessExitTest, testShouldNotAcceptQuickExit) {
+    ASSERT_TRUE(set_process_quick_exit());
+    EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testLoadChannelOpenAfterCutoff) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+    EXPECT_TRUE(should_accept_load_channel_open());
+}
+
+TEST_F(ProcessExitTest, testLoadChannelOpenRejectedOnForceReject) {
+    force_reject_exec_plan_fragment();
+    EXPECT_FALSE(should_accept_load_channel_open());
+}
+
+TEST_F(ProcessExitTest, testLoadChannelOpenRejectedOnQuickExit) {
+    ASSERT_TRUE(set_process_quick_exit());
+    EXPECT_FALSE(should_accept_load_channel_open());
+}
+
+TEST_F(ProcessExitTest, testLoadChannelOpenRejectedOnCrash) {
+    set_process_is_crashing();
+    EXPECT_FALSE(should_accept_load_channel_open());
+}
+
+TEST_F(ProcessExitTest, testShouldAcceptUntilFrontendAware) {
+    ASSERT_TRUE(set_process_exit());
+    EXPECT_TRUE(should_accept_new_request());
+    set_frontend_aware_of_exit();
+    EXPECT_TRUE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testShouldNotAcceptAfterFrontendAwareDelay) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+}
+TEST_F(ProcessExitTest, testShouldNotAcceptAfterFallbackWithoutFrontendAware) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testShouldNotAcceptImmediatelyWhenHeartbeatWaitDisabled) {
+    config::graceful_exit_wait_for_frontend_heartbeat = false;
+    ASSERT_TRUE(set_process_exit());
+    // New requests reject immediately when heartbeat waiting is disabled.
+    EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testShouldAcceptDuringHeartbeatDelay) {
+    ASSERT_TRUE(set_process_exit());
+    set_frontend_aware_of_exit();
+    EXPECT_TRUE(should_accept_new_request());
+
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+}
+
+TEST_F(ProcessExitTest, testHeartbeatAckReanchorsPerSource) {
+    // First value of a source is the baseline; later growth advances within the source.
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_FALSE(is_frontend_aware_of_exit());
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    // A different source (leader handover) re-anchors and never compares clocks.
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_TRUE(advance_heartbeat_ack("fe2:9010:2", 901));
+}
+
+TEST_F(ProcessExitTest, testRedirectDisabledAfterLeaderHandover) {
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    set_frontend_aware_of_exit();
+    // Aware of FE1 before the handover: redirect allowed.
+    EXPECT_TRUE(may_redirect_to_fe_leader());
+
+    // Leader handover: redirect is disabled for the rest of this shutdown, even though the
+    // delay window stays open (the ack of the new source still advances).
+    EXPECT_FALSE(advance_heartbeat_ack("fe2:9010:2", 900));
+    EXPECT_TRUE(advance_heartbeat_ack("fe2:9010:2", 901));
+    set_frontend_aware_of_exit();
+    EXPECT_FALSE(may_redirect_to_fe_leader());
+
+    // A fresh shutdown cycle resets the downgrade.
+    clear_frontend_aware_of_exit();
+    EXPECT_FALSE(advance_heartbeat_ack("fe1:9010:1", 100));
+    EXPECT_TRUE(advance_heartbeat_ack("fe1:9010:1", 101));
+    set_frontend_aware_of_exit();
+    EXPECT_TRUE(may_redirect_to_fe_leader());
+}
+TEST_F(ProcessExitTest, testRequestAdmissionGuardClosesWithForceReject) {
+    {
+        RequestAdmissionGuard guard;
+        EXPECT_TRUE(guard.accepted());
+    }
+
+    force_reject_exec_plan_fragment();
+
+    RequestAdmissionGuard guard;
+    EXPECT_FALSE(guard.accepted());
+}
+
+TEST_F(ProcessExitTest, testRequestAdmissionGuardDoesNotCountAfterCutoff) {
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_fe_aware_shutdown_ms.store(MonotonicMillis() - config::graceful_exit_reject_delay_ms - 1);
+    EXPECT_FALSE(should_accept_new_request());
+    const size_t before = shutdown_work_inflight();
+    {
+        RequestAdmissionGuard guard;
+        EXPECT_TRUE(guard.accepted());
+        EXPECT_EQ(before, shutdown_work_inflight());
+    }
+    EXPECT_EQ(before, shutdown_work_inflight());
+}
+
+TEST_F(ProcessExitTest, testRequestAdmissionGuardCountsDuringAdmissionWindow) {
+    ASSERT_TRUE(set_process_exit());
+    EXPECT_TRUE(should_accept_new_request());
+    const size_t before = shutdown_work_inflight();
+    {
+        RequestAdmissionGuard guard;
+        EXPECT_TRUE(guard.accepted());
+        EXPECT_EQ(before + 1, shutdown_work_inflight());
+    }
+    EXPECT_EQ(before, shutdown_work_inflight());
+}
+
+TEST_F(ProcessExitTest, testSetProcessExitPublishesStartMsBeforeExit) {
+    DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
+
+    SyncPoint::GetInstance()->LoadDependency({
+            {"ProcessExit::set_process_exit:after_start_ms", "ProcessExitTest::observer"},
+            {"ProcessExitTest::observer_done", "ProcessExit::set_process_exit:before_exit"},
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    std::thread observer([]() {
+        TEST_SYNC_POINT("ProcessExitTest::observer");
+        EXPECT_NE(0, k_starrocks_exit_start_ms.load());
+        EXPECT_FALSE(k_starrocks_exit.load());
+        EXPECT_TRUE(should_accept_new_request());
+        TEST_SYNC_POINT("ProcessExitTest::observer_done");
+    });
+
+    EXPECT_TRUE(set_process_exit());
+    observer.join();
+
+    EXPECT_TRUE(process_exit_in_progress());
+    EXPECT_NE(0, k_starrocks_exit_start_ms.load());
+    EXPECT_TRUE(should_accept_new_request());
+
+    const int64_t start_ms = k_starrocks_exit_start_ms.load();
+    EXPECT_FALSE(set_process_exit());
+    EXPECT_EQ(start_ms, k_starrocks_exit_start_ms.load());
+    EXPECT_TRUE(should_accept_new_request());
+}
+
 } // namespace starrocks

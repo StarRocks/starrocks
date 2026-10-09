@@ -330,6 +330,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void transactionLoadCoordinatorMgrWithoutChannelTest() throws Exception {
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                minTimes = 0;
+                result = null;
+            }
+        };
 
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
@@ -360,6 +367,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void transactionLoadCoordinatorMgrMultiBeOnSameNodeWithoutChannelTest() throws Exception {
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                minTimes = 0;
+                result = null;
+            }
+        };
 
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
@@ -424,6 +438,13 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void transactionLoadCoordinatorMgrOneBeOnNodeWithoutChannelTest() throws Exception {
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                minTimes = 0;
+                result = null;
+            }
+        };
 
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
@@ -472,6 +493,14 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void beginTransactionWithoutChannelInfoTest() throws Exception {
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(anyLong, anyString);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
         String label = RandomStringUtils.randomAlphanumeric(32);
         Request request = newRequest(TransactionOperation.TXN_BEGIN, (uriBuilder, reqBuilder) -> {
             reqBuilder.addHeader(DB_KEY, DB_NAME);

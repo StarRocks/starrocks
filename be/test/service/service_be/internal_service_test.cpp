@@ -17,14 +17,22 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/process_exit.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
+#include "exec/runtime/query_context_manager.h"
+#include "orchestration/orchestration_env.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
@@ -267,6 +275,156 @@ TEST_F(InternalServiceTest, test_get_load_replica_status) {
     MockClosure closure;
     service.get_load_replica_status(&cntl, &request, &response, &closure);
     ASSERT_EQ(1, response.replica_statuses_size());
+}
+
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_quick_exit;
+extern std::atomic<bool> k_starrocks_force_reject;
+
+TEST_F(InternalServiceTest, test_short_circuit_rejected_while_shutting_down) {
+    // Verify rejection and guard cleanup for a short-circuit RPC.
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+    orchestration::OrchestrationEnv orchestration_env;
+
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecShortCircuitRequest request;
+    PExecShortCircuitResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service.exec_short_circuit(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    // ErrorText includes brpc's error-code prefix.
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_exec_plan_fragment_rejected_while_shutting_down) {
+    // Verify rejection and guard cleanup for a fragment-prep RPC.
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+
+    orchestration::OrchestrationEnv orchestration_env;
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecPlanFragmentRequest request;
+    PExecPlanFragmentResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    // Rejection moved to the public entry (admission gate): force_reject makes it SetFailed
+    // and restore the inflight count, instead of the private worker which no longer rejects.
+    service.exec_plan_fragment(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_exec_batch_plan_fragments_rejected_while_shutting_down) {
+    k_starrocks_exit.store(true);
+    k_starrocks_force_reject.store(true);
+
+    orchestration::OrchestrationEnv orchestration_env;
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance(), &orchestration_env,
+                                                         _load_channel_mgr.get());
+
+    PExecBatchPlanFragmentsRequest request;
+    PExecBatchPlanFragmentsResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    // Rejection moved to the public entry (admission gate), same as exec_plan_fragment.
+    service.exec_batch_plan_fragments(&cntl, &request, &response, &closure);
+
+    ASSERT_TRUE(cntl.Failed());
+    ASSERT_EQ(brpc::EINTERNAL, cntl.ErrorCode());
+    ASSERT_EQ("[E2001]BE is shutting down", cntl.ErrorText());
+
+    k_starrocks_exit.store(false);
+    k_starrocks_force_reject.store(false);
+}
+
+TEST_F(InternalServiceTest, test_drain_resample_observes_successor_after_predecessor_release) {
+    // Drain reads shutdown_work first, then registries. Hold one predecessor, then at
+    // before_query_read publish this test's query and drop the predecessor so the
+    // re-sample must still see the successor (never a false zero).
+    // before+1 / before assumes this fixture is serial: no sibling test mutates
+    // shutdown_work during the sample. Not a process-wide invariant.
+    orchestration::OrchestrationEnv orchestration_env;
+    orchestration_env.set_exec_env_for_test(ExecEnv::GetInstance());
+
+    TUniqueId query_id = UniqueId::gen_uid().to_thrift();
+    std::atomic<bool> registered_query{false};
+
+    const size_t before = shutdown_work_inflight();
+    std::atomic<bool> owns_shutdown_work{true};
+    inc_shutdown_work();
+    ASSERT_EQ(before + 1, shutdown_work_inflight());
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("OrchestrationEnv::_get_running_fragments_count:before_query_read",
+                                          [&](void* arg) {
+                                              auto st = ExecEnv::GetInstance()->query_context_mgr()->get_or_register(
+                                                      query_id,
+                                                      /*return_error_if_not_exist=*/false);
+                                              ASSERT_OK(st);
+                                              registered_query.store(true);
+                                              if (owns_shutdown_work.exchange(false)) {
+                                                  dec_shutdown_work();
+                                              }
+                                          });
+    DeferOp clear_sync_point([&] {
+        SyncPoint::GetInstance()->ClearCallBack("OrchestrationEnv::_get_running_fragments_count:before_query_read");
+        SyncPoint::GetInstance()->DisableProcessing();
+        if (registered_query.load()) {
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
+        }
+        if (owns_shutdown_work.exchange(false)) {
+            dec_shutdown_work();
+        }
+    });
+
+    size_t count = orchestration_env.get_running_fragments_count_for_test();
+    ASSERT_GT(count, 0);
+    ASSERT_FALSE(owns_shutdown_work.load());
+    ASSERT_EQ(before, shutdown_work_inflight());
+}
+
+TEST_F(InternalServiceTest, test_quick_exit_still_counts_pipeline_query) {
+    ASSERT_NE(nullptr, ExecEnv::GetInstance()->query_context_mgr());
+    orchestration::OrchestrationEnv orchestration_env;
+    orchestration_env.set_exec_env_for_test(ExecEnv::GetInstance());
+
+    TUniqueId query_id = UniqueId::gen_uid().to_thrift();
+    ASSERT_OK(ExecEnv::GetInstance()->query_context_mgr()->get_or_register(query_id, false));
+    auto* metrics = StreamLoadMetrics::instance();
+    const auto stream_before = metrics->streaming_load_current_processing.value();
+    metrics->streaming_load_current_processing.increment(1);
+    inc_shutdown_work();
+    DeferOp restore([&] {
+        ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
+        metrics->streaming_load_current_processing.set_value(stream_before);
+        dec_shutdown_work();
+        k_starrocks_quick_exit.store(false);
+    });
+
+    ASSERT_TRUE(set_process_quick_exit());
+    EXPECT_GE(orchestration_env.get_running_fragments_count_for_test(), 1);
+
+    k_starrocks_quick_exit.store(false);
+    EXPECT_GE(orchestration_env.get_running_fragments_count_for_test(), 2);
 }
 
 } // namespace starrocks

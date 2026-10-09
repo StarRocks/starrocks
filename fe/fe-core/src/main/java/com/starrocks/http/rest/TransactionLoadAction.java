@@ -264,7 +264,8 @@ public class TransactionLoadAction extends RestBaseAction {
         if (null == redirectAddress) {
             // TODO This must be a transaction stream load. Should refactor the code to make it clearer.
             ComputeNode node = TXN_BEGIN.equals(txnOperation) ?
-                    coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName()) :
+                    coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName(),
+                            txnOperationParams.getDbName()) :
                     coordinatorMgr.get(label, txnOperationParams.getDbName());
 
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());

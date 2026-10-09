@@ -61,6 +61,9 @@ struct LoadChannelOpenContext {
     PTabletWriterOpenResult* response;
     google::protobuf::Closure* done;
     int64_t receive_rpc_time_ns;
+    // Captured in open() before queueing. New-channel creation uses this snapshot so an
+    // open admitted before cutoff still succeeds after async delay. Existing channels ignore it.
+    bool admitted_at_open = false;
 };
 
 // A LoadChannel manages tablets channels for all indexes

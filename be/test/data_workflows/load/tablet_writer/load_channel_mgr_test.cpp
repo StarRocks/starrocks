@@ -17,10 +17,17 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <thread>
+
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/process_exit.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
 #include "service/brpc_service_test_util.h"
@@ -30,6 +37,11 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+
+extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_quick_exit;
+extern std::atomic<bool> k_starrocks_force_reject;
+extern std::atomic<int64_t> k_starrocks_exit_start_ms;
 
 class LoadChannelMgrTest : public testing::Test {
 public:
@@ -51,6 +63,10 @@ protected:
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet->tablet_schema()));
     }
     void TearDown() override {
+        k_starrocks_exit.store(false);
+        k_starrocks_quick_exit.store(false);
+        k_starrocks_force_reject.store(false);
+        k_starrocks_exit_start_ms.store(0);
         if (_tablet) {
             _tablet.reset();
             ASSERT_OK(StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id));
@@ -195,6 +211,9 @@ TEST_F(LoadChannelMgrTest, async_open_submit_task_fail) {
     ASSERT_TRUE(result.status().status_code() == TStatusCode::SERVICE_UNAVAILABLE);
     auto load_channel = _load_channel_mgr->TEST_get_load_channel(UniqueId(load_id));
     ASSERT_TRUE(load_channel == nullptr);
+    ASSERT_EQ(0, _load_channel_mgr->pending_work_count());
+    ASSERT_EQ(0, _load_channel_mgr->async_rpc_pool()->total_executed_tasks());
+    ASSERT_EQ(0, shutdown_work_inflight());
 }
 
 TEST_F(LoadChannelMgrTest, sync_open_success) {
@@ -220,6 +239,179 @@ TEST_F(LoadChannelMgrTest, sync_open_success) {
     ASSERT_TRUE(result.status().status_code() == TStatusCode::OK);
     auto load_channel = _load_channel_mgr->TEST_get_load_channel(UniqueId(load_id));
     ASSERT_TRUE(load_channel != nullptr);
+}
+
+TEST_F(LoadChannelMgrTest, sync_open_success_after_shutdown_cutoff) {
+    // tablet_writer_open is successor work: cutoff does not reject a new channel.
+    // pending_work_count is the channel map; open RPCs share shutdown_work_inflight.
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+    ASSERT_TRUE(should_accept_load_channel_open());
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::enable_load_channel_rpc_async = true;
+        k_starrocks_exit.store(false);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    config::enable_load_channel_rpc_async = false;
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) != nullptr);
+    ASSERT_EQ(1, _load_channel_mgr->pending_work_count());
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(LoadChannelMgrTest, async_open_keeps_admission_across_cutoff) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+    std::atomic<int> phase{0};
+
+    DeferOp defer([&]() {
+        phase.store(2);
+        SyncPoint::GetInstance()->ClearCallBack("ChannelOpenTask::run:before_open");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ChannelOpenTask::run:before_open", [&](void*) {
+        phase.store(1);
+        while (phase.load() < 2) {
+            std::this_thread::yield();
+        }
+    });
+
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return phase.load() == 1; }));
+    ASSERT_EQ(1, shutdown_work_inflight());
+    ASSERT_TRUE(set_process_exit());
+    phase.store(2);
+    ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) != nullptr);
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(LoadChannelMgrTest, async_open_success_after_shutdown_cutoff) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+    ASSERT_TRUE(should_accept_load_channel_open());
+
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    ASSERT_TRUE(Awaitility().timeout(60000).until(
+            [&] { return _load_channel_mgr->async_rpc_pool()->total_executed_tasks() == 1; }));
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) != nullptr);
+    ASSERT_EQ(1, _load_channel_mgr->pending_work_count());
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(LoadChannelMgrTest, sync_open_rejected_when_force_reject) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+
+    force_reject_exec_plan_fragment();
+    ASSERT_FALSE(should_accept_load_channel_open());
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+        config::enable_load_channel_rpc_async = true;
+        k_starrocks_force_reject.store(false);
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    config::enable_load_channel_rpc_async = false;
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(TStatusCode::ABORTED, result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) == nullptr);
+    ASSERT_EQ(0, _load_channel_mgr->pending_work_count());
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(LoadChannelMgrTest, async_open_rejected_when_force_reject) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockClosure closure;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+
+    force_reject_exec_plan_fragment();
+    ASSERT_FALSE(should_accept_load_channel_open());
+
+    _load_channel_mgr->open(&cntl, request, &result, &closure);
+    ASSERT_TRUE(Awaitility().timeout(60000).until(
+            [&] { return _load_channel_mgr->async_rpc_pool()->total_executed_tasks() == 1; }));
+    ASSERT_TRUE(closure.has_run());
+    ASSERT_EQ(TStatusCode::ABORTED, result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) == nullptr);
+    ASSERT_EQ(0, _load_channel_mgr->pending_work_count());
+    ASSERT_EQ(0, shutdown_work_inflight());
+}
+
+TEST_F(LoadChannelMgrTest, incremental_open_after_cutoff_keeps_existing_channel) {
+    ASSERT_OK(_load_channel_mgr->init(_mem_tracker.get()));
+    PUniqueId load_id;
+    load_id.set_hi(456789);
+    load_id.set_lo(987654);
+    brpc::Controller cntl;
+    MockCountDownClosure first_done;
+    PTabletWriterOpenRequest request = create_open_request(load_id, rand());
+    PTabletWriterOpenResult result;
+    _load_channel_mgr->open(&cntl, request, &result, &first_done);
+    first_done.wait();
+    ASSERT_EQ(TStatusCode::OK, result.status().status_code());
+
+    ASSERT_TRUE(set_process_exit());
+    k_starrocks_exit_start_ms.store(MonotonicMillis() - config::graceful_exit_reject_fallback_ms - 1);
+    ASSERT_FALSE(should_accept_new_request());
+
+    MockCountDownClosure second_done;
+    PTabletWriterOpenResult incremental_result;
+    request.set_is_incremental(true);
+    _load_channel_mgr->open(&cntl, request, &incremental_result, &second_done);
+    second_done.wait();
+    ASSERT_EQ(TStatusCode::OK, incremental_result.status().status_code());
+    ASSERT_TRUE(_load_channel_mgr->TEST_get_load_channel(UniqueId(load_id)) != nullptr);
 }
 
 TEST_F(LoadChannelMgrTest, test_aborted_load_channel) {
