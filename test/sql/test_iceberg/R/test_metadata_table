@@ -118,6 +118,7 @@ position_delete_file_count	BIGINT	Yes	false	None
 equality_delete_record_count	BIGINT	Yes	false	None		
 equality_delete_file_count	BIGINT	Yes	false	None		
 last_updated_at	DATETIME	Yes	false	None		
+last_updated_snapshot_id	BIGINT	Yes	false	None		
 -- !result
 desc iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}$partitions;
 -- result:
@@ -129,6 +130,7 @@ position_delete_file_count	BIGINT	Yes	false	None
 equality_delete_record_count	BIGINT	Yes	false	None		
 equality_delete_file_count	BIGINT	Yes	false	None		
 last_updated_at	DATETIME	Yes	false	None		
+last_updated_snapshot_id	BIGINT	Yes	false	None		
 -- !result
 drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}_${uuid0} force;
 -- result:
