@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class ThreadPoolManagerTest {
 
@@ -191,5 +192,38 @@ public class ThreadPoolManagerTest {
         // can't set to <= 0
         Assertions.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, 0));
         Assertions.assertThrows(IllegalArgumentException.class, () -> ThreadPoolManager.setFixedThreadPoolSize(testPool, -1));
+    }
+
+    @Test
+    public void testCacheThreadPoolWithQueueRunsTasksConcurrently() throws InterruptedException {
+        int numThreads = 4;
+        ThreadPoolExecutor executor =
+                ThreadPoolManager.newDaemonCacheThreadPool(numThreads, 16, "test_cache_queue_pool", false);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            Assertions.assertEquals(numThreads, executor.getCorePoolSize());
+            Assertions.assertEquals(numThreads, executor.getMaximumPoolSize());
+            Assertions.assertTrue(executor.allowsCoreThreadTimeOut());
+
+            // Tasks block until released, so all of them can only be running at once if the pool
+            // starts a thread per task instead of queueing behind a single worker.
+            CountDownLatch started = new CountDownLatch(numThreads);
+            for (int i = 0; i < numThreads; i++) {
+                executor.execute(() -> {
+                    started.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
+            Assertions.assertTrue(started.await(10, TimeUnit.SECONDS));
+            Assertions.assertEquals(numThreads, executor.getActiveCount());
+            Assertions.assertEquals(0, executor.getQueue().size());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
     }
 }
