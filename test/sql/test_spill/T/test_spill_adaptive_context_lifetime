@@ -1,0 +1,55 @@
+-- name: test_spill_adaptive_context_lifetime
+CREATE DATABASE spill_adaptive_${uuid0};
+USE spill_adaptive_${uuid0};
+-- The spill pump prepares before the adaptive producer binds its aggregation context.
+-- Keep the output source live after the pump finishes; closing the pump must not close the context.
+
+CREATE TABLE t_spill_adaptive(id BIGINT, a INT, b INT, v BIGINT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 16 PROPERTIES("replication_num"="1");
+
+INSERT INTO t_spill_adaptive SELECT generate_series, IF(generate_series % 2 = 0, NULL, 1),
+generate_series % 97, generate_series % 97 FROM TABLE(generate_series(0, 193999));
+
+SET enable_query_cache=false;
+
+SET enable_spill=true;
+
+SET spill_mode='force';
+
+SET enable_runtime_adaptive_dop=true;
+
+SET new_planner_agg_stage=2;
+
+SET chunk_size=128;
+
+SET topn_push_down_agg_mode=0;
+
+SET enable_pipeline_event_scheduler=false;
+
+SET pipeline_dop=1;
+
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+
+SET pipeline_dop=8;
+
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+
+SET enable_pipeline_event_scheduler=true;
+
+SET pipeline_dop=1;
+
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+
+SET pipeline_dop=8;
+
+SELECT count(*), min(n), max(n), sum(IF(total = b * 1000, 0, 1))
+FROM (SELECT a,b,count(*) n,sum(v) total FROM t_spill_adaptive GROUP BY a,b
+      ORDER BY a ASC NULLS FIRST,b DESC LIMIT 10) q;
+
+DROP DATABASE spill_adaptive_${uuid0};

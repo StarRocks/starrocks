@@ -45,6 +45,14 @@ using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
+// True when index i is strictly interior to a chain of n operators, i.e. neither the source edge (0) nor
+// the sink edge (n-1). This is the single definition read by the pipeline (the factory chain), the driver
+// prepare-scan, and the driver process() pair-classification, so an interior operator is identified the
+// same way everywhere. It is defined on indices (not iterators), so it is well-defined for n < 2.
+static constexpr bool is_interior_index(size_t i, size_t n) {
+    return i != 0 && i + 1 != n;
+}
+
 class Operator {
     friend class PipelineDriver;
 
@@ -122,11 +130,21 @@ public:
     // Only source and sink operator may return true, and other operators always return false.
     virtual bool pending_finish() const { return false; }
 
+    // Declares that, when this operator blocks in an interior (non-edge) position, that block is covered by
+    // notifications: subscriptions to the spill layer and/or its own tasks that fire a notify on
+    // completion. The driver core only parks a driver in INTERMEDIATE_BLOCK when at least one interior
+    // operator of the chain promises this; otherwise the driver would sleep with nobody to wake it. Default
+    // false: an ordinary interior operator is self-driven (it blocks only on missing input and is released
+    // by the same process() pass that feeds it). An operator that overrides this to true on an evented
+    // fragment must subscribe its observer to at least one notification list, so the parked driver gets
+    // woken.
+    virtual bool supports_intermediate_wakeup() const { return false; }
+
     // Names the reason this operator is blocked on its current false predicate branch. It is pure, cheap,
     // and not on the hot path: it is read once when the driver is parked (EventScheduler::add_blocked_driver
-    // for a wakeable edge) and in tests. The switch must follow the same logic as has_output()/need_input(),
-    // so they stay in sync. Default NONE: an operator that is not blocked on a spill reason returns NONE and
-    // is ignored by the park-time check.
+    // for a wakeable edge, the INTERMEDIATE_BLOCK classification for an interior operator) and in tests. The
+    // switch must follow the same logic as has_output()/need_input(), so they stay in sync. Default NONE: an
+    // operator that is not blocked on a spill reason returns NONE and is ignored by the park-time check.
     virtual BlockReason block_reason() const { return BlockReason::NONE; }
 
     // Bitmask (block_reason_bit) of the reasons this operator has a wakeup for. It is a constant that

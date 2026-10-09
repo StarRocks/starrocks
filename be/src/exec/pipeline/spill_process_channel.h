@@ -42,7 +42,8 @@ class Spiller;
 }
 namespace pipeline {
 class ContextWithDependency;
-}
+class PipelineObserver;
+} // namespace pipeline
 
 class SpillProcessTask {
 public:
@@ -111,7 +112,7 @@ public:
         {
             std::lock_guard guard(_mutex);
             _is_finishing.store(true);
-            spiller_copy = _spiller;
+            spiller_copy = spiller();
         }
         if (spiller_copy != nullptr) {
             spiller_copy->notify_source_observers();
@@ -128,8 +129,8 @@ public:
     void on_current_task_finished() {
         _current_task.reset();
         _task_count.fetch_sub(1);
-        if (_spiller != nullptr) {
-            _spiller->notify_sink_observers();
+        if (auto spiller_copy = spiller(); spiller_copy != nullptr) {
+            spiller_copy->notify_sink_observers();
         }
     }
 
@@ -140,10 +141,8 @@ public:
         // Check _spiller for null explicitly, instead of assuming has_task() implies a live spiller:
         // close() may reset _spiller, and the other accessors (on_current_task_finished, set_finishing)
         // already null-check it. Do the deref after an explicit check, do not rely on && evaluation order.
-        if (_spiller == nullptr) {
-            return false;
-        }
-        return has_task() && !_spiller->is_full();
+        auto spiller_copy = spiller();
+        return spiller_copy != nullptr && has_task() && !spiller_copy->is_full();
     }
 
     // queued + current, read as a single atomic, so has_task() stays consistent with the queue and
@@ -152,18 +151,19 @@ public:
 
     bool is_finished() { return is_finishing() && !has_task(); }
 
-    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
-    const std::shared_ptr<spill::Spiller>& spiller() { return _spiller; }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller);
+    std::shared_ptr<spill::Spiller> spiller() const;
 
-    // Lifetime anchor: the spilling context (hash joiner / aggregator, a ContextWithDependency) that
-    // owns the state referenced by the spill tasks. SpillProcessOperator refs it on prepare and
-    // unrefs it on close, so the context cannot close() (free that state) while spill tasks run.
-    void set_guarded_context(pipeline::ContextWithDependency* context) { _guarded_context = context; }
-    pipeline::ContextWithDependency* guarded_context() const { return _guarded_context; }
+    // The pump can prepare before an adaptive producer creates its spiller. Register in either order.
+    void prepare_source(RuntimeState* state, pipeline::PipelineObserver* observer);
+
+    // The channel owns this ref from binding until close, including when the producer is created after
+    // the pump's prepare(). Never infer ownership later from whether the context pointer is non-null.
+    void set_guarded_context(pipeline::ContextWithDependency* context);
 
     Status execute(SpillProcessTasksBuilder& task_builder);
 
-    void close();
+    void close(RuntimeState* state);
 
 private:
     // Mutation half of add_spill_task / add_last_task: enqueue and bump the count (add_last_task also
@@ -178,6 +178,8 @@ private:
     bool _is_closed = false;
     pipeline::ContextWithDependency* _guarded_context = nullptr;
     std::shared_ptr<spill::Spiller> _spiller;
+    RuntimeState* _source_state = nullptr;
+    pipeline::PipelineObserver* _source_observer = nullptr;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
     // queued spill tasks + the one currently pulled into _current_task.

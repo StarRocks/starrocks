@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <ctime>
 #include <utility>
 
@@ -61,6 +62,27 @@ public:
     OperatorFactory* sink_operator_factory() {
         DCHECK(!_op_factories.empty());
         return _op_factories[_op_factories.size() - 1].get();
+    }
+
+    // Whether this pipeline supports the event scheduler. The edges (source at index 0, sink at the last
+    // index) must always support it. An intermediate factory is checked only when it declares an interior
+    // wakeup (supports_intermediate_wakeup()): a wakeable interior that opts out (e.g. a spillable probe
+    // whose build twin still parks) must block the fragment too. A plain interior (project, limit,
+    // chunk_accumulate, select, ...) inherits the default-false support_event_scheduler() and is
+    // self-driven; checking it would demote every fragment that contains one and make the event path
+    // unreachable. So such interiors are skipped.
+    bool all_support_event_scheduler() const {
+        const size_t n = _op_factories.size();
+        for (size_t i = 0; i < n; ++i) {
+            const OperatorFactory* f = _op_factories[i].get();
+            const bool is_edge = !is_interior_index(i, n);
+            if (is_edge || f->supports_intermediate_wakeup()) {
+                if (!f->support_event_scheduler()) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
     size_t degree_of_parallelism() const;
 

@@ -27,6 +27,8 @@ enum class BlockReason : uint8_t {
     WAIT_FLUSH,   // writer full / mem-tables in flight        (woken by flush completion)
     WAIT_RESTORE, // reader waiting on restore IO              (woken by restore completion)
     WAIT_CHANNEL, // spill-process channel holding tasks       (woken by channel enqueue/drain)
+    WAIT_LATCH,   // own load tasks (join build-side load)
+    WAIT_BUILD,   // a neighbour's phase handoff (join build-done)
 };
 
 // One-hot bit for a reason, used to build and test covered_wakeups() masks. NONE has no bit: a
@@ -58,6 +60,10 @@ inline const char* block_reason_name(BlockReason reason) {
         return "WAIT_RESTORE";
     case BlockReason::WAIT_CHANNEL:
         return "WAIT_CHANNEL";
+    case BlockReason::WAIT_LATCH:
+        return "WAIT_LATCH";
+    case BlockReason::WAIT_BUILD:
+        return "WAIT_BUILD";
     }
     return "UNKNOWN";
 }

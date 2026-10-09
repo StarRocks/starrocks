@@ -76,7 +76,9 @@ void PipelineDriverObserver::_do_update(int event) {
         // event-specific handlers below.
         bool pipeline_block = driver->driver_state() != DriverState::INPUT_EMPTY &&
                               driver->driver_state() != DriverState::OUTPUT_FULL;
-        if (pipeline_block || _is_cancel_changed(event)) {
+        // Interior spill notifications also use source/sink triggers. Edge-only
+        // filtering would drop a probe restore wakeup while the source is empty.
+        if (pipeline_block || driver->has_wakeable_intermediates() || _is_cancel_changed(event)) {
             _event_scheduler->try_schedule(driver);
         } else if (_is_all_changed(event)) {
             on_update(_event_scheduler, driver);

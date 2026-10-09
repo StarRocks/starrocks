@@ -249,6 +249,7 @@ void GlobalDriverExecutor::_worker_thread() {
             }
             case INPUT_EMPTY:
             case OUTPUT_FULL:
+            case INTERMEDIATE_BLOCK:
             case PENDING_FINISH:
             case PRECONDITION_BLOCK: {
                 _blocked_driver_poller->add_blocked_driver(driver);

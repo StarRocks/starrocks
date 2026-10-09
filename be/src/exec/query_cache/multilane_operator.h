@@ -68,6 +68,16 @@ public:
     bool need_input() const override;
     bool is_finished() const override;
 
+    // The driver-side aggregations (is_still_pending_finish, the wakeable-intermediate registry, the
+    // park-time BlockReason check) walk PipelineDriver::_operators, where query cache puts this wrapper
+    // instead of the wrapped operator. Forward them to the lanes, or a cache-wrapped spill operator
+    // reports the defaults: no pending IO (the driver tears it down while spill tasks are in flight)
+    // and no wakeup (the driver never parks it).
+    bool pending_finish() const override;
+    bool supports_intermediate_wakeup() const override;
+    pipeline::BlockReason block_reason() const override;
+    uint32_t covered_wakeups() const override;
+
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
@@ -103,6 +113,11 @@ public:
     const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() override;
     const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override;
+    // The fragment gate (Pipeline::all_support_event_scheduler) reads these off the factory chain, where
+    // query cache puts this wrapper. Forward them, or a wrapped wakeable factory is invisible to the gate:
+    // it would be skipped as a plain interior and never asked for support_event_scheduler().
+    bool support_event_scheduler() const override;
+    bool supports_intermediate_wakeup() const override;
     // can_passthrough should be true for the operator that precedes cache_operator immediately.
     // because only this operator is computation-intensive, so its input chunks must be pass through
     // this operator if its computation imposes an unacceptable performance penalty on cache mechanism.
