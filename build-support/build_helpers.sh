@@ -37,6 +37,104 @@ starrocks_detect_parallelism() {
     echo "${cpu_count}"
 }
 
+starrocks_detect_total_ram_gb() {
+    local ram_kb=""
+    if starrocks_is_darwin; then
+        local ram_bytes
+        ram_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+        if [[ -n "${ram_bytes}" && "${ram_bytes}" =~ ^[0-9]+$ && "${ram_bytes}" -gt 0 ]]; then
+            echo "$(( ram_bytes / 1024 / 1024 / 1024 ))"
+            return 0
+        fi
+    elif [[ -r /proc/meminfo ]]; then
+        ram_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+        if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
+            echo "$(( ram_kb / 1024 / 1024 ))"
+            return 0
+        fi
+    fi
+    echo 0
+}
+
+starrocks_detect_linker_type() {
+    local explicit_linker="${STARROCKS_LINKER:-}"
+    if [[ -n "${explicit_linker}" ]]; then
+        case "${explicit_linker}" in
+            *lld*|*mold*|*gold*) echo "modern" ; return 0 ;;
+            *bfd*)               echo "legacy" ; return 0 ;;
+        esac
+    fi
+
+    if starrocks_is_darwin; then
+        echo "modern"
+        return 0
+    fi
+
+    # Inspect the default system ld flavor
+    local ld_version_output
+    ld_version_output="$(ld -v 2>&1 || true)"
+    case "${ld_version_output}" in
+        *LLD*|*lld*|*mold*|*GNU\ gold*)
+            echo "modern"
+            ;;
+        *)
+            echo "legacy"
+            ;;
+    esac
+}
+
+starrocks_detect_ut_parallelism() {
+    # 1. Caller-supplied environment variable takes precedence
+    if [[ -n "${PARALLEL:-}" && "${PARALLEL}" =~ ^[0-9]+$ && "${PARALLEL}" -gt 0 ]]; then
+        echo "${PARALLEL}"
+        return 0
+    fi
+
+    # 2. Darwin host defaults to 100% core parallelism
+    if starrocks_is_darwin; then
+        starrocks_detect_parallelism
+        return 0
+    fi
+
+    local cpus
+    cpus="$(starrocks_detect_parallelism)"
+    if [[ -z "${cpus}" || ! "${cpus}" =~ ^[0-9]+$ || "${cpus}" -lt 1 ]]; then
+        cpus=1
+    fi
+
+    local linker_type
+    linker_type="$(starrocks_detect_linker_type)"
+
+    # 3. Legacy GNU BFD: preserve conservative 25% CPU throttle to avoid linker OOM
+    if [[ "${linker_type}" == "legacy" ]]; then
+        local legacy_parallel=$(( cpus / 4 + 1 ))
+        echo "${legacy_parallel}"
+        return 0
+    fi
+
+    # 4. Modern linkers (LLD, mold, gold): scale up to CPU count, capped by RAM availability
+    # Peak template instantiation and LLD link uses ~1.5 - 2.0 GiB per concurrent job.
+    local ram_gb
+    ram_gb="$(starrocks_detect_total_ram_gb)"
+    local target_parallel="${cpus}"
+
+    if [[ -n "${ram_gb}" && "${ram_gb}" =~ ^[0-9]+$ && "${ram_gb}" -gt 0 ]]; then
+        local ram_safe_jobs=$(( ram_gb / 2 ))
+        if [[ "${ram_safe_jobs}" -lt 1 ]]; then
+            ram_safe_jobs=1
+        fi
+        if [[ "${target_parallel}" -gt "${ram_safe_jobs}" ]]; then
+            target_parallel="${ram_safe_jobs}"
+        fi
+    fi
+
+    if [[ "${target_parallel}" -lt 1 ]]; then
+        target_parallel=1
+    fi
+
+    echo "${target_parallel}"
+}
+
 starrocks_default_ut_thin_archive() {
     if starrocks_is_darwin; then
         echo "OFF"
