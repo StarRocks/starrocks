@@ -166,10 +166,7 @@ void CoverageWindowFunction::update_batch_single_state_with_frame(FunctionContex
 
 void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start,
                                         size_t end) const {
-    if (end < start) {
-        ctx->set_error("ST_CoverageSimplify invalid output range");
-        return;
-    }
+    DCHECK_GT(end, start);
     // Variable-width window results append end-start rows. Preserve that
     // invariant on errors too, before the caller can append dst to its chunk.
     const size_t expected_size = dst->size() + (end - start);
