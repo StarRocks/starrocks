@@ -43,12 +43,7 @@ import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
-<<<<<<< HEAD
-=======
 import com.staros.util.Constant;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.Partition;
->>>>>>> 7b71b39 ([BugFix] Replay createShard once when it fails without a StarMgr answer (#80312))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
