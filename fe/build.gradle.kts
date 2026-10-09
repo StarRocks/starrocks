@@ -81,7 +81,7 @@ subprojects {
         set("protobuf-java.version", "3.25.9")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
-        set("staros.version", "4.2-rc5")
+        set("staros.version", "4.2-rc6")
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.11.4")
