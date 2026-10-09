@@ -14,23 +14,22 @@
 
 package com.starrocks.catalog;
 
-import com.google.gson.annotations.SerializedName;
-
 import java.util.List;
 
 public class LanceTable extends Table {
 
-    @SerializedName(value = "uri")
     private final String uri;
 
-    // The Lance catalog this table belongs to. Without it the table reported the internal catalog's name, so it
-    // counted as a meta lock target although it never lives in an internal database (see isMetaLockTarget).
     private final String catalogName;
+
+    public LanceTable(long id, String name, List<Column> schema, String uri) {
+        this(id, null, name, schema, uri);
+    }
 
     public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
         super(id, name, TableType.LANCE, schema);
-        this.catalogName = catalogName;
         this.uri = uri;
+        this.catalogName = catalogName;
     }
 
     @Override
