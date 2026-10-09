@@ -113,7 +113,10 @@ public class InsertAnalyzer {
 
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
+            // By default, INSERT ... SELECT from a hive table bypasses the connector metadata cache to avoid
+            // reading stale partitions/files. `enable_hive_metadata_cache_with_insert` opts back into the cache.
+            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()
+                    && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
                 session.setUseConnectorMetadataCache(Optional.of(false));
             }
         } finally {
