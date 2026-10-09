@@ -13,12 +13,13 @@
 
 import importlib.util
 import os
-from pathlib import Path
-from types import SimpleNamespace
-import nose.case
 import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
+
+import nose.case
 
 from lib import choose_cases, sr_sql_lib
 
@@ -42,10 +43,10 @@ class PaimonFixtureTest(unittest.TestCase):
         self.client._paimon_oss = Mock()
 
     def test_stage_and_cleanup_use_same_target(self):
-        self.client.paimon_fixture_prefix = "joobin/fixtures"
+        self.client.paimon_fixture_prefix = "custom/fixtures"
         self.client.paimon_stage("bucket", "run-1", " db.t ")
         self.client.create_paimon_catalog("catalog", "filesystem", "run-1")
-        warehouse = "oss://bucket/joobin/fixtures/run-1/"
+        warehouse = "oss://bucket/custom/fixtures/run-1/"
         self.assertIn(warehouse, self.client.execute_sql.call_args.args[0])
         self.client._paimon_oss.assert_called_once_with(
             "cp", "-r", "-f", str(self.root / "db.db/t") + "/", warehouse + "db.db/t/")
@@ -99,10 +100,10 @@ class PaimonFixtureTest(unittest.TestCase):
                 self.client.paimon_stage("bucket", run, "db.t")
         self.client._paimon_oss.assert_not_called()
 
-
     def test_reader_trace_rejects_empty_or_mixed_routes(self):
         client = self.client
         prefix = "Paimon.metadata.reader.t."
+
         def trace(native, jni):
             return {"status": True, "result": [(prefix + "paimonNativeReaderReadNum: " + str(native),),
                     (prefix + "jniReaderReadNum: " + str(jni),), (prefix + "starRocksNativeReaderReadNum: 0",)]}
@@ -124,7 +125,6 @@ class PaimonFixtureTest(unittest.TestCase):
             client.assert_paimon_native_profile("select * from t")
         self.assertEqual([call.args[0] for call in client.execute_sql.call_args_list[-2:]],
                          ["SET enable_profile = false", "SET enable_async_profile = true"])
-
 
     def test_existing_runner_cleanup_lifecycle(self):
         case_path = Path(__file__).resolve().parents[1] / "sql/test_paimon_catalog/R/test_paimon_reader_modes"
@@ -153,6 +153,7 @@ class PaimonFixtureTest(unittest.TestCase):
                 if failure == "query":
                     runner.check.side_effect = [None, None, AssertionError("query failed")]
                 operations = []
+
                 def oss(*args):
                     operations.append(args)
                     if failure == "upload" and args[0] == "cp":
