@@ -44,7 +44,9 @@ if starrocks_is_darwin; then
 else
     . ${STARROCKS_HOME}/env.sh
 fi
-PARALLEL=$(starrocks_detect_ut_parallelism)
+SR_LINKER_TYPE="$(starrocks_detect_linker_type)"
+SR_RAM_GB="$(starrocks_detect_total_ram_gb)"
+PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"
 
 # Check args
 usage() {
@@ -252,6 +254,10 @@ while true; do
     esac
 done
 
+if [[ ! "${PARALLEL}" =~ ^[0-9]+$ ]] || [[ "${PARALLEL}" -lt 1 ]]; then
+    echo "Error: -j/PARALLEL must be a positive integer" >&2
+    exit 1
+fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
@@ -355,7 +361,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
 
-echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: $(starrocks_detect_linker_type), RAM: $(starrocks_detect_total_ram_gb) GiB)"
+echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: ${SR_LINKER_TYPE}, RAM: ${SR_RAM_GB} GiB)"
 
 if [[ -n "$BUILD_TARGET" ]]; then
     ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
