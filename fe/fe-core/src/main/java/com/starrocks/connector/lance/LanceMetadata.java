@@ -29,7 +29,6 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -93,7 +92,7 @@ public class LanceMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("lance.namespace.root_database must not be empty");
         }
         this.directory = directory;
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        this.cloudConfiguration = LanceStorageOptions.buildCloudConfiguration(properties);
         this.storageOptions = new Gson().toJson(LanceStorageOptions.from(warehouse, cloudConfiguration));
         addDatabase(new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), rootDatabase));
     }
@@ -152,8 +151,8 @@ public class LanceMetadata implements ConnectorMetadata {
                 .getAsJsonObject();
         List<Column> columns = LanceApiConverter.fromSchema(description.getAsJsonObject("schema"));
         long id = tableIds.computeIfAbsent(name, ignored -> CONNECTOR_ID_GENERATOR.getNextId().asLong());
-        return new LanceTable(id, catalogName, name,
-                columns, description.get("location").getAsString(), dbName);
+        return new LanceTable(id, catalogName, dbName, name,
+                columns, description.get("location").getAsString());
     }
 
     @Override

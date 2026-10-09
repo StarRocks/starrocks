@@ -16,7 +16,6 @@ package com.starrocks.connector.lance;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudConfigurationFactory;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -27,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class LanceStorageOptionsTest {
     private static Map<String, String> options(String uri, Map<String, String> properties) {
-        CloudConfiguration config = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        CloudConfiguration config = LanceStorageOptions.buildCloudConfiguration(properties);
         return LanceStorageOptions.from(uri, config);
     }
 

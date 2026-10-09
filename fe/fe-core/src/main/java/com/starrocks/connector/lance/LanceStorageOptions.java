@@ -16,6 +16,8 @@ package com.starrocks.connector.lance;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 
 import java.net.URI;
@@ -26,6 +28,29 @@ import java.util.Map;
 /** FE metadata equivalent of the native Lance reader's catalog credential mapping. */
 final class LanceStorageOptions {
     private LanceStorageOptions() {
+    }
+
+    static CloudConfiguration buildCloudConfiguration(Map<String, String> properties) {
+        Map<String, String> explicit = new HashMap<>();
+        properties.forEach((key, value) -> {
+            if (value != null && !value.isEmpty()) {
+                explicit.put(key, value);
+            }
+        });
+        // Validate before the shared factory can discard incomplete credentials and return DEFAULT.
+        boolean accessKey = explicit.containsKey("aws.s3.access_key");
+        boolean secretKey = explicit.containsKey("aws.s3.secret_key");
+        if (accessKey != secretKey || explicit.containsKey("aws.s3.session_token") && !accessKey) {
+            throw new StarRocksConnectorException("Lance S3 access key and secret key must be supplied together; "
+                    + "a session token also requires both keys");
+        }
+        aws(explicit, new HashMap<>());
+        CloudConfiguration configuration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        if (configuration.getCloudType() == CloudType.DEFAULT && explicit.entrySet().stream()
+                .anyMatch(entry -> entry.getKey().startsWith("azure.") && !"false".equalsIgnoreCase(entry.getValue()))) {
+            throw new StarRocksConnectorException("Incomplete or unsupported Lance Azure credentials");
+        }
+        return configuration;
     }
 
     static Map<String, String> from(String warehouse, CloudConfiguration configuration) {

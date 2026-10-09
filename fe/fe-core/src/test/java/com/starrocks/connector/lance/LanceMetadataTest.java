@@ -182,4 +182,40 @@ public class LanceMetadataTest {
                 () -> LanceApiConverter.fromSchema(com.google.gson.JsonParser.parseString(
                         schema.replace("fixedsizelist", "union")).getAsJsonObject()));
     }
+
+    @Test
+    public void testRejectIncompleteCredentialsBeforeFallback() {
+        for (java.util.Map<String, String> credentials : List.of(
+                java.util.Map.of("aws.s3.access_key", "access"),
+                java.util.Map.of("aws.s3.secret_key", "secret"),
+                java.util.Map.of("aws.s3.access_key", "access", "aws.s3.secret_key", ""),
+                java.util.Map.of("aws.s3.session_token", "session"),
+                java.util.Map.of("aws.s3.iam_role_arn", "role"),
+                java.util.Map.of("azure.adls2.sas_token", "sig=test"),
+                java.util.Map.of("azure.adls2.storage_account", "account", "azure.adls2.oauth2_client_id", "client"),
+                java.util.Map.of("azure.blob.shared_key", "key"))) {
+            java.util.Map<String, String> properties = new java.util.HashMap<>(credentials);
+            properties.put("lance.catalog.warehouse", "s3://bucket/warehouse");
+            LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+            Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,
+                    () -> new LanceMetadata("lance", properties, directory));
+            org.mockito.Mockito.verifyNoInteractions(directory);
+        }
+    }
+
+    @Test
+    public void testRejectCaseCollidingColumns() {
+        for (String duplicate : List.of("ID", "id")) {
+            String schema = SCHEMA.replace("label", duplicate);
+            LanceDirectoryCatalog directory = org.mockito.Mockito.mock(LanceDirectoryCatalog.class);
+            org.mockito.Mockito.when(directory.listTables("/tmp/warehouse", "{}"))
+                    .thenReturn("[\"users\"]");
+            org.mockito.Mockito.when(directory.describeTable("/tmp/warehouse", "{}", "users"))
+                    .thenReturn("{\"location\":\"/tmp/warehouse/users.lance\",\"schema\":" + schema + "}");
+            LanceMetadata metadata = new LanceMetadata("lance", java.util.Map.of(
+                    "lance.catalog.warehouse", "/tmp/warehouse"), directory);
+            Assertions.assertThrows(com.starrocks.connector.exception.StarRocksConnectorException.class,
+                    () -> metadata.getTable(null, "default", "users"));
+        }
+    }
 }
