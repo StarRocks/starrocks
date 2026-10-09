@@ -82,7 +82,7 @@ subprojects {
         set("staros.version", "4.0.8")
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
-        set("lz4-java.version", "1.10.1")
+        set("lz4-java.version", "1.11.4")
         // var sync end
     }
 
