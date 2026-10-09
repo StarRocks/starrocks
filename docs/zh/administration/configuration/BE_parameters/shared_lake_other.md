@@ -313,6 +313,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
 - 引入版本: -
 
+### s3_multipart_equal_part_size
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：向 S3 或兼容 S3 的对象存储进行分片上传（Multipart Upload）时，是否让除最后一个分片以外的所有分片大小完全一致。部分兼容 S3 的对象存储（如 Cloudflare R2）要求非末尾分片大小相同，否则会拒绝整次分片上传，并报错 `InvalidPart: All non-trailing parts must have the same length`。使用此类对象存储时需开启该参数。开启后，除最后一个分片外，每个分片都严格等于配置的分片大小：存算分离集群中的 starlet 上传按 `starlet_fslib_s3_min_upload_part_size` 切分，BE 其他带缓冲的 S3 上传按 `experimental_s3_min_upload_part_size` 切分。默认值 `false` 保持原有行为：缓冲数据一旦达到分片大小，就把整个缓冲区作为一个分片上传，因此各分片大小不一。Parquet、ORC、CSV 文件写入器写出的文件（例如 `INSERT INTO FILES` 导出的文件，以及 Hive、Iceberg Sink 写出的文件）边生成边上传分片，不受该参数影响。修改后仅对之后开始的上传生效。S3 单次分片上传最多允许 10000 个分片，因此按等大分片上传的对象不能超过分片大小的 10000 倍；以 starlet 默认的 5 MiB 分片计算，上限约为 48.8 GiB。如需写入更大的对象，请调大分片大小。
+- 引入版本：-
+
 ### starlet_filesystem_instance_cache_capacity
 
 - 默认值：10000

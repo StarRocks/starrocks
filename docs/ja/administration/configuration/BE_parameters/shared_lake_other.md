@@ -307,6 +307,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
 - 導入バージョン: -
 
+### s3_multipart_equal_part_size
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで、最後のパートを除くすべてのパートをまったく同じサイズにするかどうか。Cloudflare R2 など一部の S3 互換オブジェクトストレージは、最後以外のパートのサイズが揃っていないマルチパートアップロードを `InvalidPart: All non-trailing parts must have the same length` エラーで拒否します。このようなストレージを使用する場合はこの項目を有効にしてください。有効にすると、最後のパートを除く各パートは設定されたパートサイズと正確に一致します。共有データクラスタの starlet アップロードでは `starlet_fslib_s3_min_upload_part_size`、BE のその他のバッファ付き S3 アップロードでは `experimental_s3_min_upload_part_size` がパートサイズになります。デフォルトの `false` は従来の動作を維持し、バッファがパートサイズに達するたびにバッファ全体を 1 つのパートとしてアップロードするため、パートサイズはばらつきます。Parquet、ORC、CSV のファイルライターが書き込むファイル（`INSERT INTO FILES` や Hive、Iceberg Sink によるファイルなど）は、生成されるたびにパート単位でアップロードされるため、この項目の影響を受けません。変更はその後に開始されたアップロードに反映されます。S3 では 1 回のアップロードあたり最大 10,000 パートまでのため、同じサイズのパートでアップロードするオブジェクトはパートサイズの 10,000 倍を超えられません。starlet のデフォルトの 5 MiB パートでは約 48.8 GiB です。より大きなオブジェクトを書き込む場合はパートサイズを大きくしてください。
+- 導入バージョン: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - デフォルト: 10000
