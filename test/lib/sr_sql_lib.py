@@ -214,7 +214,7 @@ TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
-class StarrocksSQLApiLib:
+class StarrocksSQLApiLib(object):
     """api lib"""
 
     version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
@@ -777,7 +777,6 @@ class StarrocksSQLApiLib:
         database, table = name.split(".")
         return "%s.db/%s" % (database, table)
 
-
     @staticmethod
     def _paimon_warehouse_uri(bucket, prefix, run_id):
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]+[a-z0-9]", bucket):
@@ -787,7 +786,6 @@ class StarrocksSQLApiLib:
         if not prefix or any(not re.fullmatch(r"[A-Za-z0-9_-]+", part) for part in prefix.split("/")):
             raise ValueError("invalid fixture OSS prefix")
         return "oss://%s/%s/%s/" % (bucket, prefix, run_id)
-
 
     def _paimon_warehouse(self, run_id):
         prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")

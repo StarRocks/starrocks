@@ -9,7 +9,7 @@ From `test/`, run `python3 run.py -d sql/test_paimon_catalog -v`.
 The runner needs `ossutil64` with credentials for its bucket, and the BE needs paimon-cpp.
 `oss_endpoint` is used by both ossutil and the catalog. Use the internal endpoint for local development.
 The default `paimon_fixture_prefix` is `paimon_ci_test`, including when absent from older configs.
-Override it in a local config to your own prefix, such as `joobin/paimon-fixtures`.
+Override it in a local config to your own prefix, such as `my-tests/paimon-fixtures`.
 Do not commit credentials or local configuration. Fixtures are loaded from this repository's `data/`
 directory, located relative to the helper module rather than the working directory.
 No additional file inventory, checksum or size checks are performed. Keep fixture files unchanged during a test run.
@@ -45,8 +45,8 @@ writer version, generation command and independent Paimon reader/layout checks.
 ## Helper tests and data maintenance
 
 From `test/`, run `python3 -m unittest lib.test_paimon_fixture -v` for the Paimon helpers.
-No workflow changes or shared SQL-Tester execution changes are required; the API library only
-inherits the Paimon helper methods.
+The Paimon helper methods are defined in `test/lib/sr_sql_lib.py`.
+The tests cover upload failures, cleanup retries, reader assertions and the existing runner lifecycle.
 
 The five initial tables were imported unchanged from existing repository fixtures. Their generators
 and writer versions were not recorded. The migration retains the `paimon_test` database name and
