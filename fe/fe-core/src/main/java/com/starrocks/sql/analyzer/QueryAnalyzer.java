@@ -2554,8 +2554,13 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
-            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            // Read twice -- directly and through a view, say -- it is refreshed once and bound to one object.
+            Table refreshedTable = InsertSourceRefresher.refreshedTable(session, resolvedTable);
+            if (refreshedTable == null) {
+                refreshedTable = InsertSourceRefresher.refreshAndReload(session, catalogName, dbName,
+                        tableName.getTbl(), resolvedTable);
+            }
+            // A table gone by now is left to the refresh after analysis, which fails the statement for it.
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 

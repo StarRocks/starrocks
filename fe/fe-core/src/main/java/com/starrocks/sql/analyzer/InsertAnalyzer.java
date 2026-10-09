@@ -102,6 +102,15 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        analyzeWithDeferredLock(insertStmt, session, takeLock, () -> {
+        });
+    }
+
+    /**
+     * @param afterQueryAnalyzed runs once the SELECT is analyzed, before the lock is taken
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock,
+                                               Runnable afterQueryAnalyzed) {
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
@@ -110,11 +119,19 @@ public class InsertAnalyzer {
             pushDownTargetTableSchemaToFiles(insertStmt, session);
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+            afterQueryAnalyzed.run();
 
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
-                session.setUseConnectorMetadataCache(Optional.of(false));
+            // With the auto refresh, every source is refreshed for this statement (InsertSourceRefresher), so the
+            // connector cache is current and is used. Without it, nothing refreshed the Hive sources: read them
+            // past the cache, unless the session says the cache is fine.
+            if (session.getUseConnectorMetadataCache().isEmpty()
+                    && !InsertSourceRefresher.isEnabled(session)
+                    && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+                List<Table> tables = new ArrayList<>();
+                AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+                if (!tables.isEmpty()) {
+                    session.setUseConnectorMetadataCache(Optional.of(false));
+                }
             }
         } finally {
             takeLock.run();

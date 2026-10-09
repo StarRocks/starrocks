@@ -989,6 +989,15 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
     }
 
+    /**
+     * See {@link ConnectorMetadata#invalidateTableForRead}. Goes through the query-level metadata when there is a
+     * query, so what this query already cached about the table is dropped along with the catalog's cache.
+     */
+    public void invalidateTableForRead(String catalogName, String srDbName, Table table) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.invalidateTableForRead(srDbName, table));
+    }
+
     public void finishSink(String catalogName, String dbName, String tableName,
                            List<TSinkCommitInfo> sinkCommitInfos, String branch) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
