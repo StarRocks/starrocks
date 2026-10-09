@@ -93,7 +93,7 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
-        <lz4-java.version>1.10.1</lz4-java.version>
+        <lz4-java.version>1.11.4</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
