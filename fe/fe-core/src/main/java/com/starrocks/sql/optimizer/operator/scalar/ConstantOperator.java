@@ -642,8 +642,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
      * <p>
      * The BE implements binary -> string as a raw passthrough of the underlying column
      * (VectorizedCastToStringExpr in be/src/exprs/cast_expr_tpl.hpp: VARBINARY and VARCHAR share the same
-     * physical BinaryColumn, so the cast is the identity, with neither hex encoding nor length truncation).
-     * FE folding has to produce exactly the same bytes.
+     * physical BinaryColumn, so type adaptation is the identity, with neither hex encoding nor length truncation).
+     * FE folding has to produce exactly the same bytes; explicit CHAR(N) truncation is applied afterwards.
      */
     private Optional<ConstantOperator> castBinaryTo(Type desc) {
         byte[] bytes = isNull() ? null : getBinary();

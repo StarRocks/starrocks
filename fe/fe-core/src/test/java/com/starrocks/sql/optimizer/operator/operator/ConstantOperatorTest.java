@@ -202,6 +202,17 @@ public class ConstantOperatorTest {
     }
 
     @Test
+    public void testExplicitBinaryCharCastTruncatesDecodedUtf8() {
+        ConstantOperator binary = ConstantOperator.createBinary("中😀文".getBytes(StandardCharsets.UTF_8),
+                VarbinaryType.VARBINARY);
+        Assertions.assertEquals("中😀", binary.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("中😀文", binary.castTo(new CharType(2)).get().getVarchar());
+        ConstantOperator invalid = ConstantOperator.createBinary(new byte[] {(byte) 0xe4, (byte) 0xb8},
+                VarbinaryType.VARBINARY);
+        Assertions.assertTrue(invalid.castToExplicitly(new CharType(1)).isEmpty());
+    }
+
+    @Test
     public void testCastBinaryToStringKeepsTheBytes() {
         byte[] bytes = "zz".getBytes(StandardCharsets.UTF_8);
         ConstantOperator binary = ConstantOperator.createBinary(bytes, VarbinaryType.VARBINARY);
