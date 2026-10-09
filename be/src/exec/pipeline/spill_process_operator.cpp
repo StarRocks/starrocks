@@ -25,7 +25,18 @@ namespace starrocks::pipeline {
 
 Status SpillProcessOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+<<<<<<< HEAD
     // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator) for the whole
+=======
+    // The pump sleeps INPUT_EMPTY on has_output() (has_task && !is_full), so it belongs on the spiller's
+    // source list: flush completion notifies both lists, and the channel handshake (enqueue / set_finishing)
+    // wakes the source side. The spiller is set on the channel before prepare (create() wired it). The gate
+    // for poller mode is inside subscribe_source.
+    if (_channel->spiller() != nullptr) {
+        _channel->spiller()->observable().subscribe_source(state, observer());
+    }
+    // Lifetime anchor: hold a ref on the spilling context (hash joiner / aggregator / sort context) for the whole
+>>>>>>> 67bfaf0 ([BugFix] Do not run a queued spill data task when closing the spill channel (#80252))
     // spill-processing lifetime, so async spill tasks (which reference context-owned state such as the
     // build chunks / hash map) never dereference it after the owning operators free it on cancel/close.
     if (auto* context = _channel->guarded_context(); context != nullptr) {
