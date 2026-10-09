@@ -313,6 +313,105 @@ TEST_F(LanceConnectorTest, RejectsNarrowingNestedIntegerSchema) {
     EXPECT_TRUE(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk).is_data_quality_error());
 }
 
+TEST_F(LanceConnectorTest, ProjectsStructChildrenByName) {
+    arrow::StringBuilder strings;
+    arrow::Int32Builder integers;
+    ASSERT_TRUE(strings.Append("ignored").ok());
+    ASSERT_TRUE(integers.Append(42).ok());
+    std::shared_ptr<arrow::Array> a;
+    std::shared_ptr<arrow::Array> b;
+    ASSERT_TRUE(strings.Finish(&a).ok());
+    ASSERT_TRUE(integers.Finish(&b).ok());
+    auto fields = arrow::StructArray::Make({a, b}, std::vector<std::string>{"a", "b"}).ValueOrDie();
+    TypeDescriptor projected(TYPE_STRUCT);
+    projected.field_names = {"b"};
+    projected.children = {TypeDescriptor(TYPE_INT)};
+    for (bool nested : {false, true}) {
+        TypeDescriptor type = projected;
+        std::shared_ptr<arrow::Array> array = fields;
+        if (nested) {
+            type = TypeDescriptor(TYPE_ARRAY);
+            type.children = {projected};
+            array = arrow::FixedSizeListArray::FromArrays(fields, 1).ValueOrDie();
+        }
+        const auto* tuple = tuple_for_type(type);
+        ASSERT_NE(nullptr, tuple);
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 1, {array});
+        ChunkPtr chunk;
+        ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk));
+        auto value = chunk->get_column_by_index(0)->get(0);
+        auto result = nested ? value.get_array()[0].get_struct() : value.get_struct();
+        ASSERT_EQ(1, result.size());
+        EXPECT_EQ(42, result[0].get_int32());
+    }
+}
+
+TEST_F(LanceConnectorTest, RejectsNarrowingStructIntegerByName) {
+    arrow::Int32Builder first;
+    arrow::Int64Builder second;
+    ASSERT_TRUE(first.Append(7).ok());
+    ASSERT_TRUE(second.Append(INT64_MAX).ok());
+    std::shared_ptr<arrow::Array> a;
+    std::shared_ptr<arrow::Array> b;
+    ASSERT_TRUE(first.Finish(&a).ok());
+    ASSERT_TRUE(second.Finish(&b).ok());
+    auto fields = arrow::StructArray::Make({a, b}, std::vector<std::string>{"a", "b"}).ValueOrDie();
+    TypeDescriptor projected(TYPE_STRUCT);
+    projected.field_names = {"b"};
+    projected.children = {TypeDescriptor(TYPE_INT)};
+    for (bool nested : {false, true}) {
+        TypeDescriptor type = projected;
+        std::shared_ptr<arrow::Array> array = fields;
+        if (nested) {
+            type = TypeDescriptor(TYPE_ARRAY);
+            type.children = {projected};
+            array = arrow::FixedSizeListArray::FromArrays(fields, 1).ValueOrDie();
+        }
+        const auto* tuple = tuple_for_type(type);
+        ASSERT_NE(nullptr, tuple);
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 1, {array});
+        ChunkPtr chunk;
+        EXPECT_TRUE(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk).is_data_quality_error());
+    }
+}
+
+TEST_F(LanceConnectorTest, PreservesTemporalSemanticsInsideStructs) {
+    arrow::Date64Builder dates;
+    arrow::TimestampBuilder timestamps(arrow::timestamp(arrow::TimeUnit::NANO, "Asia/Shanghai"),
+                                       arrow::default_memory_pool());
+    ASSERT_TRUE(dates.Append(-86400001).ok());
+    ASSERT_TRUE(timestamps.Append(-1).ok());
+    std::shared_ptr<arrow::Array> date;
+    std::shared_ptr<arrow::Array> timestamp;
+    ASSERT_TRUE(dates.Finish(&date).ok());
+    ASSERT_TRUE(timestamps.Finish(&timestamp).ok());
+    auto fields =
+            arrow::StructArray::Make({date, timestamp}, std::vector<std::string>{"date", "timestamp"}).ValueOrDie();
+    TypeDescriptor projected(TYPE_STRUCT);
+    // Reverse descriptor order to exercise name-based conversion planning as well as recursion.
+    projected.field_names = {"timestamp", "date"};
+    projected.children = {TypeDescriptor(TYPE_DATETIME), TypeDescriptor(TYPE_DATE)};
+    for (bool nested : {false, true}) {
+        TypeDescriptor type = projected;
+        std::shared_ptr<arrow::Array> array = fields;
+        if (nested) {
+            type = TypeDescriptor(TYPE_ARRAY);
+            type.children = {projected};
+            array = arrow::FixedSizeListArray::FromArrays(fields, 1).ValueOrDie();
+        }
+        const auto* tuple = tuple_for_type(type);
+        ASSERT_NE(nullptr, tuple);
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 1, {array});
+        ChunkPtr chunk;
+        ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk));
+        auto value = chunk->get_column_by_index(0)->get(0);
+        auto result = nested ? value.get_array()[0].get_struct() : value.get_struct();
+        ASSERT_EQ(2, result.size());
+        EXPECT_EQ(-1, result[0].get_timestamp().to_unix_microsecond());
+        EXPECT_EQ("1969-12-30", result[1].get_date().to_string());
+    }
+}
+
 TEST_F(LanceConnectorTest, CancelledQueryDoesNotRead) {
     LanceDataSourceProvider provider(nullptr, _plan);
     auto source = provider.create_data_source(_range);
