@@ -173,4 +173,69 @@ PARALLEL_TEST(ColumnViewTest, test_create_map_column_view) {
         DCHECK(map_column_view->is_map_view());
     }
 }
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+
+// A selection may be longer than the view, because `from` and `count` window the INDEXES array
+// rather than the view's rows, and the same row may be selected any number of times.
+//
+// That is the ordinary shape in a hash join: _copy_build_nullable_column selects
+// _probe_state->count positions -- one per output row of the probe chunk -- out of the build
+// column, so any build side smaller than a probe chunk selects more positions than it has rows.
+// append_selective_to used to assert `from + count <= _num_rows`, comparing the number of
+// positions against the number of rows, and aborted debug builds on exactly this input. Both
+// concat settings are covered because the assertion sat before the concat branch.
+static void test_select_more_positions_than_rows(long concat_rows_limit, long concat_bytes_limit) {
+    TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(20);
+    auto opt_view = ColumnViewHelper::create_column_view(type_desc, true, concat_rows_limit, concat_bytes_limit);
+    ASSERT_TRUE(opt_view.has_value());
+    auto column_view = std::move(opt_view.value());
+
+    // the join seeds the build column with one default row, then appends the build side
+    column_view->append_default();
+    auto src = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    src->append_datum(Slice("aa"));
+    src->append_datum(Slice("bb"));
+    column_view->append(*src);
+    ASSERT_EQ(3, column_view->size());
+
+    // 100 selected positions out of 3 rows, every ordinal in range
+    std::vector<uint32_t> selection(100);
+    for (size_t i = 0; i < selection.size(); ++i) {
+        selection[i] = static_cast<uint32_t>(i % 3);
+    }
+    auto dest = column_view->clone_empty();
+    column_view->append_selective_to(*dest, selection.data(), 0, selection.size());
+
+    // Compared against the same positions selected one at a time, so the expectation does not
+    // depend on how a value prints. clone_empty() yields the underlying column, which implements
+    // debug_item; the view itself does not.
+    auto expected = column_view->clone_empty();
+    for (unsigned int idx : selection) {
+        column_view->append_selective_to(*expected, &idx, 0, 1);
+    }
+    ASSERT_EQ(selection.size(), dest->size());
+    ASSERT_EQ(expected->size(), dest->size());
+    for (size_t i = 0; i < selection.size(); ++i) {
+        ASSERT_EQ(expected->debug_item(i), dest->debug_item(i));
+    }
+
+    // a window that does not start at 0 selects the same way
+    auto tail = column_view->clone_empty();
+    column_view->append_selective_to(*tail, selection.data(), 10, 20);
+    ASSERT_EQ(20, tail->size());
+    for (size_t i = 0; i < 20; ++i) {
+        ASSERT_EQ(expected->debug_item(10 + i), tail->debug_item(i));
+    }
+}
+
+PARALLEL_TEST(ColumnViewTest, test_select_more_positions_than_rows_without_concat) {
+    test_select_more_positions_than_rows(0, 0);
+}
+
+PARALLEL_TEST(ColumnViewTest, test_select_more_positions_than_rows_with_concat) {
+    test_select_more_positions_than_rows(1L << 62, 1L << 62);
+}
+} // namespace starrocks
+>>>>>>> 7630b7b ([BugFix] Stop asserting a selection is no longer than the column it selects from (#80324))
