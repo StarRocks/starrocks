@@ -45,6 +45,14 @@ namespace starrocks {
 static const double FILTER_TEST_FPP[]{0.05, 0.1, 0.15, 0.2, 0.25, 0.3};
 static const uint64_t FILTER_MAX_ELEMNT_NUMS = 1024;
 
+// Hits of an already-flattened path that the complex-type check may count as base-typed values
+// (JsonFlatPath::flat_base_type_hits). Values only reach a non-JSON sub-column after being flattened
+// as a base type; a JSON sub-column holds complex values, so it stays subject to
+// enable_json_flat_complex_type exactly as when deriving from data.
+static uint64_t base_type_hits(LogicalType sub_column_type, uint64_t hits) {
+    return sub_column_type == LogicalType::TYPE_JSON ? 0 : hits;
+}
+
 double estimate_filter_fpp(uint64_t element_nums) {
     uint32_t bytes[6];
     int min_idx = 7;
@@ -189,6 +197,7 @@ void JsonPathDeriver::derived(const std::vector<const ColumnReader*>& json_reade
             auto leaf = _normalize_exists_path(sub->name(), _path_root.get(), 0);
             leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(sub->column_type());
             leaf->hits += reader->num_rows();
+            leaf->flat_base_type_hits += base_type_hits(sub->column_type(), reader->num_rows());
         }
     }
 
@@ -222,6 +231,7 @@ void JsonPathDeriver::_derived_on_flat_json(const std::vector<const Column*>& js
             auto leaf = _normalize_exists_path(paths[i], _path_root.get(), hits);
             leaf->json_type &= flat_json::LOGICAL_TYPE_TO_JSON_BITS.at(types[i]);
             leaf->hits += hits;
+            leaf->flat_base_type_hits += base_type_hits(types[i], hits);
         }
     }
 }
@@ -394,7 +404,8 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
         // leaf node or all children is remain
         // check sparsity, same key may appear many times in json, so we need avoid duplicate compute hits
 
-        bool is_base_type = node->base_type_count >= node->hits - (node->hits * config::json_flat_complex_type_factor);
+        bool is_base_type = node->base_type_count + node->flat_base_type_hits >=
+                            node->hits - (node->hits * config::json_flat_complex_type_factor);
         bool type_check = config::enable_json_flat_complex_type || is_base_type;
         if (type_check && node->multi_times <= 0 && node->hits >= _total_rows * _min_json_sparsity_factory) {
             hit_leaf->emplace_back(node, absolute_path);
