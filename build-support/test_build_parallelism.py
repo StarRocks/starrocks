@@ -75,6 +75,39 @@ class TestBuildParallelism(unittest.TestCase):
         ram = self.run_bash(cmd)
         self.assertEqual(ram, "0")
 
+    def test_detect_total_ram_gb_cgroup_constrained(self):
+        # Mock awk returning 64 GiB host memory, and cat returning 16 GiB cgroup memory
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { echo 67108864; }
+        cat() { echo 17179869184; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "16")
+
+    def test_detect_total_ram_gb_cgroup_unconstrained(self):
+        # Mock awk returning 64 GiB host memory, and cat returning 'max'
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { echo 67108864; }
+        cat() { echo "max"; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "64")
+
+    def test_detect_total_ram_gb_cgroup_huge(self):
+        # Mock awk returning 64 GiB host memory, and cat returning cgroup v1 unconstrained (9223372036854771712)
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { echo 67108864; }
+        cat() { echo 9223372036854771712; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "64")
+
     def test_parallelism_preserves_caller_env(self):
         p = self.run_bash(
             "starrocks_detect_ut_parallelism",
