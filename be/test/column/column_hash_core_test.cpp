@@ -89,17 +89,12 @@ void verify_hashes_for_column(const Column& column) {
 
 } // namespace
 
-TEST(ColumnHashCoreTest, BinaryAndLargeBinaryColumns) {
+TEST(ColumnHashCoreTest, BinaryColumns) {
     auto binary = BinaryColumn::create();
     binary->append("alpha");
     binary->append("beta");
     binary->append("gamma");
     verify_hashes_for_column(*binary);
-
-    auto large_binary = LargeBinaryColumn::create();
-    large_binary->append("large-alpha");
-    large_binary->append("large-beta");
-    verify_hashes_for_column(*large_binary);
 }
 
 TEST(ColumnHashCoreTest, NullableAndJsonColumns) {

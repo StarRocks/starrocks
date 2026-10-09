@@ -83,11 +83,6 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(BinaryColumn* column) {
 }
 
 template <bool PositiveSelect>
-Status AppendWithMaskVisitor<PositiveSelect>::do_visit(LargeBinaryColumn* column) {
-    return append_binary(column);
-}
-
-template <bool PositiveSelect>
 bool AppendWithMaskVisitor<PositiveSelect>::is_selected(uint8_t value) const {
     if constexpr (PositiveSelect) {
         return value != 0;
