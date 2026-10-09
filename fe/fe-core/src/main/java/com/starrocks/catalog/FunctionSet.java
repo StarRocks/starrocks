@@ -1618,19 +1618,13 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
-        // Contract 5.4b: independent IDs for the two window signatures.
-        // GEOGRAPHY IDs remain reserved, without overloads or BE dispatch.
-        // Reserved 120420: ST_CoverageSimplify / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY, window.
-        // Reserved 120430: ST_CoverageSimplify / 3 (GEOGRAPHY, DOUBLE, BOOLEAN) -> GEOGRAPHY, window.
         Type coverageGeometry = AnyGeometryType.GEOMETRY;
         AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
                 Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
-        coverageTwo.setFunctionId(120421);
         addBuiltin(coverageTwo);
         AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
                 Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
                 coverageGeometry, VarbinaryType.VARBINARY);
-        coverageThree.setFunctionId(120431);
         addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,

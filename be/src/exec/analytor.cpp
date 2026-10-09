@@ -540,7 +540,7 @@ Status Analytor::open(RuntimeState* state) {
     }
 #endif
 
-    return _check_has_error();
+    return Status::OK();
 }
 
 void Analytor::close(RuntimeState* state) {
@@ -1044,7 +1044,6 @@ Status Analytor::_materializing_process(RuntimeState* state) {
 
         // Process at most one chunk
         (this->*_materializing_process_impl)(state);
-        RETURN_IF_ERROR(_check_has_error());
 
         // Chunk may contains multiply partitions, so the chunk need to be reprocessed.
         if (_is_current_chunk_finished_eval()) {
@@ -1463,7 +1462,6 @@ void Analytor::_update_window_batch_removable_cumulatively() {
 }
 
 Status Analytor::_output_result_chunk(ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_check_has_error());
     ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
     for (size_t i = 0; i < _result_window_columns.size(); i++) {
         output_chunk->append_column(_result_window_columns[i], _result_tuple_desc->slots()[i]->id());

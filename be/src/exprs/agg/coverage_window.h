@@ -26,7 +26,6 @@ StatusOr<size_t> output_reserve_size(size_t current_bytes, size_t value_bytes);
 
 struct CoverageWindowState {
     std::unique_ptr<GeoCoverageSimplify> core;
-    GeoCoverageLimits limits;
     std::optional<double> tolerance;
     std::optional<bool> boundary;
     size_t emitted = 0;

@@ -37,30 +37,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
-### 覆盖简化资源限制
-
-这些可动态修改的正数配置在 ST_CoverageSimplify 窗口函数状态初始化时取快照，分别限制所有行（含 NULL/EMPTY）、原始 WKB 坐标位置（含闭合和重复）、输入 WKB 字节和内核拥有的工作字节。标准窗口算子先物化完整分区，函数再检查输入限制并简化覆盖。工作内存包括内核的输入副本、模型、索引、行映射、临时数据和内部输出；算子缓冲区、固定函数状态及最终输出列使用标准查询内存管理。超限错误指出配置名，不返回部分分区结果。参见 [ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md)。
-
-#### geo_coverage_max_rows_per_partition
-
-- 默认值: 10000
-- 是否可修改：是
-
-#### geo_coverage_max_vertices_per_partition
-
-- 默认值: 1000000
-- 是否可修改：是
-
-#### geo_coverage_max_input_bytes_per_partition
-
-- 默认值: 67108864
-- 是否可修改：是
-
-#### geo_coverage_max_working_bytes_per_partition
-
-- 默认值: 268435456
-- 是否可修改：是
-
 ### H3 资源限制
 
 以下可修改的 BE 正数配置限制单行 H3 函数。超过限制会报错，不返回部分结果。函数签名与中心填充模型参见 [H3 函数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md)。

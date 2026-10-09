@@ -274,8 +274,21 @@ TEST(CoverageAnalytorTest, EmptyInputPreservesInitializationErrors) {
         EXPECT_TRUE(output.empty());
     }
     std::vector<std::pair<int32_t, std::string>> output;
-    EXPECT_FALSE(drive_coverage_analytor(1, {}, {}, false, &output, 0, true).ok());
+    EXPECT_TRUE(drive_coverage_analytor(1, {}, {}, false, &output, 0, true).ok());
     EXPECT_TRUE(drive_coverage_analytor(1, {}, {}, false, &output).ok());
+}
+TEST(CoverageAnalytorTest, SpillSettingDoesNotChangeWindowResults) {
+    const std::vector<std::optional<std::string>> input{left, std::nullopt, right, "MULTIPOLYGON EMPTY", left, right};
+    const std::vector<int32_t> keys{1, 1, 1, 1, 2, 2};
+    std::vector<std::pair<int32_t, std::string>> expected;
+    ASSERT_TRUE(drive_coverage_analytor(1, keys, input, false, &expected, 1).ok());
+    ASSERT_EQ(expected.size(), input.size());
+    for (size_t rows : {size_t(1), size_t(3), size_t(6)}) {
+        std::vector<std::pair<int32_t, std::string>> output;
+        auto status = drive_coverage_analytor(rows, keys, input, false, &output, 1, true);
+        ASSERT_TRUE(status.ok()) << status;
+        EXPECT_EQ(output, expected);
+    }
 }
 TEST(CoverageAnalytorTest, LateInvalidPartitionCannotPublishItsRows) {
     std::vector<std::pair<int32_t, std::string>> output;

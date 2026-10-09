@@ -1,8 +1,5 @@
 -- name: test_native_geo_coverage_simplify
 
-SET enable_spill=false;
--- result:
--- !result
 SET pipeline_dop=4;
 -- result:
 -- !result

@@ -2598,13 +2598,6 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
-// Snapshot at ST_CoverageSimplify window-state initialization. Positive values are required;
-// working bytes cover kernel-owned allocations; operator/output columns use query memory accounting.
-CONF_mInt64(geo_coverage_max_rows_per_partition, "10000");
-CONF_mInt64(geo_coverage_max_vertices_per_partition, "1000000");
-CONF_mInt64(geo_coverage_max_input_bytes_per_partition, "67108864");
-CONF_mInt64(geo_coverage_max_working_bytes_per_partition, "268435456");
-
 // Limits for one H3 function row/worker; all values must be positive.
 CONF_mInt64(h3_max_cells_per_row, "100000");
 CONF_mInt32(h3_max_grid_disk_k, "128");

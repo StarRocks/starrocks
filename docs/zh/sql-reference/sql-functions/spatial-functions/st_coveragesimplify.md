@@ -16,7 +16,7 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
     OVER (PARTITION BY coverage_id)
 ```
 
-`OVER ()` 将所有行作为一个分区；整个分区可以跨多个 chunk。禁止窗口内 ORDER BY、显式窗口 frame、DISTINCT、IGNORE NULLS、RESPECT NULLS 和分析执行 hint。查询外层 ORDER BY 可用。不提供标量、数组或普通聚合重载。不支持 spill，必须设置 `SET enable_spill = false`。
+`OVER ()` 将所有行作为一个分区；整个分区可以跨多个 chunk。禁止窗口内 ORDER BY、显式窗口 frame、DISTINCT、IGNORE NULLS、RESPECT NULLS 和分析执行 hint。查询外层 ORDER BY 可用。不提供标量、数组或普通聚合重载。
 
 ## 参数和输入
 
@@ -40,21 +40,20 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
 
 ## 资源限制
 
-以下可动态修改的正数 BE 配置在窗口函数状态初始化时取快照，并用于该状态处理的所有分区：
+覆盖简化内核对每个分区应用以下固定的内部限制。这些限制不是 BE 配置项：
 
-| 配置 | 默认值 | 限制 |
+| 资源 | 上限 | 包含内容 |
 | --- | ---: | --- |
-| `geo_coverage_max_rows_per_partition` | 10000 | 所有行，包括 NULL/EMPTY。 |
-| `geo_coverage_max_vertices_per_partition` | 1000000 | 原始 WKB 坐标数，包括闭合和重复位置。 |
-| `geo_coverage_max_input_bytes_per_partition` | 67108864 | 输入 WKB 字节数，包括 EMPTY。 |
-| `geo_coverage_max_working_bytes_per_partition` | 268435456 | 内核拥有的输入 WKB、模型、索引、临时数据、映射和输出存储字节数。 |
+| 行数 | 10000 | 所有行，包括 NULL/EMPTY。 |
+| 顶点数 | 1000000 | 原始 WKB 坐标数，包括闭合和重复位置。 |
+| 输入字节数 | 67108864 | 输入 WKB 字节数，包括 EMPTY。 |
+| 工作字节数 | 268435456 | 内核拥有的输入 WKB、模型、索引、临时数据、映射和输出存储字节数。 |
 
-标准窗口算子先在 StarRocks 查询内存管理下物化完整分区。函数随后将数据加入内核，并在解码和简化覆盖前检查行数、顶点数及输入 WKB 限制。工作内存限制只覆盖内核拥有的分配，不包括窗口算子的输入缓冲区、固定函数状态和独立拥有数据的输出列；这些仍受查询内存限制。超限错误指出配置名，不截断分区或输出部分结果。复杂拓扑即使未达到大小限制，也可能触发一亿个计费工作单元限制。取消检查使用标准窗口生命周期，并在内核循环、输出及受限库调用前后执行；不保证固定取消延迟或运行时间。
+标准窗口算子先在 StarRocks 查询内存管理下物化完整分区。函数随后将数据加入内核，并在解码和简化覆盖前检查行数、顶点数及输入 WKB 限制。工作内存限制只覆盖内核拥有的分配，不包括窗口算子的输入缓冲区、固定函数状态和独立拥有数据的输出列；这些仍受查询内存限制。超过内部限制时返回错误，不截断分区或输出部分结果。复杂拓扑即使未达到大小限制，也可能触发一亿个计费工作单元限制。取消检查使用标准窗口生命周期，并在内核循环、输出及受限库调用前后执行；不保证固定取消延迟或运行时间。
 
 ## 示例
 
 ```SQL
-SET enable_spill = false;
 WITH districts AS (
     SELECT 1 AS district_id, 7 AS coverage_id,
            'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))' AS wkt

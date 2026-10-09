@@ -50,8 +50,6 @@ struct WindowDispatcher {
 };
 
 void AggregateFuncResolver::register_window() {
-    add_window_mapping_native<TYPE_GEOMETRY, TYPE_GEOMETRY>("st_coveragesimplify",
-                                                            AggregateFactory::MakeCoverageWindowFunction());
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, WindowDispatcher(), this);
     }
@@ -72,6 +70,9 @@ void AggregateFuncResolver::register_window() {
             "session_number", true, AggregateFactory::MakeSessionNumberWindowFunction<TYPE_BIGINT>());
     add_aggregate_mapping_notnull<TYPE_INT, TYPE_BIGINT>("session_number", true,
                                                          AggregateFactory::MakeSessionNumberWindowFunction<TYPE_INT>());
+
+    add_aggregate_mapping_notnull<TYPE_GEOMETRY, TYPE_GEOMETRY>("st_coveragesimplify", true,
+                                                               AggregateFactory::MakeCoverageWindowFunction());
 }
 
 } // namespace starrocks

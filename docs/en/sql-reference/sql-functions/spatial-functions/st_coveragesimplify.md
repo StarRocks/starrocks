@@ -16,7 +16,7 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
     OVER (PARTITION BY coverage_id)
 ```
 
-`OVER ()` treats all input rows as one partition. The whole partition is processed across chunk boundaries. `ORDER BY` inside `OVER`, explicit window frames, DISTINCT, IGNORE NULLS, RESPECT NULLS and analytic execution hints are unsupported. An outer query `ORDER BY` is allowed. There are no scalar, array or ordinary aggregate overloads. Spill is unsupported: use `SET enable_spill = false`.
+`OVER ()` treats all input rows as one partition. The whole partition is processed across chunk boundaries. `ORDER BY` inside `OVER`, explicit window frames, DISTINCT, IGNORE NULLS, RESPECT NULLS and analytic execution hints are unsupported. An outer query `ORDER BY` is allowed. There are no scalar, array or ordinary aggregate overloads.
 
 ## Parameters and input
 
@@ -40,21 +40,20 @@ Returns native XY WKB GEOMETRY with the input CRS and one output per input row. 
 
 ## Resource limits
 
-The following positive mutable BE settings are captured when the window function state is initialized and reused for its partitions:
+The coverage kernel applies the following fixed internal bounds to each partition. These are not BE configuration options:
 
-| Setting | Default | Limit |
+| Resource | Bound | Includes |
 | --- | ---: | --- |
-| `geo_coverage_max_rows_per_partition` | 10000 | All rows, including NULL and EMPTY. |
-| `geo_coverage_max_vertices_per_partition` | 1000000 | Original WKB coordinate positions, including closures and repetitions. |
-| `geo_coverage_max_input_bytes_per_partition` | 67108864 | Input WKB bytes, including typed EMPTY. |
-| `geo_coverage_max_working_bytes_per_partition` | 268435456 | Kernel-owned input WKB, models, indices, scratch, mapping and output storage in bytes. |
+| Rows | 10000 | All rows, including NULL and EMPTY. |
+| Vertices | 1000000 | Original WKB coordinate positions, including closures and repetitions. |
+| Input bytes | 67108864 | Input WKB bytes, including typed EMPTY. |
+| Working bytes | 268435456 | Kernel-owned input WKB, models, indices, scratch, mapping and output storage in bytes. |
 
-The standard window operator first materializes a complete partition under StarRocks query memory accounting. The function then checks rows, vertices and input WKB limits while admitting data to the kernel, before decoding and simplifying the coverage. The working limit covers kernel-owned allocations; it excludes the window operator's input buffers, fixed function state and independently owned output columns, which remain subject to the query memory limit. Exceeding a limit returns an error naming the setting, without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation follows the standard window lifecycle and is also checked in kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
+The standard window operator first materializes a complete partition under StarRocks query memory accounting. The function then checks rows, vertices and input WKB limits while admitting data to the kernel, before decoding and simplifying the coverage. The working limit covers kernel-owned allocations; it excludes the window operator's input buffers, fixed function state and independently owned output columns, which remain subject to the query memory limit. Exceeding an internal bound returns an error without truncation or partial partition results. A 100 million charged-work-unit bound can reject complex topology below the size limits. Cancellation follows the standard window lifecycle and is also checked in kernel loops and output, and around bounded library operations; no fixed cancellation latency or execution time is promised.
 
 ## Examples
 
 ```SQL
-SET enable_spill = false;
 WITH districts AS (
     SELECT 1 AS district_id, 7 AS coverage_id,
            'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))' AS wkt

@@ -1,6 +1,5 @@
 -- name: test_native_geo_coverage_simplify
 
-SET enable_spill=false;
 SET pipeline_dop=4;
 CREATE TABLE coverage_fixture_${uuid0} (district_id INT, coverage_id INT, wkt VARCHAR(256)) DUPLICATE KEY(district_id) DISTRIBUTED BY HASH(district_id) BUCKETS 3 PROPERTIES("replication_num"="1");
 INSERT INTO coverage_fixture_${uuid0} VALUES (1,7,'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))'),(2,7,'POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))'),(3,7,NULL),(4,7,'MULTIPOLYGON EMPTY'),(5,8,'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))'),(6,8,'POLYGON ((4 0,4.2 2,3.8 4,4.1 6,4 8,8 8,8 0,4 0))');

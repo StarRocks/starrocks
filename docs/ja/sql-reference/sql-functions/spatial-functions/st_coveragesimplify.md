@@ -16,7 +16,7 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
     OVER (PARTITION BY coverage_id)
 ```
 
-`OVER ()` はすべての入力行を一つのパーティションとします。chunk 境界を越えてパーティション全体を処理します。OVER 内の ORDER BY、明示的な window frame、DISTINCT、IGNORE NULLS、RESPECT NULLS、分析実行 hint は未サポートです。外側の ORDER BY は使用できます。スカラー、配列、通常の集約 overload はありません。spill は未サポートなので `SET enable_spill = false` を設定してください。
+`OVER ()` はすべての入力行を一つのパーティションとします。chunk 境界を越えてパーティション全体を処理します。OVER 内の ORDER BY、明示的な window frame、DISTINCT、IGNORE NULLS、RESPECT NULLS、分析実行 hint は未サポートです。外側の ORDER BY は使用できます。スカラー、配列、通常の集約 overload はありません。
 
 ## パラメータと入力
 
@@ -40,21 +40,20 @@ ST_CoverageSimplify(GEOMETRY geom, DOUBLE tolerance, BOOLEAN simplify_boundary)
 
 ## 資源制限
 
-次の正値で変更可能な BE 設定をウィンドウ関数の状態初期化時に取得し、その状態が処理する各パーティションに適用します。
+カバレッジカーネルは各パーティションに次の固定内部制限を適用します。これらは BE 設定項目ではありません。
 
-| 設定 | デフォルト | 制限 |
+| 資源 | 上限 | 対象 |
 | --- | ---: | --- |
-| `geo_coverage_max_rows_per_partition` | 10000 | NULL/EMPTY を含む全行。 |
-| `geo_coverage_max_vertices_per_partition` | 1000000 | 閉合と重複を含む元の WKB 座標位置。 |
-| `geo_coverage_max_input_bytes_per_partition` | 67108864 | EMPTY を含む入力 WKB バイト数。 |
-| `geo_coverage_max_working_bytes_per_partition` | 268435456 | カーネルが所有する入力 WKB、モデル、索引、一時領域、行マッピング、出力ストレージのバイト数。 |
+| 行数 | 10000 | NULL/EMPTY を含む全行。 |
+| 頂点数 | 1000000 | 閉合と重複を含む元の WKB 座標位置。 |
+| 入力バイト数 | 67108864 | EMPTY を含む入力 WKB バイト数。 |
+| 作業バイト数 | 268435456 | カーネルが所有する入力 WKB、モデル、索引、一時領域、行マッピング、出力ストレージのバイト数。 |
 
-標準ウィンドウ演算子は、StarRocks のクエリメモリ管理の下で完全なパーティションを先に保持します。関数は続いてデータをカーネルに追加し、カバレッジのデコードと簡略化の前に行数、頂点数、入力 WKB 制限を確認します。作業メモリ制限はカーネル所有の割り当てを対象とし、演算子の入力バッファ、固定関数状態、独立して所有される出力列を含みません。これらには標準クエリメモリ制限が適用されます。超過時は設定名を示すエラーを返し、切り捨てや部分的なパーティション結果は返しません。複雑なトポロジーはサイズ制限以内でも 1 億の計上作業単位制限に達することがあります。キャンセルは標準ウィンドウのライフサイクルと、カーネルループ、出力、制限付きライブラリ処理の前後で確認します。固定のキャンセル遅延や実行時間は保証しません。
+標準ウィンドウ演算子は、StarRocks のクエリメモリ管理の下で完全なパーティションを先に保持します。関数は続いてデータをカーネルに追加し、カバレッジのデコードと簡略化の前に行数、頂点数、入力 WKB 制限を確認します。作業メモリ制限はカーネル所有の割り当てを対象とし、演算子の入力バッファ、固定関数状態、独立して所有される出力列を含みません。これらには標準クエリメモリ制限が適用されます。内部制限の超過時はエラーを返し、切り捨てや部分的なパーティション結果は返しません。複雑なトポロジーはサイズ制限以内でも 1 億の計上作業単位制限に達することがあります。キャンセルは標準ウィンドウのライフサイクルと、カーネルループ、出力、制限付きライブラリ処理の前後で確認します。固定のキャンセル遅延や実行時間は保証しません。
 
 ## 例
 
 ```SQL
-SET enable_spill = false;
 WITH districts AS (
     SELECT 1 AS district_id, 7 AS coverage_id,
            'POLYGON ((0 0,0 8,4 8,4.1 6,3.8 4,4.2 2,4 0,0 0))' AS wkt

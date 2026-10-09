@@ -177,11 +177,11 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 ## 联合覆盖简化（窗口）
 
-两个重载共同处理整个分区，每行返回保留原类型和 CRS 的 XY GEOMETRY。参数必须为可折叠的计划常量，OVER 必需。不支持窗口内 ORDER BY、显式 frame、普通聚合及 spill。拓扑、NULL/EMPTY、容差与资源限制参见 [ST_CoverageSimplify](st_coveragesimplify.md)。
+两个重载共同处理整个分区，每行返回保留原类型和 CRS 的 XY GEOMETRY。参数必须为可折叠的计划常量，OVER 必需。不支持窗口内 ORDER BY、显式 frame 和普通聚合。拓扑、NULL/EMPTY、容差与资源限制参见 [ST_CoverageSimplify](st_coveragesimplify.md)。
 
-| 签名 | Function ID |
-| --- | ---: |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+| 签名 | 返回值 |
+| --- | --- |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | `GEOMETRY` |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | `GEOMETRY` |
 
-GEOGRAPHY 对应 ID 120420 和 120430 仅保留，未注册。FE 记录这些 ID；BE 根据名称及逻辑参数/返回类型在窗口注册表中解析。升级时先升级 BE，再升级 FE。
+未注册 GEOGRAPHY 重载。BE 根据名称及逻辑参数/返回类型在窗口注册表中解析。升级时先升级 BE，再升级 FE。

@@ -177,11 +177,11 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 ## 共同 coverage 簡略化（ウィンドウ）
 
-両 overload はパーティション全体を共同処理し、元の型と CRS を維持する XY GEOMETRY を各行に返します。引数は折り畳み可能なプラン定数で、OVER が必須です。内部 ORDER BY、明示 frame、通常の集約、spill は未サポートです。トポロジー、NULL/EMPTY、許容値と資源制限は [ST_CoverageSimplify](st_coveragesimplify.md) を参照してください。
+両 overload はパーティション全体を共同処理し、元の型と CRS を維持する XY GEOMETRY を各行に返します。引数は折り畳み可能なプラン定数で、OVER が必須です。内部 ORDER BY、明示 frame、通常の集約は未サポートです。トポロジー、NULL/EMPTY、許容値と資源制限は [ST_CoverageSimplify](st_coveragesimplify.md) を参照してください。
 
-| シグネチャ | Function ID |
-| --- | ---: |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+| シグネチャ | 戻り値 |
+| --- | --- |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | `GEOMETRY` |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | `GEOMETRY` |
 
-GEOGRAPHY 用 ID 120420 と 120430 は予約のみで、未登録です。FE が ID を記録し、BE は名前と論理引数/結果型によってウィンドウレジストリで解決します。BE を FE より先にアップグレードしてください。
+GEOGRAPHY overload は未登録です。BE は名前と論理引数/結果型によってウィンドウレジストリで解決します。BE を FE より先にアップグレードしてください。

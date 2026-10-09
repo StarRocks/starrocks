@@ -305,8 +305,6 @@ public class AnalyzeFunctionTest {
                 QueryRelation relation = ((QueryStatement) analyzeSuccess(
                         "select ST_CoverageSimplify(" + geometry + ", " + tail + ") over ()")).getQueryRelation();
                 AnalyticExpr call = (AnalyticExpr) ((SelectRelation) relation).getOutputExpression().get(0);
-                Assertions.assertEquals(tail.contains(",") ? 120431 : 120421,
-                        call.getFnCall().getFn().getFunctionId());
                 Assertions.assertEquals(GeoTypeDescriptor.geometry(crs),
                         ((ScalarType) call.getType()).getGeoDescriptor());
             }

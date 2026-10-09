@@ -324,8 +324,7 @@ TEST(GeoTopologySimplifyFunctionTest, RegistryConsumesOnlyTheGeometryReservation
     ASSERT_TRUE(result.ok());
     EXPECT_EQ(5, decoded(*result).rings[0].size());
     ASSERT_TRUE(fn->close_function(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
-    for (uint64_t id : {120400, 120410, 120420, 120421, 120430, 120431})
-        EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(id));
+    for (uint64_t id : {120400, 120410}) EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(id));
 }
 TEST(GeoTopologySimplifyFunctionTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpOnce) {
     class Operand final : public MockExpr {

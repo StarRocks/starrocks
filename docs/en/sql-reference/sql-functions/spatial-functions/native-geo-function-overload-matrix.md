@@ -177,11 +177,11 @@ These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the ce
 
 ## Joint coverage simplification (window)
 
-Both overloads process the whole partition jointly and return one XY GEOMETRY per row with the original family and CRS. Parameters must be foldable plan constants; OVER is required. No inner ORDER BY, explicit frame, ordinary aggregate or spill support. See [ST_CoverageSimplify](st_coveragesimplify.md) for topology, NULL/EMPTY, tolerance and resource limits.
+Both overloads process the whole partition jointly and return one XY GEOMETRY per row with the original family and CRS. Parameters must be foldable plan constants; OVER is required. No inner ORDER BY, explicit frame or ordinary aggregate support. See [ST_CoverageSimplify](st_coveragesimplify.md) for topology, NULL/EMPTY, tolerance and resource limits.
 
-| Signature | Function ID |
-| --- | ---: |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | 120421 |
-| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | 120431 |
+| Signature | Result |
+| --- | --- |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE) OVER (...)` | `GEOMETRY` |
+| `ST_CoverageSimplify(GEOMETRY, DOUBLE, BOOLEAN) OVER (...)` | `GEOMETRY` |
 
-GEOGRAPHY counterparts 120420 and 120430 are reserved without registration. FE records these IDs; BE resolves this window function by name and logical argument/result types through the window registry. Upgrade BEs before FEs.
+GEOGRAPHY overloads are not registered. BE resolves this window function by name and logical argument/result types through the window registry. Upgrade BEs before FEs.

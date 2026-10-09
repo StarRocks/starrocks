@@ -21,7 +21,6 @@
 #include "base/utility/defer_op.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
-#include "common/config_expr_fwd.h"
 #include "exprs/function_context.h"
 #include "runtime/memory/memory_allocator.h"
 #include "runtime/runtime_state.h"
@@ -100,8 +99,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
     if (!planar(args[0]) || !planar(result) || !is_geo_semantically_compatible(*args[0].geo_type, *result.geo_type))
         return Status::InvalidArgument("ST_CoverageSimplify requires compatible planar GEOMETRY CRS descriptors");
     if (!ctx->state()) return Status::InvalidArgument("ST_CoverageSimplify requires a runtime state");
-    if (ctx->state()->enable_spill())
-        return Status::NotSupported("ST_CoverageSimplify partition state cannot spill; disable enable_spill");
     ASSIGN_OR_RETURN(state.tolerance, tolerance(ctx));
     ASSIGN_OR_RETURN(state.boundary, boundary(ctx));
     if (state.tolerance && state.boundary &&
@@ -109,13 +106,6 @@ Status CoverageWindowFunction::initialize(FunctionContext* ctx, CoverageWindowSt
          !std::isfinite(*state.tolerance * *state.tolerance)))
         return Status::InvalidArgument(
                 "ST_CoverageSimplify requires finite nonnegative tolerance and representable tolerance squared");
-    const int64_t rows = config::geo_coverage_max_rows_per_partition;
-    const int64_t vertices = config::geo_coverage_max_vertices_per_partition;
-    const int64_t input = config::geo_coverage_max_input_bytes_per_partition;
-    const int64_t working = config::geo_coverage_max_working_bytes_per_partition;
-    if (rows <= 0 || vertices <= 0 || input <= 0 || working <= 0)
-        return Status::InvalidArgument("ST_CoverageSimplify requires positive geo_coverage limits");
-    state.limits = {size_t(rows), size_t(vertices), size_t(input), size_t(working)};
     RETURN_IF_ERROR(checkpoint(ctx->state()));
     state.initialized = true;
     return Status::OK();
@@ -131,8 +121,8 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
                                                  int64_t start, int64_t end) const {
     if (!input || start < 0 || end < start || (!input->is_constant() && uint64_t(end) > input->size()))
         return Status::InvalidArgument("ST_CoverageSimplify invalid input partition");
-    ASSIGN_OR_RETURN(state.core, GeoCoverageSimplify::create(memory::get_default_allocator(), state.limits,
-                                                             {ctx->state(), checkpoint}));
+    ASSIGN_OR_RETURN(state.core,
+                     GeoCoverageSimplify::create(memory::get_default_allocator(), {}, {ctx->state(), checkpoint}));
     const bool skip = !state.tolerance || !state.boundary;
     for (int64_t row = start; row < end; ++row) {
         if ((row - start) % 128 == 0) RETURN_IF_ERROR(checkpoint(ctx->state()));

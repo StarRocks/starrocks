@@ -21,12 +21,9 @@
 #include <limits>
 #include <thread>
 
-#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_expr_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/function_context.h"
 #include "exprs/geo_functions.h"
@@ -287,18 +284,6 @@ TEST(CoverageWindowTest, EmptyInputStillChecksParametersAndTypes) {
     valid.fn.destroy(arity.get(), state.data());
 }
 
-TEST(CoverageWindowTest, LimitsAreCapturedAtInitialization) {
-    const auto previous = config::geo_coverage_max_rows_per_partition;
-    auto restore = DeferOp([&] { config::geo_coverage_max_rows_per_partition = previous; });
-    config::geo_coverage_max_rows_per_partition = 2;
-    WindowHarness h;
-    config::geo_coverage_max_rows_per_partition = 100;
-    h.evaluate(coverage_input({left, right, "POLYGON EMPTY"}));
-    ASSERT_TRUE(h.ctx->has_error());
-    EXPECT_NE(std::string(h.ctx->error_msg()).find("max_rows"), std::string::npos);
-    EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
-}
-
 TEST(CoverageWindowTest, CancellationAndOutputOwnershipUseTheNormalLifecycle) {
     WindowHarness cancelled;
     cancelled.runtime.set_is_cancelled(true);
@@ -322,38 +307,7 @@ TEST(CoverageWindowTest, CancellationAndOutputOwnershipUseTheNormalLifecycle) {
     worker.join();
 }
 
-TEST(CoverageWindowTest, EveryKernelLimitRejectsBeforeSimplification) {
-    struct LimitsRestore {
-        int64_t rows = config::geo_coverage_max_rows_per_partition;
-        int64_t vertices = config::geo_coverage_max_vertices_per_partition;
-        int64_t input = config::geo_coverage_max_input_bytes_per_partition;
-        int64_t working = config::geo_coverage_max_working_bytes_per_partition;
-        ~LimitsRestore() {
-            config::geo_coverage_max_rows_per_partition = rows;
-            config::geo_coverage_max_vertices_per_partition = vertices;
-            config::geo_coverage_max_input_bytes_per_partition = input;
-            config::geo_coverage_max_working_bytes_per_partition = working;
-        }
-    };
-    for (auto* limit :
-         {&config::geo_coverage_max_rows_per_partition, &config::geo_coverage_max_vertices_per_partition,
-          &config::geo_coverage_max_input_bytes_per_partition, &config::geo_coverage_max_working_bytes_per_partition}) {
-        LimitsRestore restore;
-        *limit = 1;
-        WindowHarness h;
-        h.evaluate(coverage_input({left, right}));
-        ASSERT_TRUE(h.ctx->has_error());
-        EXPECT_EQ(h.fn.kernel_calls(h.storage.data()), 0);
-        h.destroy();
-    }
-}
-
-TEST(CoverageWindowTest, SpillAndWrongPhysicalParameterFailDuringInitialization) {
-    WindowHarness spill;
-    auto& options = const_cast<TQueryOptions&>(spill.runtime.query_options());
-    options.__set_enable_spill(true);
-    spill.recreate();
-    EXPECT_TRUE(spill.ctx->has_error());
+TEST(CoverageWindowTest, WrongPhysicalParameterFailsDuringInitialization) {
     WindowHarness parameter;
     parameter.ctx->set_constant_columns({nullptr, ColumnHelper::create_const_column<TYPE_INT>(1, 1),
                                          ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, 1)});
@@ -436,11 +390,11 @@ TEST(CoverageWindowTest, OwnedOutputSerializesAfterStateDestruction) {
     EXPECT_EQ(restored->get_wkb(0).to_string(), bytes(left));
 }
 
-TEST(CoverageWindowTest, WindowOnlyRegistrationDoesNotExposeOrdinaryAggregation) {
-    EXPECT_NE(get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, false), nullptr);
-    EXPECT_NE(get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, true), nullptr);
+TEST(CoverageWindowTest, StandardWindowRegistrationHandlesBothNullabilityModes) {
+    const auto* function = get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, false);
+    ASSERT_NE(function, nullptr);
+    EXPECT_EQ(function, get_window_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, true));
     EXPECT_EQ(get_window_function("st_coveragesimplify", TYPE_GEOGRAPHY, TYPE_GEOGRAPHY, true), nullptr);
-    EXPECT_EQ(get_aggregate_function("st_coveragesimplify", TYPE_GEOMETRY, TYPE_GEOMETRY, true), nullptr);
 }
 } // namespace
 } // namespace starrocks

@@ -41,30 +41,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
-### Coverage 簡略化の資源制限
-
-変更可能な正値設定を ST_CoverageSimplify ウィンドウ関数の状態初期化時に取得します。全行（NULL/EMPTY 含む）、元の WKB 座標位置（閉合/重複含む）、入力 WKB バイト、カーネル所有の作業バイトを制限します。標準ウィンドウ演算子が完全なパーティションを保持した後、関数が入力制限を確認して簡略化します。作業メモリはカーネルの入力コピー、モデル、索引、行マッピング、一時領域、内部出力を対象とし、演算子バッファ、固定関数状態、最終出力列は標準クエリメモリ管理の対象です。超過時は設定名を示すエラーを返し、パーティションの部分結果は返しません。[ST_CoverageSimplify](../../../sql-reference/sql-functions/spatial-functions/st_coveragesimplify.md) を参照してください。
-
-#### geo_coverage_max_rows_per_partition
-
-- デフォルト: 10000
-- 変更可能：はい
-
-#### geo_coverage_max_vertices_per_partition
-
-- デフォルト: 1000000
-- 変更可能：はい
-
-#### geo_coverage_max_input_bytes_per_partition
-
-- デフォルト: 67108864
-- 変更可能：はい
-
-#### geo_coverage_max_working_bytes_per_partition
-
-- デフォルト: 268435456
-- 変更可能：はい
-
 ### H3 リソース制限
 
 以下の変更可能な正の BE 設定は H3 関数の 1 行を制限します。超過時は部分結果ではなくエラーになります。関数と中心フィルについては [H3 関数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) を参照してください。
