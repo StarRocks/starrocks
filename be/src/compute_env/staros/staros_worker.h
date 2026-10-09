@@ -79,6 +79,24 @@ public:
     // the worker will try to fetch it back from starmgr.
     absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
+    // Serialized `staros::AddShardInfo` of shard |id| if this worker owns it, NotFound otherwise.
+    // The owner hands it to a node that has to write under the shard's directory without owning
+    // the shard (the load coordinator writing a combined txn log), see `borrow_shard_info`.
+    absl::StatusOr<std::string> export_shard_info(ShardId id) const;
+
+    // Keeps a shard info produced by `export_shard_info` on the shard's owner, so that
+    // `get_shard_filesystem` and `retrieve_shard_info` resolve a shard this worker does not own
+    // without a starmgr RPC. Kept apart from the owned shards: `get_shard_info`, and therefore
+    // every ownership check, never sees it. Ignored for a shard this worker owns. Kept in an LRU
+    // cache of `kBorrowedShardInfoCacheCapacity` bytes; an entry is used for
+    // `kBorrowedShardInfoTtlSec` after its last refresh and then ignored until the cache evicts it.
+    // While `config::lake_enable_tablet_location_handoff` is off nothing is kept and nothing kept is used.
+    // The number of entries held is the `lake_tablet_location_handoff_entries` gauge.
+    absl::Status borrow_shard_info(std::string_view serialized);
+
+    // Whether an unexpired borrowed shard info of |id| is kept, see `borrow_shard_info`.
+    bool has_borrowed_shard_info(ShardId id) const;
+
     // register the listener(callback) when new shard is added to the worker
     void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
 
@@ -91,6 +109,21 @@ private:
 
         ShardInfoDetails(ShardInfo info) : shard_info(std::move(info)) {}
     };
+
+    // A value of `_borrowed_cache`. Never changed once inserted: a change inserts a new value.
+    struct BorrowedShardInfo {
+        ShardInfo shard_info;
+        std::shared_ptr<std::string> fs_cache_key;
+        int64_t expire_at_sec;
+    };
+
+    // Short on purpose: an owner gets storage credential updates pushed by starmgr, a borrower
+    // only gets them with the next handoff. Every load refreshes the entries it uses.
+    static constexpr int64_t kBorrowedShardInfoTtlSec = 300;
+    // Bytes; an entry is charged its shard info's size, about 1 KiB.
+    static constexpr size_t kBorrowedShardInfoCacheCapacity = 16 * 1024 * 1024;
+
+    static void borrowed_value_deleter(const CacheKey& /*key*/, void* value);
 
     struct CacheValue {
         std::weak_ptr<std::string> key;
@@ -124,9 +157,19 @@ private:
     }
     std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
+<<<<<<< HEAD
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
     build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
+=======
+    absl::StatusOr<FileSystemHandle> build_filesystem_on_demand(ShardId id, const Configuration& conf);
+    std::optional<ShardInfo> get_borrowed_shard_info(ShardId id) const;
+    std::optional<FileSystemHandle> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
+    // Puts |value| into `_borrowed_cache` under |id|, replacing what is there. Requires `_borrowed_mtx`.
+    void insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, FileSystemHandle>> build_filesystem_from_shard_info(
+            const ShardInfo& info, const Configuration& conf);
+>>>>>>> 776ecbe713d... [Enhancement] Hand shard info to the load coordinator for combined txn logs (#64383)
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
             std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);
@@ -143,6 +186,12 @@ private:
     std::shared_mutex _cache_mtx;
     std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
+    // Shards this worker does not own, see `borrow_shard_info`. The cache is thread-safe on its own;
+    // `_borrowed_mtx` orders the writes to it against each other and against `add_shard`. Never taken
+    // inside `_mtx`; `borrow_shard_info` takes `_mtx` inside it.
+    mutable std::mutex _borrowed_mtx;
+    std::unique_ptr<Cache> _borrowed_cache;
+    int64_t _borrowed_shard_info_ttl_sec = kBorrowedShardInfoTtlSec;
     std::unique_ptr<Cache> _fs_cache;
     add_shard_listener _add_shard_listener;
     TableMetricsManager* _table_metrics_mgr = nullptr;

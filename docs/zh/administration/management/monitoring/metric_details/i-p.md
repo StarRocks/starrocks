@@ -291,6 +291,18 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
+## `lake_tablet_location_handoff_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。本 BE 解析自己不持有的 tablet 的存储位置时，直接使用持有节点交来的位置、没有向 StarMgr 查询的次数。每增加 1，就少发一次 StarMgr GetShard RPC。该指标在负责向开启了 `file_bundling` 的表导入数据的协调节点上增长。结合 `staros_shard_info_fallback_total`，交接的命中率为 `hits / (hits + fallback)`。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 单位：文件数（每批次）
