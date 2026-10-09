@@ -82,6 +82,8 @@ StarRocks 访问 Kudu 集群元数据的一组参数。
 | hive.metastore.uris      | 否       | Hive metastore 的 URI。格式：`thrift://<metastore_IP_address>:<metastore_port>`。如果您的 Hive metastore 启用了高可用 (HA)，您可以指定多个 metastore URI，并用逗号 (`,`) 分隔，例如，`"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`。 |
 | kudu.schema-emulation.enabled | 否       | 启用或禁用 `schema` 仿真的选项。默认情况下，它是关闭的 (false)，这意味着所有表都属于 `default` `schema`。                                                                                                                                                                                                                                                                                                           |
 | kudu.schema-emulation.prefix | 否       | 仅当 `kudu.schema-emulation.enabled` = `true` 时才设置 `schema` 仿真的前缀。默认前缀为空字符串：` `。                                                                                                                                                                                                                                                                                                                   |
+| kudu.client.default-operation-timeout-ms | 否       | Kudu 客户端用于常规（非管理类）操作的超时时间，单位为毫秒，主要用于数据扫描。StarRocks 还会将该值写入下发给 BE 的 scan token，因此它同时限定 BE 扫描 Kudu tablet server 时每个请求的超时时间。取值必须为正整数。默认值为 `30000`（30 秒），与 kudu-client 的内置默认值一致。 |
+| kudu.client.default-admin-operation-timeout-ms | 否       | Kudu 客户端访问 Kudu Master 执行管理类操作（例如列出表、打开表以及获取表结构和统计信息）时的超时时间，单位为毫秒。该参数仅作用于 FE 侧的元数据请求。取值必须为正整数。默认值为 `30000`（30 秒），与 kudu-client 的内置默认值一致。 |
 
 > **注意**
 >
