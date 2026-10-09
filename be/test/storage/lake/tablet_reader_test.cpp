@@ -709,6 +709,41 @@ public:
     }
 
 protected:
+    void write_two_rowsets_with_three_segments() {
+        std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+        std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+        for (int rowset_index = 0; rowset_index < 2; ++rowset_index) {
+            const int num_segments = 2 - rowset_index;
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+            ASSERT_OK(writer->open());
+            for (int segment_index = 0; segment_index < num_segments; ++segment_index) {
+                ASSERT_OK(writer->write(chunk));
+                ASSERT_OK(writer->finish());
+            }
+            ASSERT_EQ(num_segments, writer->segments().size());
+
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(num_segments > 1);
+            rowset->set_id(rowset_index + 1);
+            rowset->set_num_rows(num_segments * chunk.num_rows());
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+            writer->close();
+        }
+        _tablet_metadata->set_version(3);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
     constexpr static const char* const kTestDirectory = "test_tablet_reader_split";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -1748,7 +1783,7 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
 TEST_F(LakeTabletReaderSpit, test_split_counts_reads_and_phy_segments) {
     constexpr int64_t kNumRowsets = 2;
     constexpr int64_t kNumSegments = 3;
-    write_two_rowsets_with_three_segments();
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
 
     TInternalScanRange internal_scan_range;
     internal_scan_range.__set_tablet_id(_tablet_metadata->id());
