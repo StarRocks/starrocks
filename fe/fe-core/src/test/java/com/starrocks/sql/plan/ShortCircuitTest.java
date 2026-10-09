@@ -100,6 +100,41 @@ public class ShortCircuitTest extends PlanTestBase {
     }
 
     @Test
+    public void testShortCircuitDeduplicatesRepeatedInLiterals() throws Exception {
+        // An IN list is set membership, so a value repeated in it must still select the row once.
+        // Each literal becomes a key tuple for the point lookup, and the lookup returns a row per
+        // tuple, so without dedup `pk1 in (20, 20)` returned the row twice under
+        // enable_short_circuit while count(*) over the same predicate returned one.
+        boolean oldShortCircuit = connectContext.getSessionVariable().isEnableShortCircuit();
+        boolean oldUnitTest = FeConstants.runningUnitTest;
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
+        FeConstants.runningUnitTest = true;
+        try {
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 20)", 1);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 20, 20)", 1);
+            // distinct keys must still produce one tuple each
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 30)", 2);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20, 30, 20)", 2);
+            assertKeyTupleCount("select * from tprimary1 where pk1 in (20)", 1);
+            // a composite key dedups per column before the tuples are crossed
+            assertKeyTupleCount("select * from tprimary_bool where pk1 in (33, 33) and pk2 = true", 1);
+        } finally {
+            connectContext.getSessionVariable().setEnableShortCircuit(oldShortCircuit);
+            FeConstants.runningUnitTest = oldUnitTest;
+        }
+    }
+
+    private void assertKeyTupleCount(String sql, int expected) throws Exception {
+        ExecPlan plan = getExecPlan(sql);
+        OlapScanNode scan = (OlapScanNode) plan.getScanNodes().stream()
+                .filter(node -> node instanceof OlapScanNode)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no OlapScanNode for: " + sql));
+        Assertions.assertEquals(expected, scan.getRowStoreKeyLiterals().size(),
+                "wrong number of point-lookup key tuples for: " + sql);
+    }
+
+    @Test
     public void testShortCircuitForShareData() throws Exception {
         new MockUp<WarehouseManager>() {
             @Mock
