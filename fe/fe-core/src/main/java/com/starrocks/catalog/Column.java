@@ -250,6 +250,18 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
+        setDefaultValueDef(defaultValueDef);
+        this.isAutoIncrement = false;
+        this.comment = comment;
+        this.generatedColumnExpr = null;
+        this.uniqueId = columnUniqId;
+        this.physicalName = physicalName;
+        this.createdTime = System.currentTimeMillis();
+    }
+
+    public void setDefaultValueDef(ColumnDef.DefaultValueDef defaultValueDef) {
+        this.defaultValue = null;
+        this.defaultExpr = null;
         if (defaultValueDef != null) {
             if (defaultValueDef.expr instanceof StringLiteral) {
                 String value = ((StringLiteral) defaultValueDef.expr).getValue();
@@ -276,12 +288,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 }
             }
         }
-        this.isAutoIncrement = false;
-        this.comment = comment;
-        this.generatedColumnExpr = null;
-        this.uniqueId = columnUniqId;
-        this.physicalName = physicalName;
-        this.createdTime = System.currentTimeMillis();
     }
 
     public Column(Column column) {
