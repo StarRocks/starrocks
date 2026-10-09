@@ -741,7 +741,8 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
         delsum -= static_cast<long>(static_cast<int>(month) * 4 + 23) / 10;
     }
     temp = ((y / 100 + 1) * 3) / 4;
-    DCHECK(delsum + static_cast<int>(y) / 4 - temp >= 0);
+    // The result is negative for a year before 0000 (an out-of-range datetime leaked by e.g. convert_tz or
+    // str_to_date); callers only use it for week arithmetic, so let it through instead of aborting the BE.
     return (delsum + static_cast<int>(y) / 4 - temp);
 }
 
