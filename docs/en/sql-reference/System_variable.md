@@ -1023,6 +1023,15 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data type**: long
 * **Unit**: Milliseconds
 
+### enable_percentile_compact_intermediate (global)
+
+* **Scope**: Global only. Set with `SET GLOBAL enable_percentile_compact_intermediate = true` or `false`.
+* **Default**: false
+* **Data type**: boolean
+* **Description**: Enables compact pass-through records for `percentile_approx` and `percentile_approx_weighted`, including their array variants, in exchange and spill. Persisted aggregate states continue to use the self-contained format.
+
+  Keep this option disabled during a rolling upgrade. Enable it only after all FE, BE, and CN nodes support the compact format. Each statement reads the global setting when execution begins, including statements on existing connections. Already running statements keep their original setting. Before downgrading workers that cannot read compact records, disable the option and wait for all statements started with it enabled to finish.
+
 ### enable_query_cache
 
 * **Description**: Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios).
