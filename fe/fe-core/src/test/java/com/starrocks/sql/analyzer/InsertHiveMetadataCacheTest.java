@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -50,6 +51,23 @@ public class InsertHiveMetadataCacheTest extends ConnectorPlanTestBase {
         connectContext.getSessionVariable().setEnableHiveMetadataCacheWithInsert(true);
         UtFrameUtils.parseStmtWithNewParser(INSERT_FROM_HIVE, connectContext);
         Assertions.assertEquals(Optional.empty(), connectContext.getUseConnectorMetadataCache());
+    }
+
+    @Test
+    public void testInsertFromHiveKeepsMetadataCacheAfterAutoRefresh() throws Exception {
+        // The pre-lock pass refreshed the source table, so planning reads the fresh cache instead of bypassing it.
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(INSERT_FROM_HIVE, connectContext);
+        new QueryAnalyzer(connectContext).analyzeExternalTablesOnly(stmt, true);
+        Analyzer.analyze(stmt, connectContext);
+        Assertions.assertEquals(Optional.of(true), connectContext.getUseConnectorMetadataCache());
+    }
+
+    @Test
+    public void testInsertFromHiveDisablesMetadataCacheWithoutAutoRefresh() throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(INSERT_FROM_HIVE, connectContext);
+        new QueryAnalyzer(connectContext).analyzeExternalTablesOnly(stmt, false);
+        Analyzer.analyze(stmt, connectContext);
+        Assertions.assertEquals(Optional.of(false), connectContext.getUseConnectorMetadataCache());
     }
 
     @Test

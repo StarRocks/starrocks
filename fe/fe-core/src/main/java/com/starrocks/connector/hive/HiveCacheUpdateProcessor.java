@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -263,9 +264,23 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             if (onlyCachedPartitions) {
                 presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive);
             } else {
-                presentPathKey = existPaths.stream()
-                        .map(path -> RemotePathKey.of(path, isRecursive))
-                        .collect(Collectors.toList());
+                // A scan keys the cache by the raw partition location, which usually lacks the trailing slash
+                // that existPaths carries. Refresh every cached key of an existing path so the entry a scan
+                // reads is updated, and key an uncached path by its location without the trailing slash.
+                Set<String> existPathSet = new HashSet<>(existPaths);
+                presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive)
+                        .stream()
+                        .filter(pathKey -> existPathSet.contains(
+                                pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/"))
+                        .collect(Collectors.toCollection(Lists::newArrayList));
+                Set<String> cachedPaths = presentPathKey.stream()
+                        .map(pathKey -> pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/")
+                        .collect(Collectors.toSet());
+                existPaths.stream()
+                        .filter(path -> !cachedPaths.contains(path))
+                        .map(path -> RemotePathKey.of(path.length() > 1 ? path.substring(0, path.length() - 1) : path,
+                                isRecursive))
+                        .forEach(presentPathKey::add);
             }
             List<RemotePathKey> updateKeys = Lists.newArrayList();
             List<RemotePathKey> invalidateKeys = Lists.newArrayList();

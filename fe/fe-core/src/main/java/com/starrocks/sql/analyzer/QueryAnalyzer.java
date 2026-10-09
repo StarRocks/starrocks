@@ -2559,6 +2559,11 @@ public class QueryAnalyzer {
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
             metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
+            // The connector metadata cache is fresh for this statement now, so planning can read it instead of
+            // bypassing it (InsertAnalyzer only bypasses it when no choice was made yet).
+            if (session.getUseConnectorMetadataCache().isEmpty()) {
+                session.setUseConnectorMetadataCache(Optional.of(true));
+            }
             Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
