@@ -16,9 +16,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -29,10 +31,16 @@ import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.AbstractSet;
 import java.util.Iterator;
@@ -41,6 +49,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -194,6 +203,43 @@ public class MvRewritePreprocessorPartitionTest {
                 }
             });
             Assertions.assertFalse(result.get(10, TimeUnit.SECONDS));
+        }
+        Assertions.assertTrue(MvRewritePreprocessor.checkMvPartitionNamesToRefresh(
+                null, mv, PCellSortedSet.of(), planContext()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    public void testConcurrentPreparationLockTimeoutUsesQueryTracer(boolean enableTrace) throws Exception {
+        PartitionChangingMV mv = new PartitionChangingMV();
+        ConnectContext traceContext = new ConnectContext();
+        traceContext.getSessionVariable().setTraceLogMode("command");
+        Tracers.register(traceContext);
+        Tracers.init(Tracers.Mode.LOGS, enableTrace ? Tracers.Module.MV : Tracers.Module.NONE, false, false);
+        Tracers queryTracers = Tracers.get();
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(traceContext, columnRefFactory);
+        MvRewritePreprocessor preprocessor = new MvRewritePreprocessor(traceContext, columnRefFactory,
+                optimizerContext, new ColumnRefSet());
+        Executor executor = Deencapsulation.getField(MvRewritePreprocessor.class, Executor.class);
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            CompletableFuture<Void> result = CompletableFuture.runAsync(() -> {
+                Assertions.assertFalse(Tracers.isSetTraceModule(Tracers.Module.MV));
+                Deencapsulation.invoke(preprocessor, "prepareMV", queryTracers, Set.of(),
+                        MaterializedViewWrapper.create(mv, 0, planContext()), MvUpdateInfo.noRefresh(mv), 100L);
+                Assertions.assertEquals("", Tracers.printLogs(), "The worker must not own the query trace");
+            }, executor);
+            result.get(10, TimeUnit.SECONDS);
+            Assertions.assertTrue(optimizerContext.getCandidateMvs().isEmpty());
+            String logs = Tracers.printLogs();
+            if (enableTrace) {
+                Assertions.assertTrue(logs.contains("Failed to lock mv partition_changing_mv"), logs);
+                Assertions.assertTrue(logs.contains("skip this mv candidate"), logs);
+            } else {
+                Assertions.assertFalse(logs.contains("Failed to lock mv"), logs);
+            }
+        } finally {
+            Tracers.close();
         }
         Assertions.assertTrue(MvRewritePreprocessor.checkMvPartitionNamesToRefresh(
                 null, mv, PCellSortedSet.of(), planContext()));
