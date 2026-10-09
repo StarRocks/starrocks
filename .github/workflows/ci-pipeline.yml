@@ -252,6 +252,7 @@ jobs:
               - 'build-support/test_check_be_module_boundaries.py'
               - 'build-support/test_gen_config_fwd_headers.py'
               - 'build-support/test_render_be_agents.py'
+              - 'build-support/test_build_parallelism.py'
               - 'build-support/be_module_boundary_baseline.json'
               - 'build-support/exec_env_header_include_allowlist.txt'
               - 'build-support/exec_env_singleton_allowlist.txt'
@@ -380,7 +381,8 @@ jobs:
           python3 -m unittest \
             build-support/test_check_be_module_boundaries.py \
             build-support/test_gen_config_fwd_headers.py \
-            build-support/test_render_be_agents.py
+            build-support/test_render_be_agents.py \
+            build-support/test_build_parallelism.py
 
       - name: Config Forward Header Check
         run: |
