@@ -1961,6 +1961,12 @@ build_nsjail() {
     check_if_source_exist $NSJAIL_SOURCE
     cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
 
+    # Kafel's Makefile gives parser.c/parser.h and lexer.c/lexer.h separate
+    # recipes that write the same files. Parallel make can run bison or flex
+    # twice and compile an incomplete generated header. Build Kafel serially
+    # before the parallel nsjail build.
+    LDFLAGS="" CFLAGS=-fPIE make -j1 -C kafel
+
     # nsjail resolves protobuf and libnl through pkg-config, which here would find a
     # host protobuf or nothing at all. Hand it the ones built above instead: PKG_CONFIG
     # only has to be set for its "install pkg-config" check, NL3_EXISTS=no stops it from
