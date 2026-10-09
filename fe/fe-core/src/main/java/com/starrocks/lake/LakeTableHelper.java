@@ -278,11 +278,51 @@ public class LakeTableHelper {
     }
 
     /**
+     * Id-based variant of {@link #removePartitionDirectory(Partition, ComputeResource, boolean, boolean)}
+     * used by {@code RecycleLakeDeletedPartitionInfo}, which retains only a flat descriptor of a
+     * non-recoverable lake partition instead of the full object graph. {@code subPartitions} carries one
+     * entry per physical sub-partition as {physicalPartitionId, shardId}.
+     */
+    static boolean removePartitionDirectory(ComputeResource computeResource,
+                                            List<long[]> physicalPartitionToShardIds,
+                                            boolean forceRemoveSharedDirectory) throws StarClientException {
+        boolean ret = true;
+        Set<String> removedPaths = new HashSet<>();
+        for (long[] pair : physicalPartitionToShardIds) {
+            long physicalPartitionId = pair[0];
+            long shardId = pair[1];
+            if (shardId < 0) {
+                LOG.info("Skipped remove directory of empty physical partition {}", physicalPartitionId);
+                continue;
+            }
+            ShardInfo shardInfo;
+            try {
+                shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
+                        .getShardInfo(shardId, computeResource.getWorkerGroupId());
+            } catch (StarClientException e) {
+                if (e.getCode() == StatusCode.NOT_EXIST) {
+                    // Shard already gone, nothing to remove.
+                    continue;
+                }
+                throw e;
+            }
+            String path = shardInfo.getFilePath().getFullPath();
+            if (!forceRemoveSharedDirectory && isSharedDirectory(path, physicalPartitionId)) {
+                LOG.info("Skipped remove possible directory shared by multiple partitions: {}", path);
+                continue;
+            }
+            if (removedPaths.add(path) && !removeShardRootDirectory(shardInfo)) {
+                ret = false;
+            }
+        }
+        return ret;
+    }
+
+    /**
      * delete `partition`'s all shard group meta (shards meta included) from starmanager
      */
     static void deleteShardGroupMeta(Partition partition)  {
         // use Set to avoid duplicate shard group id
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
         Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
         for (PhysicalPartition subPartition : subPartitions) {
@@ -290,11 +330,20 @@ public class LakeTableHelper {
                 needRemoveShardGroupIdSet.add(index.getShardGroupId());
             }
         }
-        if (!needRemoveShardGroupIdSet.isEmpty()) {
-            starOSAgent.deleteShardGroup(new ArrayList<>(needRemoveShardGroupIdSet));
-            LOG.debug("Deleted shard group related to partition {}, group ids: {}", partition.getId(),
-                    needRemoveShardGroupIdSet);
+        deleteShardGroupMeta(needRemoveShardGroupIdSet);
+    }
+
+    /**
+     * Id-based variant of {@link #deleteShardGroupMeta(Partition)} for descriptors that no longer hold
+     * the partition object graph.
+     */
+    static void deleteShardGroupMeta(Set<Long> needRemoveShardGroupIdSet) {
+        if (needRemoveShardGroupIdSet.isEmpty()) {
+            return;
         }
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        starOSAgent.deleteShardGroup(new ArrayList<>(needRemoveShardGroupIdSet));
+        LOG.debug("Deleted shard group related to partition, group ids: {}", needRemoveShardGroupIdSet);
     }
 
     public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, ComputeResource computeResource)

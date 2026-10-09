@@ -103,7 +103,7 @@ public class CatalogRecycleBinTest {
         LocalMetastore spyLocalMetastore = spy(new LocalMetastore(globalStateMgr,
                 globalStateMgr.getRecycleBin(), globalStateMgr.getColocateTableIndex()));
         doNothing().when(spyLocalMetastore).onEraseDatabase(anyLong());
-        doNothing().when(spyLocalMetastore).onErasePartition(any());
+        doNothing().when(spyLocalMetastore).onErasePartition(any(Partition.class));
         globalStateMgr.setLocalMetastore(spyLocalMetastore);
 
 
