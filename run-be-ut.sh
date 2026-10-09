@@ -44,8 +44,7 @@ if starrocks_is_darwin; then
     PARALLEL=$(starrocks_detect_parallelism)
 else
     . ${STARROCKS_HOME}/env.sh
-    host_parallelism=$(starrocks_detect_parallelism)
-    PARALLEL=$[$host_parallelism/4+1]
+    PARALLEL=$(starrocks_detect_ut_parallelism)
 fi
 
 # Check args
@@ -356,6 +355,8 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DTHIN_ARCHIVE=${THIN_ARCHIVE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
             ${STARROCKS_HOME}/be
+
+echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: $(starrocks_detect_linker_type), RAM: $(starrocks_detect_total_ram_gb) GiB)"
 
 if [[ -n "$BUILD_TARGET" ]]; then
     ${BUILD_SYSTEM} -j${PARALLEL} ${BUILD_TARGET}
