@@ -1386,6 +1386,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                 scalarOperators, identityStringPartitionColumns(icebergTable));
         boolean existPartitionTransformedEvolution = icebergTable.hasPartitionTransformedEvolution();
         Expression icebergPredicate = convertPredicate(icebergTable, residual.pushable);
+        Set<Integer> retainedStatsFieldIds = selectedFieldIds(icebergTable, params.getFieldNames());
 
         List<FileScanTask> icebergScanTasks = Lists.newArrayList();
         try (CloseableIterator<FileScanTask> iterator =
@@ -1403,7 +1404,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 FileScanTask icebergSplitScanTask = scanTask;
                 if (enableCollectColumnStatistics) {
                     try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
-                        icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                        icebergSplitScanTask =
+                                buildIcebergSplitScanTask(scanTask, icebergPredicate, key, retainedStatsFieldIds);
                     }
 
                     List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
@@ -2479,11 +2481,30 @@ public class IcebergMetadata implements ConnectorMetadata {
         return !manifest.hasAddedFiles() && !manifest.hasExistingFiles() && !manifest.hasDeletedFiles();
     }
 
-    private IcebergSplitScanTask buildIcebergSplitScanTask(
-            FileScanTask fileScanTask, Expression icebergPredicate, PredicateSearchKey filter) {
+    /**
+     * Field ids of the columns a scan selects. A cached split task keeps the stats of these columns, which
+     * min/max and COUNT(col) read from each data file, and drops the rest to keep the split cache small.
+     */
+    private static Set<Integer> selectedFieldIds(IcebergTable icebergTable, List<String> fieldNames) {
+        if (fieldNames == null || fieldNames.isEmpty()) {
+            return Set.of();
+        }
+        Schema readSchema = icebergTable.getReadSchema();
+        return fieldNames.stream()
+                .map(readSchema::findField)
+                .filter(Objects::nonNull)
+                .map(Types.NestedField::fieldId)
+                .collect(Collectors.toSet());
+    }
+
+    private IcebergSplitScanTask buildIcebergSplitScanTask(FileScanTask fileScanTask, Expression icebergPredicate,
+                                                           PredicateSearchKey filter,
+                                                           Set<Integer> retainedStatsFieldIds) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
-        DataFile dataFileWithoutStats = fileScanTask.file().copyWithoutStats();
+        DataFile dataFile = retainedStatsFieldIds.isEmpty()
+                ? fileScanTask.file().copyWithoutStats()
+                : fileScanTask.file().copyWithStats(retainedStatsFieldIds);
         DeleteFile[] deleteFiles = fileScanTask.deletes().stream()
                 .map(DeleteFile::copyWithoutStats)
                 .toArray(DeleteFile[]::new);
@@ -2507,7 +2528,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         ResidualEvaluator residualEvaluator = ResidualEvaluator.of(taskSpec, icebergPredicate, true);
 
         BaseFileScanTask baseFileScanTask = new BaseFileScanTask(
-                dataFileWithoutStats,
+                dataFile,
                 deleteFiles,
                 schemaString,
                 partitionString,
