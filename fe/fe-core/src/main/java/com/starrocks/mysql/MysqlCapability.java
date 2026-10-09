@@ -63,7 +63,8 @@ public class MysqlCapability {
         CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA(0x00200000, "CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA"),
         CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS(0x00400000, "CLIENT_CAN_HANDLE_EXPIRED_PASSWORDS"),
         CLIENT_SESSION_TRACK(0x00800000, "CLIENT_SESSION_TRACK"),
-        CLIENT_DEPRECATE_EOF(0x01000000, "CLIENT_DEPRECATE_EOF");
+        CLIENT_DEPRECATE_EOF(0x01000000, "CLIENT_DEPRECATE_EOF"),
+        CLIENT_ZSTD_COMPRESSION_ALGORITHM(0x04000000, "CLIENT_ZSTD_COMPRESSION_ALGORITHM");
 
         private Flag(int flagBit, String description) {
             this.flagBit = flagBit;
@@ -166,6 +167,14 @@ public class MysqlCapability {
 
     public boolean isSSL() {
         return (flags & Flag.CLIENT_SSL.getFlagBit()) != 0;
+    }
+
+    public boolean isCompress() {
+        return (flags & Flag.CLIENT_COMPRESS.getFlagBit()) != 0;
+    }
+
+    public boolean isZstdCompress() {
+        return (flags & Flag.CLIENT_ZSTD_COMPRESSION_ALGORITHM.getFlagBit()) != 0;
     }
 
     @Override

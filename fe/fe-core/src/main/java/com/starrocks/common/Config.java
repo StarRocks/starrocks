@@ -1310,6 +1310,14 @@ public class Config extends ConfigBase {
     public static boolean mysql_service_kill_after_disconnect = true;
 
     /**
+     * Offer the MySQL compressed protocol (zlib and zstd) in the handshake. Only clients that ask for it
+     * (e.g. mysql --compression-algorithms=zstd, JDBC useCompression=true) get compressed traffic.
+     * Applies to new connections.
+     */
+    @ConfField(mutable = true)
+    public static boolean mysql_service_compression_enabled = true;
+
+    /**
      * max num of thread to handle task in mysql.
      */
     @ConfField
