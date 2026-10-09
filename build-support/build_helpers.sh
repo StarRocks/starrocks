@@ -81,6 +81,25 @@ starrocks_detect_linker_type() {
         return 0
     fi
 
+    if [[ "$(uname -m)" != "aarch64" ]]; then
+        local gcc_version
+        gcc_version="$(${CC:-gcc} -dumpversion 2>/dev/null || echo 0)"
+        if [[ "${gcc_version%%.*}" -ge 14 ]]; then
+            local glibc_version
+            glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF; exit}' || true)"
+            if [[ -n "${glibc_version}" ]]; then
+                local major="${glibc_version%%.*}"
+                local minor="${glibc_version#*.}"
+                minor="${minor%%.*}"
+                if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 29 ]]; then
+                    echo "modern"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+
     # Inspect the default system ld flavor
     local ld_version_output
     if command -v ld >/dev/null 2>&1; then
