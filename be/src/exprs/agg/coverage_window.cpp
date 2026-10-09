@@ -19,6 +19,7 @@
 #include <limits>
 
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "exprs/function_context.h"
@@ -179,8 +180,8 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
     if (ctx->has_error()) return;
     auto& current = data(const_cast<AggDataPtr>(state));
     auto* nullable = dynamic_cast<NullableColumn*>(dst);
-    auto* geo = dynamic_cast<GeoColumn*>(nullable ? nullable->data_column()->as_mutable_raw_ptr() : dst);
-    if (!current.core || !nullable || !geo || dst->size() != start || current.emitted > current.core->rows() ||
+    auto* geo = ColumnHelper::cast_to_raw<TYPE_GEOMETRY>(ColumnHelper::get_data_column(dst));
+    if (!current.core || !nullable || dst->size() != start || current.emitted > current.core->rows() ||
         end - start > current.core->rows() - current.emitted ||
         !is_geo_semantically_compatible(geo->descriptor().type, *ctx->get_return_type().geo_type)) {
         ctx->set_error("ST_CoverageSimplify positional window mapping mismatch");
