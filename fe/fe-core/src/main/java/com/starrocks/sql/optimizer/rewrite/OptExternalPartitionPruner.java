@@ -522,6 +522,13 @@ public class OptExternalPartitionPruner {
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
         } else if (table instanceof PaimonTable) {
+            if (context.getSessionVariable().isEnableConnectorIncrementalScanRanges()) {
+                // LIMIT may be pushed into this scan after partition pruning. Do not enumerate all
+                // files here; the scan source applies SDK pruning as it is consumed. An unknown
+                // partition set must not be interpreted as an empty relation by the optimizer.
+                scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+                return;
+            }
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());

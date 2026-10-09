@@ -43,6 +43,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -59,8 +60,11 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -85,7 +89,6 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
-import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
@@ -134,10 +137,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
+    private final Map<PaimonScanKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
+
+    // A LIMIT-pruned result must not be reused by another scan of the same table with a larger limit.
+    private record PaimonScanKey(PredicateSearchKey predicate, long limit, List<String> fieldNames) {
+    }
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -607,11 +614,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         return nativeTable.copy(dynamicOptions);
     }
 
-    @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
-        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
-        PaimonTable paimonTable = (PaimonTable) table;
-        long snapshotId = -1L;
+    private org.apache.paimon.table.Table resolveScanTable(PaimonTable paimonTable, GetRemoteFilesParams params) {
         String currentBranch = branch.get();
         branch.remove();
         Identifier identifier = new Identifier(paimonTable.getCatalogDBName(),
@@ -625,13 +628,33 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         TvrVersionRange tvrVersionRange = params.getTableVersionRange();
-        snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
+        long snapshotId = tvrVersionRange.end().orElse(-1L);
 
         Map<String, String> options = new HashMap<>();
         options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
 
-        org.apache.paimon.table.Table paimonNativeTable = getNativeTable(paimonTable.getNativeTable(),
+        return getNativeTable(paimonTable.getNativeTable(),
                 tvrVersionRange).copy(options);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        org.apache.paimon.table.Table nativeTable = resolveScanTable(paimonTable, params);
+        int[] projected = params.getFieldNames().stream().mapToInt(paimonTable.getFieldNames()::indexOf).toArray();
+        List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+        // The execution engine counts matching rows. Never cap candidate file rows for this source.
+        return new PaimonRemoteFileInfoSource(nativeTable, predicates, projected,
+                params.getTableVersionRange().end().orElse(-1L),
+                params.getTableVersionRange().start().isEmpty());
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        PaimonTable paimonTable = (PaimonTable) table;
+        long snapshotId = params.getTableVersionRange().end().orElse(-1L);
+        org.apache.paimon.table.Table paimonNativeTable = resolveScanTable(paimonTable, params);
 
         GetRemoteFilesParams copyParams = params.copy();
         copyParams.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
@@ -639,31 +662,27 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        if (!paimonSplits.containsKey(filter)) {
-            ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
+        PaimonScanKey scanKey = new PaimonScanKey(filter, params.getLimit(), List.copyOf(params.getFieldNames()));
+        if (!paimonSplits.containsKey(scanKey)) {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
-            boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
-                    && onlyHasPartitionPredicate(table, params.getPredicate());
-            readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
-
-            if (pruneManifestsByLimit) {
-                readBuilder = readBuilder.withLimit((int) params.getLimit());
-            }
-            InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
+            boolean pruneManifestsByLimit = params.getLimit() > 0 && params.getLimit() < Integer.MAX_VALUE
+                    && canPushDownLimit(paimonTable, params.getPredicate(), predicates);
+            InnerTableScan scan = PaimonScan.create(paimonNativeTable, predicates, projected,
+                    pruneManifestsByLimit ? (int) params.getLimit() : null);
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
-            paimonSplits.put(filter, paimonSplitsInfo);
+            paimonSplits.put(scanKey, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                     PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(scanKey)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
@@ -764,6 +783,19 @@ public class PaimonMetadata implements ConnectorMetadata {
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        // LIMIT can be pushed down after statistics derivation. Do not eagerly exhaust a potential
+        // incremental scan just to estimate its cardinality.
+        // Snapshot row count is an estimate; WHERE selectivity and LIMIT remain optimizer concerns.
+        ConnectContext context = ConnectContext.get();
+        if (context != null && context.getSessionVariable().isEnableConnectorIncrementalScanRanges()
+                && versionRange.start().isEmpty()
+                && ((PaimonTable) table).getNativeTable() instanceof DataTable dataTable) {
+            long snapshotId = versionRange.end().orElse(-1L);
+            DataTable statisticsTable = DEFAULT_MAIN_BRANCH.equals(branch.get())
+                    ? dataTable : dataTable.switchToBranch(branch.get());
+            long rowCount = snapshotId < 0 ? 0 : statisticsTable.snapshotManager().snapshot(snapshotId).totalRecordCount();
+            return builder.setOutputRowCount(Math.max(1, rowCount)).build();
         }
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         GetRemoteFilesParams params =
@@ -1073,34 +1105,40 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    public static boolean onlyHasPartitionPredicate(Table table, ScalarOperator predicate) {
+    private static boolean canPushDownLimit(PaimonTable table, ScalarOperator predicate, List<Predicate> pushedPredicates) {
         if (predicate == null) {
             return true;
         }
 
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
-
-        List<String> predicateColumns = new ArrayList<>();
-        for (ScalarOperator operator : scalarOperators) {
-            String columnName = null;
-            if (operator.getChild(0) instanceof ColumnRefOperator) {
-                columnName = ((ColumnRefOperator) operator.getChild(0)).getName();
-            }
-
-            if (columnName == null || columnName.isEmpty()) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        // A residual WHERE clause can reject every row in the first files. File row counts are
+        // sufficient for LIMIT only if the entire predicate is evaluated exactly on partitions.
+        if (conjuncts.size() != pushedPredicates.size()) {
+            return false;
+        }
+        for (ScalarOperator conjunct : conjuncts) {
+            // Be conservative: compound/LIKE/function predicates can be only partially pushed or
+            // approximated by the converter. Column-to-column comparisons must also stay unbounded.
+            if (!(conjunct instanceof BinaryPredicateOperator || conjunct instanceof InPredicateOperator
+                    || conjunct instanceof IsNullPredicateOperator)) {
                 return false;
             }
-
-            predicateColumns.add(columnName);
-        }
-
-        List<String> partitionColNames = table.getPartitionColumnNames();
-        for (String columnName : predicateColumns) {
-            if (!partitionColNames.contains(columnName)) {
+            if (!(conjunct.getChild(0) instanceof ColumnRefOperator column)
+                    || !table.getPartitionColumnNames().contains(column.getName())) {
                 return false;
             }
+            for (int i = 1; i < conjunct.getChildren().size(); i++) {
+                ScalarOperator value = conjunct.getChild(i);
+                if (!(value instanceof ConstantOperator)) {
+                    return false;
+                }
+                // VARCHAR length differences do not change the literal's comparison semantics.
+                boolean varcharComparison = value.getType().isVarchar() && column.getType().isVarchar();
+                if (!varcharComparison && !value.getType().equals(column.getType())) {
+                    return false;
+                }
+            }
         }
-
         return true;
     }
 }
