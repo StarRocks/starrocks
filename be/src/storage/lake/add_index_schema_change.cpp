@@ -59,8 +59,7 @@ namespace {
 // BinaryColumn stores string data as a bytes buffer plus
 // an offsets array; BitmapIndexWriter expects a Slice* stride, so we
 // materialize one ad-hoc for the requested row range.
-template <typename BinaryT>
-static void fill_slice_buffer(const BinaryT& bin, size_t start_row, size_t run_len, std::vector<Slice>* out) {
+static void fill_slice_buffer(const BinaryColumn& bin, size_t start_row, size_t run_len, std::vector<Slice>* out) {
     out->resize(run_len);
     for (size_t i = 0; i < run_len; ++i) {
         (*out)[i] = bin.get_slice(start_row + i);
