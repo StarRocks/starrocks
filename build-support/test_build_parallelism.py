@@ -51,6 +51,30 @@ class TestBuildParallelism(unittest.TestCase):
         )
         self.assertEqual(linker_type, "legacy")
 
+    def test_detect_linker_type_gold(self):
+        linker_type = self.run_bash(
+            "starrocks_detect_linker_type",
+            {"STARROCKS_LINKER": "gold"}
+        )
+        self.assertEqual(linker_type, "modern")
+
+    def test_detect_linker_type_mold(self):
+        linker_type = self.run_bash(
+            "starrocks_detect_linker_type",
+            {"STARROCKS_LINKER": "mold"}
+        )
+        self.assertEqual(linker_type, "modern")
+
+    def test_detect_total_ram_gb_unreadable_fallback(self):
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        # simulate unreadable /proc/meminfo by overriding the path check in a mock
+        awk() { return 1; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "0")
+
     def test_parallelism_preserves_caller_env(self):
         p = self.run_bash(
             "starrocks_detect_ut_parallelism",
