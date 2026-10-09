@@ -121,10 +121,8 @@ public class OptimizerTraceUtil {
      * Safe log for MV module, ignore any exception during logging.
      */
     private static void traceLogMVSafe(Tracers tracers, Function<Object[], String> func, Object... args) {
-        if (!Tracers.isSetTraceModule(Tracers.Module.MV)) {
-            return;
-        }
         try {
+            // Filter using the caller's tracer, since async MV preparation workers have their own thread-local tracer.
             Tracers.log(tracers, Tracers.Module.MV, func, args);
         } catch (Exception e) {
             // ignore log exception
