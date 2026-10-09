@@ -37,16 +37,18 @@ struct CoverageWindowState {
 // output columns own their WKB and do not retain the partition state.
 class CoverageWindowFunction final : public WindowFunction<CoverageWindowState> {
 public:
-    void create(FunctionContext*, AggDataPtr) const override;
-    void update_batch_single_state_with_frame(FunctionContext*, AggDataPtr, const Column**, int64_t, int64_t, int64_t,
-                                              int64_t) const override;
-    void get_values(FunctionContext*, ConstAggDataPtr, Column*, size_t, size_t) const override;
-    void reset(FunctionContext*, const Columns&, AggDataPtr) const override;
+    void create(FunctionContext* ctx, AggDataPtr state) const override;
+    void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr state, const Column** columns,
+                                              int64_t partition_start, int64_t partition_end, int64_t frame_start,
+                                              int64_t frame_end) const override;
+    void get_values(FunctionContext* ctx, ConstAggDataPtr state, Column* dst, size_t start, size_t end) const override;
+    void reset(FunctionContext* ctx, const Columns& columns, AggDataPtr state) const override;
     std::string get_name() const override { return "st_coveragesimplify"; }
-    size_t kernel_calls(ConstAggDataPtr) const;
+    size_t kernel_calls(ConstAggDataPtr state) const;
 
 private:
-    Status initialize(FunctionContext*, CoverageWindowState&) const;
-    Status prepare_partition(FunctionContext*, CoverageWindowState&, const Column*, int64_t, int64_t) const;
+    Status initialize(FunctionContext* ctx, CoverageWindowState& state) const;
+    Status prepare_partition(FunctionContext* ctx, CoverageWindowState& state, const Column* input, int64_t start,
+                             int64_t end) const;
 };
 } // namespace starrocks
