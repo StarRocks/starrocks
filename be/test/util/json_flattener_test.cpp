@@ -558,6 +558,55 @@ TEST_F(JsonFlattenerTest, testPathTreeBoundedForDataNamedKeys) {
     }
 }
 
+// The bound holds within a row too: a single document can carry more paths than the whole trie may
+// hold, and with only that row there is no later row at which a between-rows check would kick in.
+TEST_F(JsonFlattenerTest, testPathTreeBoundedWithinASingleWideRow) {
+    config::json_flat_sparsity_factor = 0.3;
+    constexpr int kKeys = 10000;
+    auto json_column = JsonColumn::create();
+    {
+        vpack::Builder builder;
+        builder.openObject(true);
+        builder.add("fix", vpack::Value(1));
+        for (int j = 0; j < kKeys; j++) {
+            builder.add("k" + std::to_string(j), vpack::Value(j));
+        }
+        builder.close();
+        JsonValue jv;
+        jv.assign(builder);
+        json_column->append(&jv);
+    }
+
+    std::vector<const Column*> columns{json_column.get()};
+    JsonPathDeriver jf;
+    jf.set_generate_filter(true);
+    jf.derived(columns);
+
+    ASSERT_LT(jf._max_nodes, static_cast<size_t>(kKeys));
+    EXPECT_LE(jf._num_nodes, jf._max_nodes);
+    EXPECT_TRUE(jf.has_remain_json());
+    EXPECT_EQ(nullptr, jf.remain_fitler());
+
+    // Whatever was left out of the trie survives flattening in the remain column.
+    JsonFlattener flattener(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    flattener.flatten(json_column.get());
+    Columns flat_columns;
+    for (auto& c : flattener.mutable_result()) {
+        flat_columns.emplace_back(std::move(c));
+    }
+    JsonMerger merger(jf.flat_paths(), jf.flat_types(), jf.has_remain_json());
+    auto merged = merger.merge(flat_columns);
+    ASSERT_EQ(1, merged->size());
+    ASSIGN_OR_ABORT(auto original, json_column->get_object(0)->to_string());
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSIGN_OR_ABORT(auto roundtrip, down_cast<const JsonColumn*>(merged_json)->get_object(0)->to_string());
+    // Key order may differ after the merge; compare as parsed documents.
+    ASSIGN_OR_ABORT(auto a, JsonValue::parse(original));
+    ASSIGN_OR_ABORT(auto b, JsonValue::parse(roundtrip));
+    EXPECT_EQ(0, a.compare(b));
+}
+
 TEST_F(JsonFlattenerTest, testComplexJsonExtract) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto json_column = JsonColumn::create();

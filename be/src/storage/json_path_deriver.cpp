@@ -282,7 +282,7 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
             _clean_sparsity_path("", _path_root.get(), row - ignore_max);
             _num_nodes = _count_nodes(_path_root.get());
         }
-        if (_num_nodes > _max_nodes && !_path_tree_full) {
+        if (!_path_tree_full && _max_nodes > 0 && _num_nodes >= _max_nodes) {
             _shrink_path_tree(row);
         }
     }
@@ -358,7 +358,7 @@ size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current
 void JsonPathDeriver::_shrink_path_tree(size_t current_row) {
     _drop_singleton_paths(_path_root.get(), current_row);
     _num_nodes = _count_nodes(_path_root.get());
-    if (_num_nodes > _max_nodes) {
+    if (_num_nodes >= _max_nodes) {
         _path_tree_full = true;
         VLOG(2) << "flat json path tree full at row " << current_row << ", nodes: " << _num_nodes;
     }
@@ -375,7 +375,9 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
 
         auto iter = root->children.find(k);
         if (iter == root->children.end()) {
-            if (_path_tree_full) {
+            // The budget also holds within a row: a single row can carry more paths than the whole
+            // trie may have, so stop adding as soon as it is reached, not only between rows.
+            if (_path_tree_full || (_max_nodes > 0 && _num_nodes >= _max_nodes)) {
                 // Never flattened, so it stays in this node's remain.
                 root->remain = true;
                 _add_remain_key(k);
