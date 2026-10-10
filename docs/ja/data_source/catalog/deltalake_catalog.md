@@ -432,6 +432,14 @@ Google GCS を Delta Lake クラスターのストレージとして選択した
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | メタサービスアカウントの作成時に生成された JSON ファイルのプライベートキーです。 |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | インパーソネートしたいデータサービスアカウントです。       |
 
+#### ネイティブ ADLS メタデータ I/O
+
+Catalog プロパティ `"enable_delta_lake_native_adls" = "true"` を設定すると、Azure SDK で Delta メタデータを読み取ります。デフォルトは `false` で、Hadoop を使用します。この設定は `abfs://` と `abfss://` のテーブルに対する FE のディレクトリ一覧、JSON トランザクションログ、Parquet checkpoint の読み取りに適用されます。BE のデータファイル読み取りやオプティマイザの統計収集は変更しません。
+
+ネイティブ経路はストレージアカウントの HTTPS Blob エンドポイントを使用します。プライベートエンドポイントを使用する場合も、DFS に加えて Blob エンドポイントへ到達できる必要があります。Azure パブリック、米国政府、中国の標準ストレージエンドポイントをサポートし、カスタムエンドポイントはサポートしません。既存の ADLS2 共有キー、固定 SAS、クライアントシークレット、ユーザー割り当てマネージド ID、ワークロード ID の設定を使用します。ワークロード ID のトークンファイルは各 FE に必要です。カスタム Hadoop 認証プロバイダーとカスタム MSI エンドポイントはエラーとなり、デフォルトの認証チェーンにはフォールバックしません。
+
+一覧はページ単位で取得します。range リクエストは最大 1 MiB、最大 3 回試行し、各試行のタイムアウトは 30 秒です。キャンセルはリクエスト間で確認するため、実行中のリクエストの完了まで待つ場合があります。これらの上限は Delta Kernel の checkpoint デコードやメタデータキャッシュのメモリを制限しません。クエリ trace `DELTA_LAKE.metadataFileIO` は `azure_native` または `hadoop` を表示します。プロパティを無効にすると Hadoop に戻ります。
+
 #### MetadataUpdateParams
 
 StarRocks が Delta Lake のキャッシュされたメタデータを更新する方法に関する一連のパラメータです。このパラメータセットはオプションです。

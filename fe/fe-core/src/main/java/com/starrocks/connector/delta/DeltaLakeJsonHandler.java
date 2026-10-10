@@ -27,17 +27,13 @@ import com.starrocks.common.profile.Tracers;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
-import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
 import io.delta.kernel.exceptions.KernelEngineException;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructType;
 import io.delta.kernel.utils.CloseableIterator;
 import io.delta.kernel.utils.FileStatus;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -59,38 +55,28 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
     private static final ObjectReader OBJECT_READER_READ_BIG_DECIMALS = MAPPER
             .reader(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
-    private final Configuration hadoopConf;
+    private final FileIO fileIO;
     private final int maxBatchSize;
     private final Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
 
-    public DeltaLakeJsonHandler(Configuration hadoopConf, Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        super(new HadoopFileIO(hadoopConf));
-        this.hadoopConf = hadoopConf;
-        this.maxBatchSize = hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);
+    public DeltaLakeJsonHandler(FileIO fileIO, Cache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
+        super(fileIO);
+        this.fileIO = fileIO;
+        this.maxBatchSize = fileIO.getConf("delta.kernel.default.json.reader.batch-size").map(Integer::parseInt).orElse(1024);
         this.jsonCache = jsonCache;
     }
 
-    public static List<JsonNode> readJsonFile(String filePath, Configuration hadoopConf) throws IOException {
+    public static List<JsonNode> readJsonFile(String filePath, FileIO fileIO) throws IOException {
         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DeltaLakeJsonHandler.readParseJsonFile")) {
-            Path readFilePath = new Path(filePath);
-            FileSystem fs = readFilePath.getFileSystem(hadoopConf);
-            FSDataInputStream stream = null;
-            BufferedReader fileReader;
-            try {
-                stream = fs.open(readFilePath);
-                fileReader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8));
-            } catch (Exception e) {
-                Utils.closeCloseablesSilently(stream); // close it avoid leaking resources
-                throw e;
+            try (BufferedReader fileReader = new BufferedReader(new InputStreamReader(
+                    fileIO.newInputFile(filePath, -1).newStream(), StandardCharsets.UTF_8))) {
+                List<JsonNode> jsonNodeList = Lists.newArrayList();
+                String readline;
+                while ((readline = fileReader.readLine()) != null) {
+                    jsonNodeList.add(parseJsonToJsonNode(readline));
+                }
+                return jsonNodeList;
             }
-            List<JsonNode> jsonNodeList = Lists.newArrayList();
-            String readline;
-            while ((readline = fileReader.readLine()) != null) {
-                jsonNodeList.add(parseJsonToJsonNode(readline));
-            }
-
-            Utils.closeCloseables(fileReader);
-            return jsonNodeList;
         }
     }
 
@@ -164,13 +150,12 @@ public class DeltaLakeJsonHandler extends DefaultJsonHandler {
                 if (scanFileIter.hasNext()) {
                     DeltaLakeFileStatus fileStatus = DeltaLakeFileStatus.of(scanFileIter.next());
                     currentFile = fileStatus.getPath();
-                    Path filePath = new Path(fileStatus.getPath());
-                    if (filePath.getName().equals(LAST_CHECKPOINT_FILE_NAME)) {
+                    if (currentFile.endsWith("/" + LAST_CHECKPOINT_FILE_NAME)) {
                         // can not read last_checkpoint file from cache
-                        currentReadJsonList = readJsonFile(currentFile, hadoopConf);
+                        currentReadJsonList = readJsonFile(currentFile, fileIO);
                     } else {
                         currentReadJsonList = jsonCache.get(fileStatus,
-                                () -> readJsonFile(fileStatus.getPath(), hadoopConf));
+                                () -> readJsonFile(fileStatus.getPath(), fileIO));
                     }
                     currentReadLine = 0;
                 }

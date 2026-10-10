@@ -436,6 +436,14 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
 
+#### Native ADLS metadata I/O
+
+Set the catalog property `"enable_delta_lake_native_adls" = "true"` to read Delta metadata through the Azure SDK. The default is `false`, which uses Hadoop. This option affects FE directory listing, JSON transaction logs, and Parquet checkpoints for `abfs://` and `abfss://` table locations. It does not change BE data-file reads or bypass optimizer statistics collection.
+
+The native path uses the account's HTTPS Blob endpoint. The Blob endpoint must be reachable in addition to the DFS endpoint, including when private endpoints are used. Standard Azure public, US Government, and China storage endpoints are supported; custom endpoints are not. Existing ADLS2 shared-key, fixed SAS, client-secret, user-assigned managed-identity, and workload-identity settings are reused. Workload identity token files must exist on each FE. Custom Hadoop credential providers and custom MSI endpoints are unsupported and fail explicitly; no default credential chain is used.
+
+Metadata listings are paginated. Reads request at most 1 MiB per range, with up to three attempts and a 30-second timeout per attempt. Cancellation is checked between requests; an in-flight request may finish before cancellation takes effect. These bounds do not limit Delta Kernel checkpoint decoding or metadata-cache memory. The query trace `DELTA_LAKE.metadataFileIO` reports `azure_native` or `hadoop`. Disable the property to return to Hadoop.
+
 #### MetadataUpdateParams
 
 A set of parameters about how StarRocks updates the cached metadata of Delta Lake. This parameter set is optional.
