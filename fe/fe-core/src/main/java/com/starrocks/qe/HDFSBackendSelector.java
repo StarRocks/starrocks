@@ -30,6 +30,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import com.starrocks.connector.lance.LanceWorkerSelector;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.FlussScanNode;
@@ -37,6 +38,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
@@ -133,6 +135,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof LanceScanNode) {
+                LanceScanNode node = (LanceScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getLanceTable().getTableLocation();
             } else if (scanNode instanceof FlussScanNode) {
                 FlussScanNode node = (FlussScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
@@ -344,6 +350,17 @@ public class HDFSBackendSelector implements BackendSelector {
             assignedBytesPerComputeNode.put(computeNode, 0L);
             assignedScanRangesPerComputeNode.put(computeNode, 0L);
             reBalancedBytesPerComputeNode.put(computeNode, 0L);
+        }
+
+        if (scanNode instanceof LanceScanNode) {
+            // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
+            // Rotate across the provider's connector workers, including its compute-node preference.
+            for (TScanRangeLocations scanRangeLocations : locations) {
+                ComputeNode worker = LanceWorkerSelector.selectWorker(workerProvider);
+                recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
+            }
+            recordScanRangeStatistic();
+            return;
         }
 
         // schedule scan ranges to co-located backends.

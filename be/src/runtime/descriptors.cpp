@@ -378,6 +378,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::FLUSS_TABLE:
             desc = ALLOC_DESC(FlussTableDescriptor, tdesc, pool, mr);
             break;
+        case TTableType::LANCE_TABLE:
+            desc = ALLOC_DESC(LanceTableDescriptor, tdesc, mr);
+            break;
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
         }
