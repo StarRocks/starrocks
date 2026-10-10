@@ -45,6 +45,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+>>>>>>> 1e81c8a8e36... [BugFix] Suspend the task of an incremental MV a refresh inactivates (#64854)
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
@@ -1778,6 +1783,19 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             return;
         }
         inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndLog(mv, inactiveReason);
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
+        }
     }
 
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart

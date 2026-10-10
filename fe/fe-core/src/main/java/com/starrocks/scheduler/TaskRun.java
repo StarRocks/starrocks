@@ -470,10 +470,9 @@ public class TaskRun implements Comparable<TaskRun> {
             if (Constants.TaskSource.MV.equals(task.getSource())
                     && MaterializedViewExceptions.isIncrementalBreakingFailure(e)) {
                 MaterializedView mv = TaskBuilder.getMvFromTask(task);
-                // Permanent incremental breakage: inactivate the MV and rethrow. Don't kill/suspend the running
-                // refresh here -- that would eat the actionable error; the consecutive-failure path suspends the task.
+                // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
                 if (mv != null && mv.isActive()) {
-                    AlterMVJobExecutor.inactiveMvAndLog(mv,
+                    AlterMVJobExecutor.inactiveMvAndSuspendTask(mv,
                             MaterializedViewExceptions.inactiveReasonForBreakingFailure(e, mv.getName()));
                     throw e;
                 }
