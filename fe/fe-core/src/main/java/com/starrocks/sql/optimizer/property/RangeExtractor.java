@@ -20,12 +20,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -62,6 +65,21 @@ public class RangeExtractor {
 
         @Override
         public Void visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (predicate.getChild(1).isConstantRef() && predicate.getBinaryType() == BinaryType.EQ_FOR_NULL
+                    && isNullAlternativeDeriveEnabled()) {
+                ConstantOperator value = (ConstantOperator) predicate.getChild(1);
+                Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
+                if (value.isNull()) {
+                    // `E <=> NULL` is TRUE only when E is NULL
+                    descMap.put(predicate.getChild(0), ValueDescriptor.isNull(predicate.getChild(0)));
+                } else {
+                    // for a non-null const, `E <=> const` means the same as `E = const`
+                    descMap.put(predicate.getChild(0),
+                            ValueDescriptor.range(predicate.getChild(0), value, BinaryType.EQ));
+                }
+                return visit(predicate, context);
+            }
+
             if (predicate.getChild(1).isConstantRef() && predicate.getBinaryType() != BinaryType.NE
                     && predicate.getBinaryType() != BinaryType.EQ_FOR_NULL) {
 
@@ -73,6 +91,20 @@ public class RangeExtractor {
             }
 
             return visit(predicate, context);
+        }
+
+        @Override
+        public Void visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
+            if (!predicate.isNotNull() && isNullAlternativeDeriveEnabled()) {
+                Preconditions.checkState(!descMap.containsKey(predicate.getChild(0)));
+                descMap.put(predicate.getChild(0), ValueDescriptor.isNull(predicate.getChild(0)));
+            }
+            return visit(predicate, context);
+        }
+
+        private static boolean isNullAlternativeDeriveEnabled() {
+            ConnectContext ctx = ConnectContext.get();
+            return ctx != null && ctx.getSessionVariable().isCboDerivePredicateNullAlternative();
         }
 
         @Override
@@ -209,6 +241,11 @@ public class RangeExtractor {
     public abstract static class ValueDescriptor {
         protected ScalarOperator columnRef;
         protected int sourceCount = 1;
+        // true if NULL is also allowed besides the values/range, i.e. the source predicate has an
+        // `E IS NULL` or `E <=> NULL` alternative. OR unions this flag, AND intersects it.
+        // toRange() ignores it on purpose: the range describes only non-null values, and a
+        // comparison built from the range is never TRUE on NULL anyway.
+        protected boolean admitsNull = false;
 
         protected ValueDescriptor(ScalarOperator ref) {
             columnRef = ref;
@@ -244,6 +281,12 @@ public class RangeExtractor {
             MultiValuesDescriptor d = new MultiValuesDescriptor(operator.getChild(0));
             operator.getChildren().stream().skip(1).map(c -> (ConstantOperator) c)
                     .filter(c -> !c.isNull()).forEach(d.values::add);
+            return d;
+        }
+
+        public static ValueDescriptor isNull(ScalarOperator operator) {
+            MultiValuesDescriptor d = new MultiValuesDescriptor(operator);
+            d.admitsNull = true;
             return d;
         }
 
@@ -288,6 +331,7 @@ public class RangeExtractor {
 
         protected static ValueDescriptor mergeValuesAndRange(MultiValuesDescriptor value, RangeDescriptor range) {
             RangeDescriptor result = new RangeDescriptor(value, range);
+            result.admitsNull = value.admitsNull || range.admitsNull;
 
             if (value.values.isEmpty()) {
                 result.range = range.range;
@@ -302,6 +346,7 @@ public class RangeExtractor {
 
         protected static ValueDescriptor intersectValuesAndRange(MultiValuesDescriptor value, RangeDescriptor range) {
             MultiValuesDescriptor result = new MultiValuesDescriptor(value, range);
+            result.admitsNull = value.admitsNull && range.admitsNull;
 
             if (range.range == null) {
                 return result;
@@ -328,6 +373,7 @@ public class RangeExtractor {
                 MultiValuesDescriptor result = new MultiValuesDescriptor(this, other);
                 result.values.addAll(values);
                 result.values.addAll(((MultiValuesDescriptor) other).values);
+                result.admitsNull = admitsNull || other.admitsNull;
                 return result;
             }
 
@@ -340,6 +386,7 @@ public class RangeExtractor {
                 MultiValuesDescriptor result = new MultiValuesDescriptor(this, other);
                 result.values.addAll(values);
                 result.values.retainAll(((MultiValuesDescriptor) other).values);
+                result.admitsNull = admitsNull && other.admitsNull;
                 return result;
             }
 
@@ -350,16 +397,28 @@ public class RangeExtractor {
         public List<ScalarOperator> toScalarOperator() {
             Preconditions.checkState(values != null, "invalid scalar values predicate extract");
 
+            ScalarOperator valuesPart;
             if (values.isEmpty()) {
-                return Lists.newArrayList(ConstantOperator.createNull(columnRef.getType()));
+                // empty value set and no NULL alternative: the source predicate can never be
+                // TRUE, so return a typed NULL constant which rejects every row
+                valuesPart = admitsNull ? null : ConstantOperator.createNull(columnRef.getType());
             } else if (values.size() == 1) {
-                return Lists.newArrayList(
-                        new BinaryPredicateOperator(BinaryType.EQ, columnRef, values.iterator().next()));
+                valuesPart = new BinaryPredicateOperator(BinaryType.EQ, columnRef, values.iterator().next());
             } else {
                 InPredicateOperator ipo = new InPredicateOperator(false, columnRef);
                 ipo.getChildren().addAll(values);
-                return Lists.newArrayList(ipo);
+                valuesPart = ipo;
             }
+
+            if (!admitsNull) {
+                return Lists.newArrayList(valuesPart);
+            }
+            IsNullPredicateOperator isNull = new IsNullPredicateOperator(columnRef);
+            if (valuesPart == null) {
+                return Lists.newArrayList((ScalarOperator) isNull);
+            }
+            return Lists.newArrayList(new CompoundPredicateOperator(
+                    CompoundPredicateOperator.CompoundType.OR, valuesPart, isNull));
         }
 
         @Override
@@ -396,6 +455,7 @@ public class RangeExtractor {
         public ValueDescriptor union(ValueDescriptor other) {
             if (other instanceof RangeDescriptor o) {
                 RangeDescriptor result = new RangeDescriptor(this, other);
+                result.admitsNull = admitsNull || o.admitsNull;
                 if (o.range == null) {
                     result.range = range;
                 } else if (range == null) {
@@ -413,6 +473,7 @@ public class RangeExtractor {
         public ValueDescriptor intersect(ValueDescriptor other) {
             if (other instanceof RangeDescriptor o) {
                 RangeDescriptor result = new RangeDescriptor(this, other);
+                result.admitsNull = admitsNull && o.admitsNull;
                 if (range == null || o.range == null) {
                     return result;
                 }
@@ -421,15 +482,21 @@ public class RangeExtractor {
                     result.range = range.intersection(o.range);
                 } catch (Exception ignore) {
                     // empty range
-                    return new MultiValuesDescriptor(this, other);
+                    return emptyIntersection(other);
                 }
                 if (result.range.isEmpty()) {
-                    return new MultiValuesDescriptor(this, other);
+                    return emptyIntersection(other);
                 }
                 return result;
             }
 
             return intersectValuesAndRange((MultiValuesDescriptor) other, this);
+        }
+
+        private MultiValuesDescriptor emptyIntersection(ValueDescriptor other) {
+            MultiValuesDescriptor empty = new MultiValuesDescriptor(this, other);
+            empty.admitsNull = admitsNull && other.admitsNull;
+            return empty;
         }
 
         @Override
@@ -446,6 +513,11 @@ public class RangeExtractor {
                 operators.add(new BinaryPredicateOperator(type, columnRef, range.upperEndpoint()));
             }
 
+            if (admitsNull && !operators.isEmpty()) {
+                return Lists.newArrayList(new CompoundPredicateOperator(
+                        CompoundPredicateOperator.CompoundType.OR,
+                        Utils.compoundAnd(operators), new IsNullPredicateOperator(columnRef)));
+            }
             return operators;
         }
 
