@@ -98,3 +98,33 @@ TEST_F(PInternalService_RecoverableStubTest, test_get_load_replica_status) {
     auto* closure = new starrocks::RefCountClosure<starrocks::PLoadReplicaStatusResult>();
     stub->get_load_replica_status(&closure->cntl, &request, &closure->result, closure);
 }
+
+TEST_F(PInternalService_RecoverableStubTest, rpc_in_flight_guard) {
+    butil::EndPoint point;
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1", 18000, &point));
+    auto stub = std::make_shared<starrocks::PInternalService_RecoverableStub>(point);
+
+    ASSERT_EQ(0, stub->num_in_flight_rpcs());
+    ASSERT_EQ(0, stub->num_in_flight_payload_bytes());
+    auto first = stub->reserve_rpc(1024);
+    ASSERT_EQ(0, first.in_flight_before());
+    ASSERT_EQ(1, stub->num_in_flight_rpcs());
+    ASSERT_EQ(1024, stub->num_in_flight_payload_bytes());
+
+    auto second = stub->reserve_rpc(512);
+    ASSERT_EQ(1, second.in_flight_before());
+    ASSERT_EQ(2, stub->num_in_flight_rpcs());
+    ASSERT_EQ(1536, stub->num_in_flight_payload_bytes());
+
+    auto moved = std::move(second);
+    ASSERT_EQ(nullptr, second.stub());
+    ASSERT_EQ(stub.get(), moved.stub());
+    ASSERT_EQ(2, stub->num_in_flight_rpcs());
+
+    moved.reset();
+    ASSERT_EQ(1, stub->num_in_flight_rpcs());
+    ASSERT_EQ(1024, stub->num_in_flight_payload_bytes());
+    first.reset();
+    ASSERT_EQ(0, stub->num_in_flight_rpcs());
+    ASSERT_EQ(0, stub->num_in_flight_payload_bytes());
+}

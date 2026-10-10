@@ -27,6 +27,7 @@
 #include "base/brpc/disposable_closure.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
@@ -179,6 +180,12 @@ private:
         Mutex in_flight_rpc_cids_mutex;
 
         TNetworkAddress dest_addrs;
+
+        // Cached least-loaded stub pool for this destination (only used when brpc_connection_type=single).
+        // Resolved once and held for the query's lifetime so the per-chunk send path avoids the process-global
+        // BrpcStubCache lock; the cache keeps an in-use pool alive, so this reference also pins it in the cache.
+        // Only touched under `mutex`, which is held throughout _try_to_send_rpc/_send_rpc.
+        std::shared_ptr<BrpcStubCache::StubPool> stub_pool;
     };
     phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }
@@ -203,6 +210,10 @@ private:
 
     std::atomic<int64_t> _rpc_count = 0;
     std::atomic<int64_t> _rpc_cumulative_time = 0;
+    std::atomic<int64_t> _rpc_busy_stub_selection_count = 0;
+    std::atomic<int64_t> _rpc_selected_stub_inflight_max = 0;
+    std::atomic<int64_t> _rpc_stub_created_on_contention_count = 0;
+    std::atomic<int64_t> _rpc_selection_at_connection_limit_count = 0;
 
     std::unique_ptr<MemTracker> _buffered_mem_usage;
     // RuntimeProfile counters
