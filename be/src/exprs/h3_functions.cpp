@@ -414,7 +414,8 @@ StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext* context, const 
     const bool constant = columns[0]->is_constant();
     ColumnBuilder<TYPE_INT> result(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        // Cell resolution and parent conversion have bounded per-row work.
+        if ((row & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
         if (input.is_null(row)) {
             result.append_null();
             continue;
@@ -423,6 +424,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext* context, const 
         result.append(getResolution(cell));
     }
     ColumnPtr output = result.build(false);
+    RETURN_IF_ERROR(h3_checkpoint(context));
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
 }
@@ -435,7 +437,8 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_parent(FunctionContext* context, const C
     const bool constant = ColumnHelper::is_all_const(columns);
     ColumnBuilder<TYPE_BIGINT> result(constant ? 1 : size);
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        // Cell resolution and parent conversion have bounded per-row work.
+        if ((row & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
             continue;
@@ -447,11 +450,11 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_parent(FunctionContext* context, const C
             return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
         H3Index parent = 0;
         const H3Error error = cellToParent(cell, resolution, &parent);
-        RETURN_IF_ERROR(h3_checkpoint(context));
         if (error != E_SUCCESS) return h3_error("H3_ToParent", error);
         result.append(static_cast<int64_t>(parent));
     }
     ColumnPtr output = result.build(false);
+    RETURN_IF_ERROR(h3_checkpoint(context));
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
 }
