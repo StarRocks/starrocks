@@ -128,6 +128,7 @@ class PaimonFixtureTest(unittest.TestCase):
 
     def test_existing_runner_cleanup_lifecycle(self):
         case_path = Path(__file__).resolve().parents[1] / "sql/test_paimon_catalog/R/test_paimon_reader_modes"
+        (self.root / "paimon_test.db/scalar_types").mkdir(parents=True)
         for failure in (None, "query", "upload", "cleanup"):
             with self.subTest(failure=failure):
                 chooser = object.__new__(choose_cases.ChooseCase)
@@ -161,7 +162,7 @@ class PaimonFixtureTest(unittest.TestCase):
                     if failure == "cleanup" and args[0] == "rm":
                         raise RuntimeError("cleanup failed")
                 runner._paimon_oss = oss
-                with patch.object(sr_sql_lib, "PAIMON_FIXTURE_ROOT", case_path.parents[1] / "data"), \
+                with patch.object(sr_sql_lib, "PAIMON_FIXTURE_ROOT", self.root), \
                         patch.object(module, "self_print"), patch.object(module, "log"):
                     result = unittest.TestResult()
                     nose.case.FunctionTestCase(runner.test_paimon_reader_modes, tearDown=runner.tearDown).run(result)

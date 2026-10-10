@@ -78,7 +78,7 @@ from lib.hive_lib import HiveLib
 from lib.arrow_sql_lib import ArrowSqlLib
 from lib import *
 
-PAIMON_FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "sql/test_paimon_catalog/data"
+PAIMON_FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "data/paimon/warehouse"
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
@@ -807,7 +807,8 @@ class StarrocksSQLApiLib(object):
         for relative in paths:
             directory = PAIMON_FIXTURE_ROOT / relative
             if not directory.is_dir() or directory.is_symlink():
-                raise ValueError("missing or invalid fixture directory: %s" % relative)
+                raise ValueError("missing or invalid fixture directory: %s; "
+                                 "run git submodule update --init test/data from the repository root" % directory)
         prefix = getattr(self, "paimon_fixture_prefix", "paimon_ci_test")
         warehouse = self._paimon_warehouse_uri(bucket, prefix, run_id)
         self.paimon_cleanup()

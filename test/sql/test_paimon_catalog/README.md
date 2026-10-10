@@ -1,17 +1,22 @@
 # Paimon fixtures
 
-The filesystem cases stage immutable tables from `data/` to the runner's OSS bucket.
+The filesystem cases stage immutable tables from the `test/data/paimon/warehouse/` submodule directory to the runner's OSS bucket.
 Community and enterprise CI use the same fixtures and cases with their own `sr.conf` credentials.
 
 ## Run
+
+From the StarRocks repository root, initialize the pinned data version:
+
+```bash
+git submodule update --init test/data
+```
 
 From `test/`, run `python3 run.py -d sql/test_paimon_catalog -v`.
 The runner needs `ossutil64` with credentials for its bucket, and the BE needs paimon-cpp.
 `oss_endpoint` is used by both ossutil and the catalog. Use the internal endpoint for local development.
 The default `paimon_fixture_prefix` is `paimon_ci_test`, including when absent from older configs.
 Override it in a local config to your own prefix, such as `my-tests/paimon-fixtures`.
-Do not commit credentials or local configuration. Fixtures are loaded from this repository's `data/`
-directory, located relative to the helper module rather than the working directory.
+Do not commit credentials or local configuration. Fixtures are located relative to the helper module rather than the working directory.
 No additional file inventory, checksum or size checks are performed. Keep fixture files unchanged during a test run.
 
 ## Cases
@@ -39,12 +44,13 @@ VARIANT and BLOB coverage remains in the filesystem case; those types cannot uni
 a delete and an insert. Two overlapping level-0 files remain unmerged, so each reader must
 apply primary-key merge semantics. JNI, NATIVE and AUTO check the same fixed rows, aggregates,
 and predicates on deleted keys and old values. AUTO must use JNI for this layout. The native
-profile assertion also covers this merge path. See [datagen](data/datagen/README.md) for the
+profile assertion also covers this merge path. See [datagen](../../data/paimon/datagen/README.md) for the
 writer version, generation command and independent Paimon reader/layout checks.
 
 ## Helper tests and data maintenance
 
 From `test/`, run `python3 -m unittest lib.test_paimon_fixture -v` for the Paimon helpers.
+Helper tests use temporary fixture directories and do not require the submodule.
 The Paimon helper methods are defined in `test/lib/sr_sql_lib.py`.
 The tests cover upload failures, cleanup retries, reader assertions and the existing runner lifecycle.
 
