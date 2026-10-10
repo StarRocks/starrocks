@@ -243,6 +243,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：bRPC 渠道的连接模式。`single`（默认）每个渠道复用一条长连接；`pooled` 为每端点维护连接池以提升并发（增加 FD 占用）；`short` 为短连接，每次 RPC 建连以减少持久连接但会提高延迟和建连开销。
 - 引入版本：v3.2.5
 
+### brpc_failed_channel_reset_interval_s
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：BE 检查缓存的 bRPC stub 并重置连接已失败的 stub 的时间间隔。bRPC 会每隔几秒对已失败的连接进行健康检查，直到该连接被释放。如果目标地址不可达（例如 Kubernetes 中重启后的 BE Pod 的旧 IP 地址），每次检查都会打印 `Fail to wait EPOLLOUT` 日志。重置 stub 会释放已失败的连接，stub 在下一次 RPC 时建立新连接。小于或等于 `0` 的值表示关闭该检查。
+- 引入版本：-
+
 ### brpc_max_body_size
 
 - 默认值：2147483648
