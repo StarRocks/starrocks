@@ -17,6 +17,8 @@ Inserts data into an Iceberg table. This feature is supported from v3.1 onwards.
 
 Similar to loading data into StarRocks native tables, if you have the [INSERT privilege](../../../administration/user_privs/authorization/privilege_item.md#table) on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data to the Iceberg table. Currently, only Parquet-formatted Iceberg tables are supported.
 
+For Parquet data files, StarRocks honors the Iceberg table properties `write.parquet.page-size-bytes`, `write.parquet.dict-size-bytes`, and `write.parquet.row-group-size-bytes`. Each value must be a positive integer no greater than 2,147,483,647 bytes; an invalid value rejects the write. If a property is absent, StarRocks uses its writer default: 1 MiB for data pages and dictionary pages, and 128 MiB for row groups. These properties do not configure position-delete files.
+
 ### Syntax
 
 ```SQL
