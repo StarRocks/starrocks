@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
+import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_LEVEL;
 
 public class IcebergTableSinkTest {
 
@@ -47,6 +48,7 @@ public class IcebergTableSinkTest {
         // nativeTable.properties contains parquet compression -> should use it
         Map<String, String> nativeProps = Maps.newHashMap();
         nativeProps.put(PARQUET_COMPRESSION, "zstd");
+        nativeProps.put(PARQUET_COMPRESSION_LEVEL, "9");
 
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
 
@@ -104,6 +106,7 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // compression_type should map "zstd" -> TCompressionType.ZSTD
         Assertions.assertEquals(TCompressionType.ZSTD, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertEquals(9, t.getIceberg_table_sink().getParquet_compression_level());
     }
 
     @Test
@@ -167,5 +170,22 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // fallback "gzip" -> TCompressionType.GZIP
         Assertions.assertEquals(TCompressionType.GZIP, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_compression_level());
+    }
+
+    @Test
+    public void testCompressionLevelValidation() {
+        Assertions.assertEquals(5,
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "5"), "gzip"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "not-a-level"), "zstd"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "23"), "zstd"));
+        Assertions.assertThrows(IllegalArgumentException.class, () ->
+                com.starrocks.connector.iceberg.IcebergUtil.getParquetCompressionLevel(
+                        Map.of(PARQUET_COMPRESSION_LEVEL, "5"), "snappy"));
     }
 }
