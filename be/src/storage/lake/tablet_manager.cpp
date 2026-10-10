@@ -1916,7 +1916,7 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     // NOTE: if partial compaction is turned on, `segment_id` might not be the same as cached segment id
     //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
     //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
@@ -1950,16 +1950,16 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // segment->open will read the footer, and it is time-consuming.
     // separate it from static Segment::open is to prevent a large number of cache misses,
     // and many temporary segment objects generation when loading the same segment concurrently.
-    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts, stats));
     return segment;
 }
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     size_t footer_size_hint = 16 * 1024;
     return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_meta_cache,
-                        std::move(tablet_schema));
+                        std::move(tablet_schema), stats);
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)

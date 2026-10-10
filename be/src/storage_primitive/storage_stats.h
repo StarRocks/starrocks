@@ -163,6 +163,10 @@ struct OlapReaderStatistics {
     int64_t prefetch_wait_finish_ns = 0;
     int64_t prefetch_pending_ns = 0;
 
+    // Segments whose footer was read on behalf of this reader, i.e. that were not already open. Only the
+    // callers that pass their statistics to Segment::open count them.
+    int64_t segments_opened = 0;
+
     int64_t lake_prepared_rowsets = 0;
     int64_t lake_prepared_segments = 0;
     int64_t lake_prepared_scan_rows = 0;
@@ -176,6 +180,9 @@ struct OlapReaderStatistics {
     // OlapReaderStatistics: where the seed's one-time per-segment prune spends its time / IO.
     int64_t lake_prepared_seed_io_ns = 0;
     int64_t lake_prepared_seed_io_count = 0;
+    int64_t lake_prepared_seed_io_remote_ns = 0;
+    int64_t lake_prepared_seed_io_count_remote = 0;
+    int64_t lake_prepared_seed_bytes_read_remote = 0;
     int64_t lake_prepared_seed_segment_init_ns = 0;
     int64_t lake_prepared_seed_vector_index_load_ns = 0;
     int64_t lake_prepared_seed_get_row_ranges_by_vector_index_ns = 0;
@@ -193,6 +200,19 @@ struct OlapReaderStatistics {
     int64_t lake_prepared_seed_zonemap_filtered_rows = 0;
     int64_t lake_prepared_seed_bf_ns = 0;
     int64_t lake_prepared_seed_bf_filtered_rows = 0;
+    // Time (ns) the first scan task of a tablet spends preparing it for the prepared split: opening every
+    // segment of every rowset (reading the footers that are not open yet) and building the initial coarse
+    // splits (loading the short key index of each segment when the scan has key ranges). The fields below
+    // break it down; the IO ones cover the footer and short key index reads.
+    int64_t lake_prepared_tablet_prepare_ns = 0;
+    int64_t lake_prepared_tablet_segment_open_ns = 0;
+    int64_t lake_prepared_tablet_segments = 0;
+    int64_t lake_prepared_tablet_segments_opened = 0;
+    int64_t lake_prepared_tablet_io_ns = 0;
+    int64_t lake_prepared_tablet_io_count = 0;
+    int64_t lake_prepared_tablet_io_remote_ns = 0;
+    int64_t lake_prepared_tablet_io_count_remote = 0;
+    int64_t lake_prepared_tablet_bytes_read_remote = 0;
     // ------ for lake tablet ------
 
     // ------ for json type, to count flat column ------

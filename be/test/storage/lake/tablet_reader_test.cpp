@@ -37,6 +37,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -1869,6 +1870,98 @@ TEST_F(LakeTabletReaderSpit, test_split_counts_reads_and_phy_segments) {
         EXPECT_EQ(kNumSegments * num_children, total.segments_read_count);
         EXPECT_EQ(0, total.phy_rowsets_count);
         EXPECT_EQ(kNumSegments, total.phy_segments_count);
+    }
+}
+
+// The prepared split reads the segment files before it scans: the tablet prepare opens every segment and
+// loads the short key indexes to build the coarse splits, and the seed resolves the key range on the key
+// columns. Those reads must reach the lake_prepared_tablet_* and lake_prepared_seed_* statistics.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_reports_prepare_reads) {
+    constexpr int64_t kNumSegments = 3;
+    write_two_rowsets_with_three_segments();
+    for (bool parallel_load : {false, true}) {
+        SCOPED_TRACE(parallel_load);
+        ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, parallel_load);
+        // Close what the writes left open, so that the first prepare has to read every footer.
+        _tablet_mgr->metacache()->prune();
+
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+        auto make_params = [&]() {
+            auto params = generate_tablet_reader_params(&scan_range);
+            params.enable_prepared_physical_split_scan = true;
+            // Keep the opened segments for the second prepare below.
+            params.lake_io_opts.fill_metadata_cache = true;
+            // Each seed must read its key pages even after the serial case populated the page cache.
+            params.lake_io_opts.use_page_cache = false;
+            // A key range makes the prepare load the short key indexes and the seed resolve the range.
+            params.range = TabletReaderParams::RangeStartOperation::GE;
+            params.end_range = TabletReaderParams::RangeEndOperation::LE;
+            params.start_key = {OlapTuple({"1"})};
+            params.end_key = {OlapTuple({"100"})};
+            return params;
+        };
+
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        {
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(make_params()));
+            const auto& stats = reader->stats();
+            EXPECT_GT(stats.lake_prepared_tablet_prepare_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_segment_open_ns, 0);
+            EXPECT_LE(stats.lake_prepared_tablet_segment_open_ns, stats.lake_prepared_tablet_prepare_ns);
+            EXPECT_EQ(kNumSegments, stats.lake_prepared_tablet_segments);
+            EXPECT_EQ(kNumSegments, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GT(stats.lake_prepared_tablet_io_ns, 0);
+            // The local file system has no remote reads to report.
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_count);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_remote_ns);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_count_remote);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_bytes_read_remote);
+            reader->get_split_tasks(&split_tasks);
+            reader->close();
+        }
+        ASSERT_FALSE(split_tasks.empty());
+
+        // The segments are open now: the next prepare finds every one of them and reads no footer.
+        {
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(make_params()));
+            EXPECT_EQ(kNumSegments, reader->stats().lake_prepared_tablet_segments);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_segments_opened);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_io_ns);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_io_count);
+            reader->close();
+        }
+
+        // The seed of the first segment resolves the key range by reading its key column.
+        auto* ctx = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+        ASSERT_EQ(pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE, ctx->rowid_range_source);
+        auto seed = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                   /*need_split=*/false, /*could_split_physically=*/true);
+        auto params = make_params();
+        params.rowid_range_option = ctx->rowid_range;
+        params.prepared_tablet_read_state = ctx->prepared_tablet_read_state;
+        params.prepared_segment_read_state = ctx->prepared_segment_read_state;
+        params.prepared_rowset_index = ctx->rowset_index;
+        params.prepared_segment_index = ctx->segment_index;
+        params.refine_initial_coarse_split_and_append_refined_tasks = true;
+        ASSERT_OK(seed->prepare());
+        ASSERT_OK(seed->open(params));
+        EXPECT_GT(seed->stats().lake_prepared_seed_ns, 0);
+        EXPECT_GT(seed->stats().lake_prepared_seed_io_ns, 0);
+        EXPECT_LE(seed->stats().lake_prepared_seed_io_ns, seed->stats().lake_prepared_seed_ns);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_io_remote_ns);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_io_count_remote);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_bytes_read_remote);
+        seed->close();
     }
 }
 

@@ -1438,12 +1438,35 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _lake_late_rf_reinit_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "LateRuntimeFilterReinit", TUnit::UNIT, prepared_split_name);
     _lake_prepared_seed_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedPrepareTime", prepared_split_name);
+    _lake_prepared_tablet_timer = ADD_CHILD_TIMER(_runtime_profile, "TabletPrepareTime", prepared_split_name);
     _lake_initial_coarse_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "InitialCoarseMorsels", TUnit::UNIT, prepared_split_name);
     _lake_refined_counter = ADD_CHILD_COUNTER(_runtime_profile, "RefinedMorsels", TUnit::UNIT, prepared_split_name);
     // Breakdown of SeedPrepareTime: where the seed's one-time per-segment prune spends its time / IO.
     _lake_seed_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedIOTime", "SeedPrepareTime");
     _lake_seed_io_count_counter = ADD_CHILD_COUNTER(_runtime_profile, "SeedIOCount", TUnit::UNIT, "SeedPrepareTime");
+    _lake_seed_io_remote_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedIOTimeRemote", "SeedPrepareTime");
+    _lake_seed_io_count_remote_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SeedIOCountRemote", TUnit::UNIT, "SeedPrepareTime");
+    _lake_seed_bytes_read_remote_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SeedBytesReadRemote", TUnit::BYTES, "SeedPrepareTime");
+    // Breakdown of TabletPrepareTime: opening the segments of every rowset and loading their short key indexes.
+    const std::string tablet_prepare_name = "TabletPrepareTime";
+    _lake_tablet_prepare_segment_open_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "TabletPrepareSegmentOpenTime", tablet_prepare_name);
+    _lake_tablet_prepare_segments_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareSegments", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_segments_opened_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareSegmentsOpened", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_io_timer = ADD_CHILD_TIMER(_runtime_profile, "TabletPrepareIOTime", tablet_prepare_name);
+    _lake_tablet_prepare_io_count_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCount", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_io_remote_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "TabletPrepareIOTimeRemote", tablet_prepare_name);
+    _lake_tablet_prepare_io_count_remote_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareIOCountRemote", TUnit::UNIT, tablet_prepare_name);
+    _lake_tablet_prepare_bytes_read_remote_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "TabletPrepareBytesReadRemote", TUnit::BYTES, tablet_prepare_name);
     _lake_seed_segment_init_timer = ADD_CHILD_TIMER(_runtime_profile, "SeedSegmentInitTime", "SeedPrepareTime");
 
     const std::string seed_vector_index_name = "SeedVectorIndex";
@@ -1609,8 +1632,21 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, _reader->stats().lake_reusable_segment_iter_created);
     COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, _reader->stats().lake_reusable_segment_iter_reused);
     COUNTER_UPDATE(_lake_prepared_seed_timer, _reader->stats().lake_prepared_seed_ns);
+    COUNTER_UPDATE(_lake_prepared_tablet_timer, _reader->stats().lake_prepared_tablet_prepare_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_segment_open_timer, _reader->stats().lake_prepared_tablet_segment_open_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_segments_counter, _reader->stats().lake_prepared_tablet_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_segments_opened_counter, _reader->stats().lake_prepared_tablet_segments_opened);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_timer, _reader->stats().lake_prepared_tablet_io_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_count_counter, _reader->stats().lake_prepared_tablet_io_count);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, _reader->stats().lake_prepared_tablet_io_remote_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, _reader->stats().lake_prepared_tablet_io_count_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter,
+                   _reader->stats().lake_prepared_tablet_bytes_read_remote);
     COUNTER_UPDATE(_lake_seed_io_timer, _reader->stats().lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, _reader->stats().lake_prepared_seed_io_count);
+    COUNTER_UPDATE(_lake_seed_io_remote_timer, _reader->stats().lake_prepared_seed_io_remote_ns);
+    COUNTER_UPDATE(_lake_seed_io_count_remote_counter, _reader->stats().lake_prepared_seed_io_count_remote);
+    COUNTER_UPDATE(_lake_seed_bytes_read_remote_counter, _reader->stats().lake_prepared_seed_bytes_read_remote);
     COUNTER_UPDATE(_lake_seed_segment_init_timer, _reader->stats().lake_prepared_seed_segment_init_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_timer,
                    _reader->stats().lake_prepared_seed_vector_index_load_ns +

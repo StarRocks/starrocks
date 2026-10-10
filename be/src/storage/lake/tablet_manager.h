@@ -39,6 +39,7 @@
 
 namespace starrocks {
 struct FileInfo;
+struct OlapReaderStatistics;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -407,12 +408,14 @@ public:
     // meantime is not charged with this segment's memory cost.
     void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
+    // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                      TabletSchemaPtr tablet_schema);
+                                      TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats = nullptr);
     // for load segment parallel
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
-                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema);
+                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema,
+                                      OlapReaderStatistics* stats = nullptr);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
