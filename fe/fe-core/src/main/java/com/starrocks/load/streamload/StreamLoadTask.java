@@ -983,16 +983,12 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-<<<<<<< HEAD
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
-=======
-                    String msg = status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg();
+                    String msg = ERR_NO_ROWS_IMPORTED.formatErrorMsg();
                     // Point to the rejected rows, as the error of a load over the max filter ratio does.
                     if (!Strings.isNullOrEmpty(trackingUrl)) {
                         msg += ", tracking_url: " + trackingUrl;
                     }
                     throw new LoadException(msg);
->>>>>>> e95a5fb ([BugFix] Fix error reporting of failed multi-table transaction stream load commits (#80351))
                 }
 
                 if (coord.isEnableLoadProfile()) {
