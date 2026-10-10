@@ -46,7 +46,6 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -459,9 +458,9 @@ public class LocalMetaStoreTest {
         AtomicInteger dropRecords = new AtomicInteger();
         new MockUp<EditLog>() {
             @Mock
-            public void logDropTable(Invocation invocation, DropInfo info, WALApplier walApplier) {
+            public void logDropTable(Invocation invocation, DropInfo info) {
                 dropRecords.incrementAndGet();
-                invocation.proceed(info, walApplier);
+                invocation.proceed(info);
             }
         };
 
@@ -494,7 +493,7 @@ public class LocalMetaStoreTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logDropTable(DropInfo info, WALApplier walApplier) {
+            public void logDropTable(DropInfo info) {
                 throw new IllegalStateException("journal is unavailable");
             }
         };
