@@ -666,6 +666,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### enable_delta_lake_cached_statistics
+
+* **Description**: Uses cached snapshot row counts for Delta Lake optimizer statistics instead of eagerly enumerating files. Disabled by default. Collected internal statistics retain priority, and explicitly enabling `enable_delta_lake_column_statistics` retains full metadata statistics collection. On a cache miss, the optimizer uses `default_statistics_output_row_count` with unknown column statistics; this can change join and aggregation plans, so validate representative queries before enabling it. Cached counts are estimates based on file metadata and can include rows hidden by deletion vectors. They do not limit execution or provide exact `COUNT(*)` results.
+* **Default**: false
+* **Data type**: Boolean
+
+The cache is local to each FE catalog, holds at most 1,000 snapshot summaries, and expires entries after one hour without access. Entries are isolated by table location, Delta table ID, and snapshot version. Only complete, unfiltered file enumeration populates the cache; filtered, canceled, failed, and partially consumed scans do not publish summaries. An unfiltered query with this setting disabled can warm the cache. Cache misses do not start background statistics collection.
+
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
