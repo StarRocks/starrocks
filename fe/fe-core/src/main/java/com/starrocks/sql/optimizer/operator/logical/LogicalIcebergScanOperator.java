@@ -169,6 +169,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates.clone();
+            builder.fromEqDeleteRewriteRule = scanOperator.fromEqDeleteRewriteRule;
             builder.morParam = scanOperator.morParam;
             builder.tableFullMORParams = scanOperator.tableFullMORParams;
             return this;
