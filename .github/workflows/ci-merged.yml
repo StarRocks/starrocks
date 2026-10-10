@@ -262,7 +262,11 @@ jobs:
           gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
 
       - name: add version label
-        if: always()
+        # Skip when the version could not be computed (get_next_release_tag.sh exits
+        # non-zero instead of emitting a <branch>.0 fallback): prepare_version_label
+        # then fails with an empty LABEL, and posting labels[]= would 422. Skip cleanly
+        # and let the failed prepare step signal a re-run.
+        if: always() && steps.prepare_version_label.outputs.LABEL != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
@@ -296,7 +300,11 @@ jobs:
           gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
 
       - name: add version label
-        if: always()
+        # Skip when the version could not be computed (get_next_release_tag.sh exits
+        # non-zero instead of emitting a <branch>.0 fallback): prepare_version_label
+        # then fails with an empty LABEL, and posting labels[]= would 422. Skip cleanly
+        # and let the failed prepare step signal a re-run.
+        if: always() && steps.prepare_version_label.outputs.LABEL != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
