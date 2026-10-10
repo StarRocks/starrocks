@@ -133,6 +133,107 @@ public class CompactionSchedulerTest {
     }
 
     @Test
+    public void testCompactionAllowlist() {
+        CompactionScheduler scheduler = new CompactionScheduler(new CompactionMgr(), systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+        PartitionIdentifier first = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier sameTable = new PartitionIdentifier(1, 2, 4);
+        PartitionIdentifier otherTable = new PartitionIdentifier(1, 5, 6);
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("NORMAL", "");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("NORMAL", "bad-id");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("ALLOWLIST", " 2; 5;2 ");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        Assertions.assertTrue(scheduler.isCompactionAllowed(sameTable));
+        Assertions.assertTrue(scheduler.isCompactionAllowed(otherTable));
+        // Physical partition IDs must not grant permission, including for manual compaction.
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "3;6");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        Assertions.assertFalse(scheduler.isCompactionAllowed(sameTable));
+        Assertions.assertFalse(scheduler.isCompactionAllowed(otherTable));
+
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "2");
+        scheduler.disableTableOrPartitionId("2");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        scheduler.disableTableOrPartitionId("3");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        Assertions.assertTrue(scheduler.isCompactionAllowed(sameTable));
+        scheduler.updateCompactionAllowlist("NORMAL", "");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        Assertions.assertTrue(scheduler.isCompactionAllowed(otherTable));
+
+        scheduler.disableTableOrPartitionId("");
+        for (String invalid : List.of("*", "2;x", "2;", "2;;3", "*;2", "-1", "0", "9223372036854775808")) {
+            scheduler.updateCompactionAllowlist("NORMAL", invalid);
+            Assertions.assertTrue(scheduler.isCompactionAllowed(first), invalid);
+            scheduler.updateCompactionAllowlist("ALLOWLIST", invalid);
+            Assertions.assertFalse(scheduler.isCompactionAllowed(first), invalid);
+            scheduler.updateCompactionAllowlist("ALLOWLIST", invalid);
+            Assertions.assertFalse(scheduler.isCompactionAllowed(first), invalid);
+        }
+        scheduler.updateCompactionAllowlist("invalid-mode", "2");
+        Assertions.assertFalse(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "2");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "2");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+        // A table entry covers newly created physical partitions as well.
+        Assertions.assertTrue(scheduler.isCompactionAllowed(new PartitionIdentifier(1, 2, 100)));
+
+        // A candidate selected before removal must be checked again at dispatch.
+        scheduler.updateCompactionAllowlist("ALLOWLIST", "");
+        PartitionStatistics statistics = new PartitionStatistics(first);
+        statistics.setCompactionScore(new Quantiles(10, 10, 10));
+        Assertions.assertNull(scheduler.startCompaction(statistics.getSnapshot(), null));
+        scheduler.updateCompactionAllowlist("NORMAL", "");
+        Assertions.assertTrue(scheduler.isCompactionAllowed(first));
+    }
+
+    @Test
+    public void testCompactionAllowlistAtStartup() {
+        String savedMode = Config.lake_compaction_mode;
+        String savedIds = Config.lake_compaction_allow_table_ids;
+        try {
+            Config.lake_compaction_allow_table_ids = "bad-id";
+            Config.lake_compaction_mode = "NORMAL";
+            CompactionScheduler normal = new CompactionScheduler(new CompactionMgr(), systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+            Assertions.assertTrue(normal.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
+            Config.lake_compaction_mode = "ALLOWLIST";
+            CompactionScheduler invalid = new CompactionScheduler(new CompactionMgr(), systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+            Assertions.assertFalse(invalid.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
+            Config.lake_compaction_allow_table_ids = "2";
+            CompactionScheduler allowlist = new CompactionScheduler(new CompactionMgr(), systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+            Assertions.assertTrue(allowlist.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
+            Assertions.assertFalse(allowlist.isCompactionAllowed(new PartitionIdentifier(1, 5, 6)));
+        } finally {
+            Config.lake_compaction_mode = savedMode;
+            Config.lake_compaction_allow_table_ids = savedIds;
+        }
+    }
+
+    @Test
+    public void testAllowlistDoesNotOverrideTaskLimit() {
+        int saved = Config.lake_compaction_max_tasks;
+        try {
+            Config.lake_compaction_max_tasks = 0;
+            CompactionScheduler scheduler = new CompactionScheduler(new CompactionMgr(), systemInfoService,
+                    globalTransactionMgr, globalStateMgr, "");
+            scheduler.updateCompactionAllowlist("ALLOWLIST", "2");
+            Assertions.assertTrue(scheduler.isCompactionAllowed(new PartitionIdentifier(1, 2, 3)));
+            Assertions.assertEquals(0, scheduler.compactionTaskLimit(WarehouseManager.DEFAULT_RESOURCE));
+        } finally {
+            Config.lake_compaction_max_tasks = saved;
+        }
+    }
+
+    @Test
     public void testStartCompaction() {
         OlapTable table = new LakeTable();
         CompactionMgr compactionManager = new CompactionMgr();

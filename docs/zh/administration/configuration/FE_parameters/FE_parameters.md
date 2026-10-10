@@ -47,6 +47,10 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 参数组
 
+存算分离 Compaction 的表级调度控制，参见
+[`lake_compaction_mode` 和 `lake_compaction_allow_table_ids`](./shared_lake_other.md#lake_compaction_mode)。
+默认 `NORMAL` 模式保持现有行为；显式选择 `ALLOWLIST` 后才限制允许调度的表。
+
 参数分为以下几类：
 
 - [日志](./log_server_meta.md)
