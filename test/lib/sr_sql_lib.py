@@ -155,6 +155,24 @@ def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name
     return actual is not None and str(actual) == name
 
 
+# `install plugin from "http..."` downloads the plugin from an external URL. When that URL cannot be
+# reached the failure says nothing about StarRocks, so the case is skipped instead of failed.
+INSTALL_PLUGIN_URL_RE = re.compile(r'^\s*install\s+plugin\s+from\s+"(https?://([^/":]+)[^"]*)"', re.IGNORECASE)
+NETWORK_ERROR_RE = re.compile(r"timed out|Connection refused|Connection reset|No route to host", re.IGNORECASE)
+
+
+def skip_if_plugin_download_failed(sql, act):
+    """Raise SkipTest if `sql` installs a plugin from a URL and `act` is a network error reaching it."""
+    m = INSTALL_PLUGIN_URL_RE.match(sql)
+    if not m or not str(act).startswith("E: "):
+        return
+    url, host = m.group(1), m.group(2)
+    # UnknownHostException carries only the host name as its message
+    if NETWORK_ERROR_RE.search(str(act)) or host in str(act):
+        log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
+        raise SkipTest("plugin download failed (network): %s" % act)
+
+
 class Filter(logging.Filter):
     """
     Msg filters by log levels
@@ -1492,6 +1510,7 @@ class StarrocksSQLApiLib(object):
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
+        skip_if_plugin_download_failed(sql, act)
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
