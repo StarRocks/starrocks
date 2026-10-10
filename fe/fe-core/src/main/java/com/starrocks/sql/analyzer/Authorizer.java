@@ -157,8 +157,9 @@ public class Authorizer {
         if (isInsertIntoSomethingThatIsNotATable(context, tableName, privilegeType, resolvedTable)) {
             return;
         }
-        getInstance().getAccessControlOrDefault(tableName.getCatalog())
-                .checkTableAction(context, tableName, privilegeType);
+        // TableName may normalize the catalog; controller registration uses the connector's catalog name.
+        String catalog = resolvedTable == null ? tableName.getCatalog() : resolvedTable.getCatalogName();
+        getInstance().getAccessControlOrDefault(catalog).checkTableAction(context, tableName, privilegeType);
     }
 
     /**
@@ -266,7 +267,8 @@ public class Authorizer {
                 if (privilegeType == null) {
                     checkAnyActionOnTable(context, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
-                    checkTableAction(context, dbName, tbl.getName(), privilegeType);
+                    checkResolvedTableAction(context, new TableName(tbl.getCatalogName(), dbName, tbl.getName()),
+                            tbl instanceof Table table ? table : null, privilegeType);
                 }
                 break;
             case MATERIALIZED_VIEW:
