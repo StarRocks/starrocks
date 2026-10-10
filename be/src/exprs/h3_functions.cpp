@@ -19,6 +19,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -30,6 +31,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/coding.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -549,20 +551,25 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
     }
     ColumnViewer<TYPE_BIGINT> input(columns[0]);
     const bool constant = columns[0]->is_constant();
-    auto result = NullableColumn::create(GeoColumn::create(std::move(descriptor)), NullColumn::create());
-    result->reserve(constant ? 1 : size);
-    // H3 boundaries have at most MAX_CELL_BNDRY_VERTS vertices. Reuse bounded
-    // scratch buffers while keeping the normal WKB coordinate validation.
-    WkbGeometry polygon;
-    polygon.type = WkbGeometryType::POLYGON;
-    auto& ring = polygon.rings.emplace_back();
-    ring.reserve(MAX_CELL_BNDRY_VERTS + 1);
-    std::string wkb;
-    wkb.reserve(sizeof(uint8_t) + 3 * sizeof(uint32_t) + (MAX_CELL_BNDRY_VERTS + 1) * 2 * sizeof(double));
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    const size_t rows = constant ? 1 : size;
+    auto data = GeoColumn::create(std::move(descriptor));
+    auto nulls = NullColumn::create();
+    data->reserve(rows);
+    auto& null_data = nulls->get_data();
+    null_data.resize(rows, 0);
+    // H3 emits one bounded ring. Encode canonical little-endian WKB directly,
+    // retaining WkbCodec's coordinate checks and the exact degree conversion.
+    constexpr size_t kHeaderSize = sizeof(uint8_t) + 3 * sizeof(uint32_t);
+    constexpr size_t kCoordinateSize = 2 * sizeof(double);
+    std::array<uint8_t, kHeaderSize + (MAX_CELL_BNDRY_VERTS + 1) * kCoordinateSize> wkb;
+    wkb[0] = 1;
+    encode_fixed32_le(wkb.data() + 1, static_cast<uint32_t>(WkbGeometryType::POLYGON));
+    encode_fixed32_le(wkb.data() + 1 + sizeof(uint32_t), 1);
+    for (size_t row = 0; row < rows; ++row) {
         if ((row & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
         if (input.is_null(row)) {
-            result->append_nulls(1);
+            data->append_default();
+            null_data[row] = 1;
             continue;
         }
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
@@ -572,14 +579,47 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
         if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
             return Status::InternalError("H3_ToBoundary returned invalid vertex count");
         }
-        ring.clear();
+        encode_fixed32_le(wkb.data() + 1 + 2 * sizeof(uint32_t), boundary.numVerts + 1);
+        bool valid_coordinates = true;
         for (int i = 0; i < boundary.numVerts; ++i) {
-            ring.push_back({boundary.verts[i].lng * kDegreesPerRadian, boundary.verts[i].lat * kDegreesPerRadian});
+            const double x = boundary.verts[i].lng * kDegreesPerRadian;
+            const double y = boundary.verts[i].lat * kDegreesPerRadian;
+            if (!std::isfinite(x) || !std::isfinite(y) || x < -180 || x > 180 || y < -90 || y > 90) {
+                valid_coordinates = false;
+                break;
+            }
+            uint64_t x_bits;
+            uint64_t y_bits;
+            std::memcpy(&x_bits, &x, sizeof(x));
+            std::memcpy(&y_bits, &y, sizeof(y));
+            auto* coordinate = wkb.data() + kHeaderSize + i * kCoordinateSize;
+            encode_fixed64_le(coordinate, x_bits);
+            encode_fixed64_le(coordinate + sizeof(double), y_bits);
         }
-        ring.push_back(ring.front());
-        RETURN_IF_ERROR(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
-        result->append_datum(Datum(Slice(wkb)));
+        if (!valid_coordinates) {
+            // The generic validator determines error precedence, including a
+            // NaN first vertex failing the ring-closure check before finiteness.
+            WkbGeometry polygon;
+            polygon.type = WkbGeometryType::POLYGON;
+            auto& ring = polygon.rings.emplace_back();
+            ring.reserve(boundary.numVerts + 1);
+            for (int i = 0; i < boundary.numVerts; ++i) {
+                ring.push_back({boundary.verts[i].lng * kDegreesPerRadian, boundary.verts[i].lat * kDegreesPerRadian});
+            }
+            ring.push_back(ring.front());
+            std::string fallback;
+            RETURN_IF_ERROR(WkbCodec::to_wkb(polygon, &fallback, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
+            data->append_wkb(Slice(fallback));
+        } else {
+            // Copy the already encoded first coordinate to close the ring,
+            // preserving its exact floating-point bits, including signed zero.
+            std::memcpy(wkb.data() + kHeaderSize + boundary.numVerts * kCoordinateSize, wkb.data() + kHeaderSize,
+                        kCoordinateSize);
+            data->append_wkb(Slice(reinterpret_cast<const char*>(wkb.data()),
+                                   kHeaderSize + (boundary.numVerts + 1) * kCoordinateSize));
+        }
     }
+    auto result = NullableColumn::create(std::move(data), std::move(nulls));
     RETURN_IF_ERROR(h3_checkpoint(context));
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;

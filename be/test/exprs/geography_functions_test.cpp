@@ -2382,6 +2382,131 @@ TEST_F(geographyFunctionsTest, h3BoundaryBuffersRetainCancellationAndQueryErrors
     }
 }
 
+TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbMatchesTopologyCorpus) {
+    std::array<H3Index, 122> base_cells{};
+    ASSERT_EQ(E_SUCCESS, getRes0Cells(base_cells.data()));
+    std::vector<H3Index> origins(base_cells.begin(), base_cells.end());
+    for (H3Index cell : base_cells) {
+        int64_t count = 0;
+        ASSERT_EQ(E_SUCCESS, cellToChildrenSize(cell, 1, &count));
+        std::vector<H3Index> children(count, H3_NULL);
+        ASSERT_EQ(E_SUCCESS, cellToChildren(cell, 1, children.data()));
+        origins.insert(origins.end(), children.begin(), children.end());
+    }
+    for (int resolution = 0; resolution <= 15; ++resolution) {
+        std::array<H3Index, 12> pentagons{};
+        ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+        for (H3Index pentagon : pentagons) {
+            std::array<H3Index, 7> disk{};
+            ASSERT_EQ(E_SUCCESS, gridDisk(pentagon, 1, disk.data()));
+            for (H3Index cell : disk) {
+                if (cell != H3_NULL) origins.push_back(cell);
+            }
+        }
+    }
+    std::sort(origins.begin(), origins.end());
+    origins.erase(std::unique(origins.begin(), origins.end()), origins.end());
+    ASSERT_EQ(1972, origins.size());
+    // Force maximum/shorter/maximum payload transitions before the exhaustive corpus.
+    constexpr H3Index max_boundary_cell = 0x8f0800000000000ULL;
+    origins.insert(origins.begin(), {max_boundary_cell, 0x8e0800000000007ULL, max_boundary_cell, 0x81023ffffffffffULL,
+                                     0x8e0800000000017ULL, max_boundary_cell});
+    std::vector<std::string> expected;
+    std::array<bool, MAX_CELL_BNDRY_VERTS + 1> observed_vertices{};
+    for (H3Index cell : origins) {
+        CellBoundary boundary{};
+        ASSERT_EQ(E_SUCCESS, cellToBoundary(cell, &boundary));
+        ASSERT_GE(boundary.numVerts, 3);
+        ASSERT_LE(boundary.numVerts, MAX_CELL_BNDRY_VERTS);
+        observed_vertices[boundary.numVerts] = true;
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        auto& ring = polygon.rings.emplace_back();
+        constexpr double degrees_per_radian = 1.0 / 0.017453292519943295769236907684886;
+        for (int i = 0; i < boundary.numVerts; ++i) {
+            ring.push_back({boundary.verts[i].lng * degrees_per_radian, boundary.verts[i].lat * degrees_per_radian});
+        }
+        ring.push_back(ring.front());
+        expected.emplace_back();
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &expected.back(), WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        ASSERT_EQ(13 + 16 * (boundary.numVerts + 1), expected.back().size());
+    }
+    for (int vertices : {5, 6, 7, 8, 10}) EXPECT_TRUE(observed_vertices[vertices]);
+    ASSERT_EQ(189, expected.front().size());
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    // Cover ordinary, all-valid nullable, and nullable input with invalid hidden payloads.
+    for (int mode : {0, 1, 2}) {
+        auto cells = Int64Column::create();
+        auto nulls = NullColumn::create();
+        for (size_t row = 0; row < origins.size(); ++row) {
+            const bool is_null = mode == 2 && row % 17 == 0;
+            cells->append(is_null ? 0 : static_cast<int64_t>(origins[row]));
+            nulls->append(is_null);
+        }
+        ColumnPtr input = cells;
+        if (mode != 0) input = NullableColumn::create(cells, nulls);
+        auto actual = GeoFunctions::h3_to_boundary(context.get(), {input});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ASSERT_EQ(origins.size(), (*actual)->size());
+        const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(actual->get()));
+        EXPECT_EQ(geography_type().geo_type.value(), geo->descriptor().type);
+        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
+        EXPECT_EQ(GEO_DIMENSION_XY, geo->descriptor().storage.dimension);
+        EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, geo->descriptor().storage.validation_state);
+        for (size_t row = 0; row < origins.size(); ++row) {
+            SCOPED_TRACE(row);
+            const bool is_null = mode == 2 && row % 17 == 0;
+            ASSERT_EQ(is_null, (*actual)->is_null(row));
+            if (is_null) continue;
+            const Slice wkb = geo->get_wkb(row);
+            ASSERT_EQ(Slice(expected[row]), wkb);
+            EXPECT_EQ(1, static_cast<unsigned char>(wkb.data[0]));
+            EXPECT_EQ(Slice(wkb.data + 13, 16), Slice(wkb.data + wkb.size - 16, 16));
+        }
+    }
+    auto constant = GeoFunctions::h3_to_boundary(
+            context.get(), {ColumnHelper::create_const_column<TYPE_BIGINT>(max_boundary_cell, 3073)});
+    ASSERT_TRUE(constant.ok()) << constant.status();
+    ASSERT_TRUE((*constant)->is_constant());
+    ASSERT_EQ(3073, (*constant)->size());
+    const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant->get()));
+    EXPECT_EQ(Slice(expected.front()), geo->get_wkb(0));
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbRetainsDescriptorAndNullPrecedence) {
+    auto invalid_cell = ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1);
+    auto missing_context = GeoFunctions::h3_to_boundary(nullptr, {invalid_cell});
+    ASSERT_FALSE(missing_context.ok());
+    EXPECT_TRUE(missing_context.status().is_not_supported());
+    EXPECT_EQ("H3_ToBoundary requires GEOGRAPHY return descriptor", missing_context.status().message());
+    for (int variant = 0; variant < 6; ++variant) {
+        auto type = geography_type();
+        if (variant == 0) type = TypeDescriptor(TYPE_BIGINT);
+        if (variant == 1) type.geo_type.reset();
+        if (variant == 2) type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+        if (variant == 3) type.geo_type->coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
+        if (variant == 4) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
+        if (variant == 5) type.geo_type->crs = "EPSG:4326";
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, type));
+        auto actual = GeoFunctions::h3_to_boundary(context.get(), {invalid_cell});
+        ASSERT_FALSE(actual.ok());
+        EXPECT_TRUE(actual.status().is_not_supported());
+        EXPECT_EQ(variant < 2 ? "H3_ToBoundary requires GEOGRAPHY return descriptor"
+                              : "H3_ToBoundary requires CRS84 spherical GEOGRAPHY result",
+                  actual.status().message());
+        auto nulls = GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_null_column(17)});
+        ASSERT_TRUE(nulls.ok());
+        EXPECT_TRUE((*nulls)->only_null());
+        EXPECT_EQ(17, (*nulls)->size());
+    }
+    auto nulls = GeoFunctions::h3_to_boundary(nullptr, {ColumnHelper::create_const_null_column(17)});
+    ASSERT_TRUE(nulls.ok());
+    EXPECT_TRUE((*nulls)->only_null());
+    EXPECT_EQ(17, (*nulls)->size());
+}
+
 TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
     constexpr int64_t cell_value = 0x83754efffffffffLL;
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);

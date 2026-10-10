@@ -139,6 +139,72 @@ TEST(WkbCodecTest, AcceptsBothByteOrdersAndWritesCanonicalLittleEndian) {
     }
 }
 
+TEST(WkbCodecTest, CanonicalWriterPreservesFiniteDoubleBits) {
+    const std::vector<std::pair<std::string, std::string>> cases = {
+            // Signed zero and the smallest positive/negative subnormal values.
+            {"010100000000000000000000800000000000000000", "010100000000000000000000800000000000000000"},
+            {"000000000100000000000000018000000000000001", "010100000001000000000000000100000000000080"},
+            // The largest finite Cartesian coordinates must not be rounded or narrowed.
+            {"00000000017fefffffffffffffffefffffffffffff", "0101000000ffffffffffffef7fffffffffffffefff"},
+    };
+    for (const auto& [input_hex, expected_hex] : cases) {
+        const auto input = from_hex(input_hex);
+        WkbGeometry geometry;
+        const auto status = WkbCodec::parse_wkb(Slice(input), &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
+        ASSERT_TRUE(status.ok()) << status.to_string();
+
+        std::string canonical;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &canonical, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+        EXPECT_EQ(from_hex(expected_hex), canonical);
+    }
+}
+
+TEST(WkbCodecTest, CanonicalWriterNormalizesEmptyPointNanPayloads) {
+    const std::string expected = from_hex("0101000000000000000000f87f000000000000f87f");
+    const std::vector<std::string> inputs = {
+            "0101000000010000000000f87f020000000000f8ff", // Signed quiet NaNs with payloads.
+            "0101000000010000000000f07f010000000000f0ff", // Signed signaling NaNs.
+            "00000000017ff8000000000001fff8000000000002", // Big-endian quiet NaNs.
+            "00000000017ff0000000000001fff0000000000001", // Big-endian signaling NaNs.
+    };
+    for (const auto& input_hex : inputs) {
+        const auto input = from_hex(input_hex);
+        WkbGeometry geometry;
+        ASSERT_TRUE(WkbCodec::parse_wkb(Slice(input), &geometry).ok());
+        ASSERT_TRUE(geometry.empty);
+        std::string canonical;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &canonical).ok());
+        EXPECT_EQ(expected, canonical);
+    }
+}
+
+TEST(WkbCodecTest, CanonicalWriterPreservesMultiByteCounts) {
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    polygon.rings.emplace_back(257, WkbCoordinate{1.0, -2.0});
+    std::string expected = from_hex("01030000000100000001010000");
+    const std::string point = from_hex("000000000000f03f00000000000000c0");
+    for (size_t i = 0; i < 257; ++i) {
+        expected.append(point);
+    }
+    std::string canonical;
+    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &canonical).ok());
+    EXPECT_EQ(expected, canonical);
+
+    WkbGeometry empty_point;
+    empty_point.empty = true;
+    WkbGeometry collection;
+    collection.type = WkbGeometryType::GEOMETRYCOLLECTION;
+    collection.children.assign(256, empty_point);
+    expected = from_hex("010700000000010000");
+    const std::string empty = from_hex("0101000000000000000000f87f000000000000f87f");
+    for (size_t i = 0; i < 256; ++i) {
+        expected.append(empty);
+    }
+    ASSERT_TRUE(WkbCodec::to_wkb(collection, &canonical).ok());
+    EXPECT_EQ(expected, canonical);
+}
+
 TEST(WkbCodecTest, SupportsEmptyChildrenInMultiGeometries) {
     const std::vector<std::string> cases = {
             "MULTIPOINT (EMPTY, (1 2))",
