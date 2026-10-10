@@ -321,6 +321,77 @@ TabletReader::~TabletReader() {
     close();
 }
 
+const OlapReaderStatistics& TabletReader::stats() const {
+    if (_parallel_rowset_stats.empty()) {
+        return _stats;
+    }
+    _combined_stats = _stats;
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        _combined_stats.merge_from(*rowset_stats);
+    }
+    return _combined_stats;
+}
+
+const OlapReaderStatistics& TabletReader::compaction_stats() const {
+    if (_parallel_rowset_stats.empty()) {
+        return _stats;
+    }
+    // Compaction refreshes progress and task statistics for every chunk. Its collector reads only
+    // these scalar fields, so avoid rebuilding the complete profile and JSON hit maps here.
+    _compaction_stats = OlapReaderStatistics{};
+    auto add_counters = [this](const OlapReaderStatistics& from) {
+        _compaction_stats.create_segment_iter_ns += from.create_segment_iter_ns;
+        _compaction_stats.decompress_ns += from.decompress_ns;
+        _compaction_stats.block_load_ns += from.block_load_ns;
+        _compaction_stats.block_fetch_ns += from.block_fetch_ns;
+        _compaction_stats.block_seek_ns += from.block_seek_ns;
+        _compaction_stats.block_seek_num += from.block_seek_num;
+        _compaction_stats.decode_dict_ns += from.decode_dict_ns;
+        _compaction_stats.get_rowsets_ns += from.get_rowsets_ns;
+        _compaction_stats.get_delvec_ns += from.get_delvec_ns;
+        _compaction_stats.get_delta_column_group_ns += from.get_delta_column_group_ns;
+        _compaction_stats.del_filter_ns += from.del_filter_ns;
+        _compaction_stats.blocks_load += from.blocks_load;
+        _compaction_stats.raw_rows_read += from.raw_rows_read;
+        _compaction_stats.compressed_bytes_read += from.compressed_bytes_read;
+        _compaction_stats.uncompressed_bytes_read += from.uncompressed_bytes_read;
+        _compaction_stats.io_ns_remote += from.io_ns_remote;
+        _compaction_stats.io_ns_read_local_disk += from.io_ns_read_local_disk;
+        _compaction_stats.compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+        _compaction_stats.compressed_bytes_read_local_disk += from.compressed_bytes_read_local_disk;
+        _compaction_stats.segment_init_ns += from.segment_init_ns;
+        _compaction_stats.column_iterator_init_ns += from.column_iterator_init_ns;
+        _compaction_stats.io_count_local_disk += from.io_count_local_disk;
+        _compaction_stats.io_count_remote += from.io_count_remote;
+    };
+    add_counters(_stats);
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        add_counters(*rowset_stats);
+    }
+    return _compaction_stats;
+}
+
+TabletReader::RealtimeStats TabletReader::realtime_stats() const {
+    RealtimeStats result{_stats.raw_rows_read, _stats.bytes_read, _stats.decompress_ns, _stats.vec_cond_ns,
+                         _stats.del_filter_ns};
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        result.raw_rows_read += rowset_stats->raw_rows_read;
+        result.bytes_read += rowset_stats->bytes_read;
+        result.decompress_ns += rowset_stats->decompress_ns;
+        result.vec_cond_ns += rowset_stats->vec_cond_ns;
+        result.del_filter_ns += rowset_stats->del_filter_ns;
+    }
+    return result;
+}
+
+void TabletReader::reset_stats() {
+    _stats = OlapReaderStatistics{};
+    // Reusable readers may still hold iterators with these pointers until the next open().
+    for (auto& rowset_stats : _parallel_rowset_stats) {
+        *rowset_stats = OlapReaderStatistics{};
+    }
+}
+
 Status TabletReader::prepare() {
     if (_tablet_schema == nullptr) {
         _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
@@ -352,6 +423,13 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         _collect_iter->close();
         _collect_iter.reset();
     }
+    // Keep totals across reopens, including vertical compaction's column-group passes.
+    // release_for_reuse() resets both the base and private statistics after reporting them.
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        _stats.merge_from(*rowset_stats);
+    }
+    // The old iterators no longer refer to their task-local statistics.
+    _parallel_rowset_stats.clear();
 
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
@@ -994,24 +1072,32 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         _stats.rowsets_read_count++;
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+            _parallel_rowset_stats.emplace_back(std::make_unique<OlapReaderStatistics>());
+            RowsetReadOptions rowset_opts = rs_opts;
+            rowset_opts.stats = _parallel_rowset_stats.back().get();
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [&, rowset, rowset_opts]() {
 #ifdef BE_TEST
-                Status injected_st;
-                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                if (!injected_st.ok()) {
-                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                }
+                        Status injected_st;
+                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                        if (!injected_st.ok()) {
+                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                        }
 #endif
-                return enhance_error_prompt(rowset->read(schema(), rs_opts));
-            });
+                        return enhance_error_prompt(rowset->read(schema(), rowset_opts));
+                    });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
-                !st.ok()) {
-                // try load rowset serially if sumbit_func failed
-                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+            Status submit_st;
+            TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::submit", &submit_st);
+            if (submit_st.ok()) {
+                submit_st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            }
+            if (!submit_st.ok()) {
+                // Try this rowset serially if submission failed; other rowsets may still be running.
+                LOG(WARNING) << "submit_func failed: " << submit_st.code_as_string()
                              << ", try to load rowset serially, rowset_id: " << rowset->id();
-                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rowset_opts)));
                 iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
             } else {
                 futures.push_back(task->get_future());
