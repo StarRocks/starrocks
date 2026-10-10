@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <functional>
+#include <memory>
+#include <mutex>
+#include <vector>
 
 #include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset_update_state.h"
@@ -50,6 +54,18 @@ private:
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
                                        StreamChunkContainer container, int32_t condition_idx_in_partial_schema);
+    // The update files' columns for the column batch being processed, read once and shared by every
+    // source segment task of the batch. One update file usually carries rows of nearly every source
+    // segment (keys are hash distributed) and the source segments are processed independently, so
+    // without this every source segment re-read every update file it touched: O(source segments x
+    // update files) reads of the same data, most of a column-mode publish's time on fragmented tablets.
+    void _prepare_upt_chunk_cache();
+    void _release_upt_chunk_cache();
+    // The chunk of update file `upt_id`, or nullptr for a lost update-file segment. `*cached` tells
+    // whether the chunk is kept in the cache (its memory is released with the cache) or was read just
+    // for this call (the caller releases it). Safe to call from several segment tasks at once: the
+    // first caller reads the file, the others wait for it and share the result.
+    StatusOr<ChunkPtr> _get_upt_chunk(uint32_t upt_id, const Schema& partial_schema, bool* cached);
     Status _read_from_source_segment_and_update(const RowsetUpdateStateParams& params, const Schema& schema,
                                                 uint32_t rssid,
                                                 const std::function<Status(StreamChunkContainer)>& update_func);
@@ -80,6 +96,23 @@ private:
     // Only a SPLIT child's cross publish builds one. Outlives the SegmentPKIterators that reference it.
     CrossPublishRowSelectorPtr _row_selector;
     int64_t _upt_memory_usage_per_row = 0;
+
+    struct UptChunkCache {
+        struct Entry {
+            std::mutex mu;
+            std::condition_variable cv;
+            // A task is reading this file; others wait instead of reading it too.
+            bool loading = false;
+            // nullptr until read, or when memory did not allow keeping it.
+            ChunkPtr chunk;
+        };
+        // Indexed by update file id.
+        std::vector<std::unique_ptr<Entry>> entries;
+        std::mutex bytes_mu;
+        // Memory of the kept chunks, charged to _tracker and released with the cache.
+        int64_t bytes = 0;
+    };
+    UptChunkCache _upt_cache;
 };
 
 class CompactionUpdateConflictChecker {
