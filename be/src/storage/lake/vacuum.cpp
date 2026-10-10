@@ -1391,7 +1391,6 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     // protocol (no mode flag): an old FE never sets it, so the request falls through to the legacy
     // one-shot path below and behaves exactly as before.
     if (request.has_max_versions_per_round()) {
-        const int64_t round_start_ms = butil::gettimeofday_ms();
         // The incremental protocol state the FE persisted and replays each round (see
         // VacuumStatePB): the range to commit, the resume cursor, and the pass retain floor.
         const auto& req_state = request.vacuum_state();
@@ -1448,14 +1447,8 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         if (resume_from == 0) {
             resp_state->set_pass_start_version(next_pass_start);
         }
-        LOG(INFO) << "incremental vacuum: partition=" << request.partition_id() << " bundling=" << enable_file_bundling
-                  << " min_retain=" << min_retain_version << " grace_ts=" << grace_timestamp
-                  << " resume_from=" << resume_from << " pass_start_version=" << pass_start_version << " committed=["
-                  << req_to_delete_low << "," << req_to_delete_high << ") proposed=[" << next_to_delete_low << ","
-                  << next_to_delete_high << ") next_propose_start=" << next_cursor
-                  << " vacuumed_files=" << vacuumed_files << " vacuumed_bytes=" << vacuumed_file_size
-                  << " tablets=" << tablet_infos.size() << " cost=" << (butil::gettimeofday_ms() - round_start_ms)
-                  << "ms";
+        // The per-round summary (ranges, cursor, counters, timing) is logged once per request by
+        // LakeServiceImpl::vacuum from the request/response state, so nothing is logged here on success.
         // NOTE: in incremental mode the response's vacuumed_version is NOT a committed per-pass
         // watermark (propose deletes nothing and never advances it). The FE advances its persisted
         // watermark from the cursor + proposed range -- the cursor resets to 0 only when a full pass

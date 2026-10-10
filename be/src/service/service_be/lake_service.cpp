@@ -2024,6 +2024,7 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     auto cntl = static_cast<brpc::Controller*>(controller);
     auto thread_pool = vacuum_thread_pool(_env);
     if (UNLIKELY(thread_pool == nullptr)) {
+        LOG(WARNING) << "Fail to vacuum partition " << request->partition_id() << ": vacuum thread pool is null";
         cntl->SetFailed("vacuum thread pool is null");
         return;
     }
@@ -2053,31 +2054,90 @@ void LakeServiceImpl::vacuum(::google::protobuf::RpcController* controller, cons
     // keeping a vacuum worker occupied for a response nobody reads. Requests without the
     // field (older FE versions) carry no deadline and run to completion as before, and
     // setting |lake_vacuum_enable_task_timeout| to false disables the deadline entirely.
+    const int64_t received_ms = butil::gettimeofday_ms();
     int64_t deadline_ms = 0;
     if (config::lake_vacuum_enable_task_timeout && request->has_timeout_ms() && request->timeout_ms() > 0) {
-        deadline_ms = butil::gettimeofday_ms() + request->timeout_ms();
+        deadline_ms = received_ms + request->timeout_ms();
     }
 
+    const int64_t partition_id = request->partition_id();
+    const int num_tablets =
+            request->tablet_infos_size() > 0 ? request->tablet_infos_size() : request->tablet_ids_size();
+    // The presence of |max_versions_per_round| selects the incremental protocol inside lake::vacuum_impl.
+    const char* mode = request->has_max_versions_per_round() ? "incremental" : "legacy";
+
+    // |started_ms| stays 0 when the task never ran (submit failure or cancellation while queued).
+    // It is written on the vacuum worker thread and read after |latch.wait()|, which orders the two.
+    int64_t started_ms = 0;
     auto latch = BThreadCountDownLatch(1);
     auto task = std::make_shared<CancellableRunnable>(
             [&] {
                 DeferOp defer([&] { latch.count_down(); });
+                started_ms = butil::gettimeofday_ms();
+                // Logged at dequeue so a request that is still running (or hung) has a record of when it
+                // left the queue and how long it waited behind other partitions' vacuum tasks.
+                LOG(INFO) << "Start vacuum partition " << partition_id << " mode=" << mode << " tablets=" << num_tablets
+                          << " min_retain_version=" << request->min_retain_version()
+                          << " min_active_txn_id=" << request->min_active_txn_id()
+                          << " delete_txn_log=" << request->delete_txn_log()
+                          << " queue_wait=" << (started_ms - received_ms) << "ms";
                 lake::vacuum(_tablet_mgr, *request, response, deadline_ms);
             },
             [&] {
-                Status st = Status::Cancelled("vacuum task has been cancelled");
+                Status st =
+                        Status::Cancelled(fmt::format("vacuum task of partition {} has been cancelled", partition_id));
                 LOG(WARNING) << st;
                 st.to_protobuf(response->mutable_status());
                 latch.count_down();
             });
     auto st = thread_pool->submit(std::move(task));
     if (!st.ok()) {
-        LOG(WARNING) << "Fail to submit vacuum task: " << st;
+        LOG(WARNING) << "Fail to submit vacuum task of partition " << partition_id << ": " << st;
         st.to_protobuf(response->mutable_status());
         latch.count_down();
     }
 
     latch.wait();
+
+    // Failures are already logged, with the partition id, where they happen: "Fail to vacuum partition <pid>: ..."
+    // from lake::vacuum() for anything inside vacuum_impl, and the submit / cancel lines above. So only a
+    // successful request gets its summary here, exactly one line, mirroring the FE's "Vacuumed <db>.<table>.<pid>"
+    // line so the two sides can be paired. A successful vacuum used to leave no trace on the CN at all, and when
+    // the FE had already timed out this line is the only record of when the CN actually finished and what it
+    // deleted. In incremental mode the protocol state is appended from the request (what this round committed)
+    // and the response (what it proposed next).
+    if (response->status().status_code() != 0) {
+        return;
+    }
+    const int64_t finished_ms = butil::gettimeofday_ms();
+    // Mode-specific fields. Incremental: the protocol state, |pass_start_version| being the floor the FE replayed
+    // in the request (0 on a fresh round) and |new_pass_start_version| the floor this round established (only a
+    // fresh round sets it; 0 otherwise). Legacy: the vacuumed watermark and the remaining-garbage estimate, which
+    // the incremental path never fills.
+    std::string mode_fields;
+    if (request->has_max_versions_per_round()) {
+        const auto& req_state = request->vacuum_state();
+        const auto& resp_state = response->vacuum_state();
+        mode_fields = fmt::format(
+                " resume_from={} pass_start_version={} committed=[{},{}) proposed=[{},{}) next_propose_start={} "
+                "grace_blocked={} new_pass_start_version={}",
+                req_state.next_propose_start_version(), req_state.pass_start_version(), req_state.to_delete_low(),
+                req_state.to_delete_high(), resp_state.to_delete_low(), resp_state.to_delete_high(),
+                resp_state.next_propose_start_version(), resp_state.grace_blocked(), resp_state.pass_start_version());
+    } else {
+        mode_fields = fmt::format(" vacuumed_version={} extra_file_size={}", response->vacuumed_version(),
+                                  response->extra_file_size());
+    }
+    LOG(INFO) << "Vacuumed partition " << partition_id << " mode=" << mode << " tablets=" << num_tablets
+              << " bundling=" << (request->has_enable_file_bundling() && request->enable_file_bundling())
+              << " min_retain_version=" << request->min_retain_version()
+              << " grace_timestamp=" << request->grace_timestamp() << mode_fields
+              << " vacuumed_files=" << response->vacuumed_files()
+              << " vacuumed_file_size=" << response->vacuumed_file_size()
+              << " queue_wait=" << (started_ms > 0 ? started_ms - received_ms : -1) << "ms"
+              << " run=" << (started_ms > 0 ? finished_ms - started_ms : -1) << "ms"
+              << " total=" << (finished_ms - received_ms) << "ms"
+              << " deadline_exceeded=" << (deadline_ms > 0 && finished_ms > deadline_ms);
 }
 
 void LakeServiceImpl::vacuum_full(::google::protobuf::RpcController* controller,
