@@ -38,7 +38,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -128,7 +127,7 @@ public class ExportHandleTest {
         AtomicBoolean underLock = new AtomicBoolean(false);
         new MockUp<HdfsUtil>() {
             @Mock
-            public void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) {
+            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) {
                 calls.incrementAndGet();
                 if (LockHoldDepth.isUnderLock()) {
                     underLock.set(true);

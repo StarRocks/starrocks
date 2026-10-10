@@ -87,6 +87,15 @@ public class ExternalOlapTableLockTest extends PlanTestBase {
                 return 10086L;
             }
         };
+        // On branch-4.0 the synced table has no base index: updateMeta attaches an index only when the remote
+        // index's partition id equals the local physical partition id, which is freshly allocated. Building the
+        // sink's tablet routes then hits that null index, with or without this change, so it is skipped here;
+        // what these tests pin is which table the sink writes and whether the lock was taken.
+        new MockUp<OlapTableSink>() {
+            @Mock
+            public void complete() {
+            }
+        };
     }
 
     private static ExternalOlapTable published() {

@@ -139,9 +139,8 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         };
     }
 
-    private void assertNothingWentRemoteUnderTheLock(String sql) {
-        assertOnlyTheseWentRemoteUnderTheLock(sql);
-    }
+    // Resolved by the analyzer under the lock on branch-4.0, which has no general external-table pre-pass.
+    private static final String ANALYZE_TIME_RESOLVE = "getTable:hive0.lineitem_par";
 
     /**
      * @param stillUnderTheLock entry points that are known to still run with the lock held, each of which
@@ -179,8 +178,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
     /**
      * The control the three below are held to: the same mixture written as a SELECT reaches the connector
-     * without the lock at every entry point, the resolve during analysis included -- that one because
-     * {@code QueryAnalyzer.analyzeExternalTablesOnly} pre-resolves external tables before the lock is taken.
+     * without the lock at every entry point but one. Branch-4.0 has no general pre-pass that resolves external
+     * tables before the lock, so the resolve during analysis still runs under it; statistics, partition lists
+     * and file lists come after the planning snapshot drops the lock.
      */
     @Test
     public void testAPlainSelectReadingAConnectorPlansWithoutTheLock() throws Exception {
@@ -188,7 +188,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "SELECT t.pk FROM test.tprimary t JOIN hive0.partitioned_db.lineitem_par l "
                 + "ON t.pk = l.l_orderkey";
         plan(sql);
-        assertNothingWentRemoteUnderTheLock(sql);
+        assertOnlyTheseWentRemoteUnderTheLock(sql, ANALYZE_TIME_RESOLVE);
     }
 
     @Test
@@ -197,7 +197,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "DELETE FROM test.tprimary WHERE pk IN "
                 + "(SELECT l_orderkey FROM hive0.partitioned_db.lineitem_par)";
         plan(sql);
-        assertNothingWentRemoteUnderTheLock(sql);
+        assertOnlyTheseWentRemoteUnderTheLock(sql, ANALYZE_TIME_RESOLVE);
     }
 
     @Test
@@ -206,7 +206,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "UPDATE test.tprimary SET v2 = 1 WHERE pk IN "
                 + "(SELECT l_orderkey FROM hive0.partitioned_db.lineitem_par)";
         plan(sql);
-        assertNothingWentRemoteUnderTheLock(sql);
+        assertOnlyTheseWentRemoteUnderTheLock(sql, ANALYZE_TIME_RESOLVE);
     }
 
     /**

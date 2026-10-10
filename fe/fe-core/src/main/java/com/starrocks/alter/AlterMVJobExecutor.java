@@ -558,13 +558,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // No "still current" check is owed: the lock never covers external tables.
                 preResolvedRefBaseTables = mv.preResolveRefBaseTables();
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-                // Analyzing the condition re-gets the external ref base table (iceberg / delta lake) from its
-                // connector, from several places (partition-expr adjust map, partition selector, the MV's
-                // retention analysis). Only the lookups move here; the analysis itself stays under the lock.
-                // No "still current" check is owed: the lock never covers external tables.
-                preResolvedRefBaseTables = mv.preResolveRefBaseTables();
-            }
         } else if (alterClause instanceof RefreshSchemeClause) {
             // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
             // would change behaviour rather than just its timing: getTableChecked throws when a base
@@ -856,7 +849,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
             materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
             // re-analyze mv retention condition
-            materializedView.analyzeMVRetentionCondition(context);
+            try (MaterializedView.PreResolvedRefBaseTables.Scope ignored =
+                         preResolvedRefBaseTables != null ? preResolvedRefBaseTables.enter() : null) {
+                materializedView.analyzeMVRetentionCondition(context);
+            }
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT) &&
                 timeDriftConstraintSpec != null && !timeDriftConstraintSpec.equalsIgnoreCase(
