@@ -287,21 +287,14 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size
         // of large strings into a multi-hundred-MB allocation spike in the scan path.
         uint64_t total_length = 0;
         for (size_t i = 0; i < size; i++) {
-<<<<<<< HEAD
-            const auto& s = data[i];
-            const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
-            _bytes.insert(_bytes.end(), p, p + s.size);
-            _offsets.emplace_back(_bytes.size());
-=======
             total_length += data[i].size;
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
         }
 
-        const uint64_t old_bytes_size = bytes.size();
+        const uint64_t old_bytes_size = _bytes.size();
         const uint64_t new_bytes_size = old_bytes_size + total_length;
-        bytes.resize(new_bytes_size);
+        _bytes.resize(new_bytes_size);
 
-        auto* __restrict dst_bytes = bytes.data();
+        auto* __restrict dst_bytes = _bytes.data();
         uint64_t offset = old_bytes_size;
         for (size_t i = 0; i < size; i++) {
             memcpy(dst_bytes + offset, data[i].data, data[i].size);

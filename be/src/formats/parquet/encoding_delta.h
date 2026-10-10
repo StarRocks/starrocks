@@ -22,13 +22,10 @@
 #include "column/column_helper.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
-<<<<<<< HEAD
+#include "runtime/current_thread.h"
 #include "simd/delta_decode.h"
 #include "util/bit_stream_utils.h"
 #include "util/slice.h"
-=======
-#include "runtime/current_thread.h"
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
 namespace starrocks::parquet {
 

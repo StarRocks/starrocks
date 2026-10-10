@@ -16,12 +16,8 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 
-#include "base/testutil/parallel_test.h"
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
@@ -212,7 +208,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->immutable_data()[i]);
+        ASSERT_EQ(values[i], c1->get_data()[i]);
     }
     ASSERT_EQ(total_length, c1->get_bytes().size());
     // The byte buffer is sized from the total up front. Appending value by value would
@@ -224,8 +220,8 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_EQ(values.size() * 2, c1->size());
     ASSERT_EQ(total_length * 2, c1->get_bytes().size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->immutable_data()[i]);
-        ASSERT_EQ(values[i], c1->immutable_data()[i + values.size()]);
+        ASSERT_EQ(values[i], c1->get_data()[i]);
+        ASSERT_EQ(values[i], c1->get_data()[i + values.size()]);
     }
 
     // Appending nothing is a no-op.
@@ -237,10 +233,10 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_strings_overflow(values.data(), values.size(), max_length));
     ASSERT_EQ(values.size(), c2->size());
-    auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
+    auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_FALSE(c2->is_null(i));
-        ASSERT_EQ(values[i], c->immutable_data()[i]);
+        ASSERT_EQ(values[i], c->get_data()[i]);
     }
 }
 
@@ -265,7 +261,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_short_values) {
         ASSERT_TRUE(column->append_strings_overflow(values.data(), values.size(), max_length));
         ASSERT_EQ(values.size(), column->size());
         for (size_t i = 0; i < values.size(); i++) {
-            ASSERT_EQ(values[i], column->immutable_data()[i]);
+            ASSERT_EQ(values[i], column->get_data()[i]);
         }
         ASSERT_EQ(offset, column->get_bytes().size());
     }

@@ -16,12 +16,8 @@
 
 #include <unordered_set>
 
-<<<<<<< HEAD
-#include "util/trim.h"
-=======
-#include "base/string/trim.h"
 #include "runtime/current_thread.h"
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
+#include "util/trim.h"
 
 namespace starrocks {
 

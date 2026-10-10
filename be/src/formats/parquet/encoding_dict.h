@@ -25,29 +25,13 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
-<<<<<<< HEAD
+#include "runtime/current_thread.h"
 #include "simd/expand.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 #include "util/cpu_info.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
-=======
-#include "runtime/current_thread.h"
-
-namespace {
-// Single-pass min/max bounds check for dictionary indices. Reads the unsigned
-// indices through a signed reinterpret to feed SIMD min/max; any value
-// >= INT32_MAX surfaces as a negative min, which is also "out of bounds" for
-// any realistic dictionary, so the signed view is correct.
-inline bool indices_out_of_bounds(const uint32_t* indices, int32_t count, size_t dict_size) {
-    if (count <= 0) return false;
-    int32_t min_idx, max_idx;
-    starrocks::simd_minmax_int32(reinterpret_cast<const int32_t*>(indices), count, min_idx, max_idx);
-    return min_idx < 0 || static_cast<size_t>(max_idx) >= dict_size;
-}
-} // anonymous namespace
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
 namespace starrocks::parquet {
 
