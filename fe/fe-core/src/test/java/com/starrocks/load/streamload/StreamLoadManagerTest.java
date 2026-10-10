@@ -29,6 +29,7 @@ import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -70,6 +71,7 @@ public class StreamLoadManagerTest {
     private GlobalTransactionMgr globalTransactionMgr;
     private Database db;
     private NodeMgr nodeMgr;
+    private final VariableMgr variableMgr = new VariableMgr();
 
     @BeforeEach
     public void setUp() {
@@ -275,6 +277,15 @@ public class StreamLoadManagerTest {
                 result = null;
                 routineLoadMgr.getJob(anyLong);
                 result = null;
+                // toThrift formats its timestamps through TimeUtils.getTimeZone(), which reads the
+                // session variable of the current connection or, without one, the default of the
+                // variable manager. Both are cascading mocks here and would yield a null zone id.
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+                connectContext.getSessionVariable();
+                minTimes = 0;
+                result = variableMgr.getDefaultSessionVariable();
             }
         };
 
