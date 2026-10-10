@@ -14,18 +14,15 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.catalog.UserIdentity;
+import com.starrocks.sql.ast.UserIdentity;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.PartialResultException;
-import javax.naming.SizeLimitExceededException;
 import javax.naming.directory.BasicAttribute;
 import javax.naming.directory.BasicAttributes;
 import javax.naming.directory.DirContext;
@@ -37,9 +34,9 @@ import javax.naming.directory.SearchResult;
  *
  * <p>A subtree search from an AD domain root always comes back with continuation references to the domain's
  * other partitions (DNS zones, configuration). JNDI does not follow them and throws
- * {@link PartialResultException} at the end of the enumeration, after every group has been returned. The
- * in-memory directory used by {@code LDAPGroupProviderDirectoryTest} cannot produce this (JNDI asks it to
- * return referral entries as plain entries), so the directory here is a mocked {@link DirContext}.
+ * {@link PartialResultException} at the end of the enumeration, after every group has been returned. An
+ * in-memory directory cannot produce this (JNDI asks it to return referral entries as plain entries), so the
+ * directory here is a mocked {@link DirContext}.
  */
 class LDAPGroupProviderReferralTest {
 
@@ -101,8 +98,7 @@ class LDAPGroupProviderReferralTest {
     }
 
     /**
-     * Test case: a provider restored from the image whose first refresh reports referrals - the sequence that
-     *            took down every LDAP login after an FE restart
+     * Test case: a provider restored from the image whose first refresh reports referrals
      * Test point: the first refresh fills the cache, so logins resolve their groups.
      */
     @Test
@@ -114,22 +110,5 @@ class LDAPGroupProviderReferralTest {
         Assertions.assertDoesNotThrow(provider::refreshGroups);
 
         Assertions.assertEquals(Set.of("SR Analysts", "Data Platform"), groupsOf(provider, "alice", ALICE_DN));
-    }
-
-    /**
-     * Test case: the search hits a server-side entry cap, with a complete cache from an earlier refresh
-     * Test point: unlike referrals, a size limit really truncates the answer, so the refresh is a failure and
-     *             the earlier cache keeps serving within ldap_cache_max_stale_time.
-     */
-    @Test
-    public void testSizeLimitKeepsPreviousCache() throws Exception {
-        LDAPGroupProvider provider = withDirectory(LDAPGroupProviderImageLoadTest.unreachableProvider(),
-                new SizeLimitExceededException());
-        provider.setUserToGroupCache(new HashMap<>(Map.of("alice", Set.of("Previous Group"))));
-        provider.setLastSuccessfulRefreshTimeMs(System.currentTimeMillis());
-
-        provider.refreshGroups();
-
-        Assertions.assertEquals(Set.of("Previous Group"), groupsOf(provider, "alice", ALICE_DN));
     }
 }

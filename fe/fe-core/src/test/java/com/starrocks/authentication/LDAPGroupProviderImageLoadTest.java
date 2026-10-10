@@ -14,8 +14,8 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -28,9 +28,8 @@ import java.util.Set;
  * Covers an LDAP group provider that the FE restored from its image rather than built with CREATE.
  *
  * <p>The image path goes through Gson, which used to allocate the provider without running any
- * constructor, so its group cache started out null. Every login before the first successful refresh then
- * failed with a NullPointerException, and a refresh that failed hit the same null, threw out of the
- * scheduled task and stopped all later refreshes.
+ * constructor, so its group cache started out null. Every login before the first refresh completed then
+ * failed with a NullPointerException.
  *
  * <p>Every provider here points at a closed port, so any refresh it runs fails.
  */
@@ -110,22 +109,5 @@ class LDAPGroupProviderImageLoadTest {
         } finally {
             provider.destroy();
         }
-    }
-
-    /**
-     * Test case: an unexpected runtime error in the part of the refresh that runs after the LDAP search
-     * Test point: refreshGroups() does not let it escape - an exception out of a scheduleAtFixedRate task makes
-     *             the executor cancel every later run, so the provider would never refresh again.
-     */
-    @Test
-    public void testRefreshNeverThrows() {
-        LDAPGroupProvider provider = new LDAPGroupProvider("test_provider", unreachableProvider().getProperties()) {
-            @Override
-            public long getLdapCacheMaxStaleTime() {
-                throw new IllegalStateException("injected");
-            }
-        };
-
-        Assertions.assertDoesNotThrow(provider::refreshGroups);
     }
 }
