@@ -1,0 +1,54 @@
+-- name: test_iceberg_count_column_opt
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog iceberg_sql_test_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+-- COUNT(col) is answered from each data file's null count, and must match a full scan.
+create external table ice_tbl_0(
+    c_int int,
+    c_string string,
+    c_double double,
+    c_date date
+);
+
+insert into ice_tbl_0 values (1, 'a', 1.0, '2025-01-01'), (2, null, null, '2025-01-02'), (null, 'c', 3.0, null);
+insert into ice_tbl_0 values (4, null, 4.0, '2025-01-04'), (null, null, null, null);
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+function: assert_explain_contains('select count(*), count(c_int), count(c_string) from ice_tbl_0', '___count___c_string')
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date) from ice_tbl_0;
+
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date) from ice_tbl_0;
+
+-- The files written before c_new was added carry no null count for it, so they are read instead.
+alter table ice_tbl_0 add column c_new int;
+insert into ice_tbl_0 values (5, 'e', 5.0, '2025-01-05', 50), (6, 'f', null, null, null);
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date), count(c_new) from ice_tbl_0;
+
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date), count(c_new) from ice_tbl_0;
+
+-- Grouping by the partition column keeps the rewrite.
+create external table ice_tbl_1(
+    c_int int,
+    c_string string,
+    p int
+) partition by (p);
+
+insert into ice_tbl_1 values (1, 'a', 1), (null, 'b', 1), (3, null, 2), (null, null, 2), (5, 'e', 2);
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+function: assert_explain_contains('select p, count(c_int) from ice_tbl_1 group by p', '___count___c_int')
+select p, count(*), count(c_int), count(c_string) from ice_tbl_1 group by p order by p;
+
+drop table ice_tbl_0 force;
+drop table ice_tbl_1 force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
