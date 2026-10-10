@@ -137,13 +137,9 @@ bool has_prepared_segment_context(const pipeline::LakeSplitContext& split_contex
 }
 
 bool can_reuse_prepared_segment_for_child_split(const pipeline::LakeSplitContext& split_context) {
-    if (!has_prepared_segment_context(split_context)) {
-        return false;
-    }
-    if (!is_pre_refinement_coarse_split(split_context)) {
-        return true;
-    }
-    return split_context.prepared_segment_read_state->has_rowid_bounds_cache();
+    // TabletReader waits for the seed's refinement before opening a coarse sibling.
+    // Keep its prepared context even when it arrives before the bounds cache is ready.
+    return has_prepared_segment_context(split_context);
 }
 
 RowidRangeOptionPtr rowid_range_for_child_split(const pipeline::LakeSplitContext& split_context,

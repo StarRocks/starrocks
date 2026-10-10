@@ -1354,14 +1354,16 @@ TEST_F(LakeDataSourceTest, apply_child_split_context_physical_matrix) {
         EXPECT_EQ(ds4._lake_prerefinement_coarse_splits, 1);
         EXPECT_EQ(ds4.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
     }
-    // PRE_REFINEMENT_COARSE + rowid-bounds cache NOT ready: not reusable -> prepared state cleared.
+    // PRE_REFINEMENT_COARSE + rowid-bounds cache NOT ready: keep prepared state so
+    // TabletReader can wait for the seed's refinement and transfer ownership.
     {
         connector::LakeDataSource ds5(&provider, scan_range);
         auto ctx = make_split_context(RRS::PRE_REFINEMENT_COARSE, true, /*publish_bounds=*/false);
         ds5.apply_child_split_context(ctx, true);
         EXPECT_EQ(ds5._lake_prerefinement_coarse_splits, 1);
-        EXPECT_EQ(ds5.TEST_params().prepared_tablet_read_state, nullptr);
-        EXPECT_EQ(ds5.TEST_params().prepared_segment_read_state, nullptr);
+        EXPECT_EQ(ds5.TEST_params().prepared_tablet_read_state, ctx.prepared_tablet_read_state);
+        EXPECT_EQ(ds5.TEST_params().prepared_segment_read_state, ctx.prepared_segment_read_state);
+        EXPECT_EQ(ds5.TEST_params().rowid_range_option, ctx.rowid_range);
         EXPECT_FALSE(ds5.TEST_params().refine_initial_coarse_split_and_append_refined_tasks);
     }
     // use_prepared_state=false: prepared state always cleared, rowid range left untrimmed.

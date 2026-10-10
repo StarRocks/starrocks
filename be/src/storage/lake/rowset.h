@@ -119,6 +119,12 @@ struct PreparedSegmentReadState {
     SparseRangeIterator<> coarse_scan_range_iter;
     SparseRange<> allocated_coarse_ranges;
     bool coarse_split_allocation_closed = false;
+    // Coarse siblings may open while the seed is still preparing the final range. They must
+    // use the same surviving split for all segment-level statistics.
+    std::condition_variable coarse_refinement_cv;
+    bool coarse_refinement_ready = false;
+    Status coarse_refinement_status = Status::OK();
+    std::optional<rowid_t> first_surviving_coarse_rowid;
 };
 
 struct PreparedTabletReadState {
