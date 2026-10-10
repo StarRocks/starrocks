@@ -506,7 +506,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     ColumnDict columnDict = columnOptional.get();
                     long lastVersion = columnDict.getVersion();
                     long dictCollectVersion = columnDict.getCollectedVersion();
-                    if (collectVersion != dictCollectVersion) {
+                    if (collectVersion != columnDict.getContentIdentity() && collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
                         removeGlobalDict(table, columnName);
                         return;
