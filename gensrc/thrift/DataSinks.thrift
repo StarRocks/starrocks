@@ -309,6 +309,8 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // 13-16 are reserved by Iceberg Parquet size and compression-level changes.
+    17: optional string parquet_data_page_version
 }
 
 struct THiveTableSink {

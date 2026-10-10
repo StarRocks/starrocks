@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.SessionVariable;
@@ -47,6 +48,7 @@ public class IcebergTableSinkTest {
         // nativeTable.properties contains parquet compression -> should use it
         Map<String, String> nativeProps = Maps.newHashMap();
         nativeProps.put(PARQUET_COMPRESSION, "zstd");
+        nativeProps.put("write.parquet.page-version", "v2");
 
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
 
@@ -104,6 +106,7 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // compression_type should map "zstd" -> TCompressionType.ZSTD
         Assertions.assertEquals(TCompressionType.ZSTD, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertEquals("v2", t.getIceberg_table_sink().getParquet_data_page_version());
     }
 
     @Test
@@ -167,5 +170,17 @@ public class IcebergTableSinkTest {
         TDataSink t = sink.toThrift();
         // fallback "gzip" -> TCompressionType.GZIP
         Assertions.assertEquals(TCompressionType.GZIP, t.getIceberg_table_sink().getCompression_type());
+        Assertions.assertFalse(t.getIceberg_table_sink().isSetParquet_data_page_version());
+    }
+
+    @Test
+    public void testParquetDataPageVersionValidation() {
+        Assertions.assertEquals("v2", IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "V2")));
+        Assertions.assertEquals("v1", IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "v1")));
+        Assertions.assertNull(IcebergUtil.getParquetDataPageVersion(Map.of()));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> IcebergUtil.getParquetDataPageVersion(
+                Map.of("write.parquet.page-version", "2.6")));
     }
 }

@@ -64,6 +64,17 @@ public final class IcebergUtil {
     // StarRocks' historical default; Iceberg's own default is 512 MiB.
     static final long DEFAULT_TARGET_FILE_SIZE_BYTES = 1024L * 1024 * 1024;
 
+    /** Returns an explicit Iceberg Parquet data-page version, or null when absent. */
+    public static String getParquetDataPageVersion(Map<String, String> properties) {
+        String value = properties.get("write.parquet.page-version");
+        if (value == null) {
+            return null;
+        }
+        Preconditions.checkArgument("v1".equalsIgnoreCase(value) || "v2".equalsIgnoreCase(value),
+                "write.parquet.page-version must be v1 or v2: %s", value);
+        return value.toLowerCase(java.util.Locale.ROOT);
+    }
+
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
     }

@@ -51,6 +51,25 @@ class ColumnHelper;
 
 namespace starrocks::formats {
 
+namespace {
+
+constexpr auto kUnsupportedBooleanV2 =
+        "Parquet DataPage V2 with BOOLEAN columns is not supported by the StarRocks reader (issue #78692)";
+
+bool contains_boolean(const TypeDescriptor& type) {
+    if (type.type == TYPE_BOOLEAN) {
+        return true;
+    }
+    for (const auto& child : type.children) {
+        if (contains_boolean(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
 DEFINE_FAIL_POINT(parquet_writer_throw_exception);
 DEFINE_FAIL_POINT(parquet_writer_rowgroup_write_failed);
@@ -288,9 +307,20 @@ Status ParquetFileWriter::init() {
         return Status::NotSupported(status.message());
     }
 
+    // StarRocks' native Parquet reader cannot decode RLE-encoded BOOLEAN values
+    // currently emitted by V2 writers (see issue #78692).
+    if (_writer_options->data_page_version == ::parquet::ParquetDataPageVersion::V2) {
+        for (int i = 0; i < _schema->num_columns(); ++i) {
+            if (_schema->Column(i)->physical_type() == ::parquet::Type::BOOLEAN) {
+                return Status::NotSupported(kUnsupportedBooleanV2);
+            }
+        }
+    }
+
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
     ::parquet::WriterProperties::Builder builder;
     builder.version(_writer_options->version)
+            ->data_page_version(_writer_options->data_page_version)
             ->enable_write_page_index()
             ->data_pagesize(_writer_options->page_size)
             ->write_batch_size(_writer_options->write_batch_size)
@@ -336,6 +366,22 @@ Status ParquetFileWriterFactory::init() {
     RETURN_IF_ERROR(ColumnEvaluator::init(*_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
     _parsed_options->column_ids = _field_ids;
+    if (auto it = _options.find(ParquetWriterOptions::DATA_PAGE_VERSION); it != _options.end()) {
+        if (boost::iequals(it->second, "v1")) {
+            _parsed_options->data_page_version = ::parquet::ParquetDataPageVersion::V1;
+        } else if (boost::iequals(it->second, "v2")) {
+            _parsed_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+        } else {
+            return Status::InvalidArgument(fmt::format("write.parquet.page-version must be v1 or v2: {}", it->second));
+        }
+    }
+    if (_parsed_options->data_page_version == ::parquet::ParquetDataPageVersion::V2) {
+        for (const auto& type : ColumnEvaluator::types(*_column_evaluators)) {
+            if (contains_boolean(type)) {
+                return Status::NotSupported(kUnsupportedBooleanV2);
+            }
+        }
+    }
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
         _parsed_options->use_legacy_decimal_encoding =
                 boost::iequals(_options[ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING], "true");
