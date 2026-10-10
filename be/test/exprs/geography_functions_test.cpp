@@ -2408,8 +2408,8 @@ TEST_F(geographyFunctionsTest, h3ScalarOutputsMatchLibraryAtEveryResolution) {
         ColumnViewer<TYPE_BIGINT> actual(*result);
         for (size_t row = 0; row < eligible->size(); ++row) {
             H3Index expected = 0;
-            ASSERT_EQ(E_SUCCESS, cellToParent(static_cast<H3Index>(eligible->get_data()[row]), parent_resolution,
-                                             &expected));
+            ASSERT_EQ(E_SUCCESS,
+                      cellToParent(static_cast<H3Index>(eligible->get_data()[row]), parent_resolution, &expected));
             EXPECT_EQ(static_cast<int64_t>(expected), actual.value(row));
         }
     }
@@ -2479,8 +2479,8 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     EXPECT_TRUE((*resolution)->is_null(0));
     EXPECT_EQ(3, ColumnViewer<TYPE_INT>(*resolution).value(1));
 
-    auto parent = GeoFunctions::h3_to_parent(
-            nullptr, {nullable_cells, ColumnHelper::create_const_column<TYPE_INT>(2, 2)});
+    auto parent =
+            GeoFunctions::h3_to_parent(nullptr, {nullable_cells, ColumnHelper::create_const_column<TYPE_INT>(2, 2)});
     ASSERT_TRUE(parent.ok()) << parent.status();
     EXPECT_TRUE((*parent)->is_null(0));
     H3Index expected_parent = 0;
@@ -2501,14 +2501,13 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     EXPECT_EQ(static_cast<int64_t>(expected_parent), ColumnViewer<TYPE_BIGINT>(*constant_cell).value(1));
 
     // Invalid physical values hidden by NULL must never be validated eagerly.
-    const ColumnPtr all_null_resolutions =
-            NullableColumn::create(Int32Column::create(3, 16), NullColumn::create(3, 1));
+    const ColumnPtr all_null_resolutions = NullableColumn::create(Int32Column::create(3, 16), NullColumn::create(3, 1));
     auto hidden_cell = GeoFunctions::h3_to_parent(
             nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 3), all_null_resolutions});
     ASSERT_TRUE(hidden_cell.ok()) << hidden_cell.status();
     const ColumnPtr all_null_cells = NullableColumn::create(Int64Column::create(3, 0), NullColumn::create(3, 1));
-    auto hidden_resolution = GeoFunctions::h3_to_parent(
-            nullptr, {all_null_cells, ColumnHelper::create_const_column<TYPE_INT>(16, 3)});
+    auto hidden_resolution =
+            GeoFunctions::h3_to_parent(nullptr, {all_null_cells, ColumnHelper::create_const_column<TYPE_INT>(16, 3)});
     ASSERT_TRUE(hidden_resolution.ok()) << hidden_resolution.status();
     for (size_t row = 0; row < 3; ++row) {
         EXPECT_TRUE((*hidden_cell)->is_null(row));
@@ -2519,16 +2518,14 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     ASSERT_TRUE(empty.ok()) << empty.status();
     EXPECT_EQ(0, (*empty)->size());
 
-    auto both_invalid = GeoFunctions::h3_to_parent(
-            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
-                      ColumnHelper::create_const_column<TYPE_INT>(16, 1)});
+    auto both_invalid = GeoFunctions::h3_to_parent(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
+                                                             ColumnHelper::create_const_column<TYPE_INT>(16, 1)});
     ASSERT_FALSE(both_invalid.ok());
     EXPECT_EQ(invalid_cell.code(), both_invalid.status().code());
     EXPECT_EQ(invalid_cell.message(), both_invalid.status().message());
     for (int target : {-1, 4, 16}) {
-        auto invalid = GeoFunctions::h3_to_parent(
-                nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(valid, 1),
-                          ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
+        auto invalid = GeoFunctions::h3_to_parent(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(valid, 1),
+                                                            ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
         ASSERT_FALSE(invalid.ok());
         const auto& expected = target == 4 ? wrong_parent : invalid_resolution;
         EXPECT_EQ(expected.code(), invalid.status().code());
@@ -2543,8 +2540,8 @@ TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecede
     // An all-nonnull nullable input must retain the ordinary nonnullable output shape.
     const ColumnPtr nonnull = NullableColumn::create(Int64Column::create(3, valid), NullColumn::create(3, 0));
     auto nonnull_resolution = GeoFunctions::h3_resolution(nullptr, {nonnull});
-    auto nonnull_parent = GeoFunctions::h3_to_parent(
-            nullptr, {nonnull, ColumnHelper::create_const_column<TYPE_INT>(3, 3)});
+    auto nonnull_parent =
+            GeoFunctions::h3_to_parent(nullptr, {nonnull, ColumnHelper::create_const_column<TYPE_INT>(3, 3)});
     ASSERT_TRUE(nonnull_resolution.ok()) << nonnull_resolution.status();
     ASSERT_TRUE(nonnull_parent.ok()) << nonnull_parent.status();
     EXPECT_FALSE((*nonnull_resolution)->is_nullable());
@@ -2606,8 +2603,8 @@ TEST_F(geographyFunctionsTest, h3ParentConstantTargetPreservesEmptyAndInvalidCel
     for (int target : {-1, 0, 15, 16}) {
         auto cells = Int64Column::create();
         cells->append(0);
-        auto invalid = GeoFunctions::h3_to_parent(
-                nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
+        auto invalid =
+                GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
         ASSERT_FALSE(invalid.ok());
         const auto expected = Status::InvalidArgument("H3 requires a valid positive cell index");
         EXPECT_EQ(expected.code(), invalid.status().code());
