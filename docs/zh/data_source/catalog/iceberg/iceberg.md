@@ -1537,19 +1537,19 @@ StarRocks 使用最近最少使用（LRU）算法来缓存和驱逐数据。基�
 
 - 单位：-
 - 默认值：true
-- 描述：是否启用周期性 Iceberg 元数据缓存刷新。启用后，StarRocks 会轮询 Iceberg 集群的元存储（Hive Metastore 或 AWS Glue），并刷新频繁访问的 Iceberg catalog 的缓存元数据以感知数据更改。`true` 表示启用 Iceberg 元数据缓存刷新，`false` 表示禁用。
+- 描述：是否启用外部 catalog 缓存元数据的周期性后台刷新。启用后，StarRocks 会刷新最近访问过的 Iceberg 表的缓存元数据。表元数据从该 Iceberg catalog 配置的 catalog 服务读取，服务类型可以是 Hive Metastore、AWS Glue、REST、Hadoop 或 JDBC。表元数据发生变化时，StarRocks 还会刷新已缓存的 manifest 和数据文件。`true` 表示启用，`false` 表示禁用。
 
 ##### background_refresh_metadata_interval_millis
 
 - 单位：毫秒
 - 默认值：600000
-- 描述：两次连续 Iceberg 元数据缓存刷新之间的间隔。
+- 描述：两次外部 catalog 缓存元数据后台刷新之间的间隔。
 
-##### background_refresh_metadata_time_secs_since_last_access_sec
+##### background_refresh_metadata_time_secs_since_last_access_secs
 
 - 单位：秒
 - 默认值：86400
-- 描述：Iceberg 元数据缓存刷新任务的过期时间。对于已访问的 Iceberg catalog，如果超过指定时间未访问，StarRocks 将停止刷新其缓存元数据。对于未访问的 Iceberg catalog，StarRocks 将不刷新其缓存元数据。
+- 描述：一张 Iceberg 表自上次访问后，StarRocks 继续刷新该表缓存元数据的时长。StarRocks 按表判断。未被访问过的表不会被刷新。
 
 ## 附录 A：周期性元数据刷新策略
 

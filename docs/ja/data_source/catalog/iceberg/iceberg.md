@@ -1495,19 +1495,19 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 
 - 単位: -
 - デフォルト値: true
-- 説明: 定期的な Iceberg メタデータキャッシュのリフレッシュを有効にするかどうか。これが有効になると、StarRocks は Iceberg クラスターのメタストア（Hive Metastore または AWS Glue）をポーリングし、頻繁にアクセスされる Iceberg catalog のキャッシュされたメタデータをリフレッシュしてデータの変更を認識します。`true` は Iceberg メタデータキャッシュのリフレッシュを有効にし、`false` はそれを無効にします。
+- 説明: 外部カタログのキャッシュ済みメタデータを定期的にバックグラウンド更新するかどうか。有効にすると、StarRocks は最近アクセスされた Iceberg テーブルのキャッシュ済みメタデータを更新します。テーブルメタデータは、その Iceberg カタログに設定されたカタログサービス（Hive Metastore、AWS Glue、REST、Hadoop、または JDBC）から読み取ります。そのメタデータが変わった場合、StarRocks はキャッシュ済みのマニフェストとデータファイルも更新します。`true` は更新を有効にし、`false` は無効にします。
 
 ##### background_refresh_metadata_interval_millis
 
 - 単位: ミリ秒
 - デフォルト値: 600000
-- 説明: 2 つの連続した Iceberg メタデータキャッシュリフレッシュの間隔。- 単位: ミリ秒。
+- 説明: 外部カタログのキャッシュ済みメタデータを連続してバックグラウンド更新する間隔。
 
-##### background_refresh_metadata_time_secs_since_last_access_sec
+##### background_refresh_metadata_time_secs_since_last_access_secs
 
 - 単位: 秒
 - デフォルト値: 86400
-- 説明: Iceberg メタデータキャッシュリフレッシュタスクの有効期限。アクセスされた Iceberg catalog に対して、指定された時間を超えてアクセスされていない場合、StarRocks はそのキャッシュされたメタデータのリフレッシュを停止します。アクセスされていない Iceberg catalog に対して、StarRocks はそのキャッシュされたメタデータをリフレッシュしません。
+- 説明: Iceberg テーブルが最後にアクセスされてから、StarRocks がそのテーブルのキャッシュ済みメタデータの更新を続ける時間。StarRocks はテーブルごとに判断します。アクセスされていないテーブルは更新されません。
 
 ## 付録 A: 定期的なメタデータリフレッシュ戦略
 
