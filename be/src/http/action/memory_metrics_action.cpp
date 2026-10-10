@@ -43,6 +43,8 @@ void MemoryMetricsAction::handle(HttpRequest* req) {
     getMemoryMetricTree(_runtime_env.metadata_mem_tracker(), result, process_mem_tracker->consumption());
     result << ",";
     getMemoryMetricTree(_runtime_env.update_mem_tracker(), result, process_mem_tracker->consumption());
+    result << ",";
+    getMemoryMetricTree(_runtime_env.lake_publish_mem_tracker(), result, process_mem_tracker->consumption());
     result << "]";
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
     LOG(INFO) << "End collect memory metrics. " << result.str();
