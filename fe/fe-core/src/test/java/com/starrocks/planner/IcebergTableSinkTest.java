@@ -183,11 +183,13 @@ public class IcebergTableSinkTest {
 
     @Test
     public void testInvalidParquetWriterSizes() {
+        Map<String, String> invalidPageSizeProperties = Map.of(PARQUET_PAGE_SIZE_BYTES, "0");
+        Map<String, String> invalidDictSizeProperties = Map.of(PARQUET_DICT_SIZE_BYTES, "2147483648");
         Assertions.assertThrows(IllegalArgumentException.class, () ->
                 com.starrocks.connector.iceberg.IcebergUtil.getPositiveIntProperty(
-                        Map.of(PARQUET_PAGE_SIZE_BYTES, "0"), PARQUET_PAGE_SIZE_BYTES));
+                        invalidPageSizeProperties, PARQUET_PAGE_SIZE_BYTES));
         Assertions.assertThrows(IllegalArgumentException.class, () ->
                 com.starrocks.connector.iceberg.IcebergUtil.getPositiveIntProperty(
-                        Map.of(PARQUET_DICT_SIZE_BYTES, "2147483648"), PARQUET_DICT_SIZE_BYTES));
+                        invalidDictSizeProperties, PARQUET_DICT_SIZE_BYTES));
     }
 }
