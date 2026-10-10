@@ -15,6 +15,8 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.Uninterruptibles;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.extension.Inject;
 import com.starrocks.metric.MetricVisitor;
@@ -134,15 +136,29 @@ public class SlotManager extends BaseSlotManager {
                         newTasks.add(newTask);
                     }
 
-                    newTasks.forEach(Runnable::run);
+                    for (Runnable task : newTasks) {
+                        try {
+                            task.run();
+                        } catch (Throwable t) {
+                            LOG.warn("[Slot] RequestWorker skips a task that threw", t);
+                        }
+                    }
                     newTasks.clear();
 
                     boolean isAllocatedSlots = true;
                     while (isAllocatedSlots) {
                         isAllocatedSlots = schedule();
                     }
-                } catch (Exception e) {
+                } catch (Throwable e) {
+                    // Catch Throwable, as Daemon.run() does: this is the only worker for slot
+                    // admission, reclamation and FE-dead cleanup, and it is never recreated, so an
+                    // Error here (for example an OutOfMemoryError under leader heap pressure) must
+                    // not terminate it and halt slot management until the FE restarts.
                     LOG.warn("[Slot] RequestWorker throws unexpected error", e);
+                    // Back off before retrying, mirroring the Thread.sleep in Daemon.run(): if the
+                    // failure persists (the leader heap is still exhausted), retrying with no wait
+                    // would peg a CPU and flood logs during the very incident this loop survives.
+                    Uninterruptibles.sleepUninterruptibly(Config.slot_manager_error_retry_interval_ms, TimeUnit.MILLISECONDS);
                 }
             }
         }
