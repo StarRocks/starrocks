@@ -2385,6 +2385,224 @@ TEST_F(geographyFunctionsTest, h3SeamPolarAndPentagon) {
     EXPECT_TRUE(unique.contains(static_cast<int64_t>(pentagons[0])));
 }
 
+TEST_F(geographyFunctionsTest, h3RecursiveFillMatchesStandardCenterFill) {
+    for (int scenario = 0; scenario < 32; ++scenario) {
+        const size_t vertex_count = scenario % 3 == 0 ? 128 : (scenario % 3 == 1 ? 256 : 512);
+        const double longitude = -140 + scenario * 8;
+        const double latitude = -50 + (scenario % 11) * 10;
+        WkbGeometry geometry;
+        geometry.type = WkbGeometryType::POLYGON;
+        auto& ring = geometry.rings.emplace_back();
+        for (size_t i = 0; i < vertex_count; ++i) {
+            const double angle = i * 2 * M_PI / vertex_count;
+            const double radius = scenario % 2 == 0 && i % 2 == 0 ? 0.012 : 0.02;
+            ring.push_back({longitude + radius * std::cos(angle), latitude + radius * std::sin(angle)});
+        }
+        ring.push_back(ring.front());
+        if (scenario % 4 == 0) {
+            auto& hole = geometry.rings.emplace_back();
+            for (size_t i = 0; i < 32; ++i) {
+                const double angle = -static_cast<double>(i) * 2 * M_PI / 32;
+                hole.push_back({longitude + 0.003 * std::cos(angle), latitude + 0.003 * std::sin(angle)});
+            }
+            hole.push_back(hole.front());
+        }
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb).ok());
+        auto input = GeoColumn::create(
+                GeoColumnDescriptor{geography_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        input->append_wkb(Slice(wkb));
+        std::vector<std::vector<LatLng>> vertices;
+        for (const auto& source : geometry.rings) {
+            auto& target = vertices.emplace_back();
+            for (size_t i = 0; i + 1 < source.size(); ++i)
+                target.push_back({source[i].y * M_PI / 180, source[i].x * M_PI / 180});
+        }
+        std::vector<::GeoLoop> holes;
+        for (size_t i = 1; i < vertices.size(); ++i)
+            holes.push_back({static_cast<int>(vertices[i].size()), vertices[i].data()});
+        ::GeoPolygon polygon{{static_cast<int>(vertices[0].size()), vertices[0].data()},
+                             static_cast<int>(holes.size()),
+                             holes.data()};
+        for (int resolution : {7, 8, 9}) {
+            SCOPED_TRACE(scenario);
+            SCOPED_TRACE(resolution);
+            int64_t count = 0;
+            ASSERT_EQ(E_SUCCESS, maxPolygonToCellsSize(&polygon, resolution, 0, &count));
+            std::vector<H3Index> expected(count, 0);
+            ASSERT_EQ(E_SUCCESS, polygonToCells(&polygon, resolution, 0, expected.data()));
+            std::unordered_set<int64_t> expected_cells;
+            for (H3Index cell : expected)
+                if (cell != H3_NULL) expected_cells.insert(static_cast<int64_t>(cell));
+            auto actual = GeoFunctions::h3_polygon_to_cells(
+                    nullptr, {input, ColumnHelper::create_const_column<TYPE_INT>(resolution, 1)});
+            ASSERT_TRUE(actual.ok()) << actual.status();
+            std::unordered_set<int64_t> actual_cells;
+            const auto actual_datum = (*actual)->get(0);
+            for (const auto& cell : actual_datum.get_array()) EXPECT_TRUE(actual_cells.insert(cell.get_int64()).second);
+            EXPECT_EQ(expected_cells, actual_cells);
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsSensitiveGeometryAndMultipolygonSets) {
+    for (int scenario = 0; scenario < 5; ++scenario) {
+        const double longitude = scenario == 0 ? 179.95 : (scenario == 4 ? 35 : 0);
+        const double latitude = scenario == 1 ? 85 : (scenario == 4 ? 55 : 0);
+        const double radius = scenario == 2 ? 60 : 0.1;
+        const size_t count = scenario == 3 ? 32 : 256;
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        auto& ring = polygon.rings.emplace_back();
+        for (size_t i = 0; i < count; ++i) {
+            const double angle = i * 2 * M_PI / count;
+            double x = longitude + radius * std::cos(angle);
+            if (x > 180) x -= 360;
+            ring.push_back({x, latitude + radius * std::sin(angle)});
+        }
+        ring.push_back(ring.front());
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
+        auto input = GeoColumn::create(
+                GeoColumnDescriptor{geography_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        input->append_wkb(Slice(wkb));
+        std::vector<LatLng> vertices;
+        for (size_t i = 0; i + 1 < ring.size(); ++i)
+            vertices.push_back({ring[i].y * M_PI / 180, ring[i].x * M_PI / 180});
+        ::GeoPolygon library{{static_cast<int>(vertices.size()), vertices.data()}, 0, nullptr};
+        const int resolution = scenario == 2 ? 1 : 6;
+        int64_t slots = 0;
+        ASSERT_EQ(E_SUCCESS, maxPolygonToCellsSize(&library, resolution, 0, &slots));
+        std::vector<H3Index> cells(slots, 0);
+        ASSERT_EQ(E_SUCCESS, polygonToCells(&library, resolution, 0, cells.data()));
+        std::unordered_set<int64_t> expected;
+        for (H3Index c : cells)
+            if (c != H3_NULL) expected.insert(static_cast<int64_t>(c));
+        auto actual = GeoFunctions::h3_polygon_to_cells(
+                nullptr, {input, ColumnHelper::create_const_column<TYPE_INT>(resolution, 1)});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        std::unordered_set<int64_t> returned;
+        const auto actual_datum = (*actual)->get(0);
+        for (const auto& c : actual_datum.get_array()) EXPECT_TRUE(returned.insert(c.get_int64()).second);
+        EXPECT_EQ(expected, returned);
+        if (scenario == 3) continue;
+        WkbGeometry multi;
+        multi.type = WkbGeometryType::MULTIPOLYGON;
+        multi.children.push_back(polygon);
+        if (scenario == 4) {
+            auto second = polygon;
+            for (auto& vertex : second.rings[0]) vertex.x += 1;
+            multi.children.push_back(second);
+            std::vector<LatLng> second_vertices;
+            for (size_t i = 0; i + 1 < second.rings[0].size(); ++i)
+                second_vertices.push_back({second.rings[0][i].y * M_PI / 180, second.rings[0][i].x * M_PI / 180});
+            ::GeoPolygon second_library{{static_cast<int>(second_vertices.size()), second_vertices.data()}, 0, nullptr};
+            ASSERT_EQ(E_SUCCESS, maxPolygonToCellsSize(&second_library, resolution, 0, &slots));
+            cells.assign(slots, H3_NULL);
+            ASSERT_EQ(E_SUCCESS, polygonToCells(&second_library, resolution, 0, cells.data()));
+            for (H3Index cell : cells)
+                if (cell != H3_NULL) expected.insert(static_cast<int64_t>(cell));
+        }
+        WkbGeometry empty;
+        empty.type = WkbGeometryType::POLYGON;
+        empty.empty = true;
+        multi.children.push_back(empty);
+        ASSERT_TRUE(WkbCodec::to_wkb(multi, &wkb).ok());
+        auto multiple = GeoColumn::create(
+                GeoColumnDescriptor{geography_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        multiple->append_wkb(Slice(wkb));
+        auto result = GeoFunctions::h3_polygon_to_cells(
+                nullptr, {multiple, ColumnHelper::create_const_column<TYPE_INT>(resolution, 1)});
+        ASSERT_TRUE(result.ok()) << result.status();
+        returned.clear();
+        const auto result_datum = (*result)->get(0);
+        for (const auto& c : result_datum.get_array()) EXPECT_TRUE(returned.insert(c.get_int64()).second);
+        EXPECT_EQ(expected, returned);
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimits) {
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto& ring = polygon.rings.emplace_back();
+    for (size_t i = 0; i < 256; ++i) {
+        const double angle = i * 2 * M_PI / 256;
+        ring.push_back({35 + 0.015 * std::cos(angle), 55 + 0.012 * std::sin(angle)});
+    }
+    ring.push_back(ring.front());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
+    auto data = GeoColumn::create(GeoColumnDescriptor{
+            geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+    data->append_wkb(Slice(wkb));
+    constexpr size_t rows = 17;
+    ColumnPtr input = ConstColumn::create(data, rows);
+    auto resolutions = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    for (size_t row = 0; row < rows; ++row) {
+        if (row % 5 == 0)
+            resolutions->append_nulls(1);
+        else
+            resolutions->append_datum(Datum(static_cast<int32_t>(7 + row % 3)));
+    }
+    auto result = GeoFunctions::h3_polygon_to_cells(nullptr, {input, resolutions});
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(rows, (*result)->size());
+    EXPECT_FALSE((*result)->is_constant());
+    for (size_t row = 0; row < rows; ++row) EXPECT_EQ(row % 5 == 0, (*result)->get(row).is_null());
+    auto constant =
+            GeoFunctions::h3_polygon_to_cells(nullptr, {input, ColumnHelper::create_const_column<TYPE_INT>(9, rows)});
+    ASSERT_TRUE(constant.ok());
+    EXPECT_TRUE((*constant)->is_constant());
+    EXPECT_EQ(rows, (*constant)->size());
+    struct SavedLimits {
+        int64_t bytes = config::h3_max_working_bytes, cells = config::h3_max_cells_per_row,
+                work = config::h3_max_estimated_work_per_row, vertices = config::h3_max_polygon_vertices;
+        ~SavedLimits() {
+            config::h3_max_working_bytes = bytes;
+            config::h3_max_cells_per_row = cells;
+            config::h3_max_estimated_work_per_row = work;
+            config::h3_max_polygon_vertices = vertices;
+        }
+    } saved;
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
+            &state, nullptr, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)),
+            {geography_type(), TypeDescriptor(TYPE_INT)}));
+    const auto evaluate = [&]() {
+        return GeoFunctions::h3_polygon_to_cells(context.get(),
+                                                 {input, ColumnHelper::create_const_column<TYPE_INT>(9, rows)});
+    };
+    state.set_is_cancelled(true);
+    auto cancelled = evaluate();
+    ASSERT_FALSE(cancelled.ok());
+    EXPECT_TRUE(cancelled.status().is_cancelled());
+    state.set_is_cancelled(false);
+    context->set_max_array_length(1);
+    EXPECT_FALSE(evaluate().ok());
+    context->set_max_array_length(0);
+    config::h3_max_cells_per_row = 1;
+    EXPECT_FALSE(evaluate().ok());
+    config::h3_max_cells_per_row = saved.cells;
+    config::h3_max_working_bytes = 1;
+    EXPECT_FALSE(evaluate().ok());
+    config::h3_max_working_bytes = saved.bytes;
+    config::h3_max_estimated_work_per_row = 1;
+    EXPECT_FALSE(evaluate().ok());
+    config::h3_max_estimated_work_per_row = saved.work;
+    config::h3_max_polygon_vertices = 256;
+    EXPECT_FALSE(evaluate().ok());
+    config::h3_max_polygon_vertices = saved.vertices;
+    EXPECT_TRUE(evaluate().ok());
+    state.set_process_status(Status::MemoryLimitExceeded("test recursive H3 fill query memory limit"));
+    auto limited = evaluate();
+    ASSERT_FALSE(limited.ok());
+    EXPECT_TRUE(limited.status().is_mem_limit_exceeded());
+}
+
 TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
     std::unique_ptr<FunctionContext> context(

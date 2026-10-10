@@ -589,6 +589,23 @@ struct H3PolygonComponent {
     size_t vertex_count = 0;
 };
 
+// The pinned H3 4.5 center iterator avoids tracing every edge of complex
+// polygons. Keep the standard fill for small, polar, or wide/seam-crossing
+// components, where its behavior and startup cost are preferable.
+bool h3_use_recursive_fill(const H3PolygonComponent& component) {
+    if (component.vertex_count < 128) return false;
+    double west = std::numeric_limits<double>::max();
+    double east = std::numeric_limits<double>::lowest();
+    for (const auto& ring : component.vertices) {
+        for (const auto& vertex : ring) {
+            if (std::abs(vertex.lat) > 70 * kRadiansPerDegree) return false;
+            west = std::min(west, vertex.lng);
+            east = std::max(east, vertex.lng);
+        }
+    }
+    return east - west <= 90 * kRadiansPerDegree;
+}
+
 StatusOr<std::unique_ptr<H3PolygonComponent> > h3_component(const WkbGeometry& geometry) {
     auto out = std::make_unique<H3PolygonComponent>();
     out->vertices.reserve(geometry.rings.size());
@@ -694,12 +711,26 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
             RETURN_IF_ERROR(h3_checkpoint(context));
             std::vector<H3Index> scratch(static_cast<size_t>(component->slots), 0);
             H3Budget budget{static_cast<size_t>(limits.working_bytes - external_bytes)};
+            const bool recursive = h3_use_recursive_fill(*component);
             H3Error error;
             {
                 H3BudgetScope scope(&budget);
-                error = polygonToCells(&component->polygon, res, 0, scratch.data());
+                error = recursive ? polygonToCellsExperimental(&component->polygon, res, CONTAINMENT_CENTER,
+                                                               component->slots, scratch.data())
+                                  : polygonToCells(&component->polygon, res, 0, scratch.data());
             }
             if (budget.exceeded) return Status::InvalidArgument("h3_max_working_bytes exceeded");
+            if (recursive) {
+                RETURN_IF_ERROR(h3_checkpoint(context));
+                // Keep the admitted standard-fill slab and fall back rather
+                // than increasing it if the iterator needs more output slots.
+                if (error == E_MEMORY_BOUNDS) {
+                    std::fill(scratch.begin(), scratch.end(), H3_NULL);
+                    H3BudgetScope scope(&budget);
+                    error = polygonToCells(&component->polygon, res, 0, scratch.data());
+                    if (budget.exceeded) return Status::InvalidArgument("h3_max_working_bytes exceeded");
+                }
+            }
             if (error != E_SUCCESS) return h3_error("H3_PolygonToCells", error);
             for (H3Index cell : scratch) {
                 if (cell == H3_NULL) continue;
