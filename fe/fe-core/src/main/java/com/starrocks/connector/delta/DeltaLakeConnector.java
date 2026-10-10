@@ -92,11 +92,11 @@ public class DeltaLakeConnector implements Connector {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return metastore.estimateCount();
+        return metastore == null ? Map.of() : metastore.estimateCount();
     }
 
     @Override
     public long estimateSize() {
-        return metastore.estimateSize();
+        return metastore == null ? 0 : metastore.estimateSize();
     }
 }

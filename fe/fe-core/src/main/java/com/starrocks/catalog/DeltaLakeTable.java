@@ -49,6 +49,7 @@ public class DeltaLakeTable extends Table {
     private SnapshotImpl deltaSnapshot;
     private Engine deltaEngine;
     private MetastoreTable metastoreTable;
+    private boolean unityCatalogTable;
 
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -118,6 +119,14 @@ public class DeltaLakeTable extends Table {
 
     public CloudConfiguration getCloudConfiguration() {
         return metastoreTable.getCloudConfiguration();
+    }
+
+    public boolean isUnityCatalogTable() {
+        return unityCatalogTable;
+    }
+
+    public void setUnityCatalogTable(boolean unityCatalogTable) {
+        this.unityCatalogTable = unityCatalogTable;
     }
 
     public void clearMetadata() {
