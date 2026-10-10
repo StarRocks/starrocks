@@ -14,11 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -26,6 +30,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -704,5 +712,245 @@ public class CreateTableAnalyzerTest {
                 .parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         CreateTableAnalyzer.analyzeEngineName(createTableStmt, "test_unified_accepts_engine");
         Assertions.assertEquals("hive", createTableStmt.getEngineName());
+    }
+
+    private static Column getGeneratedPartitionColumn(String tableName) throws Exception {
+        OlapTable table = (OlapTable) AnalyzeTestUtil.getStarRocksAssert().getTable("test", tableName);
+        return table.getBaseSchema().stream()
+                .filter(Column::isGeneratedPartitionColumn)
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Test
+    public void testAggregateTableWithGeneratedPartitionColumn() throws Exception {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withTable("CREATE TABLE test.t_agg_week (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `v` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`dt`, `city`)\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        // the partition column is materialized as a hidden value column carrying REPLACE, which is an
+        // identity operation because it only depends on key columns
+        Column generatedColumn = getGeneratedPartitionColumn("t_agg_week");
+        Assertions.assertNotNull(generatedColumn);
+        Assertions.assertFalse(generatedColumn.isKey());
+        Assertions.assertEquals(AggregateType.REPLACE, generatedColumn.getAggregationType());
+
+        // and it stays invisible to users
+        String ddl = starRocksAssert.showCreateTable("show create table test.t_agg_week");
+        Assertions.assertFalse(ddl.contains(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX));
+        assertThat(ddl, containsString("date_trunc('week', dt)"));
+    }
+
+    @Test
+    public void testAggregateTableWithInferredKeysAndGeneratedPartitionColumn() throws Exception {
+        // the keys type is inferred from the value columns, so it is not known yet when the
+        // generated partition column is created
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.t_agg_inferred_keys (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `pv` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        OlapTable table = (OlapTable) AnalyzeTestUtil.getStarRocksAssert().getTable("test", "t_agg_inferred_keys");
+        Assertions.assertEquals(KeysType.AGG_KEYS, table.getKeysType());
+        Column generatedColumn = getGeneratedPartitionColumn("t_agg_inferred_keys");
+        Assertions.assertNotNull(generatedColumn);
+        // the generated column must not be swept into the inferred key list
+        Assertions.assertFalse(generatedColumn.isKey());
+        Assertions.assertEquals(AggregateType.REPLACE, generatedColumn.getAggregationType());
+        Assertions.assertEquals(Set.of("dt", "city"), table.getKeyColumns().stream()
+                .map(Column::getName).collect(Collectors.toSet()));
+    }
+
+    @Test
+    public void testNonDeterministicPartitionExprIsRejected() {
+        // rand() would send rows of the same aggregate key to different partitions, so the generated
+        // column would no longer be determined by the keys
+        analyzeFail("CREATE TABLE test.t_agg_nondeterministic (\n" +
+                        "  `k` bigint NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `pv` bigint SUM\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`k`, `city`)\n" +
+                        "PARTITION BY floor(rand() * 2 + k)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should be deterministic");
+        // the same holds for a duplicate key table: partition pruning would be wrong there too
+        analyzeFail("CREATE TABLE test.t_dup_nondeterministic (\n" +
+                        "  `k` bigint NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(`k`, `city`)\n" +
+                        "PARTITION BY floor(rand() * 2 + k)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should be deterministic");
+    }
+
+    @Test
+    public void testPartitionExprSpellingMustMatchTheDeclaredColumn() {
+        // a generated column resolves its source columns case sensitively, so a partition expression
+        // that spells the column differently cannot create a table at all, for any keys type. The
+        // source column of such a table can therefore never be dropped later.
+        String ddl = "CREATE TABLE test.t_agg_mixed_case_key (\n" +
+                "  `event_day` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `pv` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`event_day`, `city`)\n" +
+                "PARTITION BY date_trunc('week', EVENT_DAY)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")";
+        analyzeFail(ddl, "does not exist");
+    }
+
+    @Test
+    public void testAggregateTablePartitionExprOnValueColumnIsCaseInsensitive() {
+        // the expression spells the column differently from the declaration; the guard that keeps the
+        // generated column functionally determined by the keys must still reject it
+        analyzeFail("CREATE TABLE test.t_agg_mixed_case_value (\n" +
+                        "  `dt` datetime NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `last_day` datetime MAX,\n" +
+                        "  `pv` bigint SUM\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`dt`, `city`)\n" +
+                        "PARTITION BY date_trunc('week', LAST_DAY)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should base on key column");
+    }
+
+    @Test
+    public void testAggregateTableWithMultiExpressionPartition() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.t_agg_multi_expr (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `v` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`dt`, `city`)\n" +
+                "PARTITION BY (`city`, date_trunc('day', dt))\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        Column generatedColumn = getGeneratedPartitionColumn("t_agg_multi_expr");
+        Assertions.assertNotNull(generatedColumn);
+        Assertions.assertEquals(AggregateType.REPLACE, generatedColumn.getAggregationType());
+    }
+
+    @Test
+    public void testUniqueTableWithGeneratedPartitionColumn() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.t_uniq_week (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `v` bigint\n" +
+                ") ENGINE=OLAP\n" +
+                "UNIQUE KEY(`dt`, `city`)\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        Assertions.assertNotNull(getGeneratedPartitionColumn("t_uniq_week"));
+    }
+
+    @Test
+    public void testDuplicateTableGeneratedPartitionColumnKeepsNoAggregateType() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert().withTable("CREATE TABLE test.t_dup_week (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `v` bigint\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`dt`, `city`)\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        Column generatedColumn = getGeneratedPartitionColumn("t_dup_week");
+        Assertions.assertNotNull(generatedColumn);
+        Assertions.assertNotEquals(AggregateType.REPLACE, generatedColumn.getAggregationType());
+    }
+
+    @Test
+    public void testAggregateTablePartitionExprMustBaseOnKeyColumn() {
+        analyzeFail("CREATE TABLE test.t_agg_partition_on_value (\n" +
+                        "  `dt` datetime NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `vdt` datetime MAX,\n" +
+                        "  `v` bigint SUM\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`dt`, `city`)\n" +
+                        "PARTITION BY date_trunc('week', vdt)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "The partition expr should base on key column");
+    }
+
+    @Test
+    public void testAggregateTableStillRejectsUserDefinedGeneratedColumn() {
+        analyzeFail("CREATE TABLE test.t_agg_user_generated (\n" +
+                        "  `dt` datetime NOT NULL,\n" +
+                        "  `city` varchar(64) NOT NULL,\n" +
+                        "  `v` bigint SUM,\n" +
+                        "  `week_start` datetime NULL AS date_trunc('week', dt)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "AGGREGATE KEY(`dt`, `city`)\n" +
+                        "PARTITION BY date_trunc('day', dt)\n" +
+                        "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                        "PROPERTIES(\"replication_num\" = \"1\")",
+                "Generated Column does not support AGG table");
+    }
+
+    @Test
+    public void testAggregateTableWithGeneratedPartitionColumnCanDropKeyColumn() throws Exception {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withTable("CREATE TABLE test.t_agg_drop_key (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `channel` varchar(64) NOT NULL,\n" +
+                "  `v` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`dt`, `city`, `channel`)\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+
+        // the hidden REPLACE column must not make the table look like it carries a user REPLACE value,
+        // which would forbid dropping a key column. The schema change itself is asynchronous, so this
+        // only asserts the statement is accepted; the column actually disappearing is covered by
+        // test_agg_table_generated_partition_column_alter in the SQL suite.
+        Assertions.assertDoesNotThrow(
+                () -> starRocksAssert.alterTable("ALTER TABLE test.t_agg_drop_key DROP COLUMN `channel`"));
+    }
+
+    @Test
+    public void testAggregateTableWithGeneratedPartitionColumnCanAddColumn() throws Exception {
+        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        starRocksAssert.withTable("CREATE TABLE test.t_agg_add_column (\n" +
+                "  `dt` datetime NOT NULL,\n" +
+                "  `city` varchar(64) NOT NULL,\n" +
+                "  `v` bigint SUM\n" +
+                ") ENGINE=OLAP\n" +
+                "AGGREGATE KEY(`dt`, `city`)\n" +
+                "PARTITION BY date_trunc('week', dt)\n" +
+                "DISTRIBUTED BY HASH(`city`) BUCKETS 3\n" +
+                "PROPERTIES(\"replication_num\" = \"1\")");
+        starRocksAssert.alterTable("ALTER TABLE test.t_agg_add_column ADD COLUMN `v2` bigint SUM DEFAULT \"0\"");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_agg_add_column");
+        List<String> columnNames = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
+        // new value columns are appended before the hidden partition column
+        Assertions.assertTrue(columnNames.indexOf("v2")
+                < columnNames.indexOf(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + "0"));
     }
 }
