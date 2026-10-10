@@ -61,6 +61,11 @@ public class RewriteEquivalent {
         return this.iRewriteEquivalent.getRewriteEquivalentType();
     }
 
+    public boolean isNonSubsumePercentileRewrite(ScalarOperator input) {
+        return iRewriteEquivalent instanceof PercentileRewriteEquivalent &&
+                ((PercentileRewriteEquivalent) iRewriteEquivalent).isNonSubsume(rewriteEquivalentContext, input);
+    }
+
     public ScalarOperator rewrite(EquivalentShuttleContext shuttleContext,
                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
                                   ScalarOperator newInput) {

@@ -852,6 +852,12 @@ FROM test;
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_mv_percentile_strict_match
+
+* **默认值**: false
+* **数据类型**: boolean
+* **描述**: 为 `true` 时，百分位数物化视图改写会拒绝使用压缩参数低于查询要求的摘要。优化器可以使用同一物化视图或其他物化视图中的合适摘要，也可以回退到基表。为 `false` 时，较低压缩参数的候选仍可参与改写，但会优先选择满足压缩参数要求的候选。被拒绝的等价表达式会记录在 MV trace 中。
+
 ### enable_profile
 
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
