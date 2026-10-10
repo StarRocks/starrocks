@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <iomanip>
@@ -36,8 +37,10 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -1882,7 +1885,13 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
     ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
     ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, true);
 
+    auto* rowset_pool = RuntimeEnv::GetInstance()->load_rowset_thread_pool();
+    const int old_max_threads = rowset_pool->max_threads();
+    ASSERT_OK(rowset_pool->update_max_threads(std::max(2, old_max_threads)));
+    DeferOp restore_pool([&]() { CHECK_OK(rowset_pool->update_max_threads(old_max_threads)); });
+
     std::atomic<int> entered{0};
+    std::atomic<int> active{0};
     std::atomic<bool> overlapped{false};
     auto* sync_point = SyncPoint::GetInstance();
     sync_point->EnableProcessing();
@@ -1891,13 +1900,15 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
         sync_point->DisableProcessing();
     });
     sync_point->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void*) {
-        if (entered.fetch_add(1) + 1 == 2) {
+        if (active.fetch_add(1) + 1 == 2) {
             overlapped.store(true);
         }
+        entered.fetch_add(1);
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
         while (entered.load() < 2 && std::chrono::steady_clock::now() < deadline) {
             std::this_thread::yield();
         }
+        active.fetch_sub(1);
     });
     sync_point->SetCallBack("Rowset::read::seg_options", [](void* arg) {
         auto* stats = static_cast<SegmentReadOptions*>(arg)->stats;
