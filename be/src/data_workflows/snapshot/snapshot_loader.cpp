@@ -605,13 +605,15 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
-    // Do not need to copy GIN in pk table because it does not support GIN now
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
+    RETURN_IF_ERROR(SnapshotManager::restore_clucene_index_files(snapshot_path));
+    // Use the schema that will be installed on the tablet by this restore.
+    auto snapshot_schema = TabletSchema::create(snapshot_meta.tablet_meta().schema());
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path, snapshot_schema));
 
     if (overwrite) {
         // check all files in /clone and /tablet
         std::set<std::string> snapshot_files;
-        RETURN_IF_ERROR(fs::list_dirs_files(snapshot_path, nullptr, &snapshot_files));
+        RETURN_IF_ERROR(SnapshotManager::list_snapshot_files(snapshot_path, &snapshot_files));
         snapshot_files.erase("meta");
 
         // 1. simply delete the old dir and replace it with the snapshot dir
@@ -636,6 +638,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         for (const std::string& file : snapshot_files) {
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
+            RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(full_dest_path).parent_path().string()));
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
                 LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
                              << ", err: " << std::strerror(errno);
@@ -731,6 +734,7 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
         return Status::InternalError(ss.str());
     }
 
+    RETURN_IF_ERROR(SnapshotManager::restore_clucene_index_files(snapshot_path));
     // rename the rowset ids and tabletid info in rowset meta
     status = SnapshotManager::instance()->convert_rowset_ids(snapshot_path, tablet_id, schema_hash);
     if (!status.ok()) {

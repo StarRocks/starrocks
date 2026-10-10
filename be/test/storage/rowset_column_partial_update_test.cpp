@@ -14,8 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <set>
@@ -29,6 +32,8 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "data_workflows/clone/engine_clone_task.h"
+#include "data_workflows/snapshot/snapshot_loader.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -36,10 +41,12 @@
 #include "storage/extends_column_utils.h"
 #include "storage/meta_reader.h"
 #include "storage/olap_common.h"
+#include "storage/replication_txn_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset_column_update_state.h"
 #include "storage/schema_change_utils.h"
+#include "storage/segment_stream_converter.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -228,14 +235,15 @@ public:
     }
 
     TabletSharedPtr create_tablet_with_gin_index(int64_t tablet_id, int32_t schema_hash,
-                                                 const std::string& imp_lib = "builtin") {
+                                                 const std::string& imp_lib = "builtin",
+                                                 TKeysType::type keys_type = TKeysType::PRIMARY_KEYS) {
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
-        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.keys_type = keys_type;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 
         TColumn k1;
@@ -1942,6 +1950,377 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_gin_index_check) {
 }
 
 #ifndef __APPLE__
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_non_primary_conversion) {
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene", TKeysType::DUP_KEYS);
+    auto rowset = create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); });
+    rowset->make_visible(Version(2, 2));
+    ASSERT_OK(tablet->add_rowset(rowset));
+    auto* snapshots = SnapshotManager::instance();
+    ASSIGN_OR_ABORT(auto path, snapshots->snapshot_full(tablet, 2, 3600));
+    DeferOp cleanup([&] { (void)snapshots->release_snapshot(path); });
+    auto dir = snapshots->get_schema_hash_full_path(tablet, path);
+    const auto old_id = rowset->rowset_id().to_string();
+    const auto flat_file = dir + "/" + old_id + "_0_1_segments.gen";
+    ASSIGN_OR_ABORT(auto expected, fs::md5sum(flat_file));
+    ASSERT_OK(SnapshotManager::restore_clucene_index_files(dir));
+    ASSERT_OK(snapshots->convert_rowset_ids(dir, tablet->tablet_id(), tablet->schema_hash()));
+    TabletMeta meta;
+    ASSERT_OK(meta.create_from_file(dir + "/" + std::to_string(tablet->tablet_id()) + ".hdr"));
+    TabletMetaPB pb;
+    meta.to_meta_pb(&pb);
+    bool found = false;
+    for (const auto& rs : pb.rs_metas()) {
+        if (rs.start_version() == 2 && rs.end_version() == 2) {
+            found = true;
+            ASSERT_NE(old_id, rs.rowset_id());
+            ASSIGN_OR_ABORT(auto actual, fs::md5sum(dir + "/" + rs.rowset_id() + "_0_1.ivt/segments.gen"));
+            ASSERT_EQ(expected, actual);
+        }
+    }
+    ASSERT_TRUE(found);
+    ASSERT_FALSE(fs::path_exist(flat_file));
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_new_replica_and_migration) {
+    for (bool migration : {false, true}) {
+        SCOPED_TRACE(migration);
+        auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+        int64_t version = 1;
+        std::vector<RowsetSharedPtr> rowsets{
+                create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); })};
+        commit_rowsets(tablet, rowsets, version);
+        ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "value_2", true).value());
+
+        auto* manager = SnapshotManager::instance();
+        ASSIGN_OR_ABORT(auto snapshot_path, manager->snapshot_full(tablet, version, 3600));
+        DeferOp cleanup([&] { (void)manager->release_snapshot(snapshot_path); });
+        const auto snapshot_dir = manager->get_schema_hash_full_path(tablet, snapshot_path);
+        std::set<std::string> dirs;
+        std::set<std::string> files;
+        ASSERT_OK(fs::list_dirs_files(snapshot_dir, &dirs, &files));
+        // The downloader only transfers top-level files, never directories.
+        ASSERT_TRUE(dirs.empty());
+        ASSERT_TRUE(files.count(rowsets[0]->rowset_id().to_string() + "_0_1_segments.gen"));
+
+        // Simulate downloading to a new replica's final directory. Use a different tablet ID
+        // so the source and the new replica can coexist in this test's TabletManager.
+        const auto new_tablet_id = tablet->tablet_id() + 1;
+        const auto clone_dir = tablet->data_dir()->path() + "/data/" +
+                               std::to_string(tablet->tablet_meta()->shard_id()) + "/" + std::to_string(new_tablet_id) +
+                               "/" + std::to_string(tablet->schema_hash());
+        ASSERT_OK(fs::create_directories(clone_dir));
+        if (migration) {
+            // Migration copies rowsets into the final tablet directory and flattens CLucene files.
+            auto copied = rowsets[0]->copy_files_to(clone_dir);
+            ASSERT_OK(copied.status());
+        } else {
+            for (const auto& file : files) {
+                if (file != "meta") {
+                    ASSERT_OK(FileSystem::Default()->link_file(snapshot_dir + "/" + file, clone_dir + "/" + file));
+                }
+            }
+        }
+        ASSIGN_OR_ABORT(auto meta, manager->parse_snapshot_meta(snapshot_dir + "/meta"));
+        meta.tablet_meta().set_tablet_id(new_tablet_id);
+        for (auto& rowset_meta : meta.rowset_metas()) {
+            rowset_meta.set_tablet_id(new_tablet_id);
+        }
+        ASSIGN_OR_ABORT(auto meta_file, FileSystem::Default()->new_writable_file(clone_dir + "/meta"));
+        ASSERT_OK(meta.serialize_to_file(meta_file.get()));
+        ASSERT_OK(meta_file->close());
+
+        // Follow clone download preparation and new replica creation.
+        ASSERT_OK(SnapshotManager::restore_clucene_index_files(clone_dir));
+        ASSERT_OK(manager->convert_rowset_ids(clone_dir, new_tablet_id, tablet->schema_hash()));
+        auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+        ASSERT_OK(tablet_manager->create_tablet_from_meta_snapshot(tablet->data_dir(), new_tablet_id,
+                                                                   tablet->schema_hash(), clone_dir));
+        auto cloned = tablet_manager->get_tablet(new_tablet_id);
+        ASSERT_NE(nullptr, cloned);
+        _tablets.push_back(cloned);
+        ASSIGN_OR_ABORT(auto matches, count_rows_with_str_eq(cloned, version, 2, "value_2", true));
+        ASSERT_EQ(1, matches);
+        ASSIGN_OR_ABORT(auto absent, count_rows_with_str_eq(cloned, version, 2, "missing", true));
+        ASSERT_EQ(0, absent);
+    }
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_non_primary_clone_and_replication) {
+    auto source = create_tablet_with_gin_index(rand(), rand(), "clucene", TKeysType::DUP_KEYS);
+    auto rowset = create_str_rowset(source, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); });
+    ASSERT_OK(source->add_inc_rowset(rowset, 2));
+    auto* manager = SnapshotManager::instance();
+    for (bool incremental : {false, true}) {
+        for (bool replication : {false, true}) {
+            SCOPED_TRACE(incremental);
+            SCOPED_TRACE(replication);
+            auto target = create_tablet_with_gin_index(rand(), source->schema_hash(), "clucene", TKeysType::DUP_KEYS);
+            ASSIGN_OR_ABORT(auto path, incremental ? manager->snapshot_incremental(source, {2}, 3600)
+                                                   : manager->snapshot_full(source, 2, 3600));
+            DeferOp cleanup([&] { (void)manager->release_snapshot(path); });
+            const auto dir = manager->get_schema_hash_full_path(source, path);
+            std::set<std::string> dirs;
+            std::set<std::string> files;
+            ASSERT_OK(fs::list_dirs_files(dir, &dirs, &files));
+            ASSERT_TRUE(dirs.empty());
+            const auto download_dir = path + "/download/";
+            ASSERT_OK(fs::create_directories(download_dir));
+            for (const auto& file : files) {
+                ASSERT_OK(FileSystem::Default()->link_file(dir + "/" + file, download_dir + file));
+            }
+            ASSERT_OK(SnapshotManager::restore_clucene_index_files(download_dir));
+            TReplicateSnapshotRequest request;
+            request.__set_src_tablet_id(source->tablet_id());
+            request.__set_tablet_id(target->tablet_id());
+            request.__set_schema_hash(target->schema_hash());
+            std::unordered_map<uint32_t, uint32_t> uid_map;
+            ReplicationTxnManager txn_manager;
+            ASSERT_OK(txn_manager.convert_snapshot_for_none_primary(download_dir, &uid_map, request));
+            if (replication) {
+                ASSERT_OK(txn_manager.publish_snapshot(target.get(), download_dir, 2, incremental));
+            } else {
+                TCloneReq clone_request;
+                EngineCloneTask clone(nullptr, clone_request, 0, nullptr, nullptr, nullptr);
+                ASSERT_OK(clone._finish_clone(target.get(), download_dir, 2, incremental));
+            }
+            ASSERT_OK(fs::remove_all(download_dir));
+            ASSIGN_OR_ABORT(auto matches, count_rows_with_str_eq(target, 2, 2, "value_2", true));
+            ASSERT_EQ(1, matches);
+            ASSIGN_OR_ABORT(auto absent, count_rows_with_str_eq(target, 2, 2, "missing", true));
+            ASSERT_EQ(0, absent);
+        }
+    }
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_primary_clone_fallback) {
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{
+            create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); })};
+    commit_rowsets(tablet, rowsets, version);
+    const auto index_name = rowsets[0]->rowset_id().to_string() + "_0_1";
+    const auto source_index_dir = tablet->schema_hash_path() + "/" + index_name + ".ivt";
+    std::set<std::string> index_files;
+    ASSERT_OK(fs::list_dirs_files(source_index_dir, nullptr, &index_files));
+    ASSERT_FALSE(index_files.empty());
+
+    auto* manager = SnapshotManager::instance();
+    // Version 1 has no delta, forcing the same FULL fallback used when a delta was GCed.
+    // Requesting version 2 alone takes the incremental branch of the same clone entrypoint.
+    // The third case exercises the legacy snapshot_incremental entrypoint.
+    for (int64_t missing_version : {1, 2, 3}) {
+        SCOPED_TRACE(missing_version);
+        ASSIGN_OR_ABORT(auto path, missing_version == 3 ? manager->snapshot_incremental(tablet, {2}, 3600)
+                                                        : manager->snapshot_primary(tablet, {missing_version}, 3600));
+        DeferOp cleanup([&] { (void)manager->release_snapshot(path); });
+        const auto dir = manager->get_schema_hash_full_path(tablet, path);
+        ASSIGN_OR_ABORT(auto meta, manager->parse_snapshot_meta(dir + "/meta"));
+        ASSERT_EQ(missing_version == 1 ? SNAPSHOT_TYPE_FULL : SNAPSHOT_TYPE_INCREMENTAL, meta.snapshot_type());
+        std::set<std::string> dirs;
+        std::set<std::string> files;
+        ASSERT_OK(fs::list_dirs_files(dir, &dirs, &files));
+        ASSERT_TRUE(dirs.empty());
+
+        // Simulate the top-level-only downloader, then restore the receiving directory layout.
+        const auto download_dir = path + "/download";
+        ASSERT_OK(fs::create_directories(download_dir));
+        for (const auto& file : files) {
+            ASSERT_OK(FileSystem::Default()->link_file(dir + "/" + file, download_dir + "/" + file));
+        }
+        for (const auto& file : index_files) {
+            ASSERT_TRUE(files.count(index_name + "_" + file));
+        }
+        ASSERT_OK(SnapshotManager::restore_clucene_index_files(download_dir));
+        for (const auto& file : index_files) {
+            ASSIGN_OR_ABORT(auto expected, fs::md5sum(source_index_dir + "/" + file));
+            ASSIGN_OR_ABORT(auto actual, fs::md5sum(download_dir + "/" + index_name + ".ivt/" + file));
+            ASSERT_EQ(expected, actual);
+        }
+
+        auto target = create_tablet_with_gin_index(rand(), tablet->schema_hash(), "clucene");
+        meta.tablet_meta().set_tablet_id(target->tablet_id());
+        for (auto& rowset_meta : meta.rowset_metas()) {
+            rowset_meta.set_tablet_id(target->tablet_id());
+        }
+        ASSERT_OK(fs::delete_file(download_dir + "/meta"));
+        ASSERT_OK(meta.serialize_to_file(download_dir + "/meta"));
+        TCloneReq request;
+        EngineCloneTask clone(nullptr, request, 0, nullptr, nullptr, nullptr);
+        ASSERT_OK(clone._finish_clone_primary(target.get(), download_dir));
+        ASSERT_FALSE(fs::path_exist(download_dir));
+        ASSIGN_OR_ABORT(auto matches, count_rows_with_str_eq(target, version, 2, "value_2", true));
+        ASSERT_EQ(1, matches);
+        ASSIGN_OR_ABORT(auto absent, count_rows_with_str_eq(target, version, 2, "missing", true));
+        ASSERT_EQ(0, absent);
+    }
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_remote_replication) {
+    auto source = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    auto target = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{
+            create_str_rowset(source, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); })};
+    commit_rowsets(source, rowsets, version);
+    ASSERT_EQ(1, count_rows_with_str_eq(source, version, 2, "value_2", true).value());
+
+    auto* snapshots = SnapshotManager::instance();
+    ASSIGN_OR_ABORT(auto snapshot_path, snapshots->snapshot_full(source, version, 3600));
+    DeferOp cleanup_snapshot([&] { (void)snapshots->release_snapshot(snapshot_path); });
+    TSnapshotInfo info;
+    info.__set_snapshot_path(snapshot_path);
+    info.__set_incremental_snapshot(false);
+
+    TReplicateSnapshotRequest request;
+    request.__set_transaction_id(target->tablet_id());
+    request.__set_table_id(1);
+    request.__set_partition_id(1);
+    request.__set_tablet_id(target->tablet_id());
+    request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    request.__set_schema_hash(target->schema_hash());
+    request.__set_visible_version(1);
+    request.__set_src_tablet_id(source->tablet_id());
+    request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    request.__set_src_schema_hash(source->schema_hash());
+    request.__set_src_visible_version(version);
+    request.__set_src_snapshot_infos({info});
+    auto* replication = StorageEngine::instance()->replication_txn_manager();
+    DeferOp cleanup_txn([&] { replication->clear_txn(request.transaction_id); });
+    // The BE_TEST downloader copies the flattened snapshot; conversion and publication
+    // exercise the production replication path, including rowset ID reassignment.
+    ASSERT_OK(replication->replicate_snapshot(request));
+    ASSERT_OK(replication->publish_txn(request.transaction_id, request.partition_id, target, version));
+    // Remove staging files before reading to prove the published index files are usable.
+    replication->clear_txn(request.transaction_id);
+    ASSERT_EQ(1, count_rows_with_str_eq(target, version, 2, "value_2", true).value());
+    ASSERT_EQ(0, count_rows_with_str_eq(target, version, 2, "missing", true).value());
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_replication_with_different_column_uids) {
+    auto source = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    auto target = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    TabletSchemaPB target_schema;
+    target->tablet_schema()->to_schema_pb(&target_schema);
+    std::unordered_map<uint32_t, uint32_t> uid_map;
+    for (auto& column : *target_schema.mutable_column()) {
+        const auto old_uid = column.unique_id();
+        uid_map.emplace(old_uid, old_uid + 10);
+        column.set_unique_id(old_uid + 10);
+    }
+    for (auto& index : *target_schema.mutable_table_indices()) {
+        for (auto& uid : *index.mutable_col_unique_id()) {
+            uid = uid_map.at(uid);
+        }
+    }
+    target_schema.set_next_column_unique_id(target_schema.next_column_unique_id() + 10);
+    target_schema.set_schema_version(target_schema.schema_version() + 1);
+    target->update_max_version_schema(TabletSchema::create(target_schema));
+    ASSERT_EQ(target_schema.column(2).unique_id(), target->tablet_schema()->column(2).unique_id());
+
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{
+            create_str_rowset(source, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); })};
+    commit_rowsets(source, rowsets, version);
+    auto* snapshots = SnapshotManager::instance();
+    ASSIGN_OR_ABORT(auto path, snapshots->snapshot_full(source, version, 3600));
+    DeferOp cleanup([&] { (void)snapshots->release_snapshot(path); });
+    auto src_dir = snapshots->get_schema_hash_full_path(source, path);
+    auto dst_dir = path + "/converted/";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    std::set<std::string> files;
+    ASSERT_OK(fs::list_dirs_files(src_dir, nullptr, &files));
+    // BE_TEST's downloader bypasses stream conversion. Exercise the production
+    // converter explicitly, then the production metadata conversion and publish paths.
+    for (const auto& name : files) {
+        if (std::filesystem::path(name).extension() == ".dat") {
+            std::ifstream input(src_dir + "/" + name, std::ios::binary);
+            ASSERT_TRUE(input.is_open());
+            std::string bytes((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+            ASSIGN_OR_ABORT(auto output, FileSystem::Default()->new_writable_file(dst_dir + name));
+            SegmentStreamConverter converter(name, bytes.size(), std::move(output), &uid_map);
+            ASSERT_OK(converter.append(bytes.data(), bytes.size()));
+            ASSERT_OK(converter.close());
+        } else {
+            ASSERT_OK(FileSystem::Default()->link_file(src_dir + "/" + name, dst_dir + name));
+        }
+    }
+    // Ensure rowset schemas are embedded regardless of the light-schema-change setting.
+    ASSIGN_OR_ABORT(auto meta, snapshots->parse_snapshot_meta(dst_dir + "meta"));
+    for (auto& rowset : meta.rowset_metas()) {
+        rowset.clear_tablet_schema();
+        source->tablet_schema()->to_schema_pb(rowset.mutable_tablet_schema());
+    }
+    ASSERT_OK(fs::delete_file(dst_dir + "meta"));
+    ASSERT_OK(meta.serialize_to_file(dst_dir + "meta"));
+    TReplicateSnapshotRequest request;
+    request.__set_tablet_id(target->tablet_id());
+    request.__set_schema_hash(target->schema_hash());
+    request.__set_partition_id(1);
+    ReplicationTxnManager replication;
+    ASSERT_OK(SnapshotManager::restore_clucene_index_files(dst_dir));
+    ASSERT_OK(replication.convert_snapshot_for_primary(dst_dir, &uid_map, request, source->tablet_schema()));
+    ASSERT_OK(replication.publish_snapshot_for_primary(target.get(), dst_dir));
+    ASSERT_OK(fs::remove_all(dst_dir));
+    auto matches = count_rows_with_str_eq(target, version, 2, "value_2", true);
+    ASSERT_OK(matches.status());
+    ASSERT_EQ(1, matches.value());
+    auto absent = count_rows_with_str_eq(target, version, 2, "missing", true);
+    ASSERT_OK(absent.status());
+    ASSERT_EQ(0, absent.value());
+    ASSERT_EQ(source->tablet_schema()->column(2).unique_id(),
+              target->tablet_meta()->source_schema()->column(2).unique_id());
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_non_primary_backup_restore) {
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene", TKeysType::DUP_KEYS);
+    auto rowset = create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); });
+    ASSERT_OK(tablet->add_inc_rowset(rowset, 2));
+    auto* snapshots = SnapshotManager::instance();
+    ASSIGN_OR_ABORT(auto path, snapshots->snapshot_full(tablet, 2, 3600));
+    DeferOp cleanup([&] { (void)snapshots->release_snapshot(path); });
+    const auto dir = snapshots->get_schema_hash_full_path(tablet, path);
+    SnapshotLoader loader(nullptr, 1, 1);
+    {
+        std::unique_lock base_lock(tablet->get_base_lock());
+        std::unique_lock cumulative_lock(tablet->get_cumulative_lock());
+        std::unique_lock push_lock(tablet->get_push_lock());
+        std::unique_lock header_lock(tablet->get_header_lock());
+        ASSERT_OK(loader.move(dir, tablet, true));
+    }
+    ASSERT_OK(fs::remove_all(dir));
+    auto restored = StorageEngine::instance()->tablet_manager()->get_tablet(tablet->tablet_id());
+    ASSERT_NE(nullptr, restored);
+    ASSIGN_OR_ABORT(auto matches, count_rows_with_str_eq(restored, 2, 2, "value_2", true));
+    ASSERT_EQ(1, matches);
+    ASSIGN_OR_ABORT(auto absent, count_rows_with_str_eq(restored, 2, 2, "missing", true));
+    ASSERT_EQ(0, absent);
+}
+
+TEST_P(RowsetColumnPartialUpdateTest, full_snapshot_clucene_backup_restore) {
+    auto tablet = create_tablet_with_gin_index(rand(), rand(), "clucene");
+    int64_t version = 1;
+    std::vector<RowsetSharedPtr> rowsets{
+            create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "value_" + std::to_string(k); })};
+    commit_rowsets(tablet, rowsets, version);
+    auto* snapshots = SnapshotManager::instance();
+    ASSIGN_OR_ABORT(auto snapshot_path, snapshots->snapshot_full(tablet, version, 3600));
+    DeferOp cleanup_snapshot([&] { (void)snapshots->release_snapshot(snapshot_path); });
+    auto snapshot_dir = snapshots->get_schema_hash_full_path(tablet, snapshot_path);
+    const auto snapshot_version = version;
+
+    rowsets = {create_str_rowset(tablet, {1, 2, 3}, [](int64_t k) { return "updated_" + std::to_string(k); })};
+    commit_rowsets(tablet, rowsets, version);
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, version, 2, "updated_2", true).value());
+
+    SnapshotLoader loader(nullptr, 1, 1);
+    ASSERT_OK(loader.primary_key_move(snapshot_dir, tablet, true));
+    ASSERT_FALSE(fs::path_exist(snapshot_dir));
+    // Restore must retain the snapshot's index after replacing the tablet directory
+    // and deleting the staging snapshot, including when restoring an older version.
+    ASSERT_EQ(1, count_rows_with_str_eq(tablet, snapshot_version, 2, "value_2", true).value());
+    ASSERT_EQ(0, count_rows_with_str_eq(tablet, snapshot_version, 2, "updated_2", true).value());
+}
+
 // CLucene (the shared-nothing default implementation) is not produced for DCG .cols files.
 // After a column-mode partial update on the indexed column, the base segment's CLucene index
 // is stale, so no index is served for the updated column: ordinary predicates must fall back
