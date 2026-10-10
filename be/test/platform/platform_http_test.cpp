@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <event2/http.h>
+#include <event2/http_struct.h>
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <string>
 
 #include "base/auth/credential_mask.h"
@@ -109,6 +112,34 @@ TEST(PlatformHttpTest, DebugStringMasksCredentialHeaders) {
     // Everything else is printed as is.
     EXPECT_NE(std::string::npos, s.find("key=Content-Type, value=application/json\n"));
     EXPECT_NE(std::string::npos, s.find("key=label, value=load_1\n"));
+}
+
+TEST(PlatformHttpTest, DebugStringMasksSensitiveParams) {
+    // Feed the request through init_from_evhttp() so the uri and the query params are filled in as in production.
+    evhttp_request* ev_req = evhttp_request_new(nullptr, nullptr);
+    ev_req->type = EVHTTP_REQ_POST;
+    ev_req->uri = strdup("/api/update_config?secret_key=FakeSecret123&label=load_1");
+    ev_req->uri_elems = evhttp_uri_parse(ev_req->uri);
+    HttpRequest req(ev_req);
+    ASSERT_EQ(0, req.init_from_evhttp());
+
+    const std::string mask(kCredentialMask);
+    const std::string masked = req.debug_string([](std::string_view key) { return key == "secret_key"; });
+    EXPECT_EQ(std::string::npos, masked.find("FakeSecret123"));
+    EXPECT_NE(std::string::npos, masked.find("uri:/api/update_config?label=load_1&secret_key=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, masked.find("key=secret_key, value=" + mask + "\n"));
+    EXPECT_NE(std::string::npos, masked.find("key=label, value=load_1\n"));
+
+    // Without a predicate, the uri and params are printed as is.
+    const std::string plain = req.debug_string();
+    EXPECT_NE(std::string::npos, plain.find("uri:/api/update_config?secret_key=FakeSecret123&label=load_1\n"));
+    EXPECT_NE(std::string::npos, plain.find("key=secret_key, value=FakeSecret123\n"));
+
+    // A predicate that matches nothing leaves the uri untouched.
+    const std::string none = req.debug_string([](std::string_view) { return false; });
+    EXPECT_NE(std::string::npos, none.find("uri:/api/update_config?secret_key=FakeSecret123&label=load_1\n"));
+
+    evhttp_request_free(ev_req);
 }
 
 TEST(PlatformHttpTest, BasicAuthParsesValidAuthorization) {
