@@ -23,6 +23,7 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
@@ -40,6 +41,8 @@ import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hudi.HudiMetadata;
 import com.starrocks.connector.iceberg.IcebergMetaSpec;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexTableType;
 import com.starrocks.connector.kudu.KuduMetadata;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
@@ -177,6 +180,23 @@ public class UnifiedMetadataTest {
         unifiedMetadata.dropDb(connectContext, "test_db", false);
         CloudConfiguration cloudConfiguration = unifiedMetadata.getCloudConfiguration();
         assertEquals(CloudType.DEFAULT, cloudConfiguration.getCloudType());
+    }
+
+    @Test
+    public void testGetIndexMetadataRoutesToPaimonConnector() {
+        PaimonTable table = new PaimonTable();
+        TvrTableSnapshot version = TvrTableSnapshot.of(7L);
+        ConnectorIndexMetadata expected = ConnectorIndexMetadata.of(
+                7L, ConnectorIndexTableType.DATA_EVOLUTION, List.of());
+        new Expectations() {
+            {
+                paimonMetadata.getIndexMetadata(table, version);
+                result = expected;
+                times = 1;
+            }
+        };
+
+        assertSame(expected, unifiedMetadata.getIndexMetadata(table, version));
     }
 
     @Test
