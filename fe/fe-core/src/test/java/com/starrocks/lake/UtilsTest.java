@@ -21,11 +21,7 @@ import com.starrocks.alter.reshard.PublishTabletsInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.RangeDistributionInfo;
->>>>>>> cd3e51fb927... [BugFix] Create range-distribution tablets with their own initial metadata (#64928)
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;

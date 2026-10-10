@@ -866,7 +866,7 @@ TEST_F(LakeTabletManagerTest, per_tablet_initial_metadata_keeps_each_tablet_rang
         txn_info.set_txn_type(TXN_NORMAL);
         return lake::publish_version(_tablet_manager, lake::PublishTabletInfo(tablet_id), /*base_version=*/1,
                                      /*new_version=*/2, std::span<const TxnInfoPB>(&txn_info, 1),
-                                     skip_write_tablet_metadata, std::nullopt);
+                                     skip_write_tablet_metadata);
     };
     ASSIGN_OR_ABORT(auto second_v2, publish_empty_write(second_id, next_id(), false));
     expect_range(second_v2, &v100, &v200);
