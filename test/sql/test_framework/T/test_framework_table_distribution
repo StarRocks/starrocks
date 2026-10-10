@@ -1,0 +1,43 @@
+-- name: test_framework_table_distribution
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+-- Every form the distribution can take, asserted through
+-- information_schema.tables_config rather than SHOW CREATE TABLE text. This case
+-- carries no @native tag on purpose: the point of the helper is that it says the
+-- same thing in shared-nothing and shared-data, so it has to run in both.
+
+create table t_hash (k int, k1 date) distributed by hash(k) buckets 4 properties('replication_num' = '1');
+function: assert_table_distribution("t_hash", "HASH", "k", 4)
+
+-- Multi-column key. Spacing and backticks are normalised, so all three spellings
+-- of the same key are accepted.
+create table t_multi (k int, k1 date) distributed by hash(k, k1) buckets 3 properties('replication_num' = '1');
+function: assert_table_distribution("t_multi", "HASH", "k, k1", 3)
+function: assert_table_distribution("t_multi", "HASH", "k,k1", 3)
+function: assert_table_distribution("t_multi", "HASH", "`k`, `k1`", 3)
+
+-- No bucket count given, so the number is assigned dynamically. Omit bucket_num
+-- and the key is still asserted.
+create table t_dynamic (k int, k1 date) distributed by hash(k) properties('replication_num' = '1');
+function: assert_table_distribution("t_dynamic", "HASH", "k")
+
+-- RANDOM has no distribution key at all.
+create table t_random (k int, k1 date) distributed by random properties('replication_num' = '1');
+function: assert_table_distribution("t_random", "RANDOM")
+
+-- Type is matched case-insensitively.
+function: assert_table_distribution("t_random", "random")
+function: assert_table_distribution("t_hash", "hash", "K", 4)
+
+-- What OPTIMIZE changes is exactly what this helper reads, so the same assertion
+-- works before and after a redistribution.
+alter table t_hash distributed by hash(k1) buckets 2;
+function: wait_optimize_table_finish()
+function: assert_table_distribution("t_hash", "HASH", "k1", 2)
+
+alter table t_hash distributed by random;
+function: wait_optimize_table_finish()
+function: assert_table_distribution("t_hash", "RANDOM")
+
+drop database test_db_${uuid0};
