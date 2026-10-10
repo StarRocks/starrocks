@@ -82,15 +82,20 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * ({@code 0} = uncapped); the production runner applies it via
      * {@code query_timeout} on the sample context so an over-budget sample is
      * cancelled by the BE. Test stubs return canned batches and ignore it.
+     *
+     * <p>{@code loadTimeZone} is the zone the load reads its source in, and {@code sessionSemantics} are the load
+     * session's variables the sub-query must parse and evaluate under ({@link SampleSessionSemantics}); the
+     * production runner sets both on the sample session. Test stubs implement the three-argument form, which the
+     * default five-argument form calls, ignoring both.
      */
     @FunctionalInterface
     interface SampleQueryRunner {
         List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
                 throws StarRocksException;
 
-        // Existing test stubs return canned batches; the production runner also applies the load time zone.
-        default List<TResultBatch> run(String sampleSql, ComputeResource computeResource,
-                                     int queryTimeoutSeconds, String loadTimeZone) throws StarRocksException {
+        default List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+                                       String loadTimeZone, SampleSessionSemantics sessionSemantics)
+                throws StarRocksException {
             return run(sampleSql, computeResource, queryTimeoutSeconds);
         }
     }
@@ -112,7 +117,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * already be backtick-quoted (e.g. via {@link SqlUtils#getIdentSql}).
      *
      * <p>{@code scannedInputBytes} is what the sample actually reads and sizes its rate for;
-     * {@code totalInputBytes} is the whole input, which the estimates report.
+     * {@code totalInputBytes} is the whole input, which the estimates report. {@code sessionSemantics} are the load
+     * session's variables the sub-query runs under; the constructor that does not take them carries
+     * {@link SampleSessionSemantics#NONE}.
      */
     protected record SampleSpec(
             String fromClauseSql,
@@ -126,7 +133,8 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             long totalInputRows,
             boolean estimateFilteredInput,
             long scannedInputBytes,
-            List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
+            List<Estimates.PartitionSourceBytes> partitionSourceBytes,
+            SampleSessionSemantics sessionSemantics) {
         public SampleSpec(
                 String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
                 ComputeResource computeResource, List<String> sortKeyProjectionIdents,
@@ -134,17 +142,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 List<Column> partitionSourceColumns) {
             this(fromClauseSql, whereClauseSqlOrNull, totalInputBytes, computeResource,
                     sortKeyProjectionIdents, partitionProjectionIdents, sortKeyColumns,
-                    partitionSourceColumns, 0L, false);
-        }
-
-        public SampleSpec(
-                String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
-                ComputeResource computeResource, List<String> sortKeyProjectionIdents,
-                List<String> partitionProjectionIdents, List<Column> sortKeyColumns,
-                List<Column> partitionSourceColumns, long totalInputRows, boolean estimateFilteredInput) {
-            this(fromClauseSql, whereClauseSqlOrNull, totalInputBytes, computeResource,
-                    sortKeyProjectionIdents, partitionProjectionIdents, sortKeyColumns,
-                    partitionSourceColumns, totalInputRows, estimateFilteredInput, totalInputBytes, List.of());
+                    partitionSourceColumns, 0L, false, totalInputBytes, List.of(), SampleSessionSemantics.NONE);
         }
 
         public SampleSpec {
@@ -155,6 +153,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             Objects.requireNonNull(sortKeyColumns, "sortKeyColumns");
             Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
             Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
+            Objects.requireNonNull(sessionSemantics, "sessionSemantics");
             if (totalInputBytes < 0) {
                 throw new IllegalArgumentException("totalInputBytes must be non-negative, was " + totalInputBytes);
             }
@@ -196,14 +195,17 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         SimpleExecutor simpleExecutor = new SimpleExecutor(executorName, TResultSinkType.HTTP_PROTOCAL);
         return new SampleQueryRunner() {
             @Override
-            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) {
-                return run(sampleSql, computeResource, queryTimeoutSeconds, null);
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
+                    throws StarRocksException {
+                return run(sampleSql, computeResource, queryTimeoutSeconds, null, SampleSessionSemantics.NONE);
             }
 
             @Override
-            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource,
-                                          int queryTimeoutSeconds, String loadTimeZone) {
-                return runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone);
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+                                          String loadTimeZone, SampleSessionSemantics sessionSemantics)
+                    throws StarRocksException {
+                return runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds,
+                        loadTimeZone, sessionSemantics);
             }
         };
     }
@@ -227,7 +229,8 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 spec.fromClauseSql(), spec.whereClauseSqlOrNull(), projectionLayout.projectedIdents(),
                 samplingRate, rowLimit, request.getSeed(), request.getScanContext().loadTimeZone());
         List<TResultBatch> resultBatches = runSampleQuery(
-                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds(), request.getScanContext().loadTimeZone());
+                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds(),
+                request.getScanContext().loadTimeZone(), spec.sessionSemantics());
         List<SampleRow> rows = decodeRows(
                 resultBatches, spec.sortKeyColumns(), spec.partitionSourceColumns(), projectionLayout);
         Estimates estimates = estimateInput(spec, samplingRate, rowLimit, rows.size());
@@ -379,9 +382,10 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private List<TResultBatch> runSampleQuery(
             String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
-            String loadTimeZone) throws StarRocksException {
+            String loadTimeZone, SampleSessionSemantics sessionSemantics) throws StarRocksException {
         try {
-            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone);
+            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone,
+                    sessionSemantics);
         } catch (RuntimeException runtimeFailure) {
             throw new StarRocksException(
                     errorPrefix + "sample sub-query failed: " + runtimeFailure.getMessage(), runtimeFailure);
@@ -398,10 +402,11 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      */
     private static List<TResultBatch> runViaSimpleExecutor(
             SimpleExecutor simpleExecutor, String sampleSql, ComputeResource computeResource,
-            int queryTimeoutSeconds, String loadTimeZone) {
+            int queryTimeoutSeconds, String loadTimeZone, SampleSessionSemantics sessionSemantics)
+            throws StarRocksException {
         ConnectContext priorContext = ConnectContext.get();
-        ConnectContext sampleContext = configureSampleContext(
-                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds, loadTimeZone);
+        ConnectContext sampleContext = configureSampleContext(StatisticUtils.buildConnectContext(), computeResource,
+                queryTimeoutSeconds, loadTimeZone, sessionSemantics);
         sampleContext.setThreadLocalInfo();
         try {
             return simpleExecutor.executeDQL(sampleSql, sampleContext);
@@ -428,16 +433,16 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * leaves the built context's default timeout untouched. This is the seam
      * that makes the pre-submit deadline hard — {@code executeDQL} reads the
      * cap from {@code SessionVariable.toThrift()}, not from any SQL hint.
+     *
+     * <p>{@code sessionSemantics} -- the load session's variables that decide how the sub-query's expressions parse
+     * and evaluate -- go on the final session variable as well, before the sampler's own overrides so that no carried
+     * value can undo them. A variable that cannot be set fails the sample rather than letting it run in a session that
+     * only partly matches the load's.
      */
     @VisibleForTesting
     static ConnectContext configureSampleContext(
-            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
-        return configureSampleContext(context, computeResource, queryTimeoutSeconds, null);
-    }
-
-    @VisibleForTesting
-    static ConnectContext configureSampleContext(
-            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds, String loadTimeZone) {
+            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds, String loadTimeZone,
+            SampleSessionSemantics sessionSemantics) throws StarRocksException {
         // setCurrentWarehouseId delegates to setCurrentWarehouse, which REPLACES the session-variable
         // object with a fresh warehouse-defaulted one (re-applying only tracked SET variables). The
         // pre-submit-budget query_timeout is applied via a direct setter (not a tracked SET), so it
@@ -451,6 +456,18 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         if (loadTimeZone != null) {
             context.getSessionVariable().setTimeZone(loadTimeZone);
         }
+<<<<<<< HEAD
+=======
+        sessionSemantics.applyTo(context.getSessionVariable());
+        // Pin the sample scan to the BASE index. setCurrentWarehouseId above re-clones the session
+        // variable, so (like the query_timeout below) disable BOTH async and sync MV/rollup rewrite
+        // AFTER the switch or the disable is dropped. Without this, once the table carries sibling
+        // rollups the sync-MV/rollup rewrite (on by default) could sample a coarser sibling and skew the
+        // tablet boundaries. Mirrors the rewrite-INSERT base pinning in
+        // LakeOnlineRewriteJobBase.runPartitionRewrite.
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        context.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }

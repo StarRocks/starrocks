@@ -23,6 +23,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -74,6 +75,9 @@ import static org.mockito.Mockito.when;
  * integration coverage.
  */
 public class InsertPreSplitHookFilesTest {
+
+    // The hook reads the user's session variables by name; the GlobalStateMgr these tests mock has no VariableMgr.
+    private static final VariableMgr VARIABLE_MGR = new VariableMgr();
 
     private boolean savedConfigInsertFromFiles;
 
@@ -238,6 +242,7 @@ public class InsertPreSplitHookFilesTest {
             com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
             com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
             when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
+            when(globalState.getVariableMgr()).thenReturn(VARIABLE_MGR);
             globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
             when(metadataMgr.getDb(any(), any(), eq("target_db"))).thenReturn(database);
 
@@ -326,6 +331,7 @@ public class InsertPreSplitHookFilesTest {
             com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
             com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
             when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
+            when(globalState.getVariableMgr()).thenReturn(VARIABLE_MGR);
             globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
             when(metadataMgr.getDb(any(), any(), eq("target_db"))).thenReturn(database);
 

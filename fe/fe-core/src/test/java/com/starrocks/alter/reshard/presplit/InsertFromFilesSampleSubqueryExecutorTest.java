@@ -24,6 +24,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -628,7 +629,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
-    void configureSampleContextAlignsWarehouseBeforeSettingResource() {
+    void configureSampleContextAlignsWarehouseBeforeSettingResource() throws Exception {
         // The production runner pins the ConnectContext to the load's compute
         // resource. Warehouse-id alignment MUST come first: ConnectContext
         // discards the resource on a mismatched warehouse during planning.
@@ -637,7 +638,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
         ConnectContext returned = AbstractSqlSampleSubqueryExecutor.configureSampleContext(
-                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 0);
+                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 0, /*loadTimeZone=*/ null, SampleSessionSemantics.NONE);
 
         Assertions.assertSame(sampleContext, returned);
         InOrder inOrder = Mockito.inOrder(sampleContext);
@@ -650,7 +651,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
-    void configureSampleContextSetsQueryTimeoutWhenCapped() {
+    void configureSampleContextSetsQueryTimeoutWhenCapped() throws Exception {
         // The data-tier pipeline caps the sample at the remaining pre-submit
         // budget; configureSampleContext must push that onto the sample
         // session's query_timeout (the BE reads it via SessionVariable.toThrift
@@ -662,9 +663,26 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Mockito.when(computeResource.getWarehouseId()).thenReturn(7L);
 
         AbstractSqlSampleSubqueryExecutor.configureSampleContext(
-                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 45);
+                sampleContext, computeResource, /*queryTimeoutSeconds=*/ 45, /*loadTimeZone=*/ null, SampleSessionSemantics.NONE);
 
         Mockito.verify(sessionVariable).setQueryTimeoutS(45);
+    }
+
+    @Test
+    void theScanContextsSessionSemanticsReachTheRunner() throws Exception {
+        SampleSessionSemantics semantics = new SampleSessionSemantics(SqlModeHelper.MODE_DEFAULT,
+                Map.of(SessionVariable.TIME_ZONE, "Asia/Shanghai"));
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/d/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/d/a.parquet", 1024L)));
+        InsertFromFilesScanContext scanContext = new InsertFromFilesScanContext(sourceTable,
+                Mockito.mock(ComputeResource.class), "Asia/Shanghai", Map.of(), /*wherePredicateSql*/ null,
+                Map.of(), Map.of(), semantics);
+        PresplitTestSupport.SemanticsRecordingRunner runner = new PresplitTestSupport.SemanticsRecordingRunner();
+
+        new InsertFromFilesSampleSubqueryExecutor(runner).execute(
+                new SampleRequest(scanContext, List.of(bigintColumn("sort_key")), Long.MAX_VALUE, 0L));
+
+        Assertions.assertEquals(List.of(semantics), runner.received);
     }
 
     @Test

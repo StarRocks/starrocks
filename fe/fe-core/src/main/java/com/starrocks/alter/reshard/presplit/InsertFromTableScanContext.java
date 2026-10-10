@@ -29,11 +29,19 @@ import java.util.Objects;
  * predicate SQL is threaded through verbatim from the INSERT-SELECT statement so the sample
  * covers only the rows the load will actually write. A key column the SELECT feeds with a literal has no
  * source column; it is carried as the literal's SQL, which the sampler projects instead.
+<<<<<<< HEAD
  * The load time zone keeps external timestamp decoding aligned with the INSERT.
  *
  * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
  * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
  * come from its current snapshot summary, which the resolver reads once.
+=======
+ * A key column the SELECT computes from source columns -- a safe computed projection, or a generated
+ * column evaluated from the columns its definition reads -- is carried as the expression's SQL, which
+ * the sampler evaluates over the source rows. The load time zone keeps external timestamp decoding
+ * aligned with the INSERT. {@code sessionSemantics} are the INSERT session's variables that decide
+ * how the predicate and those expressions evaluate; the sampler sets them on its own session.
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
  */
 public record InsertFromTableScanContext(
         Table sourceTable,
@@ -43,8 +51,10 @@ public record InsertFromTableScanContext(
         ComputeResource computeResource,
         long sourceTotalBytes,
         long sourceTotalRows,
-        Map<String, String> targetToConstantSql,     // lower-cased target name -> SQL
-        String loadTimeZone) implements ScanContext {
+        Map<String, String> targetToConstantSql,    // lower-cased target name -> SQL
+        Map<String, String> targetToExpressionSql,  // lower-cased target name -> SQL
+        String loadTimeZone,
+        SampleSessionSemantics sessionSemantics) implements ScanContext {
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
@@ -52,18 +62,11 @@ public record InsertFromTableScanContext(
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(computeResource, "computeResource");
         Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+        Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+        Objects.requireNonNull(sessionSemantics, "sessionSemantics");
         if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
             throw new IllegalArgumentException("source estimates must be non-negative");
         }
-    }
-
-    /** Backward-compatible constructor for callers without a load session. */
-    public InsertFromTableScanContext(
-            Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
-            String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows,
-            Map<String, String> targetToConstantSql) {
-        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
-                sourceTotalBytes, sourceTotalRows, targetToConstantSql, null);
     }
 
     /** Every key column is backed by a source column. */
@@ -71,7 +74,7 @@ public record InsertFromTableScanContext(
             Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
             String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows) {
         this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
-                sourceTotalBytes, sourceTotalRows, Map.of());
+                sourceTotalBytes, sourceTotalRows, Map.of(), Map.of(), null, SampleSessionSemantics.NONE);
     }
 
     /** Backward-compatible constructor for the original internal-OLAP source path and its tests. */

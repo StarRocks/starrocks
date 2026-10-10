@@ -29,6 +29,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -77,12 +78,17 @@ import java.util.TreeMap;
  * empty file lists, and the column mappings
  * {@link #rejectKeyPerturbingFileGroups} screens out — a per-group {@code WHERE},
  * a negative load, a hadoop function, a {@code SET} / derived column, or a key
- * column that the mapping either supplies from the path or never names.
+ * column that the mapping either supplies from the path or never names, or a partition column
+ * the COLUMNS list leaves to its default.
  * (Example: {@code SET sort_key = upper(file_x)} would have the sampler read
  * the file's raw {@code sort_key} column instead of the mapped value the load
  * inserts.) CSV adds its own: file groups disagreeing on the positional field
  * layout or on the CSV dialect, a non-ASCII {@code enclose} / {@code escape}
  * byte, and a missing {@code COLUMNS} list with no base schema to fall back on.
+ *
+ * <p>A generated sort-key or partition column is projected as the expression the scan context carries for
+ * it -- its definition over the file columns it reads, each cast to its target type, which is how
+ * {@code Load} computes it.
  */
 final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
@@ -111,6 +117,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         // CSV. Knowing the format up front is what lets the CSV branch below pin that position.
         String format = resolveSharedFormat(context.fileGroups());
         rejectKeyPerturbingFileGroups(context.fileGroups(), sampledKeyColumns(request));
+        rejectUnreadPartitionColumns(context.fileGroups(), request.getPartitionSourceColumns());
 
         List<String> columnsFromPath = resolveSharedColumnsFromPath(context.fileGroups());
         // The load projects each partition source by its target column name, so a partition source is read
@@ -128,8 +135,53 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
             appendCsvProperties(filesProperties, context, request);
         }
         files.report(ERROR_PREFIX);
-        return new Source(filesProperties, files.totalBytes(), context.computeResource(), null, Map.of(), Map.of(),
-                Map.of(), files.scannedBytes(), files.partitionSourceBytes());
+        Map<String, String> constants = context.targetToConstantSql();
+        Map<String, String> expressions = context.targetToExpressionSql();
+        return new Source(filesProperties, files.totalBytes(), context.computeResource(), null,
+                fileColumnsByName(request, constants, expressions), constants, expressions,
+                files.scannedBytes(), files.partitionSourceBytes(), context.sessionSemantics());
+    }
+
+    /**
+     * Projects each rollup's sort key the way the base sort key is projected: by the column's own name,
+     * except a generated column, which is projected as the expression the scan context carries for it.
+     */
+    @Override
+    protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
+        BrokerLoadScanContext context = requireBrokerLoadContext(request);
+        Map<String, String> constants = context.targetToConstantSql();
+        Map<String, String> expressions = context.targetToExpressionSql();
+        if (constants.isEmpty() && expressions.isEmpty()) {
+            return super.secondaryProjectionIdents(request);
+        }
+        Map<String, String> fileColumns = fileColumnsByName(request, constants, expressions);
+        List<String> idents = new ArrayList<>();
+        for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
+            idents.addAll(filesProjections(spec.sortKey(), fileColumns, constants, expressions));
+        }
+        return idents;
+    }
+
+    /**
+     * The FILES column behind each directly projected column: the column's own name, since a Broker Load
+     * reads a column by the target's name. Empty -- name identity -- unless a generated column is computed:
+     * only then does {@link #filesProjections} need every other projected column mapped explicitly.
+     */
+    private static Map<String, String> fileColumnsByName(
+            SampleRequest request, Map<String, String> constants, Map<String, String> expressions) {
+        if (constants.isEmpty() && expressions.isEmpty()) {
+            return Map.of();
+        }
+        List<Column> projected = new ArrayList<>(sampledKeyColumns(request));
+        projected.addAll(request.getPartitionSourceColumns());
+        Map<String, String> byName = new HashMap<>();
+        for (Column column : projected) {
+            String targetName = column.getName().toLowerCase();
+            if (!constants.containsKey(targetName) && !expressions.containsKey(targetName)) {
+                byName.put(targetName, column.getName());
+            }
+        }
+        return byName;
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request) throws StarRocksException {
@@ -250,10 +302,39 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         if (columnExpressions == null || columnExpressions.isEmpty()) {
             return;
         }
-        for (Column keyColumn : sampledKeyColumns) {
-            if (!namesImportedColumn(columnExpressions, keyColumn.getName())) {
-                throw new StarRocksException(ERROR_PREFIX + "COLUMNS list does not name key column \""
-                        + keyColumn.getName() + "\", so the load does not populate it from the source");
+        rejectUnnamedColumns(columnExpressions, sampledKeyColumns, "key",
+                "so the load does not populate it from the source");
+    }
+
+    /**
+     * Rejects a COLUMNS list that does not name a non-generated partition column. The load writes that
+     * column's default, while the sampler would read whatever the file carries under its name and pre-create
+     * partitions the load never writes. A partition read from the path passes: COLUMNS FROM PATH names are
+     * part of the COLUMNS list.
+     */
+    private static void rejectUnreadPartitionColumns(List<BrokerFileGroup> fileGroups, List<Column> partitionColumns)
+            throws StarRocksException {
+        for (BrokerFileGroup fileGroup : fileGroups) {
+            List<ImportColumnDesc> columnExpressions = fileGroup.getColumnExprList();
+            if (columnExpressions == null || columnExpressions.isEmpty()) {
+                continue;
+            }
+            rejectUnnamedColumns(columnExpressions, partitionColumns, "partition",
+                    "so the load writes its default rather than the file's value");
+        }
+    }
+
+    /**
+     * Throws when the COLUMNS list does not name one of {@code columns}. A generated column is skipped: it can
+     * never be named (Load rejects it), the hook already checked that the columns it reads are, and the sampler
+     * computes it from them.
+     */
+    private static void rejectUnnamedColumns(List<ImportColumnDesc> columnExpressions, List<Column> columns,
+                                             String kind, String consequence) throws StarRocksException {
+        for (Column column : columns) {
+            if (!column.isGeneratedColumn() && !namesImportedColumn(columnExpressions, column.getName())) {
+                throw new StarRocksException(ERROR_PREFIX + "COLUMNS list does not name " + kind + " column \""
+                        + column.getName() + "\", " + consequence);
             }
         }
     }
@@ -358,7 +439,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
             throws StarRocksException {
         List<String> fileFieldNames = resolveSharedCsvFileFields(context);
         filesProperties.put(TableFunctionTable.PROPERTY_SCHEMA,
-                buildCsvSchema(fileFieldNames, projectedColumnsByName(request)));
+                buildCsvSchema(fileFieldNames, projectedColumnsByName(request, context.generatedColumnInputs())));
         appendCsvDialect(filesProperties, resolveSharedCsvDialect(context.fileGroups()));
     }
 
@@ -456,13 +537,19 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         return type.toSql();
     }
 
-    /** Every column the sampling SELECT projects — the sampled keys plus the partition sources. */
-    private static Map<String, Column> projectedColumnsByName(SampleRequest request) {
+    /**
+     * Every column the sampling SELECT reads from the file -- the sampled keys, the partition sources, and
+     * the columns a sampled generated column is computed from.
+     */
+    private static Map<String, Column> projectedColumnsByName(SampleRequest request, List<Column> generatedColumnInputs) {
         Map<String, Column> byName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         for (Column column : sampledKeyColumns(request)) {
             byName.putIfAbsent(column.getName(), column);
         }
         for (Column column : request.getPartitionSourceColumns()) {
+            byName.putIfAbsent(column.getName(), column);
+        }
+        for (Column column : generatedColumnInputs) {
             byName.putIfAbsent(column.getName(), column);
         }
         return byName;

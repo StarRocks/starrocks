@@ -462,8 +462,54 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
+<<<<<<< HEAD
 - ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`source_missing_sampled_column`（`FILES()` からの INSERT で、サンプリング対象のターゲット列が解決済みの INSERT 投影になく、サンプラーが投影できる FILES ソース列またはリテラルがない場合）、`unsupported_sampled_projection`（サンプリング対象のターゲット列が、セッションのタイムゾーンに依存する `from_unixtime(ts)` など、サンプラーで再現できない式または NULL で供給される場合。FILES のソース列は存在する可能性があります。`date_trunc('day', ts)` のような決定的な式はそのままサンプリングされ、この値は記録されません）、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`、`estimate_unavailable`（INSERT-from-table の取り込みで、External Catalog のソーステーブルのサイズをテーブル統計から見積もれない）。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`no_matching_partition`（手動 Range パーティションのターゲット：サンプリングしたパーティション値が、取り込みが書き込みうるどの宣言済みレンジにも含まれない。その値は破棄され、新しいパーティションの作成には使われない）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。
 - 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+=======
+- ラベル: `reason`。スキップの理由で、値は下の表のとおりです。表中のサンプリング対象列とは、ターゲットテーブルのパーティション列とソートキー列を指します。
+- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。導出ティアのスキップも `tablet_pre_split_sampler_failed` ではなく本カウンタに記録されます：導出ティアはデータを一切読まないためサンプラーが起動することはなく、`derivation_failed` も同様です。
+
+どの取り込みでも記録されうる値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `disabled_by_config` | 取り込み種別に対応する FE パラメータ `enable_tablet_pre_split_for_*` が無効。 |
+| `disabled_by_session` | セッションで `enable_tablet_pre_split` が `false` に設定されている。 |
+| `not_range_distribution` | ターゲットテーブルが Range 分散ではない。 |
+| `table_not_normal` | ターゲットテーブルが NORMAL 状態ではない（ALTER 実行中など）。 |
+| `unsupported_sort_key` | 可視 index にソートキーがない、またはソートキーにスカラー型でない列がある。 |
+| `has_materialized_view_or_rollup` | 可視のロールアップまたは同期マテリアライズドビューをベースインデックスと一緒に分割できない（タブレットが 1 つではない、またはソートキーが空かスカラー型でない列を含む）。 |
+| `metadata_not_resolved` | パーティションまたはそのベースインデックスが見つからない。通常は取り込み中に ALTER が実行されたため。 |
+| `multiple_base_index_tablets` | パーティションのベースインデックスに既に複数のタブレットがある。同じパーティションへの再取り込みでよく起きる。 |
+| `partition_not_empty` | パーティションに既にデータがある。 |
+| `source_missing_sampled_column` | サンプリング対象列に対応するソース列またはリテラルが取り込みにない（`FILES()` のファイルにその列がない、INSERT のターゲット列リストが省略しているなど）。 |
+| `unsupported_sampled_projection` | サンプリング対象列が、サンプラーで再現できない式（`from_unixtime(ts)` や NULL など）、または型のプッシュダウンで別の列の型として読み取られる `FILES()` の列から供給される。 |
+| `unsupported_generated_column` | サンプリング対象列が、サンプラーで値を計算できない生成列。列名と具体的な理由は FE ログに記録される。 |
+
+1 回の取り込みで複数のパーティションに書き込む場合に、パーティション単位で記録される値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `unsupported_partition_column_type` | パーティション列の型をサンプリングできない（STRUCT、ARRAY など）。 |
+| `invalid_partition_value` | サンプリングしたパーティション値から有効なパーティションを作れない（NOT NULL 列の NULL、パースできない日付など）。 |
+| `grouper_empty` | パーティションごとにグループ化する際、すべてのサンプル行が破棄された。 |
+| `no_matching_partition` | 手動 Range パーティションのテーブルで、サンプリングした値が取り込みの書き込み先となるどのレンジにも含まれない。その値は破棄され、新しいパーティションは作成されない。 |
+| `stale_catalog_state` | サンプリング後、事前分割の前にパーティションが消えた（並行する DROP や REPLACE など）。 |
+| `partition_not_eligible_post_create` | 事前作成後にパーティションが条件を満たさなくなった。通常は既にデータがあるか、複数のタブレットを持つため。 |
+
+導出ティアで記録される値。導出ティアは Range 分散の増分マテリアライズドビューのリフレッシュで使われ、分割点をサンプリングではなく導出で求めます：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `materialized_view_target` | 導出ティアがこのマテリアライズドビューに対応していない（増分マテリアライズドビューでない、ソートキーが隠し row-id 列でないなど）。 |
+| `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。 |
+| `row_id_space_not_pristine` | 自動インクリメントカウンタが既に id を払い出しているため、分割点を安全に導出できない。 |
+| `estimate_unavailable` | 利用できる出力サイズの見積もりがなく、タブレット数を決められない。テーブル統計のない External Catalog のテーブルからの INSERT でも記録される。 |
+| `multiple_temporary_partitions` | リフレッシュが複数の置き換えパーティションに書き込むため、分割するとほとんどのタブレットが空になる。機能を有効にしてもこれは変わらない。 |
+| `derivation_failed` | 分割点の導出に失敗した、または導出した分割点が検証に通らなかった。 |
+| `stale_catalog_state` | 分割点を導出してからジョブを構築するまでの間に、マテリアライズドビューの可視 index が変化した。 |
+| `submit_failed` | 導出した分割点から、受理される reshard ジョブを作れなかった。 |
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 

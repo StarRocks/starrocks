@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
@@ -34,10 +35,16 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TFunctionBinaryType;
+import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -49,6 +56,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.ACTIVITY_DATE;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.activityMonth;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.generatedColumn;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.stubGeneratedSchema;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -166,10 +177,18 @@ public class InsertSelectSourceColumnsTest {
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
+<<<<<<< HEAD
         return InsertSelectSourceColumns.resolve(
                 stmt, rel, target, source,
                 normalizedSourceName, sourceAlias, sortKeyColumns, partitionColumns,
                 InsertSelectSourceColumns.SchemaPairing.EXACT);
+=======
+        return gated(InsertSelectSourceColumns.resolveUngated(
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(source, normalizedSourceName, sourceAlias,
+                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null)),
+                sortKeyColumns, partitionColumns);
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     }
 
     /** The FILES call: whatever columns correspond are paired, extras on either side are fine. */
@@ -189,9 +208,28 @@ public class InsertSelectSourceColumnsTest {
     private static InsertSelectSourceColumns.Resolved resolvePerColumnFully(
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
+<<<<<<< HEAD
         return InsertSelectSourceColumns.resolve(
                 stmt, rel, target, source, SRC_NAME, null, sortKeyColumns, partitionColumns,
                 InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
+=======
+        return gated(InsertSelectSourceColumns.resolveUngated(
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(source, SRC_NAME, null,
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null)),
+                sortKeyColumns, partitionColumns);
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
+    }
+
+    /** The presence gates the sources apply after resolveUngated: a fed, non-degenerate key and fed partition columns. */
+    private static InsertSelectSourceColumns.Resolved gated(
+            InsertSelectSourceColumns.Resolved resolved, List<Column> sortKeyColumns, List<Column> partitionColumns) {
+        if (resolved == null || !InsertSelectSourceColumns.sortKeySampleable(sortKeyColumns, resolved)
+                || InsertSelectSourceColumns.firstUnsampleable(partitionColumns, resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED) != null) {
+            return null;
+        }
+        return resolved;
     }
 
     private static Map<String, String> sourceMapOf(InsertSelectSourceColumns.Resolved resolved) {
@@ -1149,7 +1187,7 @@ public class InsertSelectSourceColumnsTest {
         Assertions.assertEquals(
                 List.of("CAST('20260917' AS date)", "`exp_id`", "`grp_id`", "`bucket_id`"),
                 InsertSelectSourceColumns.projections(
-                        targetCols, resolved.targetToSource(), resolved.targetToConstantSql()));
+                        targetCols, resolved.targetToSource(), resolved.targetToConstantSql(), Map.of()));
     }
 
     @Test
@@ -1228,8 +1266,8 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void rollupSortKeyIsJudgedOnItsOwn() {
-        // The base key (k) passed inside resolve(); a rollup's key is checked separately by the
-        // source with the same rule. A rollup (dt, k) is sampleable, a rollup (dt) alone is not.
+        // Each index's key is judged by the same rule, the base key (k) and every rollup's alike.
+        // A rollup (dt, k) is sampleable, a rollup (dt) alone is not.
         InsertSelectSourceColumns.Resolved resolved =
                 new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"), Map.of(), Set.of());
 
@@ -1247,11 +1285,11 @@ public class InsertSelectSourceColumnsTest {
         // see that DATE -- not the string -- or it pre-creates a partition the load never uses.
         List<String> projections = InsertSelectSourceColumns.projections(
                 Arrays.asList(col("region"), dateCol("dt")),
-                Map.of("region", "src_region"), Map.of("dt", "'20260917'"));
+                Map.of("region", "src_region"), Map.of("dt", "'20260917'"), Map.of());
 
         Assertions.assertEquals(List.of("`src_region`", "CAST('20260917' AS date)"), projections);
         Assertions.assertNull(InsertSelectSourceColumns.projections(
-                Collections.singletonList(dateCol("dt")), Map.of(), Map.of()));
+                Collections.singletonList(dateCol("dt")), Map.of(), Map.of(), Map.of()));
     }
 
     @Test
@@ -1263,7 +1301,7 @@ public class InsertSelectSourceColumnsTest {
                 TypeFactory.createVarcharType(64), TypeFactory.createCharType(8));
         for (Type type : partitionTypes) {
             String projection = InsertSelectSourceColumns.projections(
-                    Collections.singletonList(new Column("p", type)), Map.of(), Map.of("p", "'1'")).get(0);
+                    Collections.singletonList(new Column("p", type)), Map.of(), Map.of("p", "'1'"), Map.of()).get(0);
             Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(
                     "SELECT " + projection + " FROM t", SqlModeHelper.MODE_DEFAULT), projection);
         }
@@ -1283,9 +1321,19 @@ public class InsertSelectSourceColumnsTest {
     private static InsertSelectSourceColumns.Resolved resolveComputed(
             String selectList, boolean byName, List<Column> targetCols, ConnectContext context,
             Column... sourceCols) {
+        return resolveComputed(SqlModeHelper.MODE_DEFAULT, selectList, byName, targetCols, context, sourceCols);
+    }
+
+    /**
+     * {@link #resolveComputed} for a statement parsed in {@code parseSqlMode}. A SET_VAR hint that drops a mode from
+     * the session leaves the parse in the session's mode, while {@code context} carries the hint's.
+     */
+    private static InsertSelectSourceColumns.Resolved resolveComputed(
+            long parseSqlMode, String selectList, boolean byName, List<Column> targetCols, ConnectContext context,
+            Column... sourceCols) {
         InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
                 "INSERT INTO t " + (byName ? "BY NAME " : "") + "SELECT " + selectList + " FROM " + FILES_CALL,
-                SqlModeHelper.MODE_DEFAULT);
+                parseSqlMode);
         SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         return InsertSelectSourceColumns.resolveUngated(
                 stmt, rel, olapTable(targetCols, targetCols, false), filesTable(sourceCols), SRC_NAME, null,
@@ -1316,8 +1364,10 @@ public class InsertSelectSourceColumnsTest {
         Assertions.assertEquals(Map.of("dt", "date_trunc('day', `ts`)"), resolved.targetToExpressionSql());
         Assertions.assertTrue(resolved.targetToConstantSql().isEmpty());
         Assertions.assertTrue(resolved.unsupportedProjectionTargets().isEmpty());
-        Assertions.assertNull(InsertSelectSourceColumns.firstUnfedColumn(targetCols, resolved));
-        Assertions.assertTrue(InsertSelectSourceColumns.partitionColumnsSampleable(List.of(dateCol("dt")), resolved));
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(targetCols, resolved,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED));
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(List.of(dateCol("dt")), resolved,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED));
         Assertions.assertEquals(List.of("CAST(date_trunc('day', `ts`) AS date)", "`k`"),
                 InsertSelectSourceColumns.projections(targetCols, resolved.targetToSource(),
                         resolved.targetToConstantSql(), resolved.targetToExpressionSql()));
@@ -1396,7 +1446,8 @@ public class InsertSelectSourceColumnsTest {
     @Test
     public void unsafeComputedProjectionsStayUnsupported() {
         // Each depends on something the ROOT sampling context does not share with the INSERT (session
-        // time zone, user, variables, a per-row random value), is not a vetted built-in, or yields NULL.
+        // time zone, user, variables, a per-row random value), is not a vetted built-in, binds no built-in
+        // (no built-in upper takes two arguments), or yields NULL.
         List<String> unsafe = List.of(
                 "from_unixtime(k)",
                 "unix_timestamp(ts)",
@@ -1408,7 +1459,8 @@ public class InsertSelectSourceColumnsTest {
                 "md5(ts)",
                 "db1.my_udf(ts)",
                 "CAST(NULL AS DATE)",
-                "uuid()");
+                "uuid()",
+                "upper(k, k)");
         List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
         for (String expression : unsafe) {
             InsertSelectSourceColumns.Resolved resolved = resolveComputed(
@@ -1419,7 +1471,8 @@ public class InsertSelectSourceColumnsTest {
             Assertions.assertTrue(resolved.targetToExpressionSql().isEmpty(), expression);
             Assertions.assertTrue(resolved.targetToConstantSql().isEmpty(), expression);
             Assertions.assertEquals("dt",
-                    InsertSelectSourceColumns.firstUnfedColumn(targetCols, resolved).getName(), expression);
+                    InsertSelectSourceColumns.firstUnsampleable(targetCols, resolved,
+                            InsertSelectSourceColumns.InputReading.AS_SELECTED).column().getName(), expression);
         }
     }
 
@@ -1433,7 +1486,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void withoutAContextNoComputedProjectionIsAdmitted() {
-        // The table-source path passes no context: its sampler only projects columns and literals.
+        // A caller that passes no context admits no computed projection.
         List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
         InsertSelectSourceColumns.Resolved resolved = resolveComputed(
                 "k, date_trunc('day', ts) AS dt", /*byName*/ true, targetCols, (ConnectContext) null,
@@ -1442,6 +1495,614 @@ public class InsertSelectSourceColumnsTest {
         Assertions.assertNotNull(resolved);
         Assertions.assertEquals(Set.of("dt"), resolved.unsupportedProjectionTargets());
         Assertions.assertTrue(resolved.targetToExpressionSql().isEmpty());
+    }
+
+    // --- generated sampled columns ---
+
+    /** A target whose non-generated base schema is {@code baseCols} and that also carries {@code generatedCols}. */
+    private static OlapTable generatedTarget(List<Column> baseCols, Column... generatedCols) {
+        OlapTable target = olapTable(baseCols, baseCols, true);
+        stubGeneratedSchema(target, baseCols, generatedCols);
+        return target;
+    }
+
+    /**
+     * {@code resolveUngated} plus {@code withGeneratedColumns} over a FILES-shaped statement, with the inputs
+     * handed over as {@code reading} says.
+     */
+    private static InsertSelectSourceColumns.Resolved resolveWithGenerated(
+            String selectList, OlapTable target, List<Column> sampledColumns,
+            InsertSelectSourceColumns.InputReading reading, Column... sourceCols) {
+        return resolveWithGenerated(computedProjectionContext(), selectList, target, sampledColumns, reading,
+                sourceCols);
+    }
+
+    /** {@link #resolveWithGenerated} for a user whose session is {@code context}; the statement is parsed in its sql_mode. */
+    private static InsertSelectSourceColumns.Resolved resolveWithGenerated(
+            ConnectContext context, String selectList, OlapTable target, List<Column> sampledColumns,
+            InsertSelectSourceColumns.InputReading reading, Column... sourceCols) {
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement("INSERT INTO t BY NAME SELECT " + selectList
+                + " FROM " + FILES_CALL, context.getSessionVariable().getSqlMode());
+        SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(filesTable(sourceCols), SRC_NAME, null,
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context));
+        return InsertSelectSourceColumns.withGeneratedColumns(
+                resolved, target, sampledColumns, reading, context, SRC_NAME, null);
+    }
+
+    /** {@link #resolveWithGenerated} with the inputs bound as selected, as INSERT from a table binds them. */
+    private static InsertSelectSourceColumns.Resolved resolveWithGenerated(
+            String selectList, OlapTable target, List<Column> sampledColumns, Column... sourceCols) {
+        return resolveWithGenerated(selectList, target, sampledColumns,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED, sourceCols);
+    }
+
+    private static final Column ACCOUNT_ID = col("account_id");
+    private static final Column ACTIVITY_MONTH = activityMonth();
+
+    @Test
+    public void generatedPartitionColumnIsComputedFromTheSourceColumnItReads() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, activity_date", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"), datetimeCol("activity_date"));
+
+        // The reference reads the value the load stores in activity_date: its source column cast to
+        // the target column's type.
+        Assertions.assertEquals(
+                Map.of("activity_date_month", "date_trunc('month', CAST(`activity_date` AS DATETIME))"),
+                resolved.targetToExpressionSql());
+        Assertions.assertTrue(resolved.generatedColumnFailures().isEmpty());
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(List.of(ACCOUNT_ID, ACTIVITY_MONTH), resolved,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED));
+        String projection = InsertSelectSourceColumns.projections(List.of(ACTIVITY_MONTH), resolved.targetToSource(),
+                resolved.targetToConstantSql(), resolved.targetToExpressionSql()).get(0);
+        Assertions.assertEquals(
+                "CAST(date_trunc('month', CAST(`activity_date` AS DATETIME)) AS datetime)", projection);
+        Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(
+                "SELECT " + projection + " FROM t", SqlModeHelper.MODE_DEFAULT), projection);
+    }
+
+    @Test
+    public void generatedColumnOverALiteralFoldsToAConstant() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(
+                "account_id, '2025-11-15 10:00:00' AS activity_date", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"));
+
+        Assertions.assertEquals("CAST('2025-11-01 00:00:00' AS DATETIME)",
+                resolved.targetToConstantSql().get("activity_date_month"));
+        Assertions.assertFalse(resolved.targetToExpressionSql().containsKey("activity_date_month"));
+    }
+
+    @Test
+    public void generatedColumnOverALiteralThatFoldsToNullIsDeclined() {
+        // A literal that does not convert to the input's DATETIME makes the definition NULL for every row.
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(
+                "account_id, 'not a date' AS activity_date", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(
+                List.of(ACTIVITY_MONTH), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("does not fold to a non-NULL constant"),
+                unsampleable.detail());
+    }
+
+    @Test
+    public void generatedColumnOverAComputedProjectionNestsThatExpression() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(
+                "account_id, CAST(ts AS DATETIME) AS activity_date", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"), datetimeCol("ts"));
+
+        Assertions.assertEquals("date_trunc('month', CAST((CAST(`ts` AS DATETIME)) AS DATETIME))",
+                resolved.targetToExpressionSql().get("activity_date_month"));
+    }
+
+    @Test
+    public void generatedColumnWhoseInputTheSourceLacksIsAttributedToTheGeneratedColumn() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable =
+                InsertSelectSourceColumns.firstUnsampleable(List.of(ACCOUNT_ID, ACTIVITY_MONTH), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertNotNull(unsampleable);
+        Assertions.assertEquals("activity_date_month", unsampleable.column().getName());
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("\"activity_date\""), unsampleable.detail());
+        Assertions.assertTrue(unsampleable.detail().contains("not take from the source"), unsampleable.detail());
+    }
+
+    @Test
+    public void generatedColumnWhoseInputIsAnUnsupportedProjectionNamesThatProjection() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(
+                "account_id, from_unixtime(account_id) AS activity_date", target,
+                List.of(ACCOUNT_ID, ACTIVITY_MONTH), col("account_id"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable =
+                InsertSelectSourceColumns.firstUnsampleable(List.of(ACTIVITY_MONTH), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("cannot reproduce"), unsampleable.detail());
+    }
+
+    @Test
+    public void generatedColumnTheSamplerCannotEvaluateIsDeclined() {
+        Column payload = new Column("payload", TypeFactory.createVarcharType(64), true);
+        Column payloadKey = generatedColumn("payload_key", TypeFactory.createVarcharType(64),
+                "get_json_string(payload, '$.k')", List.of(ACCOUNT_ID, payload));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, payload), payloadKey);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, payload", target,
+                List.of(payloadKey), col("account_id"), new Column("payload", TypeFactory.createVarcharType(64)));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable =
+                InsertSelectSourceColumns.firstUnsampleable(List.of(payloadKey), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("cannot evaluate"), unsampleable.detail());
+    }
+
+    @Test
+    public void unsampledGeneratedColumnIsIgnored() {
+        // A generated column outside the sort key, partition columns and rollup keys never reaches
+        // the sampler, so an expression the sampler could not evaluate must not decline the load.
+        Column payload = new Column("payload", TypeFactory.createVarcharType(64), true);
+        Column payloadKey = generatedColumn("payload_key", TypeFactory.createVarcharType(64),
+                "get_json_string(payload, '$.k')", List.of(ACCOUNT_ID, payload));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, payload), payloadKey);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, payload", target,
+                List.of(ACCOUNT_ID), col("account_id"), new Column("payload", TypeFactory.createVarcharType(64)));
+
+        Assertions.assertTrue(resolved.generatedColumnFailures().isEmpty());
+        Assertions.assertFalse(resolved.targetToExpressionSql().containsKey("payload_key"));
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(List.of(ACCOUNT_ID), resolved,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED));
+    }
+
+    @Test
+    public void definitionReadingAnInputTwiceReplacesEveryOccurrence() {
+        // Stored with a table qualifier, as a DDL may write it: the sampler SQL must carry no
+        // qualifier, and both references must read the source column.
+        Column month = generatedColumn("activity_date_month", DateType.DATETIME,
+                "if(t.activity_date IS NULL, NULL, date_trunc('month', t.activity_date))",
+                List.of(ACCOUNT_ID, ACTIVITY_DATE));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), month);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, activity_date", target,
+                List.of(month), col("account_id"), datetimeCol("activity_date"));
+
+        String sql = resolved.targetToExpressionSql().get("activity_date_month");
+        Assertions.assertNotNull(sql, resolved.generatedColumnFailures().toString());
+        Assertions.assertFalse(sql.contains("`t`"), sql);
+        Assertions.assertEquals(2, sql.split("CAST\\(`activity_date` AS DATETIME\\)", -1).length - 1, sql);
+    }
+
+    @Test
+    public void substitutionUsesTheSourceColumnsOwnSpelling() {
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, Activity_Date", target,
+                List.of(ACTIVITY_MONTH), col("account_id"), datetimeCol("Activity_Date"));
+
+        Assertions.assertEquals("date_trunc('month', CAST(`Activity_Date` AS DATETIME))",
+                resolved.targetToExpressionSql().get("activity_date_month"));
+    }
+
+    // INSERT binds a generated column's inputs to the SELECT output as selected and converts each only to the
+    // parameter type of the function that reads it (InsertPlanner#fillGeneratedColumns + ImplicitCastRule).
+    // The sampler converts every input to its column type, so a type mismatch is admitted only where both
+    // conversions provably give the same argument.
+
+    @Test
+    public void dateInputOfADatetimeFunctionParameterIsAdmitted() {
+        // source d DATE, column activity_date DATETIME: date_trunc's parameter is DATETIME, the column's own
+        // type, so INSERT converts the DATE straight to DATETIME -- the same value the sampler's cast yields.
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, ACTIVITY_DATE), ACTIVITY_MONTH);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, activity_date", target,
+                List.of(ACTIVITY_MONTH), col("account_id"), dateCol("activity_date"));
+
+        Assertions.assertEquals("date_trunc('month', CAST(`activity_date` AS DATETIME))",
+                resolved.targetToExpressionSql().get("activity_date_month"), resolved.generatedColumnFailures().toString());
+    }
+
+    @Test
+    public void widenedInputThatAFunctionStringifiesIsDeclined() {
+        // source n INT, column n DECIMAL(12,2), g AS concat(n, ''): INSERT converts the INT straight to concat's
+        // VARCHAR parameter and writes '1'; the sampler would cast to DECIMAL first and compute '1.00'.
+        Column n = new Column("n", TypeFactory.createUnifiedDecimalType(12, 2), true);
+        Column g = generatedColumn("g", TypeFactory.createVarcharType(64), "concat(n, '')", List.of(ACCOUNT_ID, n));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, n", target,
+                List.of(g), col("account_id"), col("n"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable =
+                InsertSelectSourceColumns.firstUnsampleable(List.of(g), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertNotNull(unsampleable);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("\"n\""), unsampleable.detail());
+        Assertions.assertTrue(unsampleable.detail().contains("cannot reproduce that conversion"), unsampleable.detail());
+    }
+
+    @Test
+    public void widenedInputIsAdmittedWhenTheLoadConvertsItToTheColumnTypeFirst() {
+        // Broker Load converts the input to the column type before the definition reads it, which is exactly what
+        // the sampler does.
+        Column n = new Column("n", TypeFactory.createUnifiedDecimalType(12, 2), true);
+        Column g = generatedColumn("g", TypeFactory.createVarcharType(64), "concat(n, '')", List.of(ACCOUNT_ID, n));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, n", target,
+                List.of(g), InsertSelectSourceColumns.InputReading.AS_COLUMN_TYPE, col("account_id"), col("n"));
+
+        Assertions.assertTrue(resolved.generatedColumnFailures().isEmpty(), resolved.generatedColumnFailures().toString());
+        Assertions.assertTrue(resolved.targetToExpressionSql().containsKey("g"));
+    }
+
+    @Test
+    public void integerWideningIsAdmittedWhereverTheInputIsRead() {
+        // INT to BIGINT keeps both the value and its text, so even a stringifying definition reads the same.
+        Column n = new Column("n", IntegerType.BIGINT, true);
+        Column g = generatedColumn("g", TypeFactory.createVarcharType(64), "concat(n, '')", List.of(ACCOUNT_ID, n));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, n", target,
+                List.of(g), col("account_id"), col("n"));
+
+        Assertions.assertTrue(resolved.generatedColumnFailures().isEmpty(), resolved.generatedColumnFailures().toString());
+    }
+
+    @Test
+    public void inputOfAnOperatorTakingTheColumnTypeIsAdmitted() {
+        // source x INT, column x DOUBLE, g AS x * 2: the multiply resolves to DOUBLE, the column's own type, so
+        // INSERT converts the INT straight to DOUBLE -- the value the sampler's cast yields.
+        Column x = new Column("x", FloatType.DOUBLE, true);
+        Column g = generatedColumn("g", FloatType.DOUBLE, "x * 2", List.of(ACCOUNT_ID, x));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, x), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, x", target,
+                List.of(g), col("account_id"), col("x"));
+
+        Assertions.assertEquals("(CAST(`x` AS DOUBLE)) * 2", resolved.targetToExpressionSql().get("g"),
+                resolved.generatedColumnFailures().toString());
+    }
+
+    @Test
+    public void inputOfAnOperatorTakingAnotherTypeIsDeclined() {
+        // source x DOUBLE, column x INT, g AS x + 1: the add resolves to BIGINT, not the column's INT, so INSERT
+        // converts the DOUBLE straight to BIGINT while the sampler would cast it to INT first.
+        Column x = new Column("x", IntegerType.INT, true);
+        Column g = generatedColumn("g", IntegerType.BIGINT, "x + 1", List.of(ACCOUNT_ID, x));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, x), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, x", target,
+                List.of(g), col("account_id"), new Column("x", FloatType.DOUBLE));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(
+                List.of(g), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("\"x\""), unsampleable.detail());
+        Assertions.assertTrue(unsampleable.detail().contains("only where a function needs it"), unsampleable.detail());
+    }
+
+    @Test
+    public void definitionThatDoesNotAnalyzeOnItsOwnIsDeclined() {
+        // The conversion check analyzes the definition against the target's own columns; here the target's schema
+        // does not list x, so the definition does not analyze and the conversion cannot be checked.
+        Column x = new Column("x", FloatType.DOUBLE, true);
+        Column g = generatedColumn("g", FloatType.DOUBLE, "x * 2", List.of(ACCOUNT_ID, x));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, x), g);
+        when(target.getBaseSchema()).thenReturn(List.of(ACCOUNT_ID, g));
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, x", target,
+                List.of(g), col("account_id"), col("x"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(
+                List.of(g), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("does not analyze on its own"), unsampleable.detail());
+    }
+
+    @Test
+    public void definitionComparingAStringWithANumberIsAdmitted() {
+        // s = 1 converts both sides to the type cbo_eq_base_type names. The sample session carries the load's value
+        // of that variable, so the sampler compares as the load does.
+        Column k = col("k");
+        Column s = new Column("s", VarcharType.VARCHAR, true);
+        Column g = generatedColumn("g", IntegerType.BIGINT, "if(s = 1, k, k + 1000000)", List.of(ACCOUNT_ID, k, s));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, k, s), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, k, s", target,
+                List.of(g), col("account_id"), col("k"), new Column("s", VarcharType.VARCHAR));
+
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(
+                List.of(g), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED),
+                resolved.generatedColumnFailures().toString());
+        Assertions.assertTrue(resolved.targetToExpressionSql().containsKey("g"), resolved.toString());
+    }
+
+    @Test
+    public void callBoundToAnythingButABuiltinIsDeclined() {
+        // The first call, nested or not, that does not bind to a built-in is named. Which bindings count is
+        // SamplingPredicateGateTest's.
+        Function builtin = mock(Function.class);
+        when(builtin.getBinaryType()).thenReturn(TFunctionBinaryType.BUILTIN);
+        Function javaUdf = mock(Function.class);
+        when(javaUdf.getBinaryType()).thenReturn(TFunctionBinaryType.SRJAR);
+        FunctionCallExpr inner = new FunctionCallExpr("upper", List.of(new SlotRef((TableName) null, "k")));
+        inner.setFn(javaUdf);
+        FunctionCallExpr outer = new FunctionCallExpr("concat", List.of(inner, new StringLiteral("-")));
+        outer.setFn(builtin);
+        Assertions.assertEquals("calls upper, which does not bind to a built-in function, so the sample session may "
+                + "resolve it differently", InsertSelectSourceColumns.sessionDependentPart(outer));
+        outer.setFn(javaUdf);
+        Assertions.assertEquals("calls concat, which does not bind to a built-in function, so the sample session may "
+                + "resolve it differently", InsertSelectSourceColumns.sessionDependentPart(outer));
+
+        outer.setFn(builtin);
+        inner.setFn(builtin);
+        Assertions.assertNull(InsertSelectSourceColumns.sessionDependentPart(outer));
+    }
+
+    /** A user session whose sql_mode reads a decimal literal as a DOUBLE. */
+    private static ConnectContext doubleLiteralContext() {
+        ConnectContext context = computedProjectionContext();
+        context.getSessionVariable().setSqlMode(SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_DOUBLE_LITERAL);
+        return context;
+    }
+
+    /** The first unsampleable of {@code g} when {@code target} is loaded from (account_id, k) in {@code context}. */
+    private static InsertSelectSourceColumns.Unsampleable unsampleableIn(ConnectContext context, OlapTable target,
+                                                                         Column g) {
+        return InsertSelectSourceColumns.firstUnsampleable(List.of(g),
+                resolveWithGenerated(context, "account_id, k", target, List.of(g),
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED, col("account_id"), col("k")),
+                InsertSelectSourceColumns.InputReading.AS_SELECTED);
+    }
+
+    @Test
+    public void definitionWithADecimalLiteralIsDeclinedUnderTheLoadsDoubleLiteral() {
+        // A stored definition was parsed in the default sql_mode: its 1.5 is a DECIMAL32(2,1). The sampler parses the
+        // rendered SQL in the load's sql_mode, where DOUBLE_LITERAL reads it as a DOUBLE. Without DOUBLE_LITERAL the
+        // rendered expression is what it has always been.
+        Column k = col("k");
+        Column g = generatedColumn("g", IntegerType.BIGINT, "if(k > 1.5, k, 0)", List.of(ACCOUNT_ID, k));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, k), g);
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = unsampleableIn(doubleLiteralContext(), target, g);
+        Assertions.assertNotNull(unsampleable);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("DOUBLE_LITERAL"), unsampleable.detail());
+
+        InsertSelectSourceColumns.Resolved admitted = resolveWithGenerated("account_id, k", target, List.of(g),
+                col("account_id"), col("k"));
+        Assertions.assertEquals("if((CAST(`k` AS INT)) > 1.5, CAST(`k` AS INT), 0)",
+                admitted.targetToExpressionSql().get("g"), admitted.generatedColumnFailures().toString());
+    }
+
+    @Test
+    public void computedProjectionWithADecimalLiteralReadBackAsADoubleIsNotAdmitted() {
+        // CAST('2.5' AS DECIMAL(10, 1)) folds to CAST(2.5 AS DECIMAL64(10,1)): without DOUBLE_LITERAL its 2.5 reads back
+        // as a decimal of the same value, which the CAST converts as before; under DOUBLE_LITERAL it reads back as a
+        // DOUBLE. An integer wider than LARGEINT renders as 100...0E0, which reads back as a DOUBLE in every sql_mode.
+        List<Column> targetCols = Arrays.asList(col("k"), new Column("dt", FloatType.DOUBLE),
+                new Column("v", FloatType.DOUBLE), new Column("w", FloatType.DOUBLE));
+        String selectList = "k, CAST('2.5' AS DECIMAL(10, 1)) AS dt, k * CAST(concat('2', '.5') AS DECIMAL(10, 1)) AS v, "
+                + "100000000000000000000000000000000000000000 AS w";
+
+        InsertSelectSourceColumns.Resolved declined = resolveComputed(selectList, /*byName*/ true, targetCols,
+                doubleLiteralContext(), col("k"));
+        Assertions.assertEquals(Set.of("dt", "v", "w"), declined.unsupportedProjectionTargets());
+
+        InsertSelectSourceColumns.Resolved admitted = resolveComputed(selectList, /*byName*/ true, targetCols, col("k"));
+        Assertions.assertEquals(Map.of("dt", "CAST(2.5 AS DECIMAL64(10,1))"), admitted.targetToConstantSql());
+        Assertions.assertEquals(Map.of("v", "`k` * (CAST(2.5 AS DECIMAL64(10,1)))"), admitted.targetToExpressionSql());
+        Assertions.assertEquals(Set.of("w"), admitted.unsupportedProjectionTargets());
+    }
+
+    @Test
+    public void inputFedByADecimalLiteralIsReadAsTheLoadParsedIt() {
+        // Under DOUBLE_LITERAL the SELECT's 3.14159265358979 is a DOUBLE, d's own type; re-read in the default sql_mode
+        // it would be a DECIMAL that concat reads unconverted, and g would be declined.
+        Column d = new Column("d", FloatType.DOUBLE, true);
+        Column g = generatedColumn("g", VarcharType.VARCHAR, "concat(d, '')", List.of(ACCOUNT_ID, d));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, d), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(doubleLiteralContext(),
+                "account_id, 3.14159265358979 AS d", target, List.of(g),
+                InsertSelectSourceColumns.InputReading.AS_SELECTED, col("account_id"));
+
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(
+                List.of(g), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED),
+                resolved.generatedColumnFailures().toString());
+    }
+
+    @Test
+    public void literalTheParserReadAsADoubleIsAdmittedUnderItsCastOnceAHintDropsDoubleLiteral() {
+        // A SET_VAR hint drops the session's DOUBLE_LITERAL: 0.5 was parsed as a FLOAT the sampler would read back as a
+        // DECIMAL, so it goes through the computed-projection branch, where its CAST restores the same value.
+        long sessionSqlMode = SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_DOUBLE_LITERAL;
+        List<Column> targetCols = Arrays.asList(col("k"), new Column("v", FloatType.DOUBLE));
+        String selectList = "k, 0.5 AS v";
+
+        InsertSelectSourceColumns.Resolved sameSqlMode = resolveComputed(sessionSqlMode, selectList, /*byName*/ true,
+                targetCols, doubleLiteralContext(), col("k"));
+        Assertions.assertEquals(Map.of("v", "0.5"), sameSqlMode.targetToConstantSql());
+
+        InsertSelectSourceColumns.Resolved hintDropsDoubleLiteral = resolveComputed(sessionSqlMode, selectList,
+                /*byName*/ true, targetCols, computedProjectionContext(), col("k"));
+        Assertions.assertEquals(Map.of("v", "CAST(0.5 AS FLOAT)"), hintDropsDoubleLiteral.targetToConstantSql());
+        Assertions.assertEquals(Set.of(), hintDropsDoubleLiteral.unsupportedProjectionTargets());
+    }
+
+    @Test
+    public void filesColumnPushedDownToAnotherColumnsTypeIsDeclined() {
+        // FILES x feeds n DATETIME and m DATE, g AS hour(n). Push-down reads x at the last mapping's type, DATE,
+        // so the load computes g = 0 for a 10:00 row while the sampler, reading x as DATETIME, would compute 10.
+        Column n = new Column("n", DateType.DATETIME, true);
+        Column m = new Column("m", DateType.DATE, true);
+        Column g = generatedColumn("g", IntegerType.TINYINT, "hour(n)", List.of(ACCOUNT_ID, n, m));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n, m), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, x AS n, x AS m", target,
+                List.of(g), InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN, col("account_id"),
+                datetimeCol("x"));
+
+        Assertions.assertTrue(resolved.targetsReadingRetypedSource().contains("n"));
+        InsertSelectSourceColumns.Unsampleable unsampleable =
+                InsertSelectSourceColumns.firstUnsampleable(List.of(g), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().contains("push-down"), unsampleable.detail());
+    }
+
+    @Test
+    public void sameShapeIsAdmittedWhereNothingRetypesTheSourceColumn() {
+        // From a table (or FILES with an explicit schema) x is read at its own type for both columns, so n reads
+        // the DATETIME the sampler reads.
+        Column n = new Column("n", DateType.DATETIME, true);
+        Column m = new Column("m", DateType.DATE, true);
+        Column g = generatedColumn("g", IntegerType.TINYINT, "hour(n)", List.of(ACCOUNT_ID, n, m));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n, m), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, x AS n, x AS m", target,
+                List.of(g), col("account_id"), datetimeCol("x"));
+
+        Assertions.assertTrue(resolved.generatedColumnFailures().isEmpty(), resolved.generatedColumnFailures().toString());
+        Assertions.assertEquals("hour(CAST(`x` AS DATETIME))", resolved.targetToExpressionSql().get("g"));
+    }
+
+    @Test
+    public void structInputOfADifferentSchemaIsDeclined() {
+        // source s STRUCT<INT>, column s STRUCT<BIGINT>: complex-typed inputs are not sampled.
+        Column s = new Column("s", new StructType(List.of(IntegerType.BIGINT)), true);
+        Column g = generatedColumn("g", BooleanType.BOOLEAN, "s IS NULL", List.of(ACCOUNT_ID, s));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, s), g);
+
+        InsertSelectSourceColumns.Resolved resolved = Assertions.assertDoesNotThrow(() -> resolveWithGenerated(
+                "account_id, s", target, List.of(g), col("account_id"),
+                new Column("s", new StructType(List.of(IntegerType.INT)))));
+
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN,
+                InsertSelectSourceColumns.firstUnsampleable(List.of(g), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED).reason());
+    }
+
+    @Test
+    public void filesKeyReadingAColumnPushedDownElsewhereIsUnsampleable() {
+        // A plain (non-generated) sampled key n = CAST(x AS DATETIME) while x also feeds m DATE: push-down reads
+        // x as DATE, so the load's n loses its time of day and the sampler's would not.
+        Column n = new Column("n", DateType.DATETIME, true);
+        Column m = new Column("m", DateType.DATE, true);
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n, m));
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated(
+                "account_id, CAST(x AS DATETIME) AS n, x AS m", target, List.of(ACCOUNT_ID, n),
+                InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN, col("account_id"),
+                datetimeCol("x"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(
+                List.of(ACCOUNT_ID, n), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN);
+        Assertions.assertNotNull(unsampleable);
+        Assertions.assertEquals("n", unsampleable.column().getName());
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION, unsampleable.reason());
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(
+                List.of(ACCOUNT_ID, n), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED));
+    }
+
+    @Test
+    public void structInputIsDeclinedEvenWhenItsTypeMatches() {
+        // Same STRUCT on both sides, so the input itself needs no conversion; complex-typed inputs are still not
+        // sampled, whatever the definition does with them (here an explicit cast).
+        StructType bThenA = new StructType(List.of(new StructField("b", 0, IntegerType.INT, null),
+                new StructField("a", 1, IntegerType.INT, null)), true);
+        Column s = new Column("s", bThenA, true);
+        Column g = generatedColumn("g", BooleanType.BOOLEAN, "CAST(s AS STRUCT<a INT, b INT>) IS NULL",
+                List.of(ACCOUNT_ID, s));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, s), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, s", target, List.of(g),
+                col("account_id"), new Column("s", bThenA));
+
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, InsertSelectSourceColumns.firstUnsampleable(
+                List.of(g), resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED).reason());
+    }
+
+    @Test
+    public void computedProjectionReadingAComplexColumnIsNotAdmitted() {
+        // A scalar projection can still coerce a STRUCT inside it (ifnull(s, t).a); whether that goes by field
+        // name or by position is the session's SQL mode, so no projection reading a complex column is admitted.
+        Column n = new Column("n", IntegerType.INT, true);
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID, n));
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id, if(s IS NULL, 0, 1) AS n",
+                target, List.of(ACCOUNT_ID, n), col("account_id"),
+                new Column("s", new StructType(List.of(IntegerType.INT))));
+
+        Assertions.assertEquals(Set.of("n"), resolved.unsupportedProjectionTargets());
+        Assertions.assertFalse(resolved.targetToExpressionSql().containsKey("n"));
+    }
+
+    @Test
+    public void definitionThatDoesNotAnalyzeIsDeclinedWithNoConversionToCheck() {
+        // account_id needs no conversion, so only the binding check analyzes the definition, and the dictionary it
+        // reads does not exist. Declining dictionary_get itself is SamplingPredicateGateTest.dictionaryLookupRejected.
+        Column g = generatedColumn("g", TypeFactory.createVarcharType(64), "dictionary_get('dict', account_id)",
+                List.of(ACCOUNT_ID));
+        OlapTable target = generatedTarget(List.of(ACCOUNT_ID), g);
+
+        InsertSelectSourceColumns.Resolved resolved = resolveWithGenerated("account_id", target,
+                List.of(g), col("account_id"));
+
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(List.of(g),
+                resolved, InsertSelectSourceColumns.InputReading.AS_SELECTED);
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN, unsampleable.reason());
+        Assertions.assertTrue(unsampleable.detail().endsWith(
+                "does not analyze on its own, so the sampler cannot check how the load evaluates it"),
+                unsampleable.detail());
+    }
+
+    @Test
+    public void firstUnsampleableNamesTheReasonOfEachUnfedShape() {
+        InsertSelectSourceColumns.Resolved resolved = new InsertSelectSourceColumns.Resolved(
+                Map.of("k", "k"), Map.of(), Map.of(), Set.of("v"), Map.of(), Set.of(),
+                Map.of("g", "is generated as x and fails"));
+
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnsampleable(List.of(col("k")), resolved,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED));
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION,
+                InsertSelectSourceColumns.firstUnsampleable(List.of(col("k"), col("v")), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED).reason());
+        Assertions.assertEquals(SkipReason.UNSUPPORTED_GENERATED_COLUMN,
+                InsertSelectSourceColumns.firstUnsampleable(List.of(col("g")), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED).reason());
+        Assertions.assertEquals(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN,
+                InsertSelectSourceColumns.firstUnsampleable(List.of(col("omitted")), resolved,
+                        InsertSelectSourceColumns.InputReading.AS_SELECTED).reason());
+    }
+
+    @Test
+    public void sampledColumnsListsBaseKeyThenPartitionThenRollupKeys() {
+        Assertions.assertEquals(List.of("k", "p", "r1", "r2"),
+                InsertSelectSourceColumns.sampledColumns(List.of(col("k")), List.of(col("p")),
+                                List.of(new SecondaryIndexSpec(7L, List.of(col("r1"), col("r2")))))
+                        .stream().map(Column::getName).toList());
     }
 
     // --- matchesSource direct tests (alias branch; reused by Task 2) ---

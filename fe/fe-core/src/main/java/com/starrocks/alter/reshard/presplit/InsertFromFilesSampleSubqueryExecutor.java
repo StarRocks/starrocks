@@ -74,7 +74,8 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
                 insertFromFilesContext.targetToConstantSql(),
                 insertFromFilesContext.targetToExpressionSql(),
                 files.scannedBytes(),
-                files.partitionSourceBytes());
+                files.partitionSourceBytes(),
+                insertFromFilesContext.sessionSemantics());
     }
 
     /**

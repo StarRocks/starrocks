@@ -279,9 +279,16 @@ public final class InsertPreSplitHook {
      *       value (has a default, is nullable, auto-increment, or generated) —
      *       mirrors InsertAnalyzer's "must be explicitly mentioned" rule, so a list
      *       missing a required column is skipped rather than resharded;</li>
+<<<<<<< HEAD
      *   <li>every range-distribution (sort) key column is present — an omitted key
      *       is defaulted for every row, collapsing the data on that key and making
      *       split boundaries degenerate.</li>
+=======
+     *   <li>every non-generated range-distribution (sort) key column of EVERY visible index (base
+     *       plus any rollup) is present -- an omitted key is defaulted for every row,
+     *       collapsing the data on that key and making split boundaries degenerate
+     *       for whichever index the omitted column belongs to.</li>
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
      * </ul>
      *
      * <p>Source-specific column/source alignment is still checked later in each
@@ -320,8 +327,15 @@ public final class InsertPreSplitHook {
                 return false;   // a required column is missing from the list
             }
         }
+<<<<<<< HEAD
         for (Column sortKey : sortKeyColumns) {
             if (!listed.contains(sortKey.getName().toLowerCase())) {
+=======
+        for (Column sortKey : unionOfVisibleIndexSortKeyColumns(target, sortKeyColumns)) {
+            // A generated sort-key column can never be listed; the sources compute it from the columns it
+            // reads, and decline with the reason when the list omits one of them.
+            if (!sortKey.isGeneratedColumn() && !listed.contains(sortKey.getName().toLowerCase())) {
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
                 return false;   // a sort-key column is missing -> degenerate split
             }
         }

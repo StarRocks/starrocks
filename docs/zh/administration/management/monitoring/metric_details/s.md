@@ -488,8 +488,54 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
+<<<<<<< HEAD
 - 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`source_missing_sampled_column`（从 `FILES()` 导入的 INSERT 中，需要采样的目标列不在解析后的 INSERT 投影中，采样器没有可投影的 FILES 源列或字面量）、`unsupported_sampled_projection`（需要采样的目标列由采样器无法重现的表达式或 NULL 提供，例如依赖会话时区的 `from_unixtime(ts)`；FILES 源列可能存在。`date_trunc('day', ts)` 这类确定性表达式会直接参与采样，不计入该值）、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`、`estimate_unavailable`（INSERT-from-table 导入无法根据表统计信息估算 External Catalog 源表的大小）。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`no_matching_partition`（手动 Range 分区的目标表：采样到的分区列值不落在本次导入可写入的任何已声明分区范围内，该值直接丢弃，不会据此新建分区）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
 - 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
+=======
+- 标签：`reason`，跳过原因，取值见下方各表。表中的采样列指目标表的分区列和排序键列。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。推导层的跳过同样记在本计数器上，而不是 `tablet_pre_split_sampler_failed`：推导层完全不读取数据，因此采样器从未运行 —— `derivation_failed` 也是如此。
+
+所有导入都可能记录的取值：
+
+| `reason` | 含义 |
+| --- | --- |
+| `disabled_by_config` | 该导入类型对应的 FE 参数 `enable_tablet_pre_split_for_*` 未开启。 |
+| `disabled_by_session` | 会话将 `enable_tablet_pre_split` 设为了 `false`。 |
+| `not_range_distribution` | 目标表不是 Range 分布。 |
+| `table_not_normal` | 目标表不处于 NORMAL 状态，例如正在执行 ALTER。 |
+| `unsupported_sort_key` | 某个可见 index 没有排序键，或排序键中有非标量类型的列。 |
+| `has_materialized_view_or_rollup` | 某个可见的 Rollup 或同步物化视图无法随基础索引一起分裂：它的 tablet 数不是 1，或排序键为空、含非标量列。 |
+| `metadata_not_resolved` | 找不到目标分区或它的基础索引，通常是导入期间有 ALTER 在执行。 |
+| `multiple_base_index_tablets` | 分区的基础索引已有多个 tablet，重复导入同一分区时很常见。 |
+| `partition_not_empty` | 分区中已有数据。 |
+| `source_missing_sampled_column` | 导入中没有某个采样列对应的源列或字面量，例如 `FILES()` 的文件里没有该列，或 INSERT 的目标列清单省略了它。 |
+| `unsupported_sampled_projection` | 某个采样列来自采样器无法重现的表达式（如 `from_unixtime(ts)` 或 NULL），或来自类型下推时按其他列类型读取的 `FILES()` 列。 |
+| `unsupported_generated_column` | 某个采样列是采样器无法计算的生成列。FE 日志会记录列名和具体原因。 |
+
+一次导入写多个分区时，逐分区记录的取值：
+
+| `reason` | 含义 |
+| --- | --- |
+| `unsupported_partition_column_type` | 分区列的类型无法采样，如 STRUCT、ARRAY。 |
+| `invalid_partition_value` | 采样到的分区值无法构成合法分区，如 NOT NULL 列出现 NULL，或日期无法解析。 |
+| `grouper_empty` | 按分区分组时，所有样本行都被丢弃。 |
+| `no_matching_partition` | 手动 Range 分区的表：采样值不在本次导入可写入的任何分区范围内。该值直接丢弃，不会据此新建分区。 |
+| `stale_catalog_state` | 分区在采样之后、预分裂之前消失，例如被并发 DROP 或 REPLACE。 |
+| `partition_not_eligible_post_create` | 分区预建后不再满足条件，通常是已有数据或已有多个 tablet。 |
+
+推导层记录的取值。推导层用于 Range 分布的增量物化视图刷新，切分点由推导得出，而不是采样得出：
+
+| `reason` | 含义 |
+| --- | --- |
+| `materialized_view_target` | 推导层不支持该物化视图，例如它不是增量物化视图，或排序键不是隐藏的 row-id 列。 |
+| `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围。 |
+| `row_id_space_not_pristine` | 自增计数器已经发放过 id，无法安全地推导切分点。 |
+| `estimate_unavailable` | 没有可用的输出大小估计，无法确定 tablet 数量。从没有表统计信息的 External Catalog 表执行 INSERT 时也会记录该值。 |
+| `multiple_temporary_partitions` | 刷新会写入多个替换分区，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
+| `derivation_failed` | 推导切分点失败，或推导出的切分点未通过校验。 |
+| `stale_catalog_state` | 推导出切分点之后、构建作业之前，物化视图的可见 index 发生了变化。 |
+| `submit_failed` | 推导出的切分点未能生成被接纳的 reshard 作业。 |
+>>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 

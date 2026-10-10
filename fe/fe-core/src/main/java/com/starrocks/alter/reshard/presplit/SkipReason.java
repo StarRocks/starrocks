@@ -43,17 +43,26 @@ public enum SkipReason {
      * partition source column -- is absent from the resolved INSERT projection. Reached by an
      * INSERT-from-FILES whose target column is legitimately absent from the inferred
      * {@code FILES()} schema (a {@code BY NAME} load defaults it, or reads it NULL under
-     * {@code fill_mismatch_column_with=null}).
+     * {@code fill_mismatch_column_with=null}), and by an INSERT whose explicit target column list
+     * omits a nullable partition column.
      *
      * <p>Deliberately NOT recorded for a projection-shape rejection (a duplicate output name, a
-     * by-position arity mismatch, a foreign-qualified slot), a computed or NULL projection, nor
-     * for a key made only of literals:
+     * by-position arity mismatch, a foreign-qualified slot), a computed or NULL projection, a
+     * generated column, nor for a key made only of literals:
      * those decline for reasons that have nothing to do with a missing column, and a wrong reason
      * sends an operator to the wrong place.
      */
     SOURCE_MISSING_SAMPLED_COLUMN,
-    /** A sampled INSERT-from-FILES column is supplied by an expression the sampler cannot reproduce. */
+    /**
+     * A sampled INSERT column is supplied by an expression the sampler cannot reproduce, or reads a FILES
+     * column that column-type push-down reads at another target column's type.
+     */
     UNSUPPORTED_SAMPLED_PROJECTION,
+    /**
+     * A sampled column is a generated column the sampler cannot compute the way the load does. The FE
+     * log names the exact reason.
+     */
+    UNSUPPORTED_GENERATED_COLUMN,
     /** Catalog snapshot did not resolve the partition or base index — load surfaces this error. */
     METADATA_NOT_RESOLVED,
     /** Pre-submit phase (sample + plan + build job) exceeded its timeout. */
