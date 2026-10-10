@@ -774,15 +774,18 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_backtrace_base_compaction_cont
 // Build a primary-key tablet whose rowsets carry explicit num_dels (so the policy does not need
 // real delete-vector files) and verify PrimaryCompactionPolicy switches to base compaction --
 // reclaiming the delete-bearing rowsets, most deleted rows first -- when the tablet's delete ratio
-// or absolute delete-row count crosses its threshold, or a base compaction is forced, while
-// leaving the clean small rowsets alone.
+// or absolute delete-row count crosses its threshold while
+// lake_pk_compaction_base_enable_delete_trigger is on, or when a base compaction is forced even
+// with the switch off, while leaving the clean small rowsets alone.
 TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     // Restore the base-compaction configs on every exit path, including a mid-test ASSERT failure,
     // so modified values don't leak into other tests.
     struct ConfigGuard {
+        bool enable_delete_trigger = config::lake_pk_compaction_base_enable_delete_trigger;
         double ratio = config::lake_pk_compaction_base_delete_ratio_threshold;
         int64_t rows = config::lake_pk_compaction_base_delete_rows_threshold;
         ~ConfigGuard() {
+            config::lake_pk_compaction_base_enable_delete_trigger = enable_delete_trigger;
             config::lake_pk_compaction_base_delete_ratio_threshold = ratio;
             config::lake_pk_compaction_base_delete_rows_threshold = rows;
         }
@@ -831,6 +834,7 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     };
 
     // Case A: ratio trigger. Aggregate ratio (0.64) >= ratio threshold (0.5); count trigger off.
+    config::lake_pk_compaction_base_enable_delete_trigger = true;
     config::lake_pk_compaction_base_delete_ratio_threshold = 0.5;
     config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
     ASSIGN_OR_ABORT(auto ratio_policy,
@@ -856,6 +860,7 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     // (0.99) so the ratio does NOT trigger, but sum(num_dels)=5.2M >= count threshold (1M) does --
     // this is exactly the account case where a low aggregate ratio hides a large absolute delete
     // volume.
+    config::lake_pk_compaction_base_enable_delete_trigger = true;
     config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
     config::lake_pk_compaction_base_delete_rows_threshold = 1000000;
     ASSIGN_OR_ABORT(auto count_policy,
@@ -863,8 +868,14 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     ASSIGN_OR_ABORT(auto count_rowsets, count_policy->pick_rowsets());
     expect_base_pick(count_rowsets);
 
+<<<<<<< HEAD
     // Case C: force_base_compaction (from ALTER ... COMPACT) triggers base even with both
     // thresholds disabled and the automatic window/interval closed.
+=======
+    // Case C: force_base_compaction (from ALTER ... COMPACT) triggers base even with the delete
+    // trigger switched off and both thresholds disabled.
+    config::lake_pk_compaction_base_enable_delete_trigger = false;
+>>>>>>> 9a8f22114db... [Enhancement] Make delete-triggered base compaction of lake primary-key tablets opt-in (#63758)
     config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
     config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
     metadata->set_last_base_compaction_time(time(nullptr));
@@ -876,16 +887,28 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     EXPECT_TRUE(forced_policy->picked_base_compaction());
     metadata->clear_last_base_compaction_time();
 
-    // Case D: neither trigger met and no force -> cumulative (size-tiered) selection, which does
-    // NOT force-pick the delete-heavy rowsets. With only 4 non-overlapped segments
-    // (< lake_pk_compaction_min_input_segments), size-tiered declines to compact, so the result is
-    // empty -- proving the base pick was not taken.
+    // Case D: delete trigger on but neither threshold met, and no force -> cumulative (size-tiered)
+    // selection, which does NOT force-pick the delete-heavy rowsets. With only 4 non-overlapped
+    // segments (< lake_pk_compaction_min_input_segments), size-tiered declines to compact, so the
+    // result is empty -- proving the base pick was not taken.
+    config::lake_pk_compaction_base_enable_delete_trigger = true;
     config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
     config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
     ASSIGN_OR_ABORT(auto cumulative_policy,
                     CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto cumulative_rowsets, cumulative_policy->pick_rowsets());
     EXPECT_TRUE(cumulative_rowsets.empty());
+
+    // Case E: delete trigger switched off. Both thresholds are met (ratio 0.64 >= 0.5 and
+    // sum(num_dels)=5.2M >= 1M), yet without a forced base compaction the policy stays on
+    // cumulative selection, whose result is empty here as in case D.
+    config::lake_pk_compaction_base_enable_delete_trigger = false;
+    config::lake_pk_compaction_base_delete_ratio_threshold = 0.5;
+    config::lake_pk_compaction_base_delete_rows_threshold = 1000000;
+    ASSIGN_OR_ABORT(auto trigger_off_policy,
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
+    ASSIGN_OR_ABORT(auto trigger_off_rowsets, trigger_off_policy->pick_rowsets());
+    EXPECT_TRUE(trigger_off_rowsets.empty());
 }
 
 TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only) {

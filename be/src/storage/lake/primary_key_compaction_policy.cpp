@@ -533,7 +533,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     }
 
     // Base compaction reclaims space from delete-bearing rowsets. Trigger it when a manual
-    // ALTER TABLE ... COMPACT requested a base compaction, or when the tablet has accumulated
+    // ALTER TABLE ... COMPACT requested a base compaction, or, while
+    // lake_pk_compaction_base_enable_delete_trigger is on, when the tablet has accumulated
     // enough deletes to be worth reclaiming -- either as a fraction of its rows
     // (lake_pk_compaction_base_delete_ratio_threshold) or in absolute delete-row count
     // (lake_pk_compaction_base_delete_rows_threshold). The absolute-count trigger matters because
@@ -541,9 +542,16 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // the aggregate ratio -- diluted by many mostly-live rowsets -- crosses the ratio threshold.
     // Otherwise run the normal size-tiered cumulative selection. When base compaction finds nothing
     // to reclaim (no delete-bearing rowsets), fall through to cumulative so a forced compaction
+<<<<<<< HEAD
     // still merges small files. Skip collecting delete stats when automatic base compaction is
     // forbidden: for rowsets without num_dels, this reads the delete vector of every segment.
     if (base_compaction_allowed()) {
+=======
+    // still merges small files. With neither a manual request nor the switch, skip collecting the
+    // delete stats: for each rowset that does not record num_dels, collecting them reads the
+    // delete vector of every segment.
+    if (_force_base_compaction || config::lake_pk_compaction_base_enable_delete_trigger) {
+>>>>>>> 9a8f22114db... [Enhancement] Make delete-triggered base compaction of lake primary-key tablets opt-in (#63758)
         const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
         // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
         // under a forced base compaction: there is nothing for base compaction to reclaim, so skip
@@ -553,7 +561,10 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
              del_stats.total_dels >= config::lake_pk_compaction_base_delete_rows_threshold)) {
             ASSIGN_OR_RETURN(auto base_rowsets, pick_base_rowsets(tablet_metadata, has_dels));
             if (!base_rowsets.empty()) {
+<<<<<<< HEAD
                 _picked_base_compaction = true;
+=======
+>>>>>>> 9a8f22114db... [Enhancement] Make delete-triggered base compaction of lake primary-key tablets opt-in (#63758)
                 return base_rowsets;
             }
         }
