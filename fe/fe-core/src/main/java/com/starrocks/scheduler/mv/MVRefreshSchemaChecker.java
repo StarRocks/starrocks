@@ -88,7 +88,7 @@ public final class MVRefreshSchemaChecker {
             return;
         }
 
-        ConnectContext context = StatisticUtils.buildConnectContext();
+        ConnectContext context = StatisticUtils.buildConnectContextWithAuth();
         context.setStatisticsContext(false);
         // bindScope save+restore protects the outer TaskRun's threadlocal — a plain
         // ConnectContext.remove() in finally would null whatever was bound before us

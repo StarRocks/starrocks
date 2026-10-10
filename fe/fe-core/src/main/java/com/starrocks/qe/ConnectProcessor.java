@@ -1347,6 +1347,10 @@ public class ConnectProcessor {
             ctx.setCurrentWarehouseId(request.getWarehouse_id());
         }
 
+        if (request.isSetAuth_token()) {
+            ctx.setAuthToken(request.getAuth_token());
+        }
+
         if (request.isSetForward_times()) {
             ctx.setForwardTimes(request.getForward_times());
         }

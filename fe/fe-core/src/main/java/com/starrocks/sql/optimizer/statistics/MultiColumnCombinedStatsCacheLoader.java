@@ -54,7 +54,7 @@ public class MultiColumnCombinedStatsCacheLoader implements AsyncCacheLoader<Lon
             }
             Optional<MultiColumnCombinedStatistics> result = Optional.empty();
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData = queryStatisticsData(connectContext, List.of(key));
                 if (!statisticData.isEmpty()) {
@@ -88,7 +88,7 @@ public class MultiColumnCombinedStatsCacheLoader implements AsyncCacheLoader<Lon
             }
 
             try {
-                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithAuth();
                 statsConnectCtx.setThreadLocalInfo();
 
                 List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, Lists.newArrayList(keys));
