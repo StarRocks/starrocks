@@ -1084,6 +1084,62 @@ class TestDistributionChanges:
         assert len(result) == 0
 
 
+class TestRangeDistribution:
+    """DISTRIBUTED_BY comparisons where either side is RANGE distribution.
+
+    Range distribution (StarRocks 4.1+, the shared-data default) has no DISTRIBUTED BY
+    syntax, so no ALTER is ever generated for it.
+    """
+
+    @staticmethod
+    def _compare(conn_distribution, meta_distribution):
+        autogen_context = Mock(spec=AutogenContext)
+        autogen_context.dialect.name = DialectName
+
+        conn_table = Mock()
+        type(conn_table).name = PropertyMock(return_value="test_table")
+        type(conn_table).schema = PropertyMock(return_value="test_db")
+        conn_table.kwargs = (
+            {TableInfoKeyWithPrefix.DISTRIBUTED_BY: conn_distribution} if conn_distribution else {}
+        )
+        conn_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(conn_table.kwargs)}
+
+        meta_table = Mock(
+            kwargs={TableInfoKeyWithPrefix.DISTRIBUTED_BY: meta_distribution} if meta_distribution else {}
+        )
+        meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
+
+        upgrade_ops = UpgradeOps([])
+        compare_starrocks_table(
+            autogen_context, upgrade_ops, conn_table.schema, conn_table.name, conn_table, meta_table
+        )
+        return upgrade_ops.ops
+
+    @pytest.mark.parametrize("conn_distribution, meta_distribution", [
+        # Range distribution is obtained by omitting DISTRIBUTED BY, so unset metadata matches.
+        ("RANGE", None),
+        # As reflected before bucket counts were dropped for RANGE.
+        ("RANGE BUCKETS 1", None),
+        ("RANGE", "RANGE"),
+        ("RANGE", "range"),
+        # Range distribution has no bucket count; StarRocks reports a placeholder 1.
+        ("RANGE BUCKETS 1", "RANGE BUCKETS 4"),
+        ("RANGE BUCKETS 3", "RANGE"),
+    ])
+    def test_range_no_change(self, conn_distribution, meta_distribution):
+        assert self._compare(conn_distribution, meta_distribution) == []
+
+    @pytest.mark.parametrize("meta_distribution", ["HASH(id) BUCKETS 8", "RANDOM", "HASH(id)"])
+    def test_range_to_other_raises(self, meta_distribution):
+        with pytest.raises(NotImplementedError, match="cannot change the distribution of a RANGE-distributed table"):
+            self._compare("RANGE", meta_distribution)
+
+    @pytest.mark.parametrize("conn_distribution", ["RANDOM", "HASH(id) BUCKETS 8"])
+    def test_other_to_range_raises(self, conn_distribution):
+        with pytest.raises(NotImplementedError, match="no DISTRIBUTED BY RANGE syntax"):
+            self._compare(conn_distribution, "RANGE")
+
+
 class TestOrderByChanges:
     """Test ORDER_BY attribute changes."""
 

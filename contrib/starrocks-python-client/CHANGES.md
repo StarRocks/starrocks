@@ -10,6 +10,7 @@ Version history
   (e.g. the same one as `version_table_schema`) instead of on every schema that holds a view.
 - Coalesce multiple `ADD`/`DROP COLUMN` autogenerate operations on a table into a single `ALTER TABLE` statement via the `combine_column_alters` rewriter, avoiding StarRocks in-progress schema-change failures (#78647 by @chris-celerdata)
 - Add opt-in `starrocks_wait_for_schema_change` to block until a column schema-change job reaches a terminal state (#78647 by @chris-celerdata)
+- Support RANGE distribution (StarRocks 4.1+, the shared-data default): reflect it as `RANGE`, accept `starrocks_distributed_by="RANGE"` (compiled by omitting `DISTRIBUTED BY`), and stop autogenerate from raising on RANGE-distributed tables whose metadata leaves `DISTRIBUTED BY` unset (by @chris-celerdata)
 
 **1.3.4**
 

@@ -60,7 +60,7 @@ from starrocks.common.utils import (
     extract_dialect_options_as_case_insensitive,
 )
 from starrocks.datatype import ARRAY, BOOLEAN, MAP, STRING, STRUCT, TINYINT, VARCHAR
-from starrocks.engine.interfaces import ReflectedPartitionInfo, ReflectedTableKeyInfo
+from starrocks.engine.interfaces import ReflectedDistributionInfo, ReflectedPartitionInfo, ReflectedTableKeyInfo
 from starrocks.reflection import StarRocksTableDefinitionParser
 from starrocks.sql.schema import MaterializedView, View
 
@@ -1763,6 +1763,10 @@ def _compare_table_distribution(
     if isinstance(meta_distribution, str):
         meta_distribution = StarRocksTableDefinitionParser.parse_distribution(meta_distribution)
 
+    if utils.is_range_distribution(conn_distribution) or utils.is_range_distribution(meta_distribution):
+        _check_range_distribution(schema, table_name, conn_distribution, meta_distribution, ddl_object, object_label)
+        return
+
     # If distribution method is the same and meta doesn't specify buckets,
     # consider it unchanged, as conn buckets might be system-assigned.
     if (
@@ -1805,6 +1809,50 @@ def _compare_table_distribution(
         table_fqn = utils.gen_simple_qualified_name(table_name, schema)
         logger.info(f"Detected DISTRIBUTION change on {object_label.lower()} {table_fqn!r}, "
                     f"from {conn_distribution!r} to {meta_distribution!r}")
+
+
+def _check_range_distribution(
+    schema: Optional[str],
+    table_name: str,
+    conn_distribution: Optional[ReflectedDistributionInfo],
+    meta_distribution: Optional[ReflectedDistributionInfo],
+    ddl_object: str,
+    object_label: str,
+) -> None:
+    """Compare distributions when either side is RANGE; no ALTER is ever generated.
+
+    Range distribution has no DISTRIBUTED BY syntax: a table gets it by omitting the clause, so
+    a RANGE table whose metadata leaves DISTRIBUTED BY unset (or sets it to 'RANGE') matches.
+    Range distribution has no bucket count (StarRocks reports a placeholder 1), so buckets are
+    not compared. Switching between RANGE
+    and HASH/RANDOM cannot be done with ALTER, so it raises instead.
+    """
+    conn_is_range = utils.is_range_distribution(conn_distribution)
+    meta_is_range = utils.is_range_distribution(meta_distribution)
+    if conn_is_range and (meta_distribution is None or meta_is_range):
+        return
+    if not conn_is_range and conn_distribution is None:
+        # Nothing reflected to compare against.
+        return
+
+    table_fqn = utils.gen_simple_qualified_name(table_name, schema)
+    if conn_is_range:
+        reason = (
+            f"StarRocks cannot change the distribution of a RANGE-distributed {ddl_object.lower()}. "
+            f"Set DISTRIBUTED BY to 'RANGE' (or leave it unset) in metadata to keep it, "
+            f"or recreate the {ddl_object.lower()} to change it."
+        )
+    else:
+        reason = (
+            f"StarRocks has no DISTRIBUTED BY RANGE syntax, so an existing {ddl_object.lower()} "
+            f"cannot be altered to RANGE distribution. Set DISTRIBUTED BY to match the database, "
+            f"or recreate the {ddl_object.lower()} to change it."
+        )
+    raise NotImplementedError(
+        f"{object_label} {table_fqn!r}: Attribute 'DISTRIBUTED BY' differs: "
+        f"'{conn_distribution}' (in database) vs '{meta_distribution}' (in metadata). "
+        f"{reason} No ALTER statement will be generated automatically."
+    )
 
 
 def _compare_table_order_by(
