@@ -1431,35 +1431,29 @@ public class MergeTabletJobTest {
         return null;
     }
 
-    private static Map<Long, TabletRange> createContiguousTabletRanges(List<Long> tabletIds, int baseValue, int step) {
-        Map<Long, TabletRange> result = new HashMap<>();
-        for (int i = 0; i < tabletIds.size(); i++) {
-            int lowerValue = baseValue + i * step;
-            int upperValue = baseValue + (i + 1) * step;
-            result.put(tabletIds.get(i), createTabletRange(lowerValue, upperValue));
-        }
-        return result;
-    }
-
+    /**
+     * Creates split ranges the way the compute node does: contiguous children that exactly cover the
+     * old tablet's range, the first keeping its lower bound and the last its upper bound.
+     */
     private static Map<Long, TabletRange> createSplitTabletRanges(long oldTabletId, List<Long> newTabletIds) {
-        TabletRange oldRange = getTabletRangeFromOldTablet(oldTabletId);
-        if (oldRange == null) {
-            return createContiguousTabletRanges(newTabletIds, 0, 100);
-        }
-
-        Integer lowerValue = extractBoundValue(oldRange, true);
-        Integer upperValue = extractBoundValue(oldRange, false);
-        if (lowerValue == null || upperValue == null || upperValue <= lowerValue) {
-            return createContiguousTabletRanges(newTabletIds, 0, 100);
-        }
-
-        int rangeSize = upperValue - lowerValue;
-        int step = Math.max(1, rangeSize / newTabletIds.size());
+        TabletRange oldTabletRange = getTabletRangeFromOldTablet(oldTabletId);
+        Range<Tuple> oldRange = oldTabletRange == null ? Range.all() : oldTabletRange.getRange();
+        Integer oldLower = extractBoundValue(oldTabletRange, true);
+        Integer oldUpper = extractBoundValue(oldTabletRange, false);
+        int count = newTabletIds.size();
+        int step = 100;
+        int lowerValue = oldLower != null ? oldLower : (oldUpper != null ? oldUpper - step * count : 0);
+        int upperValue = oldUpper != null ? oldUpper : lowerValue + step * count;
+        int width = Math.max(1, (upperValue - lowerValue) / count);
         Map<Long, TabletRange> result = new HashMap<>();
-        for (int i = 0; i < newTabletIds.size(); i++) {
-            int subLower = lowerValue + i * step;
-            int subUpper = (i == newTabletIds.size() - 1) ? upperValue : lowerValue + (i + 1) * step;
-            result.put(newTabletIds.get(i), createTabletRange(subLower, subUpper));
+        for (int i = 0; i < count; i++) {
+            boolean first = i == 0;
+            boolean last = i == count - 1;
+            Tuple lower = first ? oldRange.getLowerBound() : createTuple(lowerValue + i * width);
+            Tuple upper = last ? oldRange.getUpperBound() : createTuple(lowerValue + (i + 1) * width);
+            result.put(newTabletIds.get(i), new TabletRange(Range.of(lower, upper,
+                    first ? oldRange.isLowerBoundIncluded() : true,
+                    last ? oldRange.isUpperBoundIncluded() : false)));
         }
         return result;
     }
