@@ -54,6 +54,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
             .add(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)
+            .add(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .build();
@@ -283,6 +284,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         if (jobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)) {
             boolean pauseOnFatalParseError = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR));
             analyzedJobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(pauseOnFatalParseError));
+        }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR)) {
+            boolean skipOnFatalParseError = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR, String.valueOf(skipOnFatalParseError));
         }
     }
 

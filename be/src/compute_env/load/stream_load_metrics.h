@@ -37,6 +37,10 @@ public:
     METRIC_DEFINE_INT_COUNTER(stream_load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_rows_total, MetricUnit::ROWS);
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
+    // Kafka/Pulsar messages dropped by the routine-load property skip_on_fatal_parse_error
+    // (JsonReader::_skip_malformed_message). Each is also one filtered row, but filtered rows
+    // do not tell a poison message apart from an ordinary bad row; this counter does.
+    METRIC_DEFINE_INT_COUNTER(routine_load_skipped_malformed_messages_total, MetricUnit::NOUNIT);
 
     METRIC_DEFINE_INT_COUNTER(streaming_load_requests_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(streaming_load_bytes, MetricUnit::BYTES);
