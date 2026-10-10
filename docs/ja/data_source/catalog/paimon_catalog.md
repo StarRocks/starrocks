@@ -748,6 +748,8 @@ Paimon テーブルのスキーマを表示するには、次のいずれかの�
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+条件を満たす `ORDER BY ... LIMIT` クエリでは、Paimon スキャンは [TopN Runtime Filter](../../sql-reference/System_variable.md#enable_topn_runtime_filter) をサポートします。フィルターは実行中の TopN の境界を使用し、計画対象を最初の N ファイルに制限するものではありません。`WHERE` 条件があるクエリでは、条件を適用した上で最終的な TopN の結果を決定します。
+
 ## Paimon からデータをロード
 
 OLAP テーブル `olap_tbl` があると仮定し、以下のようにデータを変換してロードできます。
