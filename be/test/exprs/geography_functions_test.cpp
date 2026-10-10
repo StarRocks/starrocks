@@ -2276,6 +2276,112 @@ TEST_F(geographyFunctionsTest, h3PolygonToCellsCancelled) {
     EXPECT_TRUE(result.status().is_cancelled()) << result.status();
 }
 
+TEST_F(geographyFunctionsTest, h3BoundaryBuffersMatchCanonicalWkbAcrossCells) {
+    constexpr size_t size = 3073;
+    auto cells = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    std::vector<H3Index> origins;
+    origins.reserve(size);
+    for (size_t row = 0; row < size; ++row) {
+        const int resolution = row % 16;
+        H3Index cell = 0;
+        if (row % 19 == 0) {
+            std::array<H3Index, 12> pentagons{};
+            ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+            cell = pentagons[row % pentagons.size()];
+        } else {
+            const double latitude = row % 13 == 0 ? 89.9 : static_cast<double>(row % 161) - 80;
+            const double longitude = row % 17 == 0 ? 179.9 : static_cast<double>(row % 359) - 179;
+            const LatLng point{latitude * M_PI / 180, longitude * M_PI / 180};
+            ASSERT_EQ(E_SUCCESS, latLngToCell(&point, resolution, &cell));
+        }
+        origins.push_back(cell);
+        if (row % 7 == 0)
+            cells->append_nulls(1);
+        else
+            cells->append_datum(Datum(static_cast<int64_t>(cell)));
+    }
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    auto actual = GeoFunctions::h3_to_boundary(context.get(), {cells});
+    ASSERT_TRUE(actual.ok()) << actual.status();
+    ASSERT_EQ(size, (*actual)->size());
+    EXPECT_FALSE((*actual)->is_constant());
+    const auto* geo =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>((*actual).get())->data_column().get());
+    EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, geo->descriptor().storage.validation_state);
+    for (size_t row = 0; row < size; ++row) {
+        SCOPED_TRACE(row);
+        ASSERT_EQ(row % 7 == 0, (*actual)->get(row).is_null());
+        if (row % 7 == 0) continue;
+        CellBoundary boundary{};
+        ASSERT_EQ(E_SUCCESS, cellToBoundary(origins[row], &boundary));
+        WkbGeometry expected;
+        expected.type = WkbGeometryType::POLYGON;
+        auto& ring = expected.rings.emplace_back();
+        constexpr double degrees_per_radian = 1.0 / 0.017453292519943295769236907684886;
+        for (int i = 0; i < boundary.numVerts; ++i)
+            ring.push_back({boundary.verts[i].lng * degrees_per_radian, boundary.verts[i].lat * degrees_per_radian});
+        ring.push_back(ring.front());
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(expected, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        EXPECT_EQ(Slice(wkb), geo->get_wkb(row));
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryBuffersRetainConstantEmptyAndInvalidInputs) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    auto constant =
+            GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size)});
+    ASSERT_TRUE(constant.ok());
+    EXPECT_TRUE((*constant)->is_constant());
+    EXPECT_EQ(size, (*constant)->size());
+    auto empty = GeoFunctions::h3_to_boundary(context.get(), {Int64Column::create()});
+    ASSERT_TRUE(empty.ok());
+    EXPECT_EQ(0, (*empty)->size());
+    for (size_t invalid_row : {1023, 1024, 3072}) {
+        auto varying = Int64Column::create();
+        for (size_t row = 0; row < size; ++row) varying->append(row == invalid_row ? 0 : cell);
+        auto invalid = GeoFunctions::h3_to_boundary(context.get(), {varying});
+        ASSERT_FALSE(invalid.ok());
+        EXPECT_TRUE(invalid.status().is_invalid_argument());
+    }
+    auto nulls = GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_null_column(size)});
+    ASSERT_TRUE(nulls.ok());
+    EXPECT_TRUE((*nulls)->only_null());
+    EXPECT_EQ(size, (*nulls)->size());
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryBuffersRetainCancellationAndQueryErrors) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    for (bool constant : {false, true}) {
+        ColumnPtr cells;
+        if (constant)
+            cells = ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size);
+        else {
+            auto varying = Int64Column::create();
+            for (size_t row = 0; row < size; ++row) varying->append(cell);
+            cells = varying;
+        }
+        RuntimeState state;
+        state.init_instance_mem_tracker();
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_context(&state, nullptr, geography_type(), {TypeDescriptor(TYPE_BIGINT)}));
+        state.set_is_cancelled(true);
+        auto cancelled = GeoFunctions::h3_to_boundary(context.get(), {cells});
+        ASSERT_FALSE(cancelled.ok());
+        EXPECT_TRUE(cancelled.status().is_cancelled());
+        state.set_is_cancelled(false);
+        state.set_process_status(Status::MemoryLimitExceeded("test H3 boundary query memory limit"));
+        auto limited = GeoFunctions::h3_to_boundary(context.get(), {cells});
+        ASSERT_FALSE(limited.ok());
+        EXPECT_TRUE(limited.status().is_mem_limit_exceeded());
+    }
+}
+
 TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
     constexpr int64_t cell_value = 0x83754efffffffffLL;
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);

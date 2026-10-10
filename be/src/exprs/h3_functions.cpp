@@ -550,8 +550,17 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
     ColumnViewer<TYPE_BIGINT> input(columns[0]);
     const bool constant = columns[0]->is_constant();
     auto result = NullableColumn::create(GeoColumn::create(std::move(descriptor)), NullColumn::create());
+    result->reserve(constant ? 1 : size);
+    // H3 boundaries have at most MAX_CELL_BNDRY_VERTS vertices. Reuse bounded
+    // scratch buffers while keeping the normal WKB coordinate validation.
+    WkbGeometry polygon;
+    polygon.type = WkbGeometryType::POLYGON;
+    auto& ring = polygon.rings.emplace_back();
+    ring.reserve(MAX_CELL_BNDRY_VERTS + 1);
+    std::string wkb;
+    wkb.reserve(sizeof(uint8_t) + 3 * sizeof(uint32_t) + (MAX_CELL_BNDRY_VERTS + 1) * 2 * sizeof(double));
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        if ((row & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
         if (input.is_null(row)) {
             result->append_nulls(1);
             continue;
@@ -559,23 +568,19 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
         CellBoundary boundary{};
         const H3Error error = cellToBoundary(cell, &boundary);
-        RETURN_IF_ERROR(h3_checkpoint(context));
         if (error != E_SUCCESS) return h3_error("H3_ToBoundary", error);
         if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
             return Status::InternalError("H3_ToBoundary returned invalid vertex count");
         }
-        WkbGeometry polygon;
-        polygon.type = WkbGeometryType::POLYGON;
-        auto& ring = polygon.rings.emplace_back();
-        ring.reserve(static_cast<size_t>(boundary.numVerts) + 1);
+        ring.clear();
         for (int i = 0; i < boundary.numVerts; ++i) {
             ring.push_back({boundary.verts[i].lng * kDegreesPerRadian, boundary.verts[i].lat * kDegreesPerRadian});
         }
         ring.push_back(ring.front());
-        std::string wkb;
         RETURN_IF_ERROR(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
         result->append_datum(Datum(Slice(wkb)));
     }
+    RETURN_IF_ERROR(h3_checkpoint(context));
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;
 }
