@@ -763,6 +763,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：主键表单次 Compaction 合并的最大 Rowset 数。
 - 引入版本：-
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- 默认值：10000
+- 类型：Int
+- 单位：Rowset
+- 是否动态：是
+- 描述：主键表 size-tiered 合并时，单次选入的 level=-1 Rowset 最大数量；配置小于 2 时按 2 生效。level=-1 包括零行或估算有效字节为零的 Rowset。与其他层同时合并时，此配置不限制总输入数。
+- 引入版本：-
+
 ### memory_limitation_per_thread_for_schema_change
 
 - 默认值：2

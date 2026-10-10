@@ -726,6 +726,7 @@
         "update_compaction_num_threads_per_disk",
         "update_compaction_chunk_size_for_row_store",
         "max_update_compaction_num_singleton_deltas",
+        "max_update_compaction_num_level_minus_one_rowsets",
         "update_compaction_size_threshold",
         "update_compaction_result_bytes",
         "update_compaction_delvec_file_io_amp_ratio",

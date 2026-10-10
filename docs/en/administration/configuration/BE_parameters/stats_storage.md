@@ -727,6 +727,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
 - Introduced in: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- Default: 10000
+- Type: Int
+- Unit: Rowsets
+- Is mutable: Yes
+- Description: Maximum number of level -1 rowsets selected per size-tiered Primary Key compaction. Values below 2 are treated as 2. Level -1 includes rowsets with zero rows or zero estimated live bytes. This limit applies to level -1 inputs, not to the total number of inputs when other levels are also selected.
+- Introduced in: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - Default: 2
