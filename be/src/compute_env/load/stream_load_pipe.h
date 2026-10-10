@@ -79,6 +79,10 @@ public:
 
     virtual StatusOr<ByteBufferPtr> read();
 
+    // Whether this pipe delivers discrete, independent per-message buffers (e.g. Kafka/Pulsar Routine Load)
+    // rather than a continuous byte stream (e.g. HTTP Stream Load).
+    virtual bool is_discrete_message_pipe() const { return false; }
+
     StatusOr<ByteBufferPtr> no_block_read();
 
     virtual Status read(uint8_t* data, size_t* data_size, bool* eof);

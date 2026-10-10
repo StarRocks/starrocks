@@ -58,7 +58,19 @@ Useful core binaries for fast iterations:
 
 ## Core C++ Rules
 
-- Format with the repo `.clang-format`.
+- **Run clang-format before every commit** touching `be/src/` or `be/test/`:
+  ```bash
+  CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh
+  ```
+  Stage the formatted files and include them in the same commit. The CI
+  `ci-clang-format` action uses clang-format-10 and will reject PRs that are
+  not already clean. Do not rely on the CI bot auto-commit — it creates an
+  unsigned commit and signals that local formatting was skipped.
+  Install the CI-identical static binary if `clang-format-10` is not on your PATH:
+  ```bash
+  wget https://github.com/muttleyxd/clang-tools-static-binaries/releases/download/master-5b56bb49/clang-format-10_linux-amd64 \
+    -O ~/.local/bin/clang-format-10 && chmod +x ~/.local/bin/clang-format-10
+  ```
 - Prefer `#pragma once`.
 - Keep include order: corresponding header, C system, C++ stdlib, third-party, StarRocks.
 - Use `Status` and `StatusOr` for recoverable errors.
@@ -342,6 +354,10 @@ Shared service-layer target above DataWorkflows, Script, runtime, cache, compute
 Run the smallest relevant UT binary plus the architecture harness:
 
 ```bash
+# 1. Clang-format all changed C++ files (required before every commit)
+CLANG_FORMAT_BINARY=clang-format-10 bash build-support/clang-format.sh
+
+# 2. Architecture boundary check
 python3 build-support/check_be_module_boundaries.py --mode full
 python3 build-support/render_be_agents.py --check
 ```

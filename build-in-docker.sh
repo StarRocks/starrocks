@@ -39,6 +39,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_ARGS=""
 INTERACTIVE_SHELL=false
 RUN_TESTS=false
+DOCKER_MEM=""
+DOCKER_CPUS=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -75,6 +77,8 @@ DOCKER-SPECIFIC OPTIONS:
     --shell                 Open interactive shell in dev environment
     --test                  Run tests after building
     --image IMAGE           Use specific Docker image (default: $DOCKER_IMAGE)
+    --memory, -m MEM        Limit container memory (e.g., 12g, 16g)
+    --cpus CPUS             Limit container CPUs (e.g., 4)
     --help, -h              Show this help message
 
 BUILD OPTIONS (passed through to build.sh):
@@ -133,6 +137,14 @@ parse_args() {
                 DOCKER_IMAGE="$2"
                 shift 2
                 ;;
+            --memory|-m)
+                DOCKER_MEM="$2"
+                shift 2
+                ;;
+            --cpus)
+                DOCKER_CPUS="$2"
+                shift 2
+                ;;
             --help|-h)
                 usage
                 exit 0
@@ -181,12 +193,22 @@ pull_image() {
 
 # Setup Docker run command
 setup_docker_run() {
+    local m2_dir="$HOME/.m2"
+    if [[ ! -w "$m2_dir" ]]; then
+        if [[ -d "$REPO_ROOT/.m2" ]]; then
+            m2_dir="$REPO_ROOT/.m2"
+            log_info "Host $HOME/.m2 is not writable. Falling back to workspace-local $m2_dir for Maven repository mount."
+        else
+            log_warning "Host $HOME/.m2 is not writable and workspace-local .m2 does not exist. Using temporary in-memory/in-container directory. Performance may be degraded."
+            m2_dir=""
+        fi
+    fi
+
     # Base Docker run options
     DOCKER_RUN_OPTS=(
         --rm
         --name "$CONTAINER_NAME"
         --volume "$REPO_ROOT:/workspace"
-        --volume "$HOME/.m2:/tmp/.m2"
         --workdir /workspace
         --user "$(id -u):$(id -g)"
         --env "HOME=/tmp"
@@ -194,6 +216,21 @@ setup_docker_run() {
         --env "STARROCKS_THIRDPARTY=/var/local/thirdparty"
         --env "MAVEN_OPTS=-Dmaven.repo.local=/tmp/.m2/repository"
     )
+
+    if [[ -n "$m2_dir" ]]; then
+        DOCKER_RUN_OPTS+=(--volume "$m2_dir:/tmp/.m2")
+    fi
+
+    # Apply memory and CPU limits if configured
+    if [[ -n "${DOCKER_MEM:-}" ]]; then
+        DOCKER_RUN_OPTS+=(--memory="$DOCKER_MEM" --memory-swap="$DOCKER_MEM")
+        log_info "Setting Docker memory limit to $DOCKER_MEM"
+    fi
+
+    if [[ -n "${DOCKER_CPUS:-}" ]]; then
+        DOCKER_RUN_OPTS+=(--cpus="$DOCKER_CPUS")
+        log_info "Setting Docker CPU limit to $DOCKER_CPUS"
+    fi
 
     # Add any additional Docker options from environment
     if [[ -n "${DOCKER_BUILD_OPTS:-}" ]]; then

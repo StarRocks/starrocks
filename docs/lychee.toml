@@ -80,6 +80,7 @@ method = "get"
      "https://www.bilibili.com/*",
      "https://www.linkedin.com/*",
      "https://issues.apache.org/*",
+     "https://docs.confluent.io/*",
    ]
 
 # Exclude these filesystem paths from getting checked.
