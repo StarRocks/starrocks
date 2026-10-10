@@ -51,6 +51,7 @@ AIRuntimeConfig ai_runtime_config_from_globals() {
     config.request_timeout_ms = config::ai_function_request_timeout_ms;
     config.connect_timeout_ms = config::ai_function_connect_timeout_ms;
     config.max_response_bytes = config::ai_function_max_response_bytes;
+    config.max_input_file_bytes = config::ai_function_max_input_file_bytes;
     config.worker_thread_num = config::ai_function_worker_thread_num;
     config.sub_chunk_size = config::ai_function_sub_chunk_size;
     config.max_retries = config::ai_function_max_retries;

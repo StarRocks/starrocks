@@ -446,7 +446,8 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                                          .prompt = row.prompt,
                                          .options = output.input.options.get(),
                                          .model_config_id = output.model_config_id,
-                                         .capability = output.capability};
+                                         .capability = output.capability,
+                                         .media = row.media ? &*row.media : nullptr};
             AITaskCallback callback;
             auto build_callback = [&] {
                 // Lane is the process-scoped async completion state. It keeps

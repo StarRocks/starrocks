@@ -18,16 +18,12 @@
 
 namespace starrocks {
 
-class OpenAICompatibleProvider final : public AIProvider {
+// The DashScope multimodal embedding wire dialect; does not infer capabilities from model names.
+class DashScopeMultimodalProvider final : public AIProvider {
 public:
-    explicit OpenAICompatibleProvider(bool supports_video = false) : _supports_video(supports_video) {}
-
     StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
     AIProviderParseResult parse_response(std::string_view body,
                                          AICapability capability = AICapability::CHAT) const override;
-
-private:
-    bool _supports_video;
 };
 
 } // namespace starrocks

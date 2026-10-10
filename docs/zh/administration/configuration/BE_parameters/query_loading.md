@@ -108,6 +108,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
 - 引入版本：-
 
+### ai_function_max_input_file_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：传入 `ai_complete` 或 `ai_embed` 的每个 inline FILE 的原始字节数上限，在 AI 自身复制载荷和进行 Base64 编码前检查。默认值为 10 MiB。仅在所选提供商和模型支持更大输入时调高。该参数不控制扫描或 Chunk 物化；这些内存分配与 AI 载荷仍受查询内存跟踪约束。无效或超限的 inline 输入遵循 `ai_function_on_error`。新打开的 AI fragment/operator 将该值捕获到不可变运行时快照中；已打开的 fragment 继续使用原快照。修改无需重启 BE。
+- 引入版本：-
+
 ### ai_function_worker_thread_num
 
 - 默认值：16

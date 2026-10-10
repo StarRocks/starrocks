@@ -23,7 +23,7 @@
 
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_processor.h"
-#include "platform/llm/openai_compatible_provider.h"
+#include "platform/llm/ai_provider.h"
 
 namespace starrocks {
 
@@ -40,7 +40,8 @@ class QueryContext;
 // driver so expression state is never shared across concurrent drivers.
 class AIProjectExpressionProjection final : public AIProjectProjection {
 public:
-    static StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create(AIProjectProjectionSpec spec);
+    static StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create(
+            AIProjectProjectionSpec spec, size_t max_input_file_bytes = kDefaultAIMaxInputFileBytes);
 
     ~AIProjectExpressionProjection() override;
 
@@ -58,11 +59,12 @@ private:
         std::vector<ExprContext*> common;
     };
 
-    explicit AIProjectExpressionProjection(AIProjectProjectionSpec spec);
+    AIProjectExpressionProjection(AIProjectProjectionSpec spec, size_t max_input_file_bytes);
 
     void _close_contexts(RuntimeState* state, std::vector<DriverExpressionContexts>* drivers) noexcept;
 
     AIProjectProjectionSpec _spec;
+    const size_t _max_input_file_bytes;
 
     mutable std::mutex _lifecycle_mutex;
     Status _lifecycle_status;
@@ -96,6 +98,9 @@ private:
         AICapability capability = AICapability::CHAT;
         int64_t attempt_timeout_ms = 0;
         std::optional<int32_t> dimensions;
+        // Destroy the dispatcher before the provider whose address its core retains.
+        std::unique_ptr<AIProvider> provider;
+        std::unique_ptr<AITaskDispatcher> dispatcher;
     };
 
     AIProjectDispatcherSubmitter(std::map<std::string, Route, std::less<>> routes, AIWorkGroupKey workgroup_key,
@@ -103,7 +108,6 @@ private:
                                  std::shared_ptr<AIQueryMemoryAccount> memory_account, const AIServices& services,
                                  AIRuntimeConfig config);
 
-    const std::map<std::string, Route, std::less<>> _routes;
     const AIWorkGroupKey _workgroup_key;
     const UniqueId _query_id;
     const std::weak_ptr<QueryContext> _query_context;
@@ -112,10 +116,8 @@ private:
     const AIClock* const _clock;
     const AIRuntimeConfig _config;
 
-    // Declaration order is intentional: the dispatcher and all of its core
-    // state are destroyed before the provider whose address they retain.
-    OpenAICompatibleProvider _provider;
-    AITaskDispatcher _dispatcher;
+    // Route dispatchers are destroyed before their shared query/runtime context.
+    const std::map<std::string, Route, std::less<>> _routes;
 };
 
 } // namespace pipeline

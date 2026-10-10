@@ -19,18 +19,27 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.planner.AIProjectNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
@@ -68,13 +77,30 @@ import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.CatalogContext;
+import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.options.CatalogOptions;
+import org.apache.paimon.options.Options;
+import org.apache.paimon.schema.Schema;
+import org.apache.paimon.table.sink.BatchTableCommit;
+import org.apache.paimon.table.sink.BatchTableWrite;
+import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.types.BlobType;
+import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.IntType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -82,6 +108,7 @@ import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -148,6 +175,79 @@ public class AIProjectPlanTest extends PlanTestBase {
         Assertions.assertEquals("unit-test-model", chat.getModel());
         Assertions.assertEquals(AIModelConfigs.OPENAI_COMPATIBLE_PROVIDER, chat.getProvider());
         Assertions.assertFalse(aiNode.toString().contains("AI_FUNCTION_MODEL_API_KEY"));
+    }
+
+    @Test
+    public void testFileScanColumnReachesAIProjectWirePlan(@TempDir Path warehouse) throws Exception {
+        String catalogName = "ai_file_plan";
+        GlobalStateMgr state = connectContext.getGlobalStateMgr();
+        MetadataMgr previousMetadata = state.getMetadataMgr();
+        String previousChatProvider = Config.ai_default_chat_provider;
+        String previousEmbeddingEndpoint = Config.ai_default_embedding_endpoint;
+        String previousEmbeddingModel = Config.ai_default_embedding_model;
+        String previousEmbeddingProvider = Config.ai_default_embedding_provider;
+        boolean catalogCreated = false;
+        Options options = new Options();
+        options.set(CatalogOptions.WAREHOUSE, warehouse.toUri().toString());
+        try (Catalog nativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+            nativeCatalog.createDatabase("media_db", false);
+            nativeCatalog.createTable(Identifier.create("media_db", "images"),
+                    new Schema(List.of(new DataField(0, "id", new IntType()), new DataField(1, "media", new BlobType())),
+                            List.of(), List.of(), Map.of("data-evolution.enabled", "true",
+                                    "row-tracking.enabled", "true", "bucket", "-1"), ""), false);
+            BatchWriteBuilder writer = nativeCatalog.getTable(Identifier.create("media_db", "images"))
+                    .newBatchWriteBuilder();
+            try (BatchTableWrite write = writer.newWrite(); BatchTableCommit commit = writer.newCommit()) {
+                write.write(GenericRow.of(1, null));
+                commit.commit(write.prepareCommit());
+            }
+            Map<String, String> properties = Map.of("type", "paimon", "paimon.catalog.type", "filesystem",
+                    "paimon.catalog.warehouse", warehouse.toUri().toString());
+            state.getCatalogMgr().createCatalog("paimon", catalogName, "", properties);
+            catalogCreated = true;
+            MockedMetadataMgr metadata = new MockedMetadataMgr(state.getLocalMetastore(), state.getConnectorMgr());
+            metadata.registerMockedMetadata(catalogName, new PaimonMetadata(catalogName, new HdfsEnvironment(),
+                    nativeCatalog, new ConnectorProperties(ConnectorType.PAIMON, properties)));
+            state.setMetadataMgr(metadata);
+            Config.ai_default_chat_provider = AIModelConfigs.QWEN_COMPATIBLE_PROVIDER;
+            Config.ai_default_embedding_endpoint = "https://unit.test.example/multimodal-embedding";
+            Config.ai_default_embedding_model = "unit-test-embedding";
+            Config.ai_default_embedding_provider = AIModelConfigs.DASHSCOPE_MULTIMODAL_PROVIDER;
+
+            for (boolean embedding : List.of(false, true)) {
+                ExecPlan plan = getExecPlan("select " + (embedding ? "ai_embed(media)" :
+                        "ai_complete('describe', media)") + " from " + catalogName + ".media_db.images");
+                Assertions.assertEquals(1, plan.getScanNodes().size());
+                Assertions.assertInstanceOf(PaimonScanNode.class, plan.getScanNodes().get(0));
+                Assertions.assertTrue(plan.getScanNodes().get(0).getDesc().getSlots().stream()
+                        .anyMatch(slot -> slot.getType().equals(FileType.FILE)));
+                TAIProjectNode project = findOnlyAIProjectThriftNode(plan).getAi_project_node();
+                TExpr expression = findOnlyAIExpression(project.getSlot_map());
+                TExprNode call = expression.getNodes().get(0);
+                Assertions.assertEquals(embedding ? 200134 : 200104, call.getFn().getId());
+                Assertions.assertEquals(embedding ? 1 : 2, call.getNum_children());
+                String configId = embedding ? AIModelConfigs.SYSTEM_EMBEDDING_CONFIG_ID :
+                        AIModelConfigs.SYSTEM_CHAT_CONFIG_ID;
+                Assertions.assertEquals(configId, call.getAi_model_config_id());
+                TExprNode fileArgument = expression.getNodes().get(embedding ? 1 : 2);
+                Assertions.assertEquals(TExprNodeType.SLOT_REF, fileArgument.getNode_type());
+                Assertions.assertEquals(TPrimitiveType.FILE,
+                        fileArgument.getType().getTypes().get(0).getScalar_type().getType());
+                TAIModelConfiguration model = project.getAi_model_configs().get(configId);
+                Assertions.assertEquals(embedding ? AIModelConfigs.DASHSCOPE_MULTIMODAL_PROVIDER :
+                                AIModelConfigs.QWEN_COMPATIBLE_PROVIDER,
+                        (embedding ? model.getEmbedding() : model.getChat()).getProvider());
+            }
+        } finally {
+            state.setMetadataMgr(previousMetadata);
+            Config.ai_default_chat_provider = previousChatProvider;
+            Config.ai_default_embedding_endpoint = previousEmbeddingEndpoint;
+            Config.ai_default_embedding_model = previousEmbeddingModel;
+            Config.ai_default_embedding_provider = previousEmbeddingProvider;
+            if (catalogCreated) {
+                state.getCatalogMgr().dropCatalog(new DropCatalogStmt(catalogName));
+            }
+        }
     }
 
     @Test

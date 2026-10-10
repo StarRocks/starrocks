@@ -111,6 +111,39 @@ TEST(OpenAICompatibleProviderTest, BuildsSingleEmbeddingInputWithTypedOptions) {
     EXPECT_EQ("Bearer key", result->headers.back().value);
 }
 
+TEST(OpenAICompatibleProviderTest, BuildsTypedImageChatContentAndRejectsEmbeddingMedia) {
+    OpenAICompatibleProvider provider;
+    AIMediaInput media{"image/jpeg", std::string("\xff\xd8\xff\xe0\0\x02", 6)};
+    AIChatRequest request{.model = "model", .prompt = "describe", .media = &media};
+    auto result = provider.build_request(request);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_EQ(
+            R"({"model":"model","messages":[{"role":"system","content":"You are a helpful assistant."},{"role":"user","content":[{"type":"text","text":"describe"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,/9j/4AAC"}}]}],"stream":false})",
+            result->body);
+    request.capability = AICapability::TEXT_EMBEDDING;
+    EXPECT_TRUE(provider.build_request(request).status().is_not_supported());
+}
+
+TEST(OpenAICompatibleProviderTest, VideoRequiresExplicitQwenProtocol) {
+    AIMediaInput video{"video/mp4", std::string("\0\0\0\x18"
+                                                "ftypisom\0\0\0\0isommp42",
+                                                24)};
+    AIChatRequest request{.endpoint = "https://dashscope.example/qwen",
+                          .model = "qwen-video-model",
+                          .prompt = "describe",
+                          .media = &video};
+    OpenAICompatibleProvider ordinary;
+    EXPECT_TRUE(ordinary.build_request(request).status().is_not_supported());
+    auto qwen = create_ai_provider("qwen_compatible", AICapability::CHAT);
+    ASSERT_TRUE(qwen.ok());
+    auto result = (*qwen)->build_request(request);
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_NE(
+            std::string::npos,
+            result->body.find(
+                    R"("type":"video_url","video_url":{"url":"data:video/mp4;base64,AAAAGGZ0eXBpc29tAAAAAGlzb21tcDQy"})"));
+}
+
 TEST(OpenAICompatibleProviderTest, RejectsEmbeddingReservedOptions) {
     OpenAICompatibleProvider provider;
     for (const std::string_view key : {"model", "input", "encoding_format"}) {

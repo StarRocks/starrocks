@@ -107,7 +107,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The default model used by the prompt-only forms of SYSTEM `ai_complete`. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Description: The default model used by SYSTEM `ai_complete` calls without an explicit model, including FILE overloads. The value cannot contain C0 control characters (`U+0000` through `U+001F`) or DEL (`U+007F`). It may remain empty when every call supplies an explicit, non-blank model. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
 - Introduced in: -
 
 ### `ai_default_chat_provider`
@@ -115,9 +115,9 @@ This topic introduces the following types of FE configurations:
 - Default: Empty string
 - Type: String
 - Unit: -
-- Valid values: `openai_compatible`
+- Valid values: `openai_compatible`, `qwen_compatible`
 - Is mutable: Yes
-- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible` or `qwen_compatible`; empty or unrecognized values cause analysis to fail. Both protocols support text and inline image FILE inputs; only `qwen_compatible` supports inline MP4 video. The selected model must support the input modality. The protocol is not inferred from the endpoint or model name. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
 - Introduced in: -
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +143,9 @@ This topic introduces the following types of FE configurations:
 - Default: Empty string
 - Type: String
 - Unit: -
-- Valid values: `openai_compatible`
+- Valid values: `openai_compatible`, `dashscope_multimodal`
 - Is mutable: Yes
-- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
+- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible` for text or `dashscope_multimodal` for text and inline JPEG, PNG, or WebP image FILE inputs. The selected model must support the input modality. Video FILE embedding is unsupported. The empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused, and the protocol is not inferred from the endpoint or model name. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`

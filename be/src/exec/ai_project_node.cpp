@@ -33,6 +33,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
+#include "platform/llm/ai_provider.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
@@ -126,7 +127,7 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
         const TAIEndpointConfig& endpoint = model_config.__isset.chat ? model_config.chat : model_config.embedding;
         if (!endpoint.__isset.endpoint || !endpoint.__isset.model || !endpoint.__isset.provider ||
             !is_non_blank(endpoint.endpoint) || contains_control_character(endpoint.endpoint) ||
-            endpoint.provider != kOpenAICompatibleProvider || contains_control_character(endpoint.model)) {
+            !validate_ai_protocol(endpoint.provider, capability).ok() || contains_control_character(endpoint.model)) {
             return invalid_ai_project_plan();
         }
         const auto source = model_config.__isset.source ? model_config.source : TAIModelSource::SYSTEM;
@@ -137,7 +138,8 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
                 return invalid_ai_project_plan();
             }
         } else if (source == TAIModelSource::PROVIDER) {
-            if (id == kSystemChatConfigId || id == kSystemEmbeddingConfigId || !is_non_blank(endpoint.model) ||
+            if (endpoint.provider != kOpenAICompatibleProvider || id == kSystemChatConfigId ||
+                id == kSystemEmbeddingConfigId || !is_non_blank(endpoint.model) ||
                 (endpoint.__isset.api_key && contains_control_character(endpoint.api_key)) ||
                 (endpoint.__isset.timeout_ms && endpoint.timeout_ms <= 0) ||
                 (endpoint.__isset.dimensions &&
@@ -159,6 +161,7 @@ Status AIProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
                                                                           : std::nullopt,
                                 .dimensions = endpoint.__isset.dimensions ? std::optional<int32_t>(endpoint.dimensions)
                                                                           : std::nullopt,
+                                .protocol = endpoint.provider,
                         });
     }
 
