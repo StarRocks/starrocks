@@ -1757,6 +1757,16 @@ inline size_t calculate_accurate_step_count(
     return 0;
 }
 
+// All rows of an array_generate result share one element column addressed by UInt32 offsets, so a single call can
+// never produce more elements than this. Checking the count up front also keeps reserve() below vector::max_size():
+// past it reserve() throws std::length_error, which TRY_CATCH_BAD_ALLOC does not catch and which aborts the BE.
+static constexpr size_t kArrayGenerateMaxElements = std::numeric_limits<uint32_t>::max();
+
+static inline Status array_generate_too_many_elements() {
+    return Status::InvalidArgument(
+            fmt::format("array_generate would produce more than {} elements", kArrayGenerateMaxElements));
+}
+
 #define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                  \
     template <LogicalType LType, LogicalType ResultType>                                                           \
     static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
@@ -1810,6 +1820,9 @@ inline size_t calculate_accurate_step_count(
             }                                                                                                      \
                                                                                                                    \
             size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);            \
+            if (accurate_count > kArrayGenerateMaxElements - total_elements) {                                     \
+                return array_generate_too_many_elements();                                                         \
+            }                                                                                                      \
             total_elements += accurate_count;                                                                      \
         }                                                                                                          \
                                                                                                                    \
@@ -2043,11 +2056,22 @@ public:
                 }
                 auto start = start_viewer.value(cur_row);
                 auto stop = stop_viewer.value(cur_row);
+                // Count in unsigned 128-bit: stop - start and -step overflow the input type at its extremes
+                // (LARGEINT included), while the unsigned difference of two sign-extended values is exact.
+                using U128 = unsigned __int128;
+                U128 steps;
                 if (step > 0 && start <= stop) {
-                    total_elements += (stop - start) / step + 1;
+                    steps = (static_cast<U128>(stop) - static_cast<U128>(start)) / static_cast<U128>(step);
                 } else if (step < 0 && start >= stop) {
-                    total_elements += (start - stop) / (-step) + 1;
+                    steps = (static_cast<U128>(start) - static_cast<U128>(stop)) / (U128(0) - static_cast<U128>(step));
+                } else {
+                    continue;
                 }
+                // The row yields steps + 1 elements.
+                if (steps >= kArrayGenerateMaxElements - total_elements) {
+                    return array_generate_too_many_elements();
+                }
+                total_elements += static_cast<size_t>(steps) + 1;
             }
             TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));
 
@@ -2084,7 +2108,7 @@ public:
             auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
 
             if (all_const_cols) {
-                if (nulls->is_null(0)) {
+                if (nulls && nulls->is_null(0)) {
                     return ColumnHelper::create_const_null_column(num_rows);
                 } else {
                     return ConstColumn::create(std::move(dst), num_rows);
