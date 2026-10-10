@@ -3958,6 +3958,24 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_explain_matches(self, query, *expects):
+        """
+        assert explain result matches every expect pattern
+
+        The contains form covers almost every case. This one is for an expectation that is
+        only meaningful with a wildcard in the middle of it -- a residual predicate on some
+        column of a table, say, where the plan's slot numbering is not what is being
+        asserted and pinning it would make the case brittle.
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_regex(
+                str(res["result"]),
+                expect,
+                "assert expect {} does not match plan {}".format(expect, res["result"]),
+            )
+
     def assert_explain_not_contains(self, query, *expects):
         """
         assert explain result contains expect string
