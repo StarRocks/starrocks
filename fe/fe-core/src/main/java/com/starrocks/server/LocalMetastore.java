@@ -5955,7 +5955,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Long> tabletIds = new ArrayList<>();
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
             for (MaterializedIndex index : subPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
@@ -5964,6 +5963,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
+        onErasePartition(tabletIds);
+    }
+
+    /**
+     * Id-based variant used by compact recycle-bin descriptors that no longer hold the partition
+     * object graph (see {@code RecycleLakeDeletedPartitionInfo}).
+     */
+    public void onErasePartition(List<Long> tabletIds) {
+        if (tabletIds.isEmpty()) {
+            return;
+        }
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         invertedIndex.deleteTablets(tabletIds);
     }
 
