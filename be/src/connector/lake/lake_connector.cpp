@@ -1641,8 +1641,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_counter, reader_stats.lake_prepared_tablet_io_count);
     COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
     COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
-    COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter,
-                   reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter, reader_stats.lake_prepared_tablet_bytes_read_remote);
     COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
     COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
     COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);

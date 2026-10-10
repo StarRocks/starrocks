@@ -1999,9 +1999,9 @@ TEST_F(LakeTabletReaderSpit, test_failed_tablet_preparation_preserves_reads) {
                 int missing_idx = parallel_load ? 0 : 1;
                 metadata->mutable_rowsets(0)->mutable_segment_metas(missing_idx)->set_filename("missing_segment.dat");
             } else {
-                // All three footers are read before coarse-split preparation rejects the seek key.
-                params.start_key = {OlapTuple({"invalid_integer"})};
-                params.end_key = {OlapTuple({"100"})};
+                // All three footers are read before coarse-split preparation validates the range.
+                // An upper bound without its inclusion flag is rejected by get_seek_range().
+                metadata->mutable_rowsets(0)->mutable_range()->mutable_upper_bound();
             }
             auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema,
                                                          /*need_split=*/true, /*could_split_physically=*/true);
@@ -2010,6 +2010,9 @@ TEST_F(LakeTabletReaderSpit, test_failed_tablet_preparation_preserves_reads) {
             ASSERT_FALSE(status.ok());
             if (missing_segment) {
                 EXPECT_TRUE(status.is_not_found()) << status;
+            } else {
+                EXPECT_TRUE(status.is_corruption()) << status;
+                EXPECT_NE(std::string::npos, status.to_string().find("upper_bound_included is required"));
             }
             const auto& stats = reader->stats();
             EXPECT_EQ(missing_segment ? 1 : 3, stats.lake_prepared_tablet_segments_opened);

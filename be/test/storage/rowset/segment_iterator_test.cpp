@@ -2120,19 +2120,19 @@ TEST_F(SegmentIteratorTest, IndexLoadAndSeekRangeResolutionReportTheirReads) {
     ASSERT_OK(fs->create_dir_recursive(dir));
     DeferOp cleanup([&] { (void)fs->delete_dir_recursive(dir); });
 
-    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(file_name));
-    SegmentWriterOptions opts;
-    opts.num_rows_per_block = 10;
     TabletSchemaBuilder builder;
     std::shared_ptr<TabletSchema> tablet_schema =
             builder.create(1, false, TYPE_INT, true).create(2, false, TYPE_INT).build();
-    SegmentWriter writer(std::move(wfile), 0, tablet_schema, opts);
     const size_t num_rows = 100;
-    TabletDataBuilder segment_data_builder(writer, tablet_schema, config::vector_chunk_size, num_rows);
-    ASSERT_OK(segment_data_builder.append(0, [](int32_t i) { return i; }));
-    ASSERT_OK(segment_data_builder.append(1, [](int32_t i) { return i * 2; }));
-    ASSERT_OK(segment_data_builder.finalize_footer());
-    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{file_name}, 0, tablet_schema));
+    auto write_schema = ChunkHelper::convert_schema(tablet_schema);
+    auto chunk = ChunkFactory::new_chunk(write_schema, num_rows);
+    for (int32_t i = 0; i < num_rows; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(i));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(i * 2));
+    }
+    // Write both columns together so each short-key index entry describes the same row.
+    auto segment = write_and_open_segment(fs, file_name, tablet_schema, *chunk, 10);
+    ASSERT_EQ(num_rows, segment->num_rows());
 
     // Only the call that loads the index reads its page.
     OlapReaderStatistics index_stats;
@@ -2146,11 +2146,7 @@ TEST_F(SegmentIteratorTest, IndexLoadAndSeekRangeResolutionReportTheirReads) {
     EXPECT_EQ(0, reload_stats.total_pages_num);
     EXPECT_EQ(0, reload_stats.io_count_request);
 
-    auto key_field = std::make_shared<Field>(0, "c0", TYPE_INT, -1, -1, false);
-    key_field->set_uid(0);
-    key_field->set_is_key(true);
-    key_field->set_short_key_length(4);
-    Schema key_schema({key_field});
+    Schema key_schema(std::vector<FieldPtr>{write_schema.field(0)});
     std::vector<SeekRange> seek_ranges;
     seek_ranges.emplace_back(SeekTuple(key_schema, {Datum(10)}), SeekTuple(key_schema, {Datum(50)}));
     seek_ranges.back().set_inclusive_lower(true);
