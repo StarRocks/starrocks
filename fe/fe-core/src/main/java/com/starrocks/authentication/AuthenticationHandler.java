@@ -384,6 +384,137 @@ public class AuthenticationHandler {
         return authenticationResult;
     }
 
+    /**
+     * Authenticate using a raw bearer token (e.g. a JWT) presented outside the MySQL wire protocol, such
+     * as by the Arrow Flight SQL service. Only security integrations of type JWT are considered.
+     *
+     * @param context    the connection context
+     * @param user       username
+     * @param remoteHost remote host address
+     * @param rawToken   the raw token string (e.g. a signed JWT) presented by the client
+     * @return authenticated user identity
+     * @throws AuthenticationException when authentication fails
+     */
+    public static UserIdentity authenticateWithToken(ConnectContext context, String user, String remoteHost,
+                                                      String rawToken) throws AuthenticationException {
+        if (user == null || user.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", "NO");
+        }
+        if (rawToken == null || rawToken.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "NO");
+        }
+
+        // with auth check disabled, leave the decision to the regular authenticate() path
+        if (!Config.enable_auth_check) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        // native first, same precedence as authenticate()
+        AuthenticationResult authenticationResult =
+                authenticateWithNativeJwtUser(context.getAccessControlContext(), user, remoteHost, rawToken);
+        if (authenticationResult == null) {
+            authenticationResult =
+                    authenticateWithJwtSecurityIntegration(context.getAccessControlContext(), user, remoteHost, rawToken);
+        }
+
+        if (authenticationResult == null) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        setAuthenticationResultToContext(context, authenticationResult);
+        return authenticationResult.authenticatedUser;
+    }
+
+    private static AuthenticationResult authenticateWithJwtSecurityIntegration(AccessControlContext authContext,
+                                                                                String user, String remoteHost,
+                                                                                String rawToken)
+            throws AuthenticationException {
+        // unverified parse: picks the matching integration before paying for a JWKS fetch
+        String unverifiedIssuer = JWTAuthenticationProvider.extractIssuerWithoutVerification(rawToken);
+
+        List<Pair<String, AuthenticationException>> exceptions = Lists.newArrayList();
+        AuthenticationResult authenticationResult = null;
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+        String[] authChain = Config.authentication_chain;
+        for (String authMechanism : authChain) {
+            if (authenticationResult != null) {
+                break;
+            }
+
+            SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
+            if (securityIntegration == null) {
+                continue;
+            }
+
+            if (!AuthPlugin.Server.AUTHENTICATION_JWT.name().equalsIgnoreCase(securityIntegration.getType())) {
+                continue;
+            }
+
+            AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+            if (!(provider instanceof JWTAuthenticationProvider)) {
+                continue;
+            }
+
+            JWTAuthenticationProvider jwtProvider = (JWTAuthenticationProvider) provider;
+            if (!jwtProvider.isIssuerAccepted(unverifiedIssuer)) {
+                continue;
+            }
+
+            try {
+                authContext.setAuthenticationProvider(provider);
+                jwtProvider.authenticateRawToken(
+                        authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), rawToken);
+            } catch (AuthenticationException e) {
+                exceptions.add(new Pair<>(authMechanism, e));
+                continue;
+            }
+
+            authenticationResult = new AuthenticationResult(
+                    UserIdentity.createEphemeralUserIdent(user, remoteHost),
+                    securityIntegration.getGroupProviderName() == null ?
+                            List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
+                    securityIntegration.getGroupAllowedLoginList(),
+                    authMechanism);
+        }
+
+        if (authenticationResult == null && !exceptions.isEmpty()) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN,
+                    Joiner.on(", ").join(exceptions.stream().map(e -> e.first + ": " + e.second.getMessage())
+                            .collect(Collectors.toList())));
+        }
+
+        return authenticationResult;
+    }
+
+    private static AuthenticationResult authenticateWithNativeJwtUser(AccessControlContext authContext, String user,
+                                                                      String remoteHost, String rawToken)
+            throws AuthenticationException {
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
+        if (matchedUserIdentity == null) {
+            return null;
+        }
+
+        // a native user that is not a JWT user must go through its own auth plugin
+        if (!AuthPlugin.Server.AUTHENTICATION_JWT.name()
+                .equalsIgnoreCase(matchedUserIdentity.getValue().getAuthPlugin())) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        AuthenticationProvider provider = AuthenticationProviderFactory.create(
+                matchedUserIdentity.getValue().getAuthPlugin(), matchedUserIdentity.getValue().getAuthString());
+        if (!(provider instanceof JWTAuthenticationProvider)) {
+            LOG.warn("authentication provider is not a JWT provider for user {}@{}", user, remoteHost);
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+        }
+
+        authContext.setAuthenticationProvider(provider);
+        ((JWTAuthenticationProvider) provider).authenticateRawToken(authContext, matchedUserIdentity.getKey(), rawToken);
+        return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null, "native");
+    }
+
     private static void setAuthenticationResultToContext(ConnectContext context,
                                                          AuthenticationResult authenticationResult)
             throws AuthenticationException {

@@ -21,6 +21,9 @@ import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
 import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallHeaders;
+import org.apache.arrow.flight.CallStatus;
+import org.apache.arrow.flight.FlightRuntimeException;
+import org.apache.arrow.flight.FlightStatusCode;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
@@ -88,6 +91,27 @@ class ArrowFlightSqlAuthenticatorTest {
 
             RuntimeException ex = assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
             assertTrue(ex.getMessage().contains("Invalid token"));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_expiredJwtRejectedEvenWhenProxyEnabled() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        String token = "10.0.6.7|some-uuid";
+        doThrow(CallStatus.UNAUTHENTICATED.withDescription("JWT for this session has expired").toRuntimeException())
+                .when(sessionManager).validateToken(token);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + token);
+
+            FlightRuntimeException ex =
+                    assertThrows(FlightRuntimeException.class, () -> authenticator.authenticate(headers));
+            assertEquals(FlightStatusCode.UNAUTHENTICATED, ex.status().code());
         }
     }
 

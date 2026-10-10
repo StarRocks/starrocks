@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.JWTAuthenticationProvider;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -35,11 +36,19 @@ import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 public class ArrowFlightSqlSessionManager {
+
+    private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlSessionManager.class);
+
+    private static final Pattern JWT_SHAPE = Pattern.compile("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$");
 
     private final LoadingCache<String, ArrowFlightSqlTokenInfo> tokenCache;
 
@@ -70,9 +79,23 @@ public class ArrowFlightSqlSessionManager {
         ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(token);
         ctx.setRemoteIP(remoteIP);
 
+        long jwtExpireTimeMs = 0L;
         try {
-            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
-            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            if (looksLikeJwt(password)) {
+                try {
+                    AuthenticationHandler.authenticateWithToken(ctx, username, remoteIP, password);
+                    Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
+                    jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
+                } catch (AuthenticationException jwtException) {
+                    LOG.debug("JWT authentication failed for user {}, falling back to regular authentication: {}",
+                            username, jwtException.getMessage());
+                    // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+                    AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+                }
+            } else {
+                // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+                AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            }
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)
@@ -80,7 +103,8 @@ public class ArrowFlightSqlSessionManager {
                     .toRuntimeException();
         }
 
-        ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token);
+        ArrowFlightSqlTokenInfo tokenInfo =
+                new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token, jwtExpireTimeMs);
 
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setQueryId(UUIDUtil.genUUID());
@@ -123,6 +147,14 @@ public class ArrowFlightSqlSessionManager {
             throw new IllegalArgumentException(String.format("invalid bearer token [%s], please try to reconnect. " +
                     "Maybe the token is expired or evicted, could modify fe.conf " +
                     "[arrow_token_cache_expire_second] and [arrow_token_cache_size]", token));
+        }
+
+        // FlightRuntimeException (not IllegalArgumentException) so the proxy fallback cannot let it through
+        if (tokenInfo.isJwtExpired(System.currentTimeMillis())) {
+            tokenCache.invalidate(token);
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("JWT for this session has expired, please reconnect with a new token")
+                    .toRuntimeException();
         }
     }
 
@@ -199,5 +231,9 @@ public class ArrowFlightSqlSessionManager {
             return selfHost + "|" + uuid;
         }
         return uuid;
+    }
+
+    private static boolean looksLikeJwt(String credential) {
+        return credential != null && JWT_SHAPE.matcher(credential).matches();
     }
 }
