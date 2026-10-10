@@ -158,6 +158,39 @@ public class StreamLoadTaskTest {
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
+    // ---- A load whose rows were all rejected must still record where they are logged: without the tracking
+    // URL, information_schema.load_tracking_logs cannot return them and the error does not point to them ----
+    @Test
+    public void testAllRowsRejectedRecordsTrackingUrl() {
+        Map<String, String> loadCounters = Maps.newHashMap();
+        loadCounters.put(LoadEtlTask.DPP_NORMAL_ALL, "0");
+        loadCounters.put(LoadEtlTask.DPP_ABNORMAL_ALL, "4");
+        loadCounters.put(LoadJob.UNSELECTED_ROWS, "0");
+        loadCounters.put(LoadJob.LOADED_BYTES, "100");
+        String trackingUrl = "http://127.0.0.1:8040/api/_load_error_log?file=error_log_test";
+
+        streamLoadTask.setCoordinator(coord);
+        new Expectations() {
+            {
+                coord.join(anyInt);
+                result = true;
+                coord.getExecStatus();
+                result = Status.OK;
+                coord.getLoadCounters();
+                result = loadCounters;
+                coord.getTrackingUrl();
+                result = trackingUrl;
+            }
+        };
+
+        StarRocksException e = ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                ERR_NO_ROWS_IMPORTED.formatErrorMsg(),
+                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+        Assertions.assertTrue(e.getMessage().contains("tracking_url: " + trackingUrl), e.getMessage());
+        String recordedTrackingUrl = Deencapsulation.getField(streamLoadTask, "trackingUrl");
+        Assertions.assertEquals(trackingUrl, recordedTrackingUrl);
+    }
+
     @Test
     public void testCancelledLoadReportsCancelReason() {
         streamLoadTask.setCoordinator(coord);
