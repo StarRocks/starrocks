@@ -401,12 +401,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
-<<<<<<< HEAD
-=======
-        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
-            sqlBuilder.append(" ");
-            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
-        } else if (node.getQueryPeriod() != null) {
+        if (StringUtils.isEmpty(node.getQueryPeriodString()) && node.getQueryPeriod() != null) {
             // The raw clause text is only recorded by the StarRocks parser (it is also what gets pushed
             // down to MySQL external tables). Other producers - the Trino dialect - build the typed period
             // alone, so render that here: without it a serialize/reparse round trip would drop the time
@@ -414,7 +409,6 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append(" ").append(buildQueryPeriod(node.getQueryPeriod()));
         }
 
->>>>>>> e84c688 ([BugFix] Keep Iceberg time travel when the SQL dialect is Trino (#79171))
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
