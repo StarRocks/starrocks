@@ -107,6 +107,49 @@ public class StatisticsCollectionTrigger {
         return trigger;
     }
 
+    /**
+     * Trigger a statistics re-collection for the given columns after a schema change invalidated their
+     * previously collected statistics (e.g. MODIFY COLUMN to a type with different ordering semantics,
+     * whose stale min/max would otherwise be reinterpreted under the new type).
+     * <p>
+     * Collects FULL statistics over ALL partitions on purpose: the stale rows being replaced live in
+     * every partition, while the partition-health based incremental collection would skip the unchanged
+     * ones (a type change does not alter row counts), so this must not go through the health filter.
+     */
+    public static StatisticsCollectionTrigger triggerOnSchemaChange(Database db, Table table, List<String> columns) {
+        StatisticsCollectionTrigger trigger = new StatisticsCollectionTrigger();
+        trigger.db = db;
+        trigger.table = table;
+        trigger.sync = false;
+        trigger.analyzeType = StatsConstants.AnalyzeType.FULL;
+        if (!Config.enable_statistic_collect || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+            return trigger;
+        }
+        trigger.executeCollect(null, columns, null);
+        return trigger;
+    }
+
+    /**
+     * Re-collect the histogram of the given columns after a schema change invalidated the previously
+     * collected one (histogram bucket bounds are stored as strings under the collection-time type
+     * ordering, exactly like the basic min/max), using the properties the original histogram was
+     * collected with.
+     */
+    public static StatisticsCollectionTrigger triggerHistogramOnSchemaChange(Database db, Table table,
+                                                                             List<String> columns,
+                                                                             Map<String, String> properties) {
+        StatisticsCollectionTrigger trigger = new StatisticsCollectionTrigger();
+        trigger.db = db;
+        trigger.table = table;
+        trigger.sync = false;
+        trigger.analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
+        if (!Config.enable_statistic_collect || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+            return trigger;
+        }
+        trigger.executeCollect(null, columns, properties);
+        return trigger;
+    }
+
     public static StatisticsCollectionTrigger triggerOnFirstLoad(TransactionState txnState,
                                           Database db,
                                           Table table,
@@ -162,7 +205,7 @@ public class StatisticsCollectionTrigger {
             executeOverWrite();
             waitFinish();
         } else if (analyzeType != null) {
-            executeCollect();
+            executeCollect(new ArrayList<>(partitionIds), null, null);
             waitFinish();
         }
     }
@@ -203,13 +246,17 @@ public class StatisticsCollectionTrigger {
         }
     }
 
-    private void executeCollect() {
-        Map<String, String> properties = Maps.newHashMap();
-        if (SAMPLE == analyzeType) {
-            properties = StatsConstants.buildInitStatsProp();
+    // partitionIdList == null: the job factory expands it to all data-bearing partitions;
+    // columnNames == null: all collectible columns;
+    // extraProperties == null: default properties derived from the analyze type
+    private void executeCollect(List<Long> partitionIdList, List<String> columnNames,
+                                Map<String, String> extraProperties) {
+        Map<String, String> properties = extraProperties;
+        if (properties == null) {
+            properties = SAMPLE == analyzeType ? StatsConstants.buildInitStatsProp() : Maps.newHashMap();
         }
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), null, analyzeType,
+                db.getId(), table.getId(), columnNames, analyzeType,
                 StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
@@ -229,7 +276,7 @@ public class StatisticsCollectionTrigger {
                         statsConnectCtx.setSessionId(((OlapTable) table).getSessionId());
                     }
                     StatisticsCollectJob job = StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
-                            new ArrayList<>(partitionIds), null, null,
+                            partitionIdList, columnNames, null,
                             analyzeType, StatsConstants.ScheduleType.ONCE,
                             analyzeStatus.getProperties(), List.of(), List.of(), false);
                     if (!partitionTabletRowCounts.isEmpty()) {
