@@ -285,6 +285,15 @@ StarRocks supports using one of the following authentication methods to access D
 > - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`.
 > - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`.
 
+### Native SDK reads
+
+For external-table and file reads, set `"azure.adls2.use_native_sdk" = "true"` alongside the ADLS2 authentication properties to let BE/CN read `abfs://` and `abfss://` files through the native Azure SDK. The default is `false`, which retains Hadoop I/O. This is a data-file read option; it does not change FE metadata I/O. Native writes through ADLS paths are not supported.
+
+The native reader uses HTTPS against the account's Blob endpoint. Ensure that the Blob endpoint is reachable as well as the DFS endpoint, including private-endpoint deployments. Standard Azure public, US Government, and China endpoints are supported; custom endpoints are not. Shared key, fixed SAS, client secret, user-assigned managed identity, and workload identity reuse the existing ADLS2 settings. For workload identity, the configured token file must exist on every participating BE/CN as well as the FE. Custom Hadoop credential providers and custom MSI endpoints are not supported. Unsupported or missing credentials fail explicitly rather than selecting the process's default identity.
+
+Disable this property to return to Hadoop. Existing storage I/O profiling remains available on the native path.
+
+
 ### Managed Identity
 
 Before you start, you need to make the following preparations:

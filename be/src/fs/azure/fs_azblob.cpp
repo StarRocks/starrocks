@@ -361,10 +361,25 @@ BlobContainerClientPtr AzBlobClientFactory::create_blob_container_client(
     // client secret service principal
     if (!azure_cloud_credential.client_id.empty() && !azure_cloud_credential.client_secret.empty() &&
         !azure_cloud_credential.tenant_id.empty()) {
+        Azure::Identity::ClientSecretCredentialOptions options;
+        if (!azure_cloud_credential.authority_host.empty()) {
+            options.AuthorityHost = azure_cloud_credential.authority_host;
+        }
         auto client_secret_credential = std::make_shared<Azure::Identity::ClientSecretCredential>(
                 azure_cloud_credential.tenant_id, azure_cloud_credential.client_id,
-                azure_cloud_credential.client_secret);
+                azure_cloud_credential.client_secret, options);
         return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), client_secret_credential);
+    }
+
+    // The SDK refreshes workload identity tokens from the configured file.
+    if (!azure_cloud_credential.token_file.empty()) {
+        Azure::Identity::WorkloadIdentityCredentialOptions options;
+        options.TenantId = azure_cloud_credential.tenant_id;
+        options.ClientId = azure_cloud_credential.client_id;
+        options.TokenFilePath = azure_cloud_credential.token_file;
+        options.AuthorityHost = azure_cloud_credential.authority_host;
+        auto credential = std::make_shared<Azure::Identity::WorkloadIdentityCredential>(options);
+        return std::make_shared<BlobContainerClient>(blob_uri.get_container_uri(), credential);
     }
 
     // user assigned managed identity
@@ -497,8 +512,23 @@ StatusOr<BlobContainerClientPtr> AzBlobFileSystem::new_blob_container_client(con
         return Status::InvalidArgument("CloudConfiguration in FSOption is nullptr");
     }
 
-    const auto& azure_cloud_configuration = CloudConfigurationFactory::create_azure(*t_cloud_configuration);
+    AzureCloudConfiguration azure_cloud_configuration;
+    if (uri.is_adls2()) {
+        ASSIGN_OR_RETURN(azure_cloud_configuration,
+                         CloudConfigurationFactory::create_adls2(
+                                 *t_cloud_configuration, uri.account() + ".dfs." + uri.endpoint_suffix().substr(5)));
+    } else {
+        azure_cloud_configuration = CloudConfigurationFactory::create_azure(*t_cloud_configuration);
+    }
     const auto& azure_cloud_credential = azure_cloud_configuration.azure_cloud_credential;
+    if (uri.is_adls2()) {
+        try {
+            return _factory->new_blob_container_client(azure_cloud_credential, uri);
+        } catch (const std::exception&) {
+            // SDK diagnostics can embed credential material. Invalid native settings must not escape as exceptions.
+            return Status::InvalidArgument("Failed to initialize native ADLS credentials");
+        }
+    }
     return _factory->new_blob_container_client(azure_cloud_credential, uri);
 }
 
@@ -546,6 +576,9 @@ StatusOr<std::unique_ptr<WritableFile>> AzBlobFileSystem::new_writable_file(cons
         return Status::InvalidArgument(fmt::format("Invalid azure blob URI: {}", fname));
     }
 
+    if (uri.is_adls2()) {
+        return Status::NotSupported("Native ADLS currently supports reads only");
+    }
     ASSIGN_OR_RETURN(auto client, new_blob_client(uri));
     auto output_stream = std::make_unique<AzBlobOutputStream>(std::move(client), uri);
     return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);
@@ -559,7 +592,7 @@ namespace fs {
 namespace {
 
 bool match_azblob_unique(std::string_view uri, const FSOptions& options) {
-    return FSOptionsHelper::azure_use_native_sdk(options) && is_azblob_uri(uri);
+    return FSOptionsHelper::azure_use_native_sdk(options) && (is_azblob_uri(uri) || is_adls2_uri(uri));
 }
 
 StatusOr<std::unique_ptr<FileSystem>> create_azblob_unique(std::string_view, const FSOptions& options) {

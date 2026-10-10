@@ -162,4 +162,24 @@ TEST_F(AzBlobURITest, test_parse_hdfs_style_uri) {
     EXPECT_FALSE(uri.parse(path));
 }
 
+TEST_F(AzBlobURITest, test_parse_adls2) {
+    for (const std::string scheme : {"abfs", "abfss"}) {
+        for (const std::string suffix : {"core.windows.net", "core.usgovcloudapi.net", "core.chinacloudapi.cn"}) {
+            AzBlobURI uri;
+            ASSERT_TRUE(uri.parse(scheme + "://container@account.dfs." + suffix + "/dir/file%20name%252F.parquet"));
+            EXPECT_TRUE(uri.is_adls2());
+            EXPECT_EQ("account", uri.account());
+            EXPECT_EQ("container", uri.container());
+            EXPECT_EQ("dir/file%20name%252F.parquet", uri.blob_name());
+            EXPECT_EQ("https://account.blob." + suffix + "/container", uri.get_container_uri());
+        }
+    }
+    AzBlobURI uri;
+    EXPECT_FALSE(uri.parse("abfss://container@account.custom.endpoint/file"));
+    EXPECT_FALSE(uri.parse("abfss://account.dfs.core.windows.net/file"));
+    EXPECT_FALSE(uri.parse("abfss://container@.dfs.core.windows.net/file"));
+    EXPECT_TRUE(uri.parse("abfss://container@account.dfs.core.windows.net"));
+    EXPECT_TRUE(uri.blob_name().empty());
+}
+
 } // namespace starrocks

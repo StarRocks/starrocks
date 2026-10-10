@@ -17,6 +17,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "common/statusor.h"
 #include "fs/credential/cloud_configuration.h"
 #include "gen_cpp/CloudConfiguration_types.h"
 
@@ -76,6 +77,9 @@ public:
 
     // This is a reserved interface for aliyun EMR starrocks, and cannot be deleted
     static const AliyunCloudConfiguration create_aliyun(const TCloudConfiguration& t_cloud_configuration);
+
+    static StatusOr<AzureCloudConfiguration> create_adls2(const TCloudConfiguration& configuration,
+                                                          const std::string& dfs_host);
 
     static const AzureCloudConfiguration create_azure(const TCloudConfiguration& t_cloud_configuration);
 
