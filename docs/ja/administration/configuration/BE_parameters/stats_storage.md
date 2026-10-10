@@ -620,6 +620,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 主キーテーブルの単一コンパクションでマージできる最大 rowset 数。
 - 導入バージョン: -
 
+### max_update_compaction_num_level_minus_one_rowsets
+
+- デフォルト: 10000
+- タイプ: Int
+- 単位: Rowset
+- 変更可能: はい
+- 説明: 主キーテーブルの size-tiered コンパクションで一度に選択する level=-1 の Rowset の最大数。設定値が 2 未満の場合は 2 として扱います。level=-1 には行数が 0、または推定有効バイト数が 0 の Rowset が含まれます。他のレベルと一緒にマージする場合、この設定は入力の合計数を制限しません。
+- 導入バージョン: -
+
 ### memory_limitation_per_thread_for_schema_change
 
 - デフォルト: 2
