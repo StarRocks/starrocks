@@ -17,7 +17,10 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableName;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -160,5 +163,21 @@ public class InsertPreSplitHookColumnListTest {
                     insertWithTargetColumns(List.of("k", "v")), table, requiredColumns("k")),
                     "a target column list omitting a divergent rollup sort key must not be pre-split safe");
         }
+    }
+
+    @Test
+    public void generatedSortKeyColumnNeedNotBeListed() {
+        // A generated column can never be named in a column list. Requiring it there declined every explicit
+        // list on a table whose sort key holds one; the sources compute it from the columns it reads instead,
+        // and decline with the reason when the list omits one of those.
+        Column k = PresplitTestSupport.bigintColumn("k");
+        Column g = PresplitTestSupport.nullableBigintColumn("g");
+        g.setGeneratedColumnExpr(ColumnIdExpr.create(new SlotRef((TableName) null, "k")));
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseSchema()).thenReturn(List.of(k, g));
+        when(table.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(k));
+
+        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
+                insertWithTargetColumns(List.of("k")), table, List.of(g, k)));
     }
 }

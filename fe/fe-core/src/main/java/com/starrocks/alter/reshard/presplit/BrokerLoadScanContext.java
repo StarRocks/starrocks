@@ -21,6 +21,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -51,6 +52,17 @@ import java.util.Objects;
  * no {@code COLUMNS} list takes its positional field layout from that schema
  * ({@link com.starrocks.load.Load#initColumns}), and the sampler has to declare
  * the same layout to FILES. Parquet/ORC resolve by name and never consult it.
+ *
+ * <p>{@code targetToConstantSql} / {@code targetToExpressionSql} carry each sampled generated
+ * column (lower-cased name) as the expression the data tier evaluates in its place -- its
+ * definition over the file columns it reads, each cast to its target type, which is how
+ * {@code Load} computes it -- and {@code generatedColumnInputs} the target columns those
+ * expressions read, which a CSV sample has to declare. All three are empty when no sampled
+ * column is generated.
+ *
+ * <p>{@code sessionSemantics} are the job session's variables that decide how those expressions
+ * evaluate and how a timestamp decodes, copied when the hook ran; the data tier sets them on its own
+ * session.
  */
 public record BrokerLoadScanContext(
         BrokerDesc brokerDesc,
@@ -58,13 +70,21 @@ public record BrokerLoadScanContext(
         List<List<TBrokerFileStatus>> fileStatusesPerGroup,
         ComputeResource computeResource,
         String loadTimeZone,
-        List<Column> targetBaseSchema) implements ScanContext {
+        List<Column> targetBaseSchema,
+        Map<String, String> targetToConstantSql,
+        Map<String, String> targetToExpressionSql,
+        List<Column> generatedColumnInputs,
+        SampleSessionSemantics sessionSemantics) implements ScanContext {
 
     public BrokerLoadScanContext {
         Objects.requireNonNull(fileGroups, "fileGroups");
         Objects.requireNonNull(fileStatusesPerGroup, "fileStatusesPerGroup");
         Objects.requireNonNull(computeResource, "computeResource");
         Objects.requireNonNull(targetBaseSchema, "targetBaseSchema");
+        Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+        Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+        Objects.requireNonNull(generatedColumnInputs, "generatedColumnInputs");
+        Objects.requireNonNull(sessionSemantics, "sessionSemantics");
         if (fileGroups.size() != fileStatusesPerGroup.size()) {
             throw new IllegalArgumentException(String.format(
                     "fileGroups size %d != fileStatusesPerGroup size %d",
@@ -83,6 +103,7 @@ public record BrokerLoadScanContext(
             List<List<TBrokerFileStatus>> fileStatusesPerGroup,
             ComputeResource computeResource,
             String loadTimeZone) {
-        this(brokerDesc, fileGroups, fileStatusesPerGroup, computeResource, loadTimeZone, List.of());
+        this(brokerDesc, fileGroups, fileStatusesPerGroup, computeResource, loadTimeZone, List.of(),
+                Map.of(), Map.of(), List.of(), SampleSessionSemantics.NONE);
     }
 }
