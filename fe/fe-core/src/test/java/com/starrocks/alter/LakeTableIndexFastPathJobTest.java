@@ -32,6 +32,7 @@ import org.mockito.ArgumentCaptor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -294,16 +295,28 @@ public class LakeTableIndexFastPathJobTest {
     public void testApplicableIndexes_MatchesByColumnIdNotName() {
         // A rollup / sync-MV that carries the indexed column under a RENAMED
         // output but the SAME ColumnId must still be considered applicable —
-        // applicableIndexes matches by ColumnId (via the base table), not by
+        // applicableIndexes matches by ColumnId, not by
         // name, mirroring OlapTable.getIndexesBySchema. A name-based check would
         // wrongly skip it and leave the FE/BE schema id diverged.
         TOlapTableIndex thrift = new TOlapTableIndex();
         thrift.setIndex_type(TIndexType.BITMAP);
-        thrift.setColumns(Collections.singletonList("v")); // base column name
+        thrift.setColumns(Collections.singletonList("w")); // persisted display name
+        thrift.setIndex_name("idx");
+        thrift.setIndex_id(101);
+        thrift.setCommon_properties(Map.of("common", "value"));
+        thrift.setIndex_properties(Map.of("index", "value"));
+        thrift.setSearch_properties(Map.of("search", "value"));
+        thrift.setExtra_properties(Map.of("extra", "value"));
 
         OlapTable table = mock(OlapTable.class);
-        Column baseV = new Column("v", IntegerType.BIGINT); // ColumnId = "v"
-        when(table.getColumn("v")).thenReturn(baseV);
+        // Another column reuses the original display name. Resolving the wire
+        // ColumnId as a display name would incorrectly select this column.
+        Column otherV = new Column("u", IntegerType.BIGINT);
+        otherV.setName("v");
+        when(table.getColumn("v")).thenReturn(otherV);
+        Column baseV = new Column("v", IntegerType.BIGINT);
+        baseV.setName("w");
+        when(table.getColumn("w")).thenReturn(baseV);
 
         // Meta carries the same column id "v" but under a renamed output "w".
         Column renamed = new Column("w", IntegerType.BIGINT);
@@ -314,11 +327,20 @@ public class LakeTableIndexFastPathJobTest {
         List<TOlapTableIndex> applicable = LakeTableAddIndexJob.applicableIndexes(
                 Collections.singletonList(thrift), meta, table);
         assertEquals(1, applicable.size()); // matched by id despite the name differing
+        TOlapTableIndex expected = thrift.deepCopy();
+        expected.setColumns(List.of("v"));
+        assertEquals(expected, applicable.get(0));
+        applicable.get(0).getIndex_properties().put("index", "changed");
+        assertEquals("value", thrift.getIndex_properties().get("index"));
+        // Dispatch must not rewrite journaled display names: retries and replay
+        // would otherwise interpret "v" as the other column's reused name.
+        assertEquals(List.of("w"), thrift.getColumns());
+        assertEquals(List.of("v"), LakeTableAddIndexJob.applicableIndexes(
+                Collections.singletonList(thrift), meta, table).get(0).getColumns());
 
         // Sanity: a meta that carries neither the id nor the name is excluded.
-        Column other = new Column("k9", IntegerType.BIGINT);
         MaterializedIndexMeta otherMeta = mock(MaterializedIndexMeta.class);
-        when(otherMeta.getSchema()).thenReturn(List.of(other));
+        when(otherMeta.getSchema()).thenReturn(List.of(otherV));
         assertTrue(LakeTableAddIndexJob.applicableIndexes(
                 Collections.singletonList(thrift), otherMeta, table).isEmpty());
     }
@@ -331,7 +353,7 @@ public class LakeTableIndexFastPathJobTest {
     public void testAddIndexJob_ApplyCatalogMutation_MergesAddBfColumns() {
         LakeTableAddIndexJob job = new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
                 new ArrayList<>(), new ArrayList<>(),
-                List.of("c2"));
+                List.of("renamed"));
 
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
@@ -340,9 +362,9 @@ public class LakeTableIndexFastPathJobTest {
         existingBf.add(ColumnId.create("c1"));
         when(table.getBfColumnIds()).thenReturn(existingBf);
         when(table.getBfFpp()).thenReturn(0.05);
-        Column col = mock(Column.class);
-        when(col.getName()).thenReturn("c2");
-        when(table.getColumn("c2")).thenReturn(col);
+        Column col = new Column("c2", IntegerType.BIGINT);
+        col.setName("renamed");
+        when(table.getColumn("renamed")).thenReturn(col);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Set<ColumnId>> setCaptor = ArgumentCaptor.forClass(Set.class);
@@ -368,8 +390,7 @@ public class LakeTableIndexFastPathJobTest {
         when(table.getBfColumnIds()).thenReturn(null);
         // Zero fpp → the job substitutes DEFAULT_BLOOM_FILTER_FPP.
         when(table.getBfFpp()).thenReturn(0.0);
-        Column col = mock(Column.class);
-        when(col.getName()).thenReturn("c1");
+        Column col = new Column("c1", IntegerType.BIGINT);
         when(table.getColumn("c1")).thenReturn(col);
 
         ArgumentCaptor<Double> fppCaptor = ArgumentCaptor.forClass(Double.class);
@@ -388,8 +409,7 @@ public class LakeTableIndexFastPathJobTest {
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         when(table.getBfColumnIds()).thenReturn(null);
         when(table.getBfFpp()).thenReturn(0.05);
-        Column c1 = mock(Column.class);
-        when(c1.getName()).thenReturn("c1");
+        Column c1 = new Column("c1", IntegerType.BIGINT);
         when(table.getColumn("c1")).thenReturn(c1);
         when(table.getColumn("missing")).thenReturn(null);
 
@@ -473,7 +493,7 @@ public class LakeTableIndexFastPathJobTest {
         // Drop one of two bf columns → setBloomFilterInfo with the remaining set.
         LakeTableDropIndexJob job = new LakeTableDropIndexJob(1L, 2L, 3L, "t", 60_000L,
                 new ArrayList<Long>(), new ArrayList<String>(), new ArrayList<TDropIndexInfo>(),
-                List.of("c1"));
+                List.of("renamed"));
 
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
@@ -482,9 +502,9 @@ public class LakeTableIndexFastPathJobTest {
         existingBf.add(ColumnId.create("c2"));
         when(table.getBfColumnIds()).thenReturn(existingBf);
         when(table.getBfFpp()).thenReturn(0.05);
-        Column col = mock(Column.class);
-        when(col.getName()).thenReturn("c1");
-        when(table.getColumn("c1")).thenReturn(col);
+        Column col = new Column("c1", IntegerType.BIGINT);
+        col.setName("renamed");
+        when(table.getColumn("renamed")).thenReturn(col);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Set<ColumnId>> setCaptor = ArgumentCaptor.forClass(Set.class);
@@ -507,8 +527,7 @@ public class LakeTableIndexFastPathJobTest {
         Set<ColumnId> existingBf = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
         existingBf.add(ColumnId.create("only"));
         when(table.getBfColumnIds()).thenReturn(existingBf);
-        Column col = mock(Column.class);
-        when(col.getName()).thenReturn("only");
+        Column col = new Column("only", IntegerType.BIGINT);
         when(table.getColumn("only")).thenReturn(col);
         job.applyCatalogMutation(table);
         verify(table).setBloomFilterInfo(null, 0);
