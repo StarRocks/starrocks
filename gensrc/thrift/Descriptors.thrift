@@ -95,7 +95,7 @@ enum THdfsFileFormat {
   ORC = 6,
   SEQUENCE_FILE = 7,
   LANCE = 8,
-  // Puffin file, used by Iceberg v3 deletion vectors (deletion-vector-v1 blob).
+  // Puffin format, used by Iceberg v3 deletion-vector-v1 blobs.
   PUFFIN = 9,
 
   UNKNOWN = 100

@@ -161,7 +161,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertEquals("/path/to/dv-file.puffin", df.getFull_path());
         Assertions.assertEquals(4L, df.getContent_offset());
         Assertions.assertEquals(40L, df.getContent_size_in_bytes());
-        Assertions.assertEquals("/path/to/data-a.parquet", df.getReferenced_data_file());
     }
 
     @Test
@@ -183,7 +182,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertEquals(101L, emitted.getContent_offset());
         Assertions.assertEquals(40L, emitted.getContent_size_in_bytes());
         Assertions.assertEquals(141L, emitted.getLength());
-        Assertions.assertEquals("/path/to/data-a.parquet", emitted.getReferenced_data_file());
     }
 
     @Test

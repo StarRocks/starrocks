@@ -325,7 +325,6 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 dv.setFile_format(THdfsFileFormat.PUFFIN);
                 dv.setFile_content(TIcebergFileContent.POSITION_DELETES);
                 dv.setLength(deleteFile.fileSizeInBytes());
-                dv.setReferenced_data_file(deleteFile.referencedDataFile());
                 dv.setContent_offset(deleteFile.contentOffset());
                 dv.setContent_size_in_bytes(deleteFile.contentSizeInBytes());
                 posDeleteFiles.add(dv);

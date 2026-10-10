@@ -184,30 +184,6 @@ Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std:
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
-        const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
-        std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-        std::shared_ptr<CacheInputStream>& cache_input_stream) const {
-    const FileInputStreamOptions options{.fs = _ctx.fs,
-                                         .file_path = delete_file.full_path,
-                                         .file_size = delete_file.length,
-                                         .fs_stats = &fs_stats,
-                                         .app_stats = &app_stats,
-                                         .datacache_options = _ctx.datacache_options};
-    ASSIGN_OR_RETURN(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
-    std::vector<SharedBufferedInputStream::IORange> io_ranges{};
-    int64_t offset = 0;
-    while (offset < delete_file.length) {
-        const int64_t remain_length =
-                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), delete_file.length - offset);
-        io_ranges.emplace_back(offset, remain_length);
-        offset += remain_length;
-    }
-
-    RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
-    return file;
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_deletion_vector_file(
         const TIcebergDeleteFile& delete_file, int64_t offset, int64_t size, FormatScannerStats& fs_stats,
         FormatScannerStats& app_stats, std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
         std::shared_ptr<CacheInputStream>& cache_input_stream) const {
@@ -219,14 +195,14 @@ StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_deletion_
                                          .datacache_options = _ctx.datacache_options};
     ASSIGN_OR_RETURN(auto file, create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
     std::vector<SharedBufferedInputStream::IORange> io_ranges{};
-    int64_t cur = offset;
     const int64_t end = offset + size;
-    while (cur < end) {
+    while (offset < end) {
         const int64_t remain_length =
-                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), end - cur);
-        io_ranges.emplace_back(cur, remain_length);
-        cur += remain_length;
+                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), end - offset);
+        io_ranges.emplace_back(offset, remain_length);
+        offset += remain_length;
     }
+
     RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
     return file;
 }
@@ -305,8 +281,8 @@ Status IcebergDeleteBuilder::build_deletion_vector(const TIcebergDeleteFile& del
     FormatScannerStats fs_stats;
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<CacheInputStream> cache_input_stream;
-    ASSIGN_OR_RETURN(auto file, open_deletion_vector_file(delete_file, content_offset, content_size, fs_stats,
-                                                          app_stats, shared_buffered_input_stream, cache_input_stream));
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, content_offset, content_size, fs_stats, app_stats,
+                                                        shared_buffered_input_stream, cache_input_stream));
 
     std::vector<uint8_t> blob(content_size);
     RETURN_IF_ERROR(file->read_at_fully(content_offset, blob.data(), content_size));
@@ -324,8 +300,8 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
     std::shared_ptr<SharedBufferedInputStream> shared_buffered_input_stream;
     std::shared_ptr<CacheInputStream> cache_input_stream;
 
-    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_stats, app_stats, shared_buffered_input_stream,
-                                                        cache_input_stream));
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, 0, delete_file.length, fs_stats, app_stats,
+                                                        shared_buffered_input_stream, cache_input_stream));
 
     RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
             file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,

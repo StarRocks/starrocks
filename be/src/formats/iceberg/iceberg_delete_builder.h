@@ -83,11 +83,6 @@ private:
     Status build(const TIcebergDeleteFile& delete_file, const std::string& format) const;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
-            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
-            std::shared_ptr<CacheInputStream>& cache_input_stream) const;
-
-    StatusOr<std::unique_ptr<RandomAccessFile>> open_deletion_vector_file(
             const TIcebergDeleteFile& delete_file, int64_t offset, int64_t size, FormatScannerStats& fs_stats,
             FormatScannerStats& app_stats, std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
