@@ -28,9 +28,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.zone.ZoneOffsetTransition;
 import java.time.zone.ZoneRules;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
@@ -151,23 +149,7 @@ public final class ConvertTzStatisticUtils {
 
         // Exact per-key MCV transform; keep one covering bucket for the non-MCV mass
         // (same idea as HistogramStatisticsCollectJob.buildCollectSingleBucket in stats collection).
-        return Optional.of(buildSingleBucketHistogram(minValue, maxValue, rowCount, newMcv));
+        return Optional.of(Histogram.ofSingleBucket(minValue, maxValue, rowCount, newMcv));
     }
 
-    /**
-     * Build an MCV histogram with a single covering bucket for the remaining non-MCV rows.
-     * Mirrors the stats-collection fallback that stores one bucket over [min, max] with
-     * count = totalRows - sum(MCV) when a full multi-bucket histogram is unavailable.
-     */
-    public static Histogram buildSingleBucketHistogram(double minValue, double maxValue,
-                                                       double totalRows, Map<String, Long> mcv) {
-        if (Double.isInfinite(minValue) || Double.isInfinite(maxValue)
-                || Double.isNaN(minValue) || Double.isNaN(maxValue)) {
-            return new Histogram(Collections.emptyList(), mcv);
-        }
-        long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
-        long nonMcvRows = Math.max(0L, Math.round(totalRows) - mcvRows);
-        List<Bucket> buckets = List.of(new Bucket(minValue, maxValue, nonMcvRows, 0L));
-        return new Histogram(buckets, mcv);
-    }
 }

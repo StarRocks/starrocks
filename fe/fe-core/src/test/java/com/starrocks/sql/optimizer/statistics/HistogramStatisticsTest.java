@@ -606,6 +606,70 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(0.0, estimated.getColumnStatistic(columnRefOperator).getNullsFraction(), 0.001);
     }
 
+    private static final ColumnRefOperator STRING_COLUMN = new ColumnRefOperator(0, VarcharType.VARCHAR, "s", true);
+
+    // A string column as stats collection stores it: the MCVs plus one [+inf, +inf] placeholder bucket that
+    // holds the remaining rows. 1000 rows: 'hot' x 600, then 200 other values x 2 rows each.
+    private static Statistics stringColumnWithPlaceholderBucket() {
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("hot", 600L);
+        List<Bucket> placeholderBucket = List.of(
+                new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, 400L, 0L));
+        ColumnStatistic columnStatistic = new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY,
+                0, 20, 201, new Histogram(placeholderBucket, mcv), ColumnStatistic.StatisticType.ESTIMATE);
+        return Statistics.builder()
+                .setOutputRowCount(1000)
+                .addColumnStatistic(STRING_COLUMN, columnStatistic)
+                .build();
+    }
+
+    private static Statistics estimateStringComparison(BinaryType binaryType, String value) {
+        Statistics statistics = stringColumnWithPlaceholderBucket();
+        ConstantOperator constant = ConstantOperator.createVarchar(value);
+        return BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(Optional.of(STRING_COLUMN),
+                statistics.getColumnStatistic(STRING_COLUMN), new BinaryPredicateOperator(binaryType, STRING_COLUMN,
+                        constant), Optional.of(constant), statistics);
+    }
+
+    @Test
+    public void testPlaceholderBucketEqualMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s = 'hot'  correct row estimate is returned END
+
+        String mcvValue = "hot";
+        double expectedRowCount = 600;
+
+        Statistics actual = estimateStringComparison(BinaryType.EQ, mcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testPlaceholderBucketNotEqualMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s <> 'hot' then row count is 1000-600 = 400 rows END
+
+        String mcvValue = "hot";
+        double expectedRowCount = 400;
+
+        Statistics actual = estimateStringComparison(BinaryType.NE, mcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testPlaceholderBucketEqualNonMcv() {
+        // Given a string column whose histogram has MCV {'hot': 600} and only a [+inf, +inf] placeholder bucket
+        // CASE WHEN s = 'cold' misses the MCV THEN 400 non-MCV rows / 200 non-MCV values = 2 rows END
+
+        String nonMcvValue = "cold";
+        double expectedRowCount = 2;
+
+        Statistics actual = estimateStringComparison(BinaryType.EQ, nonMcvValue);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
+
 
     @Test
     public void testUpdateHistWithJoin() {

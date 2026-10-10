@@ -306,5 +306,73 @@ public class StatisticsEstimateUtilsTest {
         assertNull(result.getHistogram());
     }
 
-}
+    @Test
+    void itShouldCarryNonMcvRowsInUnionBucket() {
+        // Given a union of 10000 and 20000 rows with no nulls, whose merged MCVs hold 14000 rows,
+        // over the merged range [1, 200]
+        // CASE WHEN the union propagates a histogram THEN it carries the rows outside the MCVs in a
+        // bucket over the merged range, so the union's total row count is no longer just its MCV rows END
 
+        final var leftColStats = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(50)
+                .setHistogram(new Histogram(List.of(), Map.of("1", 5000L, "2", 3000L)))
+                .build();
+        final var rightColStats = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(200)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(80)
+                .setHistogram(new Histogram(List.of(), Map.of("3", 4000L, "4", 2000L)))
+                .build();
+        final var expectedLowerBound = 1.0;
+        final var expectedUpperBound = 200.0;
+        final var expectedNonMcvRows = 16_000L;
+        final var expectedUpperRepeats = 0L;
+        final var expectedTotalRows = 30_000L;
+
+        final var actualHistogram = StatisticsEstimateUtils.unionColumnStatistic(
+                leftColStats, 10_000, rightColStats, 20_000).getHistogram();
+
+        final var actualBuckets = actualHistogram.getBuckets();
+        assertEquals(1, actualBuckets.size());
+        assertEquals(expectedLowerBound, actualBuckets.get(0).getLower());
+        assertEquals(expectedUpperBound, actualBuckets.get(0).getUpper());
+        assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
+        assertEquals(expectedUpperRepeats, actualBuckets.get(0).getUpperRepeats());
+        assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+    }
+
+    @Test
+    void itShouldExcludeNullsFromTheUnionBucket() {
+        // Given a union of 10000 rows that are half null and 20000 rows with no nulls, so 25000 of
+        // the 30000 union rows are non-null, whose merged MCVs hold 14000 rows
+        // CASE WHEN the union propagates a histogram THEN the bucket counts only non-null rows
+        // outside the MCVs, because an MCV key is a value and so never counts a null END
+
+        final var leftColStats = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100)
+                .setNullsFraction(0.5)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(50)
+                .setHistogram(new Histogram(List.of(), Map.of("1", 5000L, "2", 3000L)))
+                .build();
+        final var rightColStats = ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(200)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(80)
+                .setHistogram(new Histogram(List.of(), Map.of("3", 4000L, "4", 2000L)))
+                .build();
+        final var expectedNonMcvRows = 11_000L;
+        final var expectedTotalRows = 25_000L;
+
+        final var actualHistogram = StatisticsEstimateUtils.unionColumnStatistic(
+                leftColStats, 10_000, rightColStats, 20_000).getHistogram();
+
+        assertEquals(expectedNonMcvRows, actualHistogram.getBuckets().get(0).getCount());
+        assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+    }
+}

@@ -24,13 +24,35 @@ import java.util.Optional;
 import javax.annotation.Nonnull;
 
 public class Histogram {
-
     private final List<Bucket> buckets;
     private final Map<String, Long> mcv;
 
     public Histogram(List<Bucket> buckets, Map<String, Long> mcv) {
         this.buckets = buckets == null ? List.of() : buckets;
         this.mcv = mcv == null ? Map.of() : mcv;
+    }
+
+    /**
+     * For a histogram with no buckets, where the MCVs cover every row the histogram describes.
+     */
+    public Histogram(Map<String, Long> mcv) {
+        this.mcv = mcv == null ? Map.of() : mcv;
+        this.buckets = List.of();
+    }
+
+    public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
+                                          Map<String, Long> mcv) {
+        long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
+        long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
+        if (nonMcvRows == 0) {
+            return new Histogram(mcv);
+        }
+        if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
+            return new Histogram(List.of(
+                    new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, nonMcvRows, 0L)), mcv);
+        }
+        long upperRepeats = minValue == maxValue ? nonMcvRows : 0L;
+        return new Histogram(List.of(new Bucket(minValue, maxValue, nonMcvRows, upperRepeats)), mcv);
     }
 
     public long getTotalRows() {
