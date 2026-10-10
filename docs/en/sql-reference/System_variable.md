@@ -730,6 +730,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this keeps the gather fragment within the labels of the scanned data. The guarantee holds only when `choose_execute_instances_mode` is `LOCALITY` (default) and `prefer_compute_node` is `false` (default). Otherwise, intermediate fragments may be scheduled on BEs or CNs outside the label. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
+
 ### enable_gin_filter
 
 * **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.

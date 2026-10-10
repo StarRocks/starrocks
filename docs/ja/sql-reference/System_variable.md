@@ -611,6 +611,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: true
 * **導入バージョン**: v3.3.0
 
+### enable_gather_fragment_child_affinity
+
+* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment はスキャン対象データのラベル範囲内に保たれます。この保証は `choose_execute_instances_mode` が `LOCALITY`（デフォルト）かつ `prefer_compute_node` が `false`（デフォルト）の場合にのみ成立します。それ以外の場合、中間 Fragment がラベル範囲外の BE または CN にスケジュールされる可能性があります。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
+* **デフォルト**: false
+* **導入バージョン**: v4.2
+
 ### enable_gin_filter
 
 * **説明**: クエリ中に[全文逆インデックス](../table_design/indexes/inverted_index.md)を利用するかどうか。
