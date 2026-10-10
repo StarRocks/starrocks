@@ -1175,6 +1175,74 @@ void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcContro
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::get_csv_splits(google::protobuf::RpcController* controller,
+                                                 const PGetCsvSplitsRequest* request, PGetCsvSplitsResult* response,
+                                                 google::protobuf::Closure* done) {
+    auto task = [=]() { this->_get_csv_splits(controller, request, response, done); };
+
+    auto st = _exec_env->execution_services().load_rpc_pool->submit_func(std::move(task));
+    if (!st.ok()) {
+        LOG(WARNING) << "get csv splits: " << st
+                     << ", thread pool size: " << _exec_env->execution_services().load_rpc_pool->num_threads();
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("too busy to get csv splits").to_protobuf(response->mutable_status());
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_get_csv_splits(google::protobuf::RpcController* controller,
+                                                  const PGetCsvSplitsRequest* request, PGetCsvSplitsResult* response,
+                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    TGetCsvSplitsRequest t_request;
+
+    auto st = Status::OK();
+    DeferOp defer([&st, &response] { st.to_protobuf(response->mutable_status()); });
+
+    {
+        auto* cntl = static_cast<brpc::Controller*>(controller);
+        auto ser_request = cntl->request_attachment().to_string();
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "deserialize thrift message error: " << st;
+            return;
+        }
+    }
+
+    if (!t_request.__isset.scan_range || !t_request.__isset.split_size) {
+        st = Status::InvalidArgument("scan_range and split_size are both required");
+        return;
+    }
+    const auto& scan_range = t_request.scan_range.broker_scan_range;
+    if (scan_range.ranges.empty()) {
+        st = Status::InvalidArgument("No file to split. Please check the specified path.");
+        return;
+    }
+    if (t_request.split_size <= 0) {
+        st = Status::InvalidArgument("split_size must be positive");
+        return;
+    }
+
+    RuntimeState state(_exec_env);
+
+    std::vector<std::vector<int64_t>> offsets;
+    st = FileScanner::csv_split_offsets(&state, scan_range, t_request.split_size, &offsets);
+    if (!st.ok()) {
+        LOG(WARNING) << "get csv splits failed: " << st;
+        return;
+    }
+
+    for (const auto& file_offsets : offsets) {
+        auto* splits = response->add_splits();
+        for (int64_t offset : file_offsets) {
+            splits->add_offsets(offset);
+        }
+    }
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {

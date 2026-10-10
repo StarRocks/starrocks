@@ -57,6 +57,7 @@ ADD_BE_LIB(FormatCsv
         csv/converter.cpp
         csv/csv_defaults.h
         csv/csv_reader.cpp
+        csv/csv_record_framer.cpp
         csv/csv_file_writer.cpp
         csv/date_converter.cpp
         csv/datetime_converter.cpp

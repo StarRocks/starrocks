@@ -1186,6 +1186,231 @@ TEST_P(CSVScannerTest, test_enclose_fanatics) {
     EXPECT_EQ(-999, chunk->get(0)[7].get_int32());
 }
 
+TEST_P(CSVScannerTest, test_escaped_ordinary_character_inside_enclosed_field) {
+    // Issue #43613. An escape before an ordinary character used to drop the parser out of the
+    // enclosed field, after which the field's own separators and newlines were read as structure
+    // and the row was cut into the wrong columns. Only escapes before an enclose, an escape or a
+    // delimiter kept the field open.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file24");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(3, chunk->num_columns());
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ("reported \"NO\" symptoms,.brabdominal cramping", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("ok", chunk->get(0)[2].get_slice());
+}
+
+TEST_P(CSVScannerTest, test_lone_enclose_outside_a_field_does_not_consume_the_next_character) {
+    // A lone enclose character in an unenclosed field used to escape whatever came after it, so the
+    // separator behind it was swallowed and two columns arrived as one. A row delimiter there ran
+    // two records together the same way. A doubled one still stands for a literal enclose.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file25");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_rows());
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ("a", chunk->get(0)[0].get_slice());
+    EXPECT_EQ("b", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("c", chunk->get(1)[0].get_slice());
+    EXPECT_EQ("d\"e", chunk->get(1)[1].get_slice());
+}
+
+TEST_P(CSVScannerTest, test_get_split_offsets_ignores_enclosed_row_delimiters) {
+    // Issue #65245. csv_file26 holds three records, the middle one carrying a row delimiter inside
+    // an enclosed field at offset 33. A range may only begin at 0, 13 or 66; beginning at 34, which
+    // is where seeking to the next raw row delimiter lands, cuts that record in half.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file26");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+
+    // A split size of 1 keeps every boundary. No boundary is reported at end of file.
+    std::vector<int64_t> offsets;
+    Status st = scanner->get_split_offsets(1, &offsets);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(std::vector<int64_t>({0, 13, 66}), offsets);
+
+    // Thinning drops boundaries that are too close together, and never invents one: 13 goes, 66
+    // stays, and 34 was never a candidate.
+    std::vector<int64_t> thinned;
+    st = scanner->get_split_offsets(40, &thinned);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(std::vector<int64_t>({0, 66}), thinned);
+}
+
+TEST_P(CSVScannerTest, test_get_split_offsets_is_accounted_for_like_a_scan) {
+    // The boundary pass reads the whole file before the real scan starts and the load waits on it,
+    // so it is counted the way ScannerCSVReader::_fill_buffer counts its own reads. Left out, load
+    // timings would omit this phase entirely and report only that it finished.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file26");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+
+    std::vector<int64_t> offsets;
+    Status st = scanner->get_split_offsets(1, &offsets);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // csv_file26 is 79 bytes: one read returns all of it, the next returns nothing and ends the pass.
+    EXPECT_EQ(1, scanner->TEST_scanner_counter()->num_files_read);
+    EXPECT_EQ(2, scanner->TEST_scanner_counter()->file_read_count);
+    EXPECT_EQ(79, scanner->TEST_runtime_state()->num_bytes_scan_from_source());
+}
+
+TEST_P(CSVScannerTest, test_csv_split_offsets_fails_when_a_file_cannot_be_read) {
+    // A file that cannot be read part way through the set abandons the whole request: the frontend
+    // has no boundaries for it and loads everything whole rather than guess at where records begin.
+    TBrokerScanRangeParams params;
+    params.__set_multi_row_delimiter("\n");
+    params.__set_multi_column_separator(",");
+    params.__set_enclose('"');
+
+    auto make_range = [](const std::string& path) {
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(3);
+        range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+        range.__set_path(path);
+        return range;
+    };
+
+    std::vector<TBrokerRangeDesc> ranges{make_range("./be/test/exec/test_data/csv_scanner/csv_file26"),
+                                         make_range("./be/test/exec/test_data/csv_scanner/does_not_exist")};
+
+    TBrokerScanRange scan_range;
+    scan_range.params = params;
+    scan_range.ranges = ranges;
+
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    std::vector<std::vector<int64_t>> offsets;
+    Status st = FileScanner::csv_split_offsets(&state, scan_range, 1, &offsets);
+    EXPECT_FALSE(st.ok());
+}
+
+TEST_P(CSVScannerTest, test_csv_split_offsets_reports_one_list_per_file_in_order) {
+    // What the get_csv_splits RPC calls. Each file in the range is framed on its own and the
+    // boundaries come back in the order the files were given, which is the only thing tying a list
+    // of offsets back to the path it belongs to - the reply carries no paths of its own.
+    TBrokerScanRangeParams params;
+    params.__set_multi_row_delimiter("\n");
+    params.__set_multi_column_separator(",");
+    params.__set_skip_header(0);
+    params.__set_trim_space(false);
+    params.__set_enclose('"');
+    params.__set_escape(0);
+
+    auto make_range = [](const std::string& path) {
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(3);
+        range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+        range.__set_path(path);
+        return range;
+    };
+
+    // csv_file26 carries a row delimiter inside an enclosed field; csv_file24 is a single record.
+    std::vector<TBrokerRangeDesc> ranges{make_range("./be/test/exec/test_data/csv_scanner/csv_file26"),
+                                         make_range("./be/test/exec/test_data/csv_scanner/csv_file24")};
+
+    TBrokerScanRange scan_range;
+    scan_range.params = params;
+    scan_range.ranges = ranges;
+
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    std::vector<std::vector<int64_t>> offsets;
+    Status st = FileScanner::csv_split_offsets(&state, scan_range, 1, &offsets);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ASSERT_EQ(2, offsets.size());
+    EXPECT_EQ(std::vector<int64_t>({0, 13, 66}), offsets[0]);
+    EXPECT_EQ(std::vector<int64_t>({0}), offsets[1]);
+}
+
+TEST_P(CSVScannerTest, test_record_aligned_ranges_read_every_record_once) {
+    // The two ranges below are the ones get_csv_splits yields for csv_file26, and between them they
+    // must produce each of its three records exactly once.
+    //
+    // The first range ends exactly on a boundary, so it must stop there: reading on until it has
+    // passed the limit, which is what an unaligned range does, would take the third record as well
+    // and load it twice. The second range starts exactly on a boundary, so nothing may be discarded
+    // at its head: skipping to the next row delimiter, which is what an unaligned range does, would
+    // drop the third record entirely.
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
+
+    auto make_range = [&types](int64_t start_offset, int64_t size) {
+        TBrokerRangeDesc range;
+        range.__set_num_of_columns_from_file(types.size());
+        range.__set_format_type(TFileFormatType::FORMAT_CSV_PLAIN);
+        range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file26");
+        range.__set_start_offset(start_offset);
+        range.__set_size(size);
+        range.__set_record_aligned(true);
+        return range;
+    };
+
+    {
+        std::vector<TBrokerRangeDesc> ranges{make_range(0, 66)};
+        auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_EQ(2, chunk->num_rows());
+        EXPECT_EQ("id", chunk->get(0)[0].get_slice());
+        EXPECT_EQ("1", chunk->get(1)[0].get_slice());
+        EXPECT_EQ("FIA CARD SERVICES\nNATIONAL ASSOCIATION_501330", chunk->get(1)[1].get_slice());
+        EXPECT_EQ("ok", chunk->get(1)[2].get_slice());
+    }
+
+    {
+        std::vector<TBrokerRangeDesc> ranges{make_range(66, 13)};
+        auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"', 0);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok()) << st.to_string();
+
+        ChunkPtr chunk = scanner->get_next().value();
+        ASSERT_EQ(1, chunk->num_rows());
+        EXPECT_EQ("2", chunk->get(0)[0].get_slice());
+        EXPECT_EQ("plain", chunk->get(0)[1].get_slice());
+        EXPECT_EQ("fine", chunk->get(0)[2].get_slice());
+    }
+}
+
 TEST_P(CSVScannerTest, test_column_count_inconsistent) {
     std::vector<TypeDescriptor> types;
     types.emplace_back(TYPE_INT);
