@@ -248,6 +248,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        metadataOfTable(table).invalidateTableForRead(srDbName, table);
+    }
+
+    @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         return hiveMetadata.dbExists(context, dbName);
     }
