@@ -56,7 +56,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -84,6 +83,7 @@ import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.type.VarcharType;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -99,7 +99,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -604,13 +603,13 @@ public class SparkLoadJobTest {
                                                                       @Injectable Database db) throws Exception {
         // afterVisible() runs inside DatabaseTransactionMgr.finishTransaction's critical section, and the ETL
         // output deletion is a broker/HDFS round trip. Sample the lock depth where the real transport would be
-        // contacted. OR-accumulated so a later lock-free call cannot erase a locked one.
-        AtomicBoolean deletedUnderLock = new AtomicBoolean(false);
+        // contacted. The deletion runs on a thread of its own, so the probe records every thread.
+        LockProbe probe = LockProbe.onAnyThread();
         CountDownLatch deleted = new CountDownLatch(1);
         new MockUp<SparkEtlJobHandler>() {
             @Mock
             public void deleteEtlOutputPath(String outputPath, BrokerDesc brokerDesc) {
-                deletedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
+                probe.record("deleteEtlOutputPath");
                 deleted.countDown();
             }
         };
@@ -637,7 +636,7 @@ public class SparkLoadJobTest {
         Assertions.assertEquals(JobState.FINISHED, job.getState());
         Assertions.assertTrue(deleted.await(30, TimeUnit.SECONDS),
                 "the etl output was never deleted, so the check below is vacuous");
-        Assertions.assertFalse(deletedUnderLock.get(),
+        Assertions.assertFalse(probe.everUnderLock("deleteEtlOutputPath"),
                 "SparkLoadJob.afterVisible deleted the etl output while holding an FE metadata lock");
     }
 }

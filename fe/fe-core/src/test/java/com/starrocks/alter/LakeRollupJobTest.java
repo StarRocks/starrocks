@@ -26,7 +26,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
@@ -40,6 +39,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -56,7 +56,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LakeRollupJobTest {
     private static final String DB = "db_for_lake_mv";
@@ -286,16 +285,13 @@ public class LakeRollupJobTest {
 
     /**
      * Whether {@link LakeRollupJob#lakePublishVersion} was holding a metadata lock when it published,
-     * sampled inside the faked transport. OR-accumulated: the publish runs once per partition and one
-     * lock-free call must not erase a locked one.
+     * sampled inside the faked transport. Static because the faked transport is a static method.
      */
-    private static final AtomicBoolean PUBLISHED_UNDER_LOCK = new AtomicBoolean(false);
-    private static final AtomicBoolean PUBLISH_WAS_CALLED = new AtomicBoolean(false);
+    private static LockProbe publishProbe;
 
     @Test
     public void testCreateSyncMvWithEnableFileBundling() throws Exception {
-        PUBLISHED_UNDER_LOCK.set(false);
-        PUBLISH_WAS_CALLED.set(false);
+        publishProbe = LockProbe.onAnyThread();
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -316,8 +312,7 @@ public class LakeRollupJobTest {
                 // contacted: the job reads the partition's tablets under the table's READ lock, but the
                 // publish itself has to happen after that lock is dropped, or every waiter on the table
                 // -- transaction publish included -- pays the round trip.
-                PUBLISH_WAS_CALLED.set(true);
-                PUBLISHED_UNDER_LOCK.compareAndSet(false, LockHoldDepth.isUnderLock());
+                publishProbe.record("publish");
             }
         };
 
@@ -342,8 +337,7 @@ public class LakeRollupJobTest {
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
 
-        Assertions.assertTrue(PUBLISH_WAS_CALLED.get(), "the job never reached the publish, so the check below is vacuous");
-        Assertions.assertFalse(PUBLISHED_UNDER_LOCK.get(),
+        publishProbe.assertReachedOutsideTheLock("publish",
                 "lakePublishVersion published while holding an FE metadata lock");
 
         for (Partition partition : table.getPartitions()) {

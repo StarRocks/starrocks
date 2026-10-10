@@ -28,7 +28,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -48,6 +47,7 @@ import com.starrocks.sql.ast.SyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -805,15 +805,13 @@ public class AlterMaterializedViewTest extends MVTestBase  {
      */
     @Test
     public void testAlterMvAnalyzesConstraintsBeforeTakingTheLock() throws Exception {
-        AtomicBoolean analyzed = new AtomicBoolean(false);
-        AtomicBoolean analyzedUnderLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onAnyThread();
         new MockUp<PropertyAnalyzer>() {
             @Mock
             public List<UniqueConstraint> analyzeUniqueConstraint(Invocation invocation,
                                                                   Map<String, String> properties,
                                                                   Database db, Table table) {
-                analyzed.set(true);
-                analyzedUnderLock.set(LockHoldDepth.isUnderLock());
+                probe.record("analyzeUniqueConstraint");
                 return invocation.proceed(properties, db, table);
             }
         };
@@ -823,8 +821,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         currentState.getLocalMetastore().alterMaterializedView(stmt);
 
-        Assertions.assertTrue(analyzed.get(), "the constraint analysis should have run");
-        Assertions.assertFalse(analyzedUnderLock.get(),
+        probe.assertReachedOutsideTheLock("analyzeUniqueConstraint",
                 "constraint analysis resolves tables through MetadataMgr and must not run under the MV's lock");
     }
 }

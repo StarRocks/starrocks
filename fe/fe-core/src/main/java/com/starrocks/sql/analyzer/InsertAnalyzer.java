@@ -102,6 +102,15 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        analyzeWithDeferredLock(insertStmt, session, takeLock, () -> {
+        });
+    }
+
+    /**
+     * @param afterQueryAnalyzed runs once the SELECT is analyzed, before the lock is taken
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock,
+                                               Runnable afterQueryAnalyzed) {
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
@@ -110,11 +119,19 @@ public class InsertAnalyzer {
             pushDownTargetTableSchemaToFiles(insertStmt, session);
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+            afterQueryAnalyzed.run();
 
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
-                session.setUseConnectorMetadataCache(Optional.of(false));
+            // With the auto refresh, every source is refreshed for this statement (InsertSourceRefresher), so the
+            // connector cache is current and is used. Without it, nothing refreshed the Hive sources: read them
+            // past the cache, unless the session says the cache is fine.
+            if (session.getUseConnectorMetadataCache().isEmpty()
+                    && !InsertSourceRefresher.isEnabled(session)
+                    && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+                List<Table> tables = new ArrayList<>();
+                AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+                if (!tables.isEmpty()) {
+                    session.setUseConnectorMetadataCache(Optional.of(false));
+                }
             }
         } finally {
             takeLock.run();
@@ -851,17 +868,14 @@ public class InsertAnalyzer {
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        // An external target was resolved before the lock was taken, because the lock covers nothing about
-        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
-        // succeed -- falls through to the resolve this has always done.
-        Table table = session.getPreResolvedWriteTargets().take(tableNameObj);
-        if (table == null) {
+        // An external target was resolved before the lock was taken; see PreResolvedState#WRITE_TARGET.
+        Table table = session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableNameObj, () -> {
             Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
             if (database == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
-            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
-        }
+            return MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        });
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

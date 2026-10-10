@@ -116,6 +116,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
@@ -2360,6 +2361,22 @@ public class AnalyzerUtils {
         }
 
         return order1 > order2;
+    }
+
+    /**
+     * The table an UPDATE, DELETE or MERGE writes to. An external target was resolved before the meta lock was
+     * taken, because the lock covers nothing about it (see {@link PreResolvedState#WRITE_TARGET}); a miss -- an
+     * internal target, or a pre-resolve that did not succeed -- resolves it here, the way it always was.
+     */
+    public static Table resolveWriteTarget(ConnectContext session, TableName tableName) {
+        return session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableName, () -> {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            return MetaUtils.getSessionAwareTable(session, null, tableName);
+        });
     }
 
     public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {

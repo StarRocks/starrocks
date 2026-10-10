@@ -36,6 +36,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,7 +46,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -73,20 +73,14 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
 
     /** Connector calls seen by the probed catalogs, per lock state. */
     private static class Probe {
-        private final Thread owner = Thread.currentThread();
-        private final AtomicInteger getTableCalls = new AtomicInteger();
-        private final AtomicInteger getTableCallsUnderLock = new AtomicInteger();
+        private static final String GET_TABLE = "getTable";
         /** Calls made from change detection, i.e. with {@link MVPCTRefreshPlanner} on the stack. */
-        private final AtomicInteger detectionCalls = new AtomicInteger();
-        private final AtomicInteger detectionCallsUnderLock = new AtomicInteger();
+        private static final String DETECTION = "detection";
         /** Partition reads of any origin, for the scope's own test. */
-        private final AtomicInteger partitionCalls = new AtomicInteger();
+        private static final String PARTITION = "partition";
+        private final LockProbe lock = LockProbe.onCurrentThread();
         /** Where the first call under the lock came from, so a failure names the call site. */
         private volatile Throwable firstUnderLock;
-
-        private boolean isObserved() {
-            return Thread.currentThread() == owner;
-        }
 
         private static boolean fromDetection() {
             return StackWalker.getInstance().walk(frames ->
@@ -94,35 +88,33 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
         }
 
         private void recordFirstUnderLock(String call) {
-            if (firstUnderLock == null) {
+            if (firstUnderLock == null && LockHoldDepth.isUnderLock()) {
                 firstUnderLock = new Throwable(call + " under lock");
             }
         }
 
         private void sampleGetTable(String call) {
-            if (!isObserved()) {
+            if (!lock.isProbedThread()) {
                 return;
             }
-            getTableCalls.incrementAndGet();
-            if (LockHoldDepth.isUnderLock()) {
-                getTableCallsUnderLock.incrementAndGet();
-                recordFirstUnderLock(call);
-            }
+            lock.record(GET_TABLE);
+            recordFirstUnderLock(call);
         }
 
         private void samplePartitionCall(String call) {
-            if (!isObserved()) {
+            if (!lock.isProbedThread()) {
                 return;
             }
-            partitionCalls.incrementAndGet();
+            lock.record(PARTITION);
             if (!fromDetection()) {
                 return;
             }
-            detectionCalls.incrementAndGet();
-            if (LockHoldDepth.isUnderLock()) {
-                detectionCallsUnderLock.incrementAndGet();
-                recordFirstUnderLock(call);
-            }
+            lock.record(DETECTION);
+            recordFirstUnderLock(call);
+        }
+
+        private int partitionCalls() {
+            return lock.calls(PARTITION);
         }
     }
 
@@ -231,9 +223,9 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
             TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
             taskRun.getProperties().put(TaskRun.FORCE, "true");
             initAndExecuteTaskRun(taskRun);
-            Assertions.assertTrue(probe.getTableCalls.get() > 0,
+            Assertions.assertTrue(probe.lock.calls(Probe.GET_TABLE) > 0,
                     "the probe never saw the connector, so this test proves nothing");
-            Assertions.assertEquals(0, probe.getTableCallsUnderLock.get(), underLockStack());
+            Assertions.assertFalse(probe.lock.everUnderLock(Probe.GET_TABLE), underLockStack());
         } finally {
             starRocksAssert.dropMaterializedView("mv_refresh_plan_over_hive");
         }
@@ -256,9 +248,9 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
             installProbe();
             withMVRefreshTaskRun(DB_NAME, mv);
             Assertions.assertFalse(mv.getPartitions().isEmpty(), "the refresh added no partitions");
-            Assertions.assertTrue(probe.getTableCalls.get() > 0,
+            Assertions.assertTrue(probe.lock.calls(Probe.GET_TABLE) > 0,
                     "the probe never saw the connector, so this test proves nothing");
-            Assertions.assertEquals(0, probe.getTableCallsUnderLock.get(), underLockStack());
+            Assertions.assertFalse(probe.lock.everUnderLock(Probe.GET_TABLE), underLockStack());
         } finally {
             starRocksAssert.dropMaterializedView("mv_add_partitions_over_hive");
         }
@@ -277,9 +269,9 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
         Map<String, Long> before = visibleVersions(mv);
         installProbe();
         withMVRefreshTaskRun(DB_NAME, mv);
-        Assertions.assertTrue(probe.detectionCalls.get() > 0,
+        Assertions.assertTrue(probe.lock.calls(Probe.DETECTION) > 0,
                 "change detection never reached the connector, so this test proves nothing");
-        Assertions.assertEquals(0, probe.detectionCallsUnderLock.get(), underLockStack());
+        Assertions.assertFalse(probe.lock.everUnderLock(Probe.DETECTION), underLockStack());
         Map<String, Long> after = visibleVersions(mv);
         return after.keySet().stream()
                 .filter(name -> !after.get(name).equals(before.get(name)))
@@ -406,20 +398,20 @@ public class MVRefreshLockConnectorIOTest extends MVTestBase {
 
         try (PrefetchedPartitionInfos prefetched = PrefetchedPartitionInfos.open()) {
             Assertions.assertTrue(prefetched.prefetch(table, null, true));
-            int afterPrefetch = probe.partitionCalls.get();
+            int afterPrefetch = probe.partitionCalls();
 
             Assertions.assertEquals(live.keySet(),
                     ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo().keySet());
-            Assertions.assertEquals(afterPrefetch, probe.partitionCalls.get(), "a prefetched fetch hit the connector");
+            Assertions.assertEquals(afterPrefetch, probe.partitionCalls(), "a prefetched fetch hit the connector");
 
             ConnectorPartitionTraits.build(table, TvrTableSnapshot.of(Optional.of(1L)))
                     .getPartitionNameWithPartitionInfo();
-            Assertions.assertTrue(probe.partitionCalls.get() > afterPrefetch,
+            Assertions.assertTrue(probe.partitionCalls() > afterPrefetch,
                     "a fetch of another snapshot was answered from the prefetched one");
         }
 
-        int afterScope = probe.partitionCalls.get();
+        int afterScope = probe.partitionCalls();
         ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo();
-        Assertions.assertTrue(probe.partitionCalls.get() > afterScope, "the scope outlived its close()");
+        Assertions.assertTrue(probe.partitionCalls() > afterScope, "the scope outlived its close()");
     }
 }

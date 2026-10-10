@@ -2804,7 +2804,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
             for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
                 BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
-                if (!(table instanceof IcebergTable || table instanceof DeltaLakeTable)
+                if (!isRefreshedPerQuery(table)
                         || baseTableInfo == null || resolved.containsKey(baseTableInfo)) {
                     continue;
                 }
@@ -2847,6 +2847,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Whether a cached ref base table is re-got from its catalog for each query ({@link #refreshBaseTable}); the
+     * pre-resolve ({@link #preResolveRefBaseTables}) must cover exactly these.
+     */
+    private static boolean isRefreshedPerQuery(Table table) {
+        return table instanceof IcebergTable || table instanceof DeltaLakeTable;
+    }
+
+    /**
      * Since the table is cached in the Optional, needs to refresh it again for each query.
      */
     private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
@@ -2854,7 +2862,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Map<BaseTableInfo, RefreshedBaseTable> preResolved = PRE_RESOLVED_REF_BASE_TABLES.get();
         for (Map.Entry<Table, K> e : cached.entrySet()) {
             Table table = e.getKey();
-            if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
+            if (isRefreshedPerQuery(table)) {
                 Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache

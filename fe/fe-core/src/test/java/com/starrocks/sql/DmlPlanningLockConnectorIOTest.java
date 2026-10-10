@@ -14,19 +14,11 @@
 
 package com.starrocks.sql;
 
-import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.connector.ConnectorMetadataRequestContext;
-import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,12 +28,9 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -50,7 +39,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -72,35 +60,20 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
-    private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
-    private volatile Thread testThread;
+    private LockProbe probe;
     // Off by default: the DML tests pin getTable, and a DML target resolve may ask getDb on the way.
     private boolean probeCreateTarget;
 
-    private void record(String key) {
-        if (Thread.currentThread() != testThread) {
-            return;
-        }
-        underLock.merge(key, LockHoldDepth.isUnderLock(), Boolean::logicalOr);
-    }
-
     /** Mounted on MetadataMgr, the one door every connector metadata request goes through. */
     private void probeConnectorCalls() {
-        testThread = Thread.currentThread();
+        probe = LockProbe.onCurrentThread();
+        probe.probeExternalGetTable();
+        probe.probeScanMetadata();
         new MockUp<MetadataMgr>() {
-            @Mock
-            public Table getTable(Invocation invocation, ConnectContext context, String catalogName, String dbName,
-                                  String tblName) {
-                if (!CatalogMgr.isInternalCatalog(catalogName)) {
-                    record("getTable:" + catalogName + "." + tblName);
-                }
-                return invocation.proceed(context, catalogName, dbName, tblName);
-            }
-
             @Mock
             public Database getDb(Invocation invocation, ConnectContext context, String catalogName, String dbName) {
                 if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
-                    record("getDb:" + catalogName + "." + dbName);
+                    probe.record("getDb:" + catalogName + "." + dbName);
                 }
                 return invocation.proceed(context, catalogName, dbName);
             }
@@ -109,33 +82,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
             public boolean tableExists(Invocation invocation, ConnectContext context, String catalogName,
                                        String dbName, String tblName) {
                 if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
-                    record("tableExists:" + catalogName + "." + tblName);
+                    probe.record("tableExists:" + catalogName + "." + tblName);
                 }
                 return invocation.proceed(context, catalogName, dbName, tblName);
-            }
-
-            @Mock
-            public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
-                                                 Table table, Map<ColumnRefOperator, Column> columns,
-                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
-                                                 long limit, TvrVersionRange versionRange) {
-                record("getTableStatistics:" + table.getName());
-                return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
-                        versionRange);
-            }
-
-            @Mock
-            public List<String> listPartitionNames(Invocation invocation, String catalogName, String dbName,
-                                                   String tableName, ConnectorMetadataRequestContext context) {
-                record("listPartitionNames:" + tableName);
-                return invocation.proceed(catalogName, dbName, tableName, context);
-            }
-
-            @Mock
-            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table,
-                                                       GetRemoteFilesParams params) {
-                record("getRemoteFiles:" + table.getName());
-                return invocation.proceed(table, params);
             }
         };
     }
@@ -150,22 +99,22 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
      *                          fail here rather than quietly widen the exemption
      */
     private void assertOnlyTheseWentRemoteUnderTheLock(String sql, String... stillUnderTheLock) {
-        // Without this the check below passes on an empty map, i.e. whenever the probe never fired.
-        Assertions.assertFalse(underLock.isEmpty(),
+        // Without this the check below passes on an empty probe, i.e. whenever it never fired.
+        Assertions.assertFalse(probe.isEmpty(),
                 "planning never reached the external catalog, the probe proves nothing, for: " + sql);
         Set<String> expected = Set.of(stillUnderTheLock);
-        underLock.forEach((site, held) -> {
+        for (String site : probe.keys()) {
             if (expected.contains(site)) {
-                return;
+                continue;
             }
-            Assertions.assertFalse(held,
+            Assertions.assertFalse(probe.everUnderLock(site),
                     "an FE metadata lock was held while planning contacted the external catalog, at " + site
-                            + ", for: " + sql + "; full samples: " + underLock);
-        });
+                            + ", for: " + sql + "; full samples: " + probe);
+        }
         for (String site : expected) {
-            Assertions.assertEquals(Boolean.TRUE, underLock.get(site),
+            Assertions.assertTrue(probe.everUnderLock(site),
                     site + " no longer runs under the lock, which is good news: drop it from this test and "
-                            + "from the residual list in the plan doc. Full samples: " + underLock);
+                            + "from the residual list in the plan doc. Full samples: " + probe);
         }
     }
 
@@ -281,7 +230,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
                 + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
         plan(sql);
-        Assertions.assertTrue(connectContext.getPreResolvedWriteTargets().isEmpty(),
+        Assertions.assertTrue(connectContext.getPreResolvedState().isEmpty(),
                 "the pre-resolved target was left behind, so the analyzer resolved its own copy instead");
     }
 
@@ -296,10 +245,10 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         probeConnectorCalls();
         String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_before_lock AS SELECT pk, v1 FROM test.tprimary";
         plan(sql);
-        Assertions.assertTrue(underLock.containsKey("tableExists:iceberg0.ctas_before_lock"),
-                "the CTAS never asked whether its target exists, the probe proves nothing: " + underLock);
+        Assertions.assertTrue(probe.calls("tableExists:iceberg0.ctas_before_lock") > 0,
+                "the CTAS never asked whether its target exists, the probe proves nothing: " + probe);
         assertNothingWentRemoteUnderTheLock(sql);
-        Assertions.assertTrue(connectContext.getPreResolvedWriteTargets().isEmpty(),
+        Assertions.assertTrue(connectContext.getPreResolvedState().isEmpty(),
                 "the pre-resolved create target was left behind, so the analyzer asked the catalog again");
     }
 
@@ -369,9 +318,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(false);
         }
-        Assertions.assertFalse(underLock.isEmpty(), "planning never reached the external catalog");
-        Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
-                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + underLock);
+        Assertions.assertFalse(probe.isEmpty(), "planning never reached the external catalog");
+        Assertions.assertTrue(probe.anyUnderLock(),
+                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + probe);
     }
 
     /**
