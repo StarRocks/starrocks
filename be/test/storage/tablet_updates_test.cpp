@@ -26,6 +26,7 @@
 #include "storage/txn_manager.h"
 #include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -4402,6 +4403,21 @@ TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
     ASSERT_FALSE(_tablet->updates()->is_apply_stop());
     StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id(), kKeepMetaAndFiles);
     ASSERT_TRUE(_tablet->updates()->is_apply_stop());
+}
+
+TEST_F(TabletUpdatesTest, test_drop_tablet_does_not_increment_error_state_metric) {
+    _tablet = create_tablet(rand(), rand());
+    const auto error_state_count = StarRocksMetrics::instance()->primary_key_table_error_state_total.value();
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_EQ(error_state_count + 1, StarRocksMetrics::instance()->primary_key_table_error_state_total.value());
+    _tablet->updates()->reset_error();
+
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    ASSERT_OK(tablet_manager->drop_tablet(_tablet->tablet_id(), kDeleteFiles));
+    _tablet.reset();
+    ASSERT_OK(tablet_manager->start_trash_sweep());
+
+    EXPECT_EQ(error_state_count + 1, StarRocksMetrics::instance()->primary_key_table_error_state_total.value());
 }
 
 TEST_F(TabletUpdatesTest, test_skip_schema) {
