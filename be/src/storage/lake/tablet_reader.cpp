@@ -321,6 +321,38 @@ TabletReader::~TabletReader() {
     close();
 }
 
+const OlapReaderStatistics& TabletReader::stats() const {
+    if (_parallel_rowset_stats.empty()) {
+        return _stats;
+    }
+    _combined_stats = _stats;
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        _combined_stats.merge_from(*rowset_stats);
+    }
+    return _combined_stats;
+}
+
+TabletReader::RealtimeStats TabletReader::realtime_stats() const {
+    RealtimeStats result{_stats.raw_rows_read, _stats.bytes_read, _stats.decompress_ns, _stats.vec_cond_ns,
+                         _stats.del_filter_ns};
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        result.raw_rows_read += rowset_stats->raw_rows_read;
+        result.bytes_read += rowset_stats->bytes_read;
+        result.decompress_ns += rowset_stats->decompress_ns;
+        result.vec_cond_ns += rowset_stats->vec_cond_ns;
+        result.del_filter_ns += rowset_stats->del_filter_ns;
+    }
+    return result;
+}
+
+void TabletReader::reset_stats() {
+    _stats = OlapReaderStatistics{};
+    // Reusable readers may still hold iterators with these pointers until the next open().
+    for (auto& rowset_stats : _parallel_rowset_stats) {
+        *rowset_stats = OlapReaderStatistics{};
+    }
+}
+
 Status TabletReader::prepare() {
     if (_tablet_schema == nullptr) {
         _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
@@ -352,6 +384,13 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         _collect_iter->close();
         _collect_iter.reset();
     }
+    // Keep totals across reopens, including vertical compaction's column-group passes.
+    // release_for_reuse() resets both the base and private statistics after reporting them.
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        _stats.merge_from(*rowset_stats);
+    }
+    // The old iterators no longer refer to their task-local statistics.
+    _parallel_rowset_stats.clear();
 
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
@@ -994,24 +1033,32 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         _stats.rowsets_read_count++;
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+            _parallel_rowset_stats.emplace_back(std::make_unique<OlapReaderStatistics>());
+            RowsetReadOptions rowset_opts = rs_opts;
+            rowset_opts.stats = _parallel_rowset_stats.back().get();
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
+                    [&, rowset, rowset_opts]() {
 #ifdef BE_TEST
-                Status injected_st;
-                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                if (!injected_st.ok()) {
-                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                }
+                        Status injected_st;
+                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                        if (!injected_st.ok()) {
+                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                        }
 #endif
-                return enhance_error_prompt(rowset->read(schema(), rs_opts));
-            });
+                        return enhance_error_prompt(rowset->read(schema(), rowset_opts));
+                    });
 
             auto packaged_func = [task]() { (*task)(); };
-            if (auto st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
-                !st.ok()) {
-                // try load rowset serially if sumbit_func failed
-                LOG(WARNING) << "sumbit_func failed: " << st.code_as_string()
+            Status submit_st;
+            TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::submit", &submit_st);
+            if (submit_st.ok()) {
+                submit_st = RuntimeEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
+            }
+            if (!submit_st.ok()) {
+                // Try this rowset serially if submission failed; other rowsets may still be running.
+                LOG(WARNING) << "submit_func failed: " << submit_st.code_as_string()
                              << ", try to load rowset serially, rowset_id: " << rowset->id();
-                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rs_opts)));
+                ASSIGN_OR_RETURN(auto seg_iters, enhance_error_prompt(rowset->read(schema(), rowset_opts)));
                 iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
             } else {
                 futures.push_back(task->get_future());

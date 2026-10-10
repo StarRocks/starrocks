@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <set>
 #include <vector>
@@ -97,8 +98,18 @@ public:
 
     void close() override;
 
-    const OlapReaderStatistics& stats() const { return _stats; }
+    const OlapReaderStatistics& stats() const;
     OlapReaderStatistics* mutable_stats() { return &_stats; }
+    void reset_stats();
+
+    struct RealtimeStats {
+        int64_t raw_rows_read = 0;
+        int64_t bytes_read = 0;
+        int64_t decompress_ns = 0;
+        int64_t vec_cond_ns = 0;
+        int64_t del_filter_ns = 0;
+    };
+    RealtimeStats realtime_stats() const;
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
@@ -162,6 +173,10 @@ private:
     PredicateList _predicate_free_list;
 
     OlapReaderStatistics _stats;
+    // A SegmentIterator retains its stats pointer after rowset->read() returns. Keep each parallel
+    // rowset's statistics alive until the reader and its iterators are finished.
+    std::vector<std::unique_ptr<OlapReaderStatistics>> _parallel_rowset_stats;
+    mutable OlapReaderStatistics _combined_stats;
 
     MemPool _mempool;
     ObjectPool _obj_pool;
