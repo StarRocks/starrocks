@@ -129,6 +129,11 @@ public class CatalogUtilsTest extends StarRocksTestBase {
             public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
                 return new ArrayList<>();
             }
+
+            @mockit.Mock
+            public int getTotalBackendNumber() {
+                return 0;
+            }
         };
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);
@@ -146,10 +151,19 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         new MockUp<SystemInfoService>() {
             @mockit.Mock
             public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-                if (locationLabel != null && !locationLabel.isEmpty()) {
+                if (locationLabel != null && locationLabel.containsEntry("rack", "r1")) {
                     return LongStream.rangeClosed(1, 6).boxed().collect(Collectors.toList());
                 }
+                // no matching BEs for other labels
+                if (locationLabel != null && !locationLabel.isEmpty()) {
+                    return new ArrayList<>();
+                }
                 return LongStream.rangeClosed(1, 30).boxed().collect(Collectors.toList());
+            }
+
+            @mockit.Mock
+            public int getTotalBackendNumber() {
+                return 30;
             }
         };
 
@@ -158,7 +172,15 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         assertEquals(CatalogUtils.divisibleBucketNum(6),
                 CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
 
-        // null / empty location falls back to all BEs (30) -> 36; physical uses divisibleBucketNum(30)
+        // labels set but no BE matches -> fall back to total BE count (30)
+        Multimap<String, String> unmatched = HashMultimap.create();
+        unmatched.put("rack", "gone");
+        when(olapTable.getLocation()).thenReturn(unmatched);
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+
+        // null / empty location uses all BEs via getLabelledBackendsIds (30) -> 36
         when(olapTable.getLocation()).thenReturn(null);
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),

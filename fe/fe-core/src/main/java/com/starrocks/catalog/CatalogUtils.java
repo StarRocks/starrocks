@@ -501,6 +501,9 @@ public class CatalogUtils {
     public static int calPhysicalPartitionBucketNum(OlapTable olapTable) {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
+        if (backendNum == 0) {
+            backendNum = clusterInfo.getTotalBackendNumber();
+        }
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
@@ -512,6 +515,9 @@ public class CatalogUtils {
     public static int calBucketNumAccordingToBackends(OlapTable olapTable) {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
+        if (backendNum == 0) {
+            backendNum = clusterInfo.getTotalBackendNumber();
+        }
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
