@@ -521,7 +521,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     private List<ForeignKeyConstraint> preResolvedForeignKeyConstraints;
     private Boolean preResolvedHasNonNativeBaseTable;
     private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
-    private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
     private String preResolvedDefineSql;
     private AlterJobMgr.AlterMaterializedViewStatusContext preResolvedActivateContext;
     private RuntimeException preResolvedActivateFailure;

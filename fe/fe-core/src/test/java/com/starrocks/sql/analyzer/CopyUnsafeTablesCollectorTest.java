@@ -20,10 +20,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -207,7 +207,7 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
         HiveTable table = HiveTable.builder()
                 .setId(1L)
                 .setTableName("tbl1")
-                .setFullSchema(ImmutableList.of(new Column("k", IntegerType.INT, true)))
+                .setFullSchema(ImmutableList.of(new Column("k", Type.INT, true)))
                 .setResourceName("my_hive_resource")
                 .build();
         Assertions.assertTrue(

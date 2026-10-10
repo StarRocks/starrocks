@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
@@ -746,27 +747,31 @@ public class StatementPlanner {
         InsertStmt insertStmt = (InsertStmt) stmt;
         // An OVERWRITE is refused for an external OLAP table by the analyzer anyway, so it is not worth a sync.
         if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()
-                || insertStmt.getTableRef() == null || insertStmt.isOverwrite()) {
+                || insertStmt.getTableName() == null || insertStmt.isOverwrite()) {
             return;
         }
-        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
-        if (!CatalogMgr.isInternalCatalog(tableRef.getCatalogName())) {
+        // Judged on a normalized copy, so that a statement whose target is anything else is left as it was.
+        TableName stmtTableName = insertStmt.getTableName();
+        TableName tableName = new TableName(stmtTableName.getCatalog(), stmtTableName.getDb(), stmtTableName.getTbl(),
+                stmtTableName.getPos());
+        tableName.normalization(session);
+        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             return;
         }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableRef.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
         if (db == null) {
             return;
         }
         if (!(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
-                tableRef.getTableName()) instanceof ExternalOlapTable)) {
+                tableName.getTbl()) instanceof ExternalOlapTable)) {
             return;
         }
         // Resolved again the way the INSERT is, so that a temporary table of the same name still shadows it.
-        Table table = MetaUtils.getSessionAwareTable(session, db, TableName.fromTableRef(tableRef));
+        Table table = MetaUtils.getSessionAwareTable(session, db, tableName);
         if (table instanceof ExternalOlapTable) {
-            // Written back as beginTransaction does: with the target set, InsertAnalyzer skips the resolution that
-            // would normalize it, and the privilege check needs the database of an unqualified name.
-            insertStmt.setTableRef(tableRef);
+            // Normalized in place as beginTransaction does: with the target set, InsertAnalyzer skips the
+            // resolution that would normalize it, and the privilege check needs the database of an unqualified name.
+            stmtTableName.normalization(session);
             insertStmt.setTargetTable(MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) table));
         }
     }

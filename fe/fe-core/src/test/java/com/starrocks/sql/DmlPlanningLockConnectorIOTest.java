@@ -20,12 +20,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.connector.ConnectorMetadataRequestContext;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -117,7 +117,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
             public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
                                                  Table table, Map<ColumnRefOperator, Column> columns,
                                                  List<PartitionKey> partitionKeys, ScalarOperator predicate,
-                                                 long limit, TvrVersionRange versionRange) {
+                                                 long limit, TableVersionRange versionRange) {
                 record("getTableStatistics:" + table.getName());
                 return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
                         versionRange);
@@ -125,7 +125,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
             @Mock
             public List<String> listPartitionNames(Invocation invocation, String catalogName, String dbName,
-                                                   String tableName, ConnectorMetadataRequestContext context) {
+                                                   String tableName, ConnectorMetadatRequestContext context) {
                 record("listPartitionNames:" + tableName);
                 return invocation.proceed(catalogName, dbName, tableName, context);
             }

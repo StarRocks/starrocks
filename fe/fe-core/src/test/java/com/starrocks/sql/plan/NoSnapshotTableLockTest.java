@@ -45,7 +45,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.catalog.Type.INT;
 
 /**
  * Tables that live in an internal database but keep their data elsewhere -- FILE, and HIVE / ICEBERG / HUDI

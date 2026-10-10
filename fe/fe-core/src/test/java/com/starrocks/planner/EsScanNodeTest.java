@@ -32,11 +32,15 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPlanNode;
+import java.util.HashMap;
+import java.util.Map;
 import mockit.Expectations;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -131,7 +135,7 @@ public class EsScanNodeTest extends EsTestCase {
         props.put(EsTable.KEY_INDEX, "doe");
         props.put(EsTable.KEY_TYPE, "doc");
         props.put(EsTable.KEY_VERSION, "6.5.3");
-        EsTable esTable = new EsTable(1L, "doe", List.of(new Column("k1", IntegerType.BIGINT)), props, null);
+        EsTable esTable = new EsTable(1L, "doe", List.of(new Column("k1", Type.BIGINT)), props, null);
         mockSyncFinding(Map.of("k1", "k1.keyword"));
         esTable.syncTableMetaData(null);
         EsTable.MetaSnapshot planned = esTable.getMetaSnapshot();

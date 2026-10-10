@@ -76,21 +76,20 @@ public final class PreResolvedBaseTables {
      */
     public static PreResolvedBaseTables resolve(Collection<BaseTableInfo> baseTableInfos) {
         PreResolvedBaseTables result = new PreResolvedBaseTables();
-        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                if (baseTableInfo == null || baseTableInfo.isInternalCatalog()
-                        || result.byInfo.containsKey(baseTableInfo)) {
-                    continue;
-                }
-                Resolution resolution;
-                try {
-                    resolution = new Resolution(GlobalStateMgr.getCurrentState().getMetadataMgr()
-                            .getTable(scope.getContext(), baseTableInfo).orElse(null), null);
-                } catch (RuntimeException e) {
-                    resolution = new Resolution(null, e);
-                }
-                result.byInfo.put(baseTableInfo, resolution);
+        ConnectContext context = new ConnectContext();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo == null || baseTableInfo.isInternalCatalog()
+                    || result.byInfo.containsKey(baseTableInfo)) {
+                continue;
             }
+            Resolution resolution;
+            try {
+                resolution = new Resolution(GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(context, baseTableInfo).orElse(null), null);
+            } catch (RuntimeException e) {
+                resolution = new Resolution(null, e);
+            }
+            result.byInfo.put(baseTableInfo, resolution);
         }
         return result;
     }

@@ -45,7 +45,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -53,8 +52,8 @@ import static org.mockito.Mockito.verify;
  * Replaying ALTER MATERIALIZED VIEW ... ACTIVE used to re-analyze the whole define query while holding the
  * MV write lock, resolving every base table through the connector. On a follower that is a connector round
  * trip under the lock per replayed entry; on the checkpoint thread it made the image depend on an external
- * catalog being reachable, and in lock_blocking_call_validation_mode=error the gate throws inside the
- * re-analysis, so the image recorded the MV inactive while the leader had it active.
+ * catalog being reachable, and a failure inside the re-analysis made the image record the MV inactive while
+ * the leader had it active.
  *
  * <p>The leader now journals the base tables it activated with, and replay adopts them. The part of the
  * rebuild that still needs the connector runs asynchronously, outside the lock.
@@ -185,7 +184,7 @@ public class AlterMVReplayActivateTest extends MVTestBase {
                 starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " ACTIVE");
                 ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
                         ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
-                verify(spyEditLog).logAlterMvStatus(captor.capture(), any());
+                verify(spyEditLog).logAlterMvStatus(captor.capture());
                 Assertions.assertEquals(mv.getBaseTableInfos(), captor.getValue().getBaseTableInfos());
             } finally {
                 GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);

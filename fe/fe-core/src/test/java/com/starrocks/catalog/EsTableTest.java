@@ -15,12 +15,12 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Type;
 import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.elasticsearch.SearchContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
-import com.starrocks.type.IntegerType;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -61,8 +61,8 @@ public class EsTableTest {
         props.put(EsTable.KEY_INDEX, "doe");
         props.put(EsTable.KEY_TYPE, "doc");
         props.put(EsTable.KEY_VERSION, "6.5.3");
-        return new EsTable(1L, "doe", List.of(new Column("k1", IntegerType.BIGINT),
-                new Column("k2", IntegerType.BIGINT)), props, null);
+        return new EsTable(1L, "doe", List.of(new Column("k1", Type.BIGINT),
+                new Column("k2", Type.BIGINT)), props, null);
     }
 
     /**

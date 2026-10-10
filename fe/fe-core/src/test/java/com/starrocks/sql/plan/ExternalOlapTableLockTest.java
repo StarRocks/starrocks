@@ -136,7 +136,7 @@ public class ExternalOlapTableLockTest extends PlanTestBase {
         ExternalOlapTable published = published();
         long sourceDbId = published.getSourceTableDbId();
         long sourceTableId = published.getSourceTableId();
-        int physicalPartitions = published.getPhysicalPartitionIdToPartitionId().size();
+        int physicalPartitions = published.getAllPhysicalPartitions().size();
 
         ExternalOlapTable target = sinkTable("insert into test.ext_olap select v1, v2 from test.t0");
         Assertions.assertEquals(1, syncs.get());
@@ -147,7 +147,7 @@ public class ExternalOlapTableLockTest extends PlanTestBase {
 
         Assertions.assertEquals(sourceDbId, published.getSourceTableDbId());
         Assertions.assertEquals(sourceTableId, published.getSourceTableId());
-        Assertions.assertEquals(physicalPartitions, published.getPhysicalPartitionIdToPartitionId().size());
+        Assertions.assertEquals(physicalPartitions, published.getAllPhysicalPartitions().size());
         Assertions.assertTrue(published.getPartitions().isEmpty());
     }
 
@@ -174,11 +174,11 @@ public class ExternalOlapTableLockTest extends PlanTestBase {
         connectContext.changeCatalogDb("default_catalog.test");
         InsertStmt stmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "explain insert into ext_olap select 1, 2", connectContext);
-        Assertions.assertNull(stmt.getTableRef().getDbName(), "the fixture is not an unqualified name");
+        Assertions.assertNull(stmt.getTableName().getDb(), "the fixture is not an unqualified name");
         StatementPlanner.plan(stmt, connectContext);
         Assertions.assertEquals(1, syncs.get());
-        Assertions.assertEquals("test", stmt.getTableRef().getDbName());
-        Assertions.assertEquals("default_catalog", stmt.getTableRef().getCatalogName());
+        Assertions.assertEquals("test", stmt.getTableName().getDb());
+        Assertions.assertEquals("default_catalog", stmt.getTableName().getCatalog());
     }
 
     /** The two paths that skip the sync cannot work on an external OLAP table, so they are refused up front. */

@@ -343,7 +343,7 @@ public class HiveTableTest {
     @Test
     public void testGetPropertiesDoesNotWriteToTheTable() {
         Map<String, String> stored = new HashMap<>();
-        HiveTable table = new HiveTable(1L, "hive_tbl", Lists.newArrayList(new Column("k", IntegerType.INT)),
+        HiveTable table = new HiveTable(1L, "hive_tbl", Lists.newArrayList(new Column("k", Type.INT)),
                 "hive0", null, "db0", "table0", "hdfs://127.0.0.1:10000/hive", "", 0L,
                 Lists.newArrayList(), Lists.newArrayList("k"), stored, new HashMap<>(),
                 HiveStorageFormat.PARQUET, HiveTable.HiveTableType.EXTERNAL_TABLE);
