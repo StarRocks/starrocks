@@ -190,7 +190,8 @@ bool RawColumnReader::column_all_pages_dict_encoded() const {
                 has_dict_encoding = true;
             }
 
-            // RLE and BIT_PACKED are used for repetition/definition levels
+            // RLE and BIT_PACKED are level encodings. RLE is also the value encoding of v2 boolean
+            // columns, which never carry a dictionary, so it is not a non-dictionary value encoding here.
             if (encoding != tparquet::Encoding::PLAIN_DICTIONARY && encoding != tparquet::Encoding::RLE_DICTIONARY &&
                 encoding != tparquet::Encoding::RLE && encoding != tparquet::Encoding::BIT_PACKED) {
                 has_nondict_encoding = true;
