@@ -58,21 +58,6 @@ import com.starrocks.proto.VacuumResponse;
 
 import java.util.concurrent.Future;
 
-/**
- * The decorator every lake-service caller gets: it counts the requests, and it attaches the
- * blocking-call door to the futures it hands back.
- *
- * <p>The door belongs here because this is the one place every lake RPC passes through --
- * {@link BrpcProxy#getLakeService} builds nothing else -- and because the wait that a lock would be
- * held across is the caller's {@code get()}, not the send. See {@link GuardedFuture} for why the
- * future is wrapped rather than each of the callers guarded.
- *
- * <p>Each RPC gets its own transport tag, so a slow-lock report names the request rather than the
- * service. That is deliberately finer than the operation-level tags a few call sites carry of their
- * own -- {@code com.starrocks.lake.Utils} guards its publish methods with {@code "lake-publish"} at
- * the point where the publish is decided. The two are not redundant: one says which operation
- * entered a critical section, the other says which round trip the thread is actually sitting in.
- */
 public class LakeServiceWithMetrics implements LakeService {
     final LakeService lakeService;
     public LakeServiceWithMetrics(LakeService lakeService) {
@@ -88,132 +73,132 @@ public class LakeServiceWithMetrics implements LakeService {
     @Override
     public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.publishVersion(request), "lake-publish-version");
+        return lakeService.publishVersion(request);
     }
 
     @Override
     public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.abortTxn(request), "lake-abort-txn");
+        return lakeService.abortTxn(request);
     }
 
     @Override
     public Future<CompactResponse> compact(CompactRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.compact(request), "lake-compact");
+        return lakeService.compact(request);
     }
 
     @Override
     public Future<CompactResponse> aggregateCompact(AggregateCompactRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.aggregateCompact(request), "lake-aggregate-compact");
+        return lakeService.aggregateCompact(request);
     }
 
     @Override
     public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.deleteTablet(request), "lake-delete-tablet");
+        return lakeService.deleteTablet(request);
     }
 
     @Override
     public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.deleteData(request), "lake-delete-data");
+        return lakeService.deleteData(request);
     }
 
     @Override
     public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.deleteTxnLog(request), "lake-delete-txn-log");
+        return lakeService.deleteTxnLog(request);
     }
 
     @Override
     public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.getTabletStats(request), "lake-get-tablet-stats");
+        return lakeService.getTabletStats(request);
     }
 
     @Override
     public Future<DropTableResponse> dropTable(DropTableRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.dropTable(request), "lake-drop-table");
+        return lakeService.dropTable(request);
     }
 
     @Override
     public Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.dropTabletCache(request), "lake-drop-tablet-cache");
+        return lakeService.dropTabletCache(request);
     }
 
     @Override
     public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.publishLogVersion(request), "lake-publish-log-version");
+        return lakeService.publishLogVersion(request);
     }
 
     @Override
     public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.publishLogVersionBatch(request), "lake-publish-log-version-batch");
+        return lakeService.publishLogVersionBatch(request);
     }
 
     @Override
     public Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.lockTabletMetadata(request), "lake-lock-tablet-metadata");
+        return lakeService.lockTabletMetadata(request);
     }
 
     @Override
     public Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.unlockTabletMetadata(request), "lake-unlock-tablet-metadata");
+        return lakeService.unlockTabletMetadata(request);
     }
 
     @Override
     public Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.uploadSnapshots(request), "lake-upload-snapshots");
+        return lakeService.uploadSnapshots(request);
     }
 
     @Override
     public Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.restoreSnapshots(request), "lake-restore-snapshots");
+        return lakeService.restoreSnapshots(request);
     }
 
     @Override
     public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.abortCompaction(request), "lake-abort-compaction");
+        return lakeService.abortCompaction(request);
     }
 
     @Override
     public Future<VacuumResponse> vacuum(VacuumRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.vacuum(request), "lake-vacuum");
+        return lakeService.vacuum(request);
     }
 
     @Override
     public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.aggregatePublishVersion(request), "lake-aggregate-publish-version");
+        return lakeService.aggregatePublishVersion(request);
     }
 
     @Override
     public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.vacuumFull(request), "lake-vacuum-full");
+        return lakeService.vacuumFull(request);
     }
 
     @Override
     public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.getTabletMetadatas(request), "lake-get-tablet-metadatas");
+        return lakeService.getTabletMetadatas(request);
     }
 
     @Override
     public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
         increaseMetrics();
-        return GuardedFuture.guard(lakeService.repairTabletMetadata(request), "lake-repair-tablet-metadata");
+        return lakeService.repairTabletMetadata(request);
     }
 }
