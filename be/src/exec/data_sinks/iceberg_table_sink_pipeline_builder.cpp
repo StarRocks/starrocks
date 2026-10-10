@@ -14,6 +14,7 @@
 
 #include "exec/data_sinks/iceberg_table_sink_pipeline_builder.h"
 
+#include <map>
 #include <unordered_map>
 
 #include "common/config_exec_fwd.h"
@@ -28,6 +29,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_factory.h"
 #include "formats/column_evaluator.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "formats/reserved_columns.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
@@ -38,6 +40,19 @@
 namespace starrocks {
 
 namespace {
+
+void set_parquet_data_file_size_options(const TIcebergTableSink& sink, std::map<std::string, std::string>* options) {
+    if (sink.__isset.parquet_page_size_bytes) {
+        (*options)[formats::ParquetWriterOptions::PAGE_SIZE_BYTES] = std::to_string(sink.parquet_page_size_bytes);
+    }
+    if (sink.__isset.parquet_dict_size_bytes) {
+        (*options)[formats::ParquetWriterOptions::DICT_SIZE_BYTES] = std::to_string(sink.parquet_dict_size_bytes);
+    }
+    if (sink.__isset.parquet_row_group_size_bytes) {
+        (*options)[formats::ParquetWriterOptions::ROW_GROUP_SIZE_BYTES] =
+                std::to_string(sink.parquet_row_group_size_bytes);
+    }
+}
 
 std::unordered_map<std::string, formats::FileColumnId> build_top_level_field_id_map(
         const std::vector<TIcebergSchemaField>& fields) {
@@ -294,6 +309,7 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
     data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    set_parquet_data_file_size_options(t_iceberg_sink, &data_sink_ctx->options);
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
@@ -516,6 +532,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format;
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    set_parquet_data_file_size_options(t_iceberg_sink, &data_sink_ctx->options);
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }

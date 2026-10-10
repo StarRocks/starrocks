@@ -773,6 +773,42 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     ASSERT_OK(maybe_writer.status());
 }
 
+TEST_F(ParquetFileWriterTest, TestFactoryParquetWriterSizes) {
+    std::vector type_descs{TYPE_BOOLEAN_DESC};
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    std::map<std::string, std::string> options = {{ParquetWriterOptions::PAGE_SIZE_BYTES, "64"},
+                                                  {ParquetWriterOptions::DICT_SIZE_BYTES, "128"},
+                                                  {ParquetWriterOptions::ROW_GROUP_SIZE_BYTES, "1"}};
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                            column_evaluators, std::nullopt, nullptr, _runtime_state);
+    ASSERT_OK(factory.init());
+    auto maybe_writer = factory.create(_file_path);
+    ASSERT_OK(maybe_writer.status());
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnTestHelper::build_column<uint8_t>({0, 1, 1, 0}), 0);
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_OK(writer->close().io_status);
+    ASSERT_OK(maybe_writer.value().stream->close());
+    ASSERT_OK(maybe_writer.value().stream->io_status().get());
+    ASSIGN_OR_ASSERT_FAIL(auto file, _fs.new_random_access_file(_file_path));
+    auto file_size = _fs.get_file_size(_file_path).value();
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+    auto ctx = _create_scan_context(type_descs);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    ASSERT_EQ(file_reader->get_file_metadata()->t_metadata().row_groups.size(), 2);
+
+    options[ParquetWriterOptions::PAGE_SIZE_BYTES] = "0";
+    auto invalid_factory =
+            ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                     column_evaluators, std::nullopt, nullptr, _runtime_state);
+    ASSERT_FALSE(invalid_factory.init().ok());
+}
+
 TEST_F(ParquetFileWriterTest, TestWriteJson) {
     std::vector type_descs{TYPE_JSON_DESC};
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
