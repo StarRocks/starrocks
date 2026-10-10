@@ -99,6 +99,8 @@ public:
     void close() override;
 
     const OlapReaderStatistics& stats() const;
+    // Snapshot only the counters consumed by CompactionTaskStats::collect().
+    const OlapReaderStatistics& compaction_stats() const;
     OlapReaderStatistics* mutable_stats() { return &_stats; }
     void reset_stats();
 
@@ -177,6 +179,7 @@ private:
     // rowset's statistics alive until the reader and its iterators are finished.
     std::vector<std::unique_ptr<OlapReaderStatistics>> _parallel_rowset_stats;
     mutable OlapReaderStatistics _combined_stats;
+    mutable OlapReaderStatistics _compaction_stats;
 
     MemPool _mempool;
     ObjectPool _obj_pool;

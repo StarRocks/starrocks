@@ -1930,6 +1930,9 @@ TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) 
     EXPECT_EQ(66, total_rows);
     EXPECT_EQ(66, reader->stats().raw_rows_read);
     EXPECT_EQ(reader->stats().raw_rows_read, reader->realtime_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().raw_rows_read, reader->compaction_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().compressed_bytes_read, reader->compaction_stats().compressed_bytes_read);
+    EXPECT_TRUE(reader->compaction_stats().flat_json_hits.empty());
 
     // Profile reporting for a reused reader resets every private accumulator while its old
     // iterators are still alive. The next open must not report the first scan twice.

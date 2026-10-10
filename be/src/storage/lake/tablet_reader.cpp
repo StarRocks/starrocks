@@ -332,6 +332,45 @@ const OlapReaderStatistics& TabletReader::stats() const {
     return _combined_stats;
 }
 
+const OlapReaderStatistics& TabletReader::compaction_stats() const {
+    if (_parallel_rowset_stats.empty()) {
+        return _stats;
+    }
+    // Compaction refreshes progress and task statistics for every chunk. Its collector reads only
+    // these scalar fields, so avoid rebuilding the complete profile and JSON hit maps here.
+    _compaction_stats = OlapReaderStatistics{};
+    auto add_counters = [this](const OlapReaderStatistics& from) {
+        _compaction_stats.create_segment_iter_ns += from.create_segment_iter_ns;
+        _compaction_stats.decompress_ns += from.decompress_ns;
+        _compaction_stats.block_load_ns += from.block_load_ns;
+        _compaction_stats.block_fetch_ns += from.block_fetch_ns;
+        _compaction_stats.block_seek_ns += from.block_seek_ns;
+        _compaction_stats.block_seek_num += from.block_seek_num;
+        _compaction_stats.decode_dict_ns += from.decode_dict_ns;
+        _compaction_stats.get_rowsets_ns += from.get_rowsets_ns;
+        _compaction_stats.get_delvec_ns += from.get_delvec_ns;
+        _compaction_stats.get_delta_column_group_ns += from.get_delta_column_group_ns;
+        _compaction_stats.del_filter_ns += from.del_filter_ns;
+        _compaction_stats.blocks_load += from.blocks_load;
+        _compaction_stats.raw_rows_read += from.raw_rows_read;
+        _compaction_stats.compressed_bytes_read += from.compressed_bytes_read;
+        _compaction_stats.uncompressed_bytes_read += from.uncompressed_bytes_read;
+        _compaction_stats.io_ns_remote += from.io_ns_remote;
+        _compaction_stats.io_ns_read_local_disk += from.io_ns_read_local_disk;
+        _compaction_stats.compressed_bytes_read_remote += from.compressed_bytes_read_remote;
+        _compaction_stats.compressed_bytes_read_local_disk += from.compressed_bytes_read_local_disk;
+        _compaction_stats.segment_init_ns += from.segment_init_ns;
+        _compaction_stats.column_iterator_init_ns += from.column_iterator_init_ns;
+        _compaction_stats.io_count_local_disk += from.io_count_local_disk;
+        _compaction_stats.io_count_remote += from.io_count_remote;
+    };
+    add_counters(_stats);
+    for (const auto& rowset_stats : _parallel_rowset_stats) {
+        add_counters(*rowset_stats);
+    }
+    return _compaction_stats;
+}
+
 TabletReader::RealtimeStats TabletReader::realtime_stats() const {
     RealtimeStats result{_stats.raw_rows_read, _stats.bytes_read, _stats.decompress_ns, _stats.vec_cond_ns,
                          _stats.del_filter_ns};
