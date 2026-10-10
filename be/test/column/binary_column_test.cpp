@@ -208,7 +208,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_TRUE(c1->append_strings_overflow(values.data(), values.size(), max_length));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->immutable_data()[i]);
+        ASSERT_EQ(values[i], c1->get_slice(i));
     }
     ASSERT_EQ(total_length, c1->get_bytes().size());
     // The byte buffer is sized from the total up front. Appending value by value would
@@ -220,8 +220,8 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     ASSERT_EQ(values.size() * 2, c1->size());
     ASSERT_EQ(total_length * 2, c1->get_bytes().size());
     for (size_t i = 0; i < values.size(); i++) {
-        ASSERT_EQ(values[i], c1->immutable_data()[i]);
-        ASSERT_EQ(values[i], c1->immutable_data()[i + values.size()]);
+        ASSERT_EQ(values[i], c1->get_slice(i));
+        ASSERT_EQ(values[i], c1->get_slice(i + values.size()));
     }
 
     // Appending nothing is a no-op.
@@ -236,7 +236,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_long_values) {
     auto* c = reinterpret_cast<BinaryColumn*>(c2->data_column_raw_ptr());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_FALSE(c2->is_null(i));
-        ASSERT_EQ(values[i], c->immutable_data()[i]);
+        ASSERT_EQ(values[i], c->get_slice(i));
     }
 }
 
@@ -261,7 +261,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings_overflow_short_values) {
         ASSERT_TRUE(column->append_strings_overflow(values.data(), values.size(), max_length));
         ASSERT_EQ(values.size(), column->size());
         for (size_t i = 0; i < values.size(); i++) {
-            ASSERT_EQ(values[i], column->immutable_data()[i]);
+            ASSERT_EQ(values[i], column->get_slice(i));
         }
         ASSERT_EQ(offset, column->get_bytes().size());
     }
