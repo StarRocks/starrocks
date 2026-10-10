@@ -61,6 +61,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.HadoopConfigurable;
 import org.apache.iceberg.hadoop.HadoopInputFile;
@@ -125,7 +126,17 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     @Override
     public void initialize(Map<String, String> properties) {
         this.properties = properties;
-        wrappedIO = new ResolvingFileIO();
+        String userFileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
+        if (userFileIOImpl != null && !userFileIOImpl.equals(IcebergCachingFileIO.class.getName())) {
+            // User specified a custom io-impl, create and wrap it
+            try {
+                this.wrappedIO = (FileIO) Class.forName(userFileIOImpl).getDeclaredConstructor().newInstance();
+            } catch (Exception e) {
+                throw new StarRocksConnectorException("Failed to create FileIO instance: " + userFileIOImpl, e);
+            }
+        } else {
+            wrappedIO = new ResolvingFileIO();
+        }
         wrappedIO.initialize(properties);
 
         if (conf != null) {
