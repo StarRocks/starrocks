@@ -429,6 +429,9 @@ public class StatementPlanner {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setMvTransformerContext(mvTransformerContext);
             optimizerContext.setStatement(stmt);
+            // As createQueryPlanWithReTry and InsertPlanner do: whether a query is planned under the lock must
+            // not decide whether disable_table_stats_from_metadata_for_single_table applies to it.
+            optimizerContext.setSourceTablesCount(collectSourceTablesCount(session, queryStmt));
             if (isShortCircuit) {
                 optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
             }
@@ -604,7 +607,7 @@ public class StatementPlanner {
 
     // Lock all database before analyze
     public static void lock(PlannerMetaLocker locker) {
-        locker.lock();
+        locker.lockForPlanning();
     }
 
     // unLock all database after analyze
