@@ -55,6 +55,24 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     private long savedByteLimit;
     private int savedMinFiles;
 
+    @Test
+    void sampleSqlCarriesTheLoadTimeZoneForComputedKeys() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/a.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesScanContext scanContext = new InsertFromFilesScanContext(
+                sourceTable, Mockito.mock(ComputeResource.class), "America/Los_Angeles", Map.of(), null,
+                Map.of(), Map.of("dt", "date_trunc('day', `ts`)"));
+        Column dt = new Column("dt", DateType.DATE);
+
+        capturingExecutor(capturedSql).execute(new SampleRequest(
+                scanContext, List.of(dt), List.of(dt), Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT /*+ SET_VAR(time_zone='America/Los_Angeles') */ CAST(date_trunc('day', `ts`) AS date) FROM"),
+                capturedSql.toString());
+    }
+
     @BeforeEach
     void setScanLimits() {
         savedByteLimit = Config.tablet_pre_split_data_tier_scan_byte_limit;
@@ -496,7 +514,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
-        Assertions.assertTrue(capturedSql.toString().contains("SELECT `tenant`, `position` FROM FILES"),
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "SELECT /*+ SET_VAR(time_zone='UTC') */ `tenant`, `position` FROM FILES"),
                 "both sort-key columns must appear in the projection: " + capturedSql);
         List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());
@@ -530,7 +549,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
         Assertions.assertTrue(capturedSql.toString().contains(
-                        "SELECT `dt`, `exp_id` FROM FILES"),
+                        "SELECT /*+ SET_VAR(time_zone='UTC') */ `dt`, `exp_id` FROM FILES"),
                 "the overlapping partition column must be projected only once: " + capturedSql);
         Assertions.assertFalse(capturedSql.toString().contains("`exp_id`, `dt` FROM FILES"),
                 "the partition projection must reuse the earlier dt result: " + capturedSql);
@@ -733,7 +752,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                         Map.of("sort_key", "file_col"), /*wherePredicateSql=*/ null),
                 List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
-        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `file_col` FROM FILES("),
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                "SELECT /*+ SET_VAR(time_zone='UTC') */ `file_col` FROM FILES("),
                 "the projection must name the FILES column, not the target column: " + capturedSql);
     }
 
@@ -758,7 +778,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         Assertions.assertTrue(
-                capturedSql.toString().startsWith("SELECT `sort_key`, CAST('20260917' AS date) FROM FILES("),
+                capturedSql.toString().startsWith(
+                        "SELECT /*+ SET_VAR(time_zone='UTC') */ `sort_key`, CAST('20260917' AS date) FROM FILES("),
                 "the literal stands in for the partition column: " + capturedSql);
     }
 
@@ -785,7 +806,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         Assertions.assertTrue(capturedSql.toString().startsWith(
-                        "SELECT CAST('20260917' AS date), `file_key` FROM FILES("),
+                        "SELECT /*+ SET_VAR(time_zone='UTC') */ CAST('20260917' AS date), `file_key` FROM FILES("),
                 "the literal stands in for dt in the sort key, and the partition column reuses that result: "
                         + capturedSql);
     }
@@ -843,7 +864,7 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         Assertions.assertTrue(capturedSql.toString().startsWith(
-                        "SELECT CAST(date_trunc('day', `ts`) AS date), `exp_id` FROM FILES("),
+                        "SELECT /*+ SET_VAR(time_zone='UTC') */ CAST(date_trunc('day', `ts`) AS date), `exp_id` FROM FILES("),
                 "each computed key is projected as its expression under the target cast: " + capturedSql);
         SampleRow row = Lists.newArrayList(execution.rows()).get(0);
         Assertions.assertEquals(PrimitiveType.DATE, row.sortKeyTuple().get(0).getType().getPrimitiveType());
@@ -868,7 +889,9 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                         Long.MAX_VALUE, 0L));
 
         Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/*/*\""), capturedSql.toString());
-        Assertions.assertTrue(capturedSql.toString().contains("SELECT `sort_key`, CAST(CAST(`file_dt` AS DATE) AS date)"),
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "SELECT /*+ SET_VAR(time_zone='UTC') */ `sort_key`, "
+                        + "CAST(CAST(`file_dt` AS DATE) AS date)"),
                 capturedSql.toString());
         Assertions.assertTrue(execution.estimates().partitionSourceBytes().isEmpty());
     }

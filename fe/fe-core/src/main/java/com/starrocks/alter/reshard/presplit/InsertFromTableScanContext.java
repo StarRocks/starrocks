@@ -29,6 +29,7 @@ import java.util.Objects;
  * predicate SQL is threaded through verbatim from the INSERT-SELECT statement so the sample
  * covers only the rows the load will actually write. A key column the SELECT feeds with a literal has no
  * source column; it is carried as the literal's SQL, which the sampler projects instead.
+ * The load time zone keeps external timestamp decoding aligned with the INSERT.
  *
  * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
  * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
@@ -42,7 +43,8 @@ public record InsertFromTableScanContext(
         ComputeResource computeResource,
         long sourceTotalBytes,
         long sourceTotalRows,
-        Map<String, String> targetToConstantSql) implements ScanContext {   // lower-cased target name -> SQL
+        Map<String, String> targetToConstantSql,     // lower-cased target name -> SQL
+        String loadTimeZone) implements ScanContext {
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
@@ -53,6 +55,15 @@ public record InsertFromTableScanContext(
         if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
             throw new IllegalArgumentException("source estimates must be non-negative");
         }
+    }
+
+    /** Backward-compatible constructor for callers without a load session. */
+    public InsertFromTableScanContext(
+            Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
+            String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows,
+            Map<String, String> targetToConstantSql) {
+        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
+                sourceTotalBytes, sourceTotalRows, targetToConstantSql, null);
     }
 
     /** Every key column is backed by a source column. */
