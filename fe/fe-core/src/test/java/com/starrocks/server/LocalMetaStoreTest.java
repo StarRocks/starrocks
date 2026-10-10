@@ -19,16 +19,24 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
@@ -43,11 +51,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -63,11 +71,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class LocalMetaStoreTest {
     private static ConnectContext connectContext;
@@ -422,9 +432,9 @@ public class LocalMetaStoreTest {
         AtomicInteger dropRecords = new AtomicInteger();
         new MockUp<EditLog>() {
             @Mock
-            public void logDropTable(Invocation invocation, DropInfo info, WALApplier walApplier) {
+            public void logDropTable(Invocation invocation, DropInfo info) {
                 dropRecords.incrementAndGet();
-                invocation.proceed(info, walApplier);
+                invocation.proceed(info);
             }
         };
 
@@ -457,7 +467,7 @@ public class LocalMetaStoreTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logDropTable(DropInfo info, WALApplier walApplier) {
+            public void logDropTable(DropInfo info) {
                 throw new IllegalStateException("journal is unavailable");
             }
         };
@@ -838,5 +848,106 @@ public class LocalMetaStoreTest {
         }
 
         starRocksAssert.dropTable("test.add_partition_race");
+    }
+
+    // onReload reaches external systems for an MV with external base tables (twice per base table, and
+    // recursively through a hierarchical MV's whole dependency chain), so it must not run under the
+    // database's write lock: on a replaying follower the connector caches are cold, so those are real remote
+    // calls and every query against that database used to wait for them.
+    @Test
+    public void testReplayCreateTableRunsOnReloadOutsideDbLock() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        AtomicReference<Boolean> lockHeldDuringReload = new AtomicReference<>();
+        new MockUp<OlapTable>() {
+            @Mock
+            public void onReload() {
+                lockHeldDuringReload.set(isDatabaseLocked(db.getId()));
+            }
+        };
+
+        String tableName = "test_replay_create_table_onreload_lock";
+        LocalMetastore followerMetastore = newFollowerMetastore(db);
+        followerMetastore.replayCreateTable(new CreateTableInfo(db.getFullName(), newReplayTable(tableName), null));
+
+        Assertions.assertEquals(Boolean.FALSE, lockHeldDuringReload.get(),
+                "onReload must run after the database write lock is released");
+        Assertions.assertNotNull(followerMetastore.getDb(db.getFullName()).getTable(tableName));
+    }
+
+    // Pins the ordering the lock-scope reasoning rests on: the table is registered inside the lock and
+    // reloaded only after it is released, so the worst a concurrent reader can observe is a just-registered
+    // table whose derived state is not rebuilt yet -- never a table that is missing after the entry replayed.
+    @Test
+    public void testReplayCreateTableRegistersTableBeforeReloadingIt() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        String tableName = "test_replay_create_table_register_order";
+        LocalMetastore followerMetastore = newFollowerMetastore(db);
+
+        AtomicReference<Boolean> visibleDuringReload = new AtomicReference<>();
+        new MockUp<OlapTable>() {
+            @Mock
+            public void onReload() {
+                visibleDuringReload.set(followerMetastore.getDb(db.getFullName()).getTable(tableName) != null);
+            }
+        };
+
+        followerMetastore.replayCreateTable(new CreateTableInfo(db.getFullName(), newReplayTable(tableName), null));
+
+        Assertions.assertEquals(Boolean.TRUE, visibleDuringReload.get(),
+                "the table must already be registered by the time onReload runs");
+    }
+
+    // Moving onReload out of the lock must not turn a reload failure into a leaked database write lock, and
+    // the failure must still propagate so that replay aborts instead of silently skipping the journal entry.
+    @Test
+    public void testReplayCreateTableRethrowsReloadFailureWithoutLeakingDbLock() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        // Positive control for isDatabaseLocked: without it the "lock is not held" assertions here and in
+        // testReplayCreateTableRunsOnReloadOutsideDbLock would also pass if the helper never detected a lock.
+        Locker probe = new Locker();
+        probe.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            Assertions.assertTrue(isDatabaseLocked(db.getId()));
+        } finally {
+            probe.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+        Assertions.assertFalse(isDatabaseLocked(db.getId()));
+
+        new MockUp<OlapTable>() {
+            @Mock
+            public void onReload() {
+                throw new IllegalStateException("mocked reload failure");
+            }
+        };
+
+        String tableName = "test_replay_create_table_reload_failure";
+        LocalMetastore followerMetastore = newFollowerMetastore(db);
+        IllegalStateException e = Assertions.assertThrows(IllegalStateException.class,
+                () -> followerMetastore.replayCreateTable(
+                        new CreateTableInfo(db.getFullName(), newReplayTable(tableName), null)));
+        Assertions.assertEquals("mocked reload failure", e.getMessage());
+        Assertions.assertFalse(isDatabaseLocked(db.getId()),
+                "the database write lock must be released even when onReload fails");
+    }
+
+    private static LocalMetastore newFollowerMetastore(Database db) {
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), new CatalogRecycleBin(), new ColocateTableIndex());
+        followerMetastore.unprotectCreateDb(new Database(db.getId(), db.getFullName()));
+        return followerMetastore;
+    }
+
+    // No partitions, so replaying it touches neither the tablet inverted index nor the leader's tables.
+    private static OlapTable newReplayTable(String tableName) {
+        OlapTable table = new OlapTable(GlobalStateMgr.getCurrentState().getNextId(), tableName,
+                Lists.newArrayList(new Column("k1", Type.INT)), KeysType.DUP_KEYS,
+                new SinglePartitionInfo(), new RandomDistributionInfo(1));
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        return table;
+    }
+
+    private static boolean isDatabaseLocked(long dbId) {
+        return GlobalStateMgr.getCurrentState().getLockManager().dumpLockManager().stream()
+                .anyMatch(lockInfo -> lockInfo.getRid() == dbId && !lockInfo.getOwners().isEmpty());
     }
 }
