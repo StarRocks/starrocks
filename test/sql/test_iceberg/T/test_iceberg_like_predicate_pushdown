@@ -1,0 +1,41 @@
+-- name: test_iceberg_like_predicate_pushdown
+-- Test Point:
+--   1. A LIKE pattern holding the single-character wildcard `_` is not handed to Iceberg as a
+--      startsWith(), so the data files whose bounds only cover a wildcard match survive pruning.
+--   2. An escaped `\_` or a trailing `\%` is a literal character, so those patterns are not prefix
+--      matches either.
+--   3. A plain prefix pattern is still pushed down and still returns the same rows.
+-- Method: load one row per INSERT so every value gets its own data file and its own min/max bounds,
+--         then pair each predicate with the same predicate behind CONCAT(), which is never pushed
+--         down and therefore carries the answer the pruned scan has to agree with.
+-- Scope: Iceberg predicate pushdown, LIKE conversion in ScalarOperatorToIcebergExpr
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}", "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/iceberg_like_pushdown_${uuid0}/iceberg_db/${uuid0}"
+);
+
+function: retry_execute_sql("create external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (id int, s string)", False, 5, 1000)
+
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (1, 'abc1');
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (2, 'axc2');
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (3, 'a_c3');
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (4, 'zzz4');
+insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} values (5, 'star%');
+
+refresh external table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0};
+
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'a_c%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'a_c%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'a\\_c%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'a\\_c%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'star\\%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'star\\%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where s like 'ab%' order by id;
+select id, s from iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} where concat(s, '') like 'ab%' order by id;
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};
+shell: ossutil64 rm -rf oss://${oss_bucket}/iceberg_like_pushdown_${uuid0}/iceberg_db/${uuid0} > /dev/null || echo "exit 0" >/dev/null
