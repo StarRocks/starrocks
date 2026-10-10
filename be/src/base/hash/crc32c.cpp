@@ -25,6 +25,22 @@
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
+#include <strings.h>
+
+#include <atomic>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+
+#if defined(__linux__)
+#include <sys/auxv.h>
+#if __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#endif
+#endif
+#if defined(__aarch64__) && !defined(HWCAP_PMULL)
+#define HWCAP_PMULL (1 << 4)
+#endif
 #include "base/coding.h"
 
 namespace starrocks::crc32c {
@@ -239,7 +255,89 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
+namespace {
+static bool is_pmull_disabled_by_env() {
+    const char* env = getenv("STARROCKS_DISABLE_PMULL");
+    if (env == nullptr || env[0] == '\0') {
+        return false;
+    }
+    if (strcmp(env, "0") == 0 || strcasecmp(env, "false") == 0 || strcasecmp(env, "off") == 0 ||
+        strcasecmp(env, "no") == 0) {
+        return false;
+    }
+    return true;
+}
+} // namespace
+
+bool IsPmullDisabledByEnvForTesting() {
+    return is_pmull_disabled_by_env();
+}
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace {
+#if defined(USE_ARM_PMULL)
+std::atomic<int8_t> s_has_pmull{-1};
+
+__attribute__((noinline)) static bool init_arm_pmull() {
+    static const bool s_hw_has_pmull = []() {
+#if defined(__APPLE__)
+        return true;
+#elif defined(__linux__)
+        return (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+#else
+        return false;
+#endif
+    }();
+
+    bool enabled = s_hw_has_pmull && !is_pmull_disabled_by_env();
+    s_has_pmull.store(enabled ? 1 : 0, std::memory_order_relaxed);
+    return enabled;
+}
+#endif
+
+inline bool has_arm_pmull() {
+#if defined(USE_ARM_PMULL)
+    int8_t val = s_has_pmull.load(std::memory_order_relaxed);
+    if (__builtin_expect(val != -1, 1)) {
+        return val != 0;
+    }
+    return init_arm_pmull();
+#else
+    return false;
+#endif
+}
+} // namespace
+
+void ResetArmPmullForTesting() {
+#if defined(USE_ARM_PMULL)
+    s_has_pmull.store(-1, std::memory_order_relaxed);
+#endif
+}
+
+bool HasArmPmull() {
+    return has_arm_pmull();
+}
+
+#if defined(USE_ARM_PMULL)
+uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+#else
+void ResetArmPmullForTesting() {}
+
+bool HasArmPmull() {
+    return false;
+}
+#endif
+
+uint32_t ExtendFallback(uint32_t crc, const char* buf, size_t size) {
+    return ExtendImpl<Fast_CRC32>(crc, buf, size);
+}
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+    if (__builtin_expect(size == 0, 0)) {
+        return crc;
+    }
+
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
     constexpr size_t CRC32C_SSE42_MINIMUM_LENGTH = (1 << 6);
@@ -250,9 +348,21 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
         if (!size) return crc;
         buf += chunk_size;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(USE_ARM_PMULL)
+    constexpr size_t CRC32C_CHUNKSIZE_MASK = ((1 << 4) - 1);
+    constexpr size_t CRC32C_MINIMUM_LENGTH = (1 << 6);
+    if (size >= CRC32C_MINIMUM_LENGTH && has_arm_pmull()) {
+        size_t chunk_size = size & ~CRC32C_CHUNKSIZE_MASK;
+        size &= CRC32C_CHUNKSIZE_MASK;
+        crc = ~crc32c_pmull_simd(~crc, buf, chunk_size);
+        if (!size) return crc;
+        buf += chunk_size;
+    }
+#endif
 #endif
 
-    return ExtendImpl<Fast_CRC32>(crc, buf, size);
+    return ExtendFallback(crc, buf, size);
 }
 
 } // namespace starrocks::crc32c
