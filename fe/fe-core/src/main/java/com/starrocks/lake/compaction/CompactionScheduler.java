@@ -91,8 +91,6 @@ public class CompactionScheduler extends Daemon {
     private volatile Set<Long> disabledIds; // copy-on-write, table id or partition id
     // null means NORMAL; an empty set allows no tables. Publish mode and IDs together on config refresh.
     private volatile Set<Long> allowedTableIds = Collections.emptySet();
-    private String lastCompactionMode;
-    private String lastAllowTableIds;
 
     CompactionScheduler(@NotNull CompactionMgr compactionManager, @NotNull SystemInfoService systemInfoService,
                         @NotNull GlobalTransactionMgr transactionMgr, @NotNull GlobalStateMgr stateMgr,
@@ -860,9 +858,6 @@ public class CompactionScheduler extends Daemon {
     }
 
     void updateCompactionAllowlist(String mode, String tableIds) {
-        if (mode.equals(lastCompactionMode) && tableIds.equals(lastAllowTableIds)) {
-            return;
-        }
         Set<Long> newAllowedIds = new HashSet<>();
         if ("NORMAL".equals(mode.trim())) {
             allowedTableIds = null;
@@ -889,8 +884,6 @@ public class CompactionScheduler extends Daemon {
                         "Use NORMAL or ALLOWLIST and positive table IDs separated by semicolons", mode, tableIds);
             }
         }
-        lastCompactionMode = mode;
-        lastAllowTableIds = tableIds;
     }
 
     public boolean isPartitionDisabled(Long partitionId) {

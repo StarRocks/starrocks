@@ -172,6 +172,8 @@ public class CompactionSchedulerTest {
             Assertions.assertTrue(scheduler.isCompactionAllowed(first), invalid);
             scheduler.updateCompactionAllowlist("ALLOWLIST", invalid);
             Assertions.assertFalse(scheduler.isCompactionAllowed(first), invalid);
+            scheduler.updateCompactionAllowlist("ALLOWLIST", invalid);
+            Assertions.assertFalse(scheduler.isCompactionAllowed(first), invalid);
         }
         scheduler.updateCompactionAllowlist("invalid-mode", "2");
         Assertions.assertFalse(scheduler.isCompactionAllowed(first));
