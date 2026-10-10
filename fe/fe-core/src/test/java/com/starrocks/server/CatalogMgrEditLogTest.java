@@ -246,6 +246,62 @@ public class CatalogMgrEditLogTest {
     }
 
     @Test
+    public void testIcebergCacheLimitsAlterAndReplay() throws Exception {
+        String name = "iceberg_live_limits";
+        String limit = "iceberg_data_file_cache_memory_usage_ratio";
+        Map<String, String> properties = new HashMap<>(Map.of("type", "iceberg", "iceberg.catalog.type", "glue"));
+        // Replay creates a lazy connector, avoiding any metastore access in this test.
+        masterCatalogMgr.replayCreateCatalog(new com.starrocks.catalog.ExternalCatalog(12345, name, "", properties));
+        com.starrocks.connector.CatalogConnector original = connectorMgr.getConnector(name);
+        Catalog catalog = masterCatalogMgr.getCatalogByName(name);
+        Map<String, String> updates = Map.of(limit, "0.2");
+        masterCatalogMgr.alterCatalog(new com.starrocks.sql.ast.AlterCatalogStmt(name,
+                new com.starrocks.sql.ast.ModifyTablePropertiesClause(updates), null));
+        Assertions.assertSame(original, connectorMgr.getConnector(name));
+        Assertions.assertSame(catalog, masterCatalogMgr.getCatalogByName(name));
+        Assertions.assertEquals("0.2", catalog.getConfig().get(limit));
+        Assertions.assertEquals("LazyConnector", original.normalConnectorClassName());
+
+        ConnectorMgr followerConnectors = new ConnectorMgr();
+        CatalogMgr follower = new CatalogMgr(followerConnectors);
+        follower.replayCreateCatalog(new com.starrocks.catalog.ExternalCatalog(12345, name, "",
+                new HashMap<>(Map.of("type", "iceberg", "iceberg.catalog.type", "glue"))));
+        Object followerOriginal = followerConnectors.getConnector(name);
+        AlterCatalogLog log = (AlterCatalogLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_CATALOG);
+        follower.replayAlterCatalog(log);
+        Assertions.assertSame(followerOriginal, followerConnectors.getConnector(name));
+        Assertions.assertEquals("0.2", follower.getCatalogByName(name).getConfig().get(limit));
+
+        // A mixed update must still recreate the connector on replay.
+        follower.replayAlterCatalog(new AlterCatalogLog(name, Map.of(limit, "0.3", "aws.s3.region", "eu-central-1")));
+        Assertions.assertNotSame(followerOriginal, followerConnectors.getConnector(name));
+        Assertions.assertEquals(12345, follower.getCatalogByName(name).getId());
+    }
+
+    @Test
+    public void testIcebergCacheLimitsJournalFailure() throws Exception {
+        String name = "iceberg_failed_live_limits";
+        String limit = "iceberg_table_cache_memory_usage_ratio";
+        masterCatalogMgr.replayCreateCatalog(new com.starrocks.catalog.ExternalCatalog(12346, name, "",
+                new HashMap<>(Map.of("type", "iceberg", "iceberg.catalog.type", "glue", limit, "0.1"))));
+        Object original = connectorMgr.getConnector(name);
+        EditLog previous = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog failing = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed")).when(failing).logAlterCatalog(any(), any());
+        GlobalStateMgr.getCurrentState().setEditLog(failing);
+        try {
+            Assertions.assertThrows(RuntimeException.class, () -> masterCatalogMgr.alterCatalog(
+                    new com.starrocks.sql.ast.AlterCatalogStmt(name,
+                            new com.starrocks.sql.ast.ModifyTablePropertiesClause(Map.of(limit, "0.2")), null)));
+            Assertions.assertSame(original, connectorMgr.getConnector(name));
+            Assertions.assertEquals("0.1", masterCatalogMgr.getCatalogByName(name).getConfig().get(limit));
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(previous);
+        }
+    }
+
+    @Test
     public void testAlterCatalogNormalCase() throws Exception {
         // 1. Create a catalog first
         String catalogName = "test_alter_catalog";

@@ -830,6 +830,10 @@ v3.3.3 以降、StarRocks は [定期的なメタデータリフレッシュ戦�
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest キャッシュの最大メモリ使用率。v3.5.6 以降でサポートされています。 |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | Iceberg テーブルキャッシュの非同期更新がトリガーされる間隔（秒単位）。v3.5.7 以降でサポートされています。 |
+| iceberg_table_cache_memory_usage_ratio | 0.1 | Iceberg テーブルオブジェクトのキャッシュに使用する FE JVM ヒープの最大比率。 |
+| iceberg_partition_cache_memory_usage_ratio | 0.1 | パーティションメタデータのキャッシュに使用する FE JVM ヒープの最大比率。 |
+
+`ALTER CATALOG` が上記の 4 つの `iceberg_*_cache_memory_usage_ratio` プロパティのみを変更する場合、StarRocks はコネクターを再作成せずに既存のキャッシュ上限を更新します。上限を増やすとキャッシュエントリは保持され、上限を減らすと新しい制限を満たすためにエントリが削除される場合があります。各比率には 0 から 1 までの有限数を指定します。同じ文で他のプロパティも変更する場合は、従来どおりコネクターが再作成されます。
 
 v3.4 以降、StarRocks は、以下のパラメーターを設定することで、Iceberg メタデータを読み取ることで Iceberg テーブルの統計情報を取得できます。これにより、Iceberg テーブルの統計情報の収集を積極的にトリガーする必要はありません。
 

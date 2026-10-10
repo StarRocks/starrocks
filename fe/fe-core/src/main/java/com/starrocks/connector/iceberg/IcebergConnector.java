@@ -38,6 +38,7 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -48,12 +49,12 @@ import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
-    private final Map<String, String> properties;
+    private volatile Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
-    private final IcebergCatalogProperties icebergCatalogProperties;
+    private volatile IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
     private final IcebergProcedureRegistry procedureRegistry;
     // Global commit queue manager for this catalog - shared across all queries
@@ -62,7 +63,7 @@ public class IcebergConnector implements Connector {
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
-        this.properties = context.getProperties();
+        this.properties = new HashMap<>(context.getProperties());
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
@@ -117,6 +118,26 @@ public class IcebergConnector implements Connector {
     }
 
     @Override
+    public synchronized Runnable preparePropertyUpdate(Map<String, String> updates) {
+        if (!IcebergCatalogProperties.isCacheMemoryPropertyUpdate(updates)) {
+            return null;
+        }
+        IcebergCatalogProperties.validateCacheMemoryProperties(updates);
+        Map<String, String> merged = new HashMap<>(properties);
+        merged.putAll(updates);
+        IcebergCatalogProperties updated = new IcebergCatalogProperties(merged);
+        return () -> {
+            synchronized (this) {
+                if (icebergNativeCatalog instanceof CachingIcebergCatalog) {
+                    ((CachingIcebergCatalog) icebergNativeCatalog).updateCacheMemoryLimits(updated);
+                }
+                properties = merged;
+                icebergCatalogProperties = updated;
+            }
+        };
+    }
+
+    @Override
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
                 buildIcebergJobPlanningExecutor(), icebergCatalogProperties,
@@ -125,7 +146,7 @@ public class IcebergConnector implements Connector {
 
     // In order to be compatible with the catalog created with the wrong configuration,
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
-    public IcebergCatalog getNativeCatalog() {
+    public synchronized IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
             // Inside the null check, not at the entry: this method is called on every getMetadata,
             // and once the catalog exists it returns a field. Only the build contacts anything --

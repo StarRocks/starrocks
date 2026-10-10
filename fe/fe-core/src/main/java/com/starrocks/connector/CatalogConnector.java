@@ -46,6 +46,11 @@ public class CatalogConnector implements Connector {
         );
     }
 
+    @Override
+    public Runnable preparePropertyUpdate(Map<String, String> properties) {
+        return normalConnector.preparePropertyUpdate(properties);
+    }
+
     public void shutdown() {
         normalConnector.shutdown();
     }

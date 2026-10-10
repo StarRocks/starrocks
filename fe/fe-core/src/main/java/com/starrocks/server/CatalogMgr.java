@@ -188,6 +188,13 @@ public class CatalogMgr {
 
             if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
+                Runnable update = preparePropertyUpdate(catalog, properties);
+                if (update != null) {
+                    AlterCatalogLog log = new AlterCatalogLog(catalogName, properties);
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(log,
+                            wal -> applyPropertyUpdate(catalog, properties, update));
+                    return;
+                }
                 CatalogConnector newConnector = createNewConnector(catalog, properties, false);
                 if (newConnector == null) {
                     return;
@@ -207,6 +214,17 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
+    }
+
+    private Runnable preparePropertyUpdate(Catalog catalog, Map<String, String> properties) {
+        CatalogConnector connector = connectorMgr.getConnector(catalog.getName());
+        return connector == null ? null : connector.preparePropertyUpdate(properties);
+    }
+
+    private void applyPropertyUpdate(Catalog catalog, Map<String, String> properties, Runnable update) {
+        update.run();
+        catalog.getConfig().putAll(properties);
+        LOG.info("Update catalog [{}] properties in place: {}", catalog.getName(), properties.keySet());
     }
 
     private void alterCatalogInternal(Catalog catalog, CatalogConnector newConnector, Map<String, String> properties) {
@@ -364,6 +382,11 @@ public class CatalogMgr {
             Map<String, String> properties = log.getProperties();
             Catalog catalog = catalogs.get(catalogName);
 
+            Runnable update = preparePropertyUpdate(catalog, properties);
+            if (update != null) {
+                applyPropertyUpdate(catalog, properties, update);
+                return;
+            }
             CatalogConnector newConnector = createNewConnector(catalog, properties, true);
             if (newConnector == null) {
                 return;
