@@ -58,6 +58,7 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -229,6 +230,16 @@ public interface ConnectorMetadata {
     }
 
     default void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+    }
+
+    /**
+     * Make the statement being planned read this table as it is now, for an INSERT ... SELECT that must not see
+     * stale source data ({@code enable_insert_select_external_auto_refresh}). A connector that can simply drop
+     * what it cached about the table -- no remote I/O -- does that and lets planning load only what it reads.
+     * The default refreshes the whole table, which is what such a statement always did.
+     */
+    default void invalidateTableForRead(String srDbName, Table table) {
+        refreshTable(srDbName, table, new ArrayList<>(), false);
     }
 
     default boolean dbExists(ConnectContext context, String dbName) {

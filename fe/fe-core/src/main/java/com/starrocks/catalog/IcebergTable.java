@@ -79,6 +79,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -421,6 +422,103 @@ public class IcebergTable extends Table {
         return nativeTable;
     }
 
+<<<<<<< HEAD
+=======
+    // Immutable read view a time-travel query pins on its per-query IcebergTable copy: the targeted
+    // snapshot's schema and the partition specs its manifests reference, keyed by spec id.
+    private static class SnapshotReadView {
+        private final Schema schema;
+        private final Map<Integer, PartitionSpec> specsById;
+
+        SnapshotReadView(Schema schema, Map<Integer, PartitionSpec> specsById) {
+            this.schema = schema;
+            this.specsById = specsById;
+        }
+    }
+
+    // Return a per-query copy bound to the given read metadata (a targeted snapshot's schema and the
+    // partition specs its manifests reference, for time travel), with the StarRocks full schema
+    // rebuilt from the read schema.
+    public IcebergTable withReadMetadata(Schema readSchema, Map<Integer, PartitionSpec> readSpecsById) {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, IcebergApiConverter.toFullSchemas(readSchema, getNativeTable()), getNativeTable(),
+                icebergProperties);
+        table.readView = new SnapshotReadView(readSchema, readSpecsById);
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        table.metricsReporter = metricsReporter;
+        return table;
+    }
+
+    /**
+     * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
+     * query to plan and run on. The published object is shared by every query and read without the meta lock,
+     * and a query writes to the table it plans on: it loads the native table lazily, installs its own metrics
+     * reporter, fills the partition caches and clears the native table when it ends. On the copy those stay
+     * with the query. The native table is handed over as it is -- possibly still unloaded, in which case the
+     * copy loads it for itself -- and the related MVs and constraints are shared, since the planner only reads
+     * them.
+     */
+    public IcebergTable copyForQuery() {
+        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
+                comment, fullSchema, nativeTable, icebergProperties);
+        table.createTime = createTime;
+        table.relatedMaterializedViews = relatedMaterializedViews;
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        return table;
+    }
+
+    /**
+     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
+     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
+     * resolved per query already.
+     */
+    @Override
+    public Table forQueryPlanning() {
+        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
+    }
+
+    // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
+    // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
+    // are not exposed; ordinary reads keep the current spec.
+    private List<PartitionField> readSchemaPartitionFields() {
+        Schema schema = getReadSchema();
+        return getReadSpec().fields().stream()
+                .filter(field -> schema.findColumnName(field.sourceId()) != null)
+                .collect(Collectors.toList());
+    }
+
+    // The Iceberg schema this table instance is read with: the targeted snapshot's schema for a
+    // time-travel read (bound via withReadMetadata), otherwise the current table schema.
+    public Schema getReadSchema() {
+        return readView != null ? readView.schema : getNativeTable().schema();
+    }
+
+    // The partition spec this table instance is read with. For a time-travel read this is derived
+    // from the target snapshot's manifests: a single spec is the snapshot's partitioning; multiple
+    // specs (mixed partitioning within the snapshot) are treated as unpartitioned so table-level
+    // partition-metadata optimizations are disabled and correctness is preserved (scan planning still
+    // uses each file's own spec). Ordinary reads use the current table spec.
+    public PartitionSpec getReadSpec() {
+        Map<Integer, PartitionSpec> specsById = readView != null ? readView.specsById : null;
+        if (specsById == null) {
+            return getNativeTable().spec();
+        }
+        if (specsById.size() == 1) {
+            return specsById.values().iterator().next();
+        }
+        return PartitionSpec.unpartitioned();
+    }
+
+    // True when this is a time-travel read that pinned an explicit snapshot read view via
+    // withReadMetadata. Lets callers tell a time-travel read (keep the snapshot schema/spec) from an
+    // ordinary read of the current table state.
+    public boolean isTimeTravelRead() {
+        return readView != null;
+    }
+
+>>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);

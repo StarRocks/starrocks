@@ -205,6 +205,11 @@ public class UnifiedMetadataTest {
             }
 
             {
+                hiveMetadata.invalidateTableForRead("test_db", hiveTable);
+                times = 1;
+            }
+
+            {
                 hiveMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
                 times = 1;
             }
@@ -229,6 +234,7 @@ public class UnifiedMetadataTest {
         List<PartitionInfo> partitionInfos = unifiedMetadata.getPartitions(hiveTable, ImmutableList.of());
         assertEquals(ImmutableList.of(), partitionInfos);
         unifiedMetadata.refreshTable("test_db", hiveTable, ImmutableList.of(), false);
+        unifiedMetadata.invalidateTableForRead("test_db", hiveTable);
         unifiedMetadata.finishSink("test_db", "test_tbl", ImmutableList.of(), null);
         createTableStmt.setEngineName("hive");
         assertTrue(unifiedMetadata.createTable(connectContext, createTableStmt));

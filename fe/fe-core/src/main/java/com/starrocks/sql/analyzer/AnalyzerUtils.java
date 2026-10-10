@@ -118,6 +118,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -2208,4 +2209,37 @@ public class AnalyzerUtils {
 
         return order1 > order2;
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * The table an UPDATE, DELETE or MERGE writes to. An external target was resolved before the meta lock was
+     * taken, because the lock covers nothing about it (see {@link PreResolvedState#WRITE_TARGET}); a miss -- an
+     * internal target, or a pre-resolve that did not succeed -- resolves it here, the way it always was.
+     */
+    public static Table resolveWriteTarget(ConnectContext session, TableName tableName) {
+        return session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableName, () -> {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            return MetaUtils.getSessionAwareTable(session, null, tableName);
+        });
+    }
+
+    public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+        tableName.normalization(context);
+        QualifiedName qualifiedName = QualifiedName.of(
+                Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                tableRef.getPos());
+        String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+        return new TableRef(qualifiedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+    }
+>>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 }

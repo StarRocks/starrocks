@@ -31,8 +31,12 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
+=======
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -41,7 +45,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LoadStmt;
@@ -197,12 +200,24 @@ public class DeleteAnalyzer {
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
         analyzeProperties(deleteStatement, session);
 
+<<<<<<< HEAD
         TableName tableName = deleteStatement.getTableName();
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+=======
+        TableRef tableRef = deleteStatement.getTableRef();
+        TableName tableName = TableName.fromTableRef(tableRef);
+        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
+
+        // Handle Iceberg table delete
+        if (table instanceof IcebergTable) {
+            analyzeIcebergTable(deleteStatement, table, session);
+            return;
+>>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
 
