@@ -19,11 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.InsertStmt;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.common.MetaUtils;
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -140,32 +136,6 @@ public class InsertPreSplitHookColumnListTest {
         Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
                 insertWithTargetColumns(List.of("K", "V")), tableWithBaseColumns("k", "v"), requiredColumns("k")));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void columnListOmittingRollupKey_notPreSplitSafe() {
-        // base index (id 1): sort key k, plus v. A visible rollup (id 2) sorts on a
-        // divergent column r. A target list covering the base sort key but omitting
-        // the rollup's sort key must be rejected -- the rollup split would collapse
-        // its data on r even though the base split on k is fine.
-        OlapTable table = tableWithBaseColumns("k", "v");
-        when(table.getBaseIndexMetaId()).thenReturn(1L);
-        MaterializedIndexMeta baseMeta = mock(MaterializedIndexMeta.class);
-        when(baseMeta.getIndexMetaId()).thenReturn(1L);
-        MaterializedIndexMeta rollupMeta = mock(MaterializedIndexMeta.class);
-        when(rollupMeta.getIndexMetaId()).thenReturn(2L);
-        when(table.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
-
-        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(table, 2L))
-                    .thenReturn(requiredColumns("r"));
-
-            Assertions.assertFalse(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
-                    insertWithTargetColumns(List.of("k", "v")), table, requiredColumns("k")),
-                    "a target column list omitting a divergent rollup sort key must not be pre-split safe");
-        }
-    }
 
     @Test
     public void generatedSortKeyColumnNeedNotBeListed() {
@@ -182,5 +152,4 @@ public class InsertPreSplitHookColumnListTest {
         Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
                 insertWithTargetColumns(List.of("k")), table, List.of(g, k)));
     }
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 }

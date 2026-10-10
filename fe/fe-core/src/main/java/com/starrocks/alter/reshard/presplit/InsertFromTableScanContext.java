@@ -29,19 +29,15 @@ import java.util.Objects;
  * predicate SQL is threaded through verbatim from the INSERT-SELECT statement so the sample
  * covers only the rows the load will actually write. A key column the SELECT feeds with a literal has no
  * source column; it is carried as the literal's SQL, which the sampler projects instead.
-<<<<<<< HEAD
- * The load time zone keeps external timestamp decoding aligned with the INSERT.
- *
- * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
- * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
- * come from its current snapshot summary, which the resolver reads once.
-=======
  * A key column the SELECT computes from source columns -- a safe computed projection, or a generated
  * column evaluated from the columns its definition reads -- is carried as the expression's SQL, which
  * the sampler evaluates over the source rows. The load time zone keeps external timestamp decoding
  * aligned with the INSERT. {@code sessionSemantics} are the INSERT session's variables that decide
  * how the predicate and those expressions evaluate; the sampler sets them on its own session.
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
+ *
+ * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
+ * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
+ * come from its current snapshot summary, which the resolver reads once.
  */
 public record InsertFromTableScanContext(
         Table sourceTable,

@@ -133,49 +133,6 @@ final class InsertSelectSourceColumns {
         }
     }
 
-    /**
-<<<<<<< HEAD
-     * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
-     *
-     * @param insertStmt          the parsed INSERT statement
-     * @param selectRelation      the SELECT body of the INSERT
-     * @param targetTable         the INSERT target (range-distributed); the effective target
-     *                            columns are derived from it by {@link #effectiveTargetColumns}
-     * @param sourceTable         the single source table (OLAP, Iceberg, or the inferred
-     *                            {@code TableFunctionTable} of a {@code FILES(...)} call)
-     * @param normalizedSourceName fully-qualified source name (catalog/db/tbl) for qualifier matching
-     * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
-     * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
-     * @param partitionColumns    partition columns of the target
-     * @param pairing             how closely the source schema must mirror the target's
-     * @return the resolved projection, or {@code null} when the projection is ambiguous or unsafe
-     */
-    static Resolved resolve(
-            InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, Table sourceTable,
-            TableName normalizedSourceName, String sourceAlias,
-            List<Column> sortKeyColumns, List<Column> partitionColumns,
-            SchemaPairing pairing) {
-        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, sourceTable,
-                normalizedSourceName, sourceAlias, pairing, /*computedProjectionContext*/ null);
-        if (resolved == null) {
-            return null;
-        }
-        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
-            return null;
-        }
-        return resolved;
-=======
-     * The source relation and projection rules used to resolve one INSERT-SELECT. A non-null
-     * {@code computedProjectionContext} admits a safe computed expression when {@link #foldedComputedProjection},
-     * folding its plan-time constants in the INSERT user's context, and
-     * {@link SamplingPredicateGate#evaluatesAsTheLoad} accept it; {@code null} leaves every computed output
-     * unsupported.
-     */
-    record ResolutionContext(Table sourceTable, TableName normalizedSourceName, String sourceAlias,
-                             SchemaPairing pairing, ConnectContext computedProjectionContext) {
-    }
-
     /** How the load hands a generated column the values of the columns its definition reads. */
     enum InputReading {
         /** Converted to each column's own type first: Broker Load ({@code Load} casts every input). */
@@ -188,7 +145,6 @@ final class InsertSelectSourceColumns {
          * column at a target column's type: INSERT FROM FILES with no explicit FILES schema.
          */
         AS_SELECTED_AFTER_PUSH_DOWN
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     }
 
     /**
@@ -199,9 +155,9 @@ final class InsertSelectSourceColumns {
      *
      * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
      *                                  evaluate a computed projection: such a projection is admitted
-     *                                  when {@link #foldedComputedProjection} accepts it, with its
-     *                                  plan-time constants folded in this context. {@code null}
-     *                                  admits none, so every computed output stays unsupported.
+     *                                  when {@link #foldedComputedProjection}, folding in this context,
+     *                                  and {@link SamplingPredicateGate#evaluatesAsTheLoad} accept it.
+     *                                  {@code null} admits none, so every computed output stays unsupported.
      */
     static Resolved resolveUngated(
             InsertStmt insertStmt, SelectRelation selectRelation,
@@ -492,29 +448,21 @@ final class InsertSelectSourceColumns {
                 || resolved.targetToExpressionSql().containsKey(targetName);
     }
 
-    /**
-     * Every column a sample projects, in the order a skip is attributed: the base sort key, the
-     * partition columns, then each visible rollup's sort key.
-     */
-    static List<Column> sampledColumns(List<Column> sortKeyColumns, List<Column> partitionColumns,
-                                       List<SecondaryIndexSpec> secondaryIndexSpecs) {
+    /** Every column a sample projects, in the order a skip is attributed: the sort key, then the partition columns. */
+    static List<Column> sampledColumns(List<Column> sortKeyColumns, List<Column> partitionColumns) {
         List<Column> columns = new ArrayList<>(sortKeyColumns);
         columns.addAll(partitionColumns);
-        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            columns.addAll(spec.sortKey());
-        }
         return columns;
     }
 
     /** A sampled column the sampler cannot project, with the skip reason and what to tell the operator. */
     record Unsampleable(Column column, SkipReason reason, String detail) {
 
-        /** Records the skip in the eligibility metric, the FE log, and the load's PreSplit profile. */
+        /** Records the skip in the eligibility metric and the FE log. */
         void record(String tableName) {
             PreSplitMetrics.recordEligibilitySkip(reason);
             LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" {}; skipping pre-split",
                     tableName, column.getName(), detail);
-            PreSplitProfile.recordOutcome("SKIPPED: " + reason + " (" + column.getName() + ")");
         }
     }
 
@@ -560,10 +508,9 @@ final class InsertSelectSourceColumns {
      * @param context the INSERT user's context, in which plan-time constants are folded
      */
     static Resolved admitSampledColumns(Resolved resolved, OlapTable target, List<Column> sortKeyColumns,
-                                        List<Column> partitionColumns, List<SecondaryIndexSpec> secondaryIndexSpecs,
-                                        InputReading reading, ConnectContext context,
+                                        List<Column> partitionColumns, InputReading reading, ConnectContext context,
                                         TableName sourceName, String sourceAlias) {
-        List<Column> sampledColumns = sampledColumns(sortKeyColumns, partitionColumns, secondaryIndexSpecs);
+        List<Column> sampledColumns = sampledColumns(sortKeyColumns, partitionColumns);
         Resolved extended = withGeneratedColumns(resolved, target, sampledColumns, reading, context,
                 sourceName, sourceAlias);
         Unsampleable unsampleable = firstUnsampleable(sampledColumns, extended, reading);
@@ -573,11 +520,6 @@ final class InsertSelectSourceColumns {
         }
         if (!sortKeySampleable(sortKeyColumns, extended)) {
             return null;
-        }
-        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            if (!sortKeySampleable(spec.sortKey(), extended)) {
-                return null;
-            }
         }
         return extended;
     }

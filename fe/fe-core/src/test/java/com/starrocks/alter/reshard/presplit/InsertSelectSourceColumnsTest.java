@@ -177,18 +177,10 @@ public class InsertSelectSourceColumnsTest {
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
-<<<<<<< HEAD
-        return InsertSelectSourceColumns.resolve(
-                stmt, rel, target, source,
-                normalizedSourceName, sourceAlias, sortKeyColumns, partitionColumns,
-                InsertSelectSourceColumns.SchemaPairing.EXACT);
-=======
         return gated(InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target,
-                new InsertSelectSourceColumns.ResolutionContext(source, normalizedSourceName, sourceAlias,
-                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null)),
+                stmt, rel, target, source, normalizedSourceName, sourceAlias,
+                InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
                 sortKeyColumns, partitionColumns);
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     }
 
     /** The FILES call: whatever columns correspond are paired, extras on either side are fine. */
@@ -208,17 +200,10 @@ public class InsertSelectSourceColumnsTest {
     private static InsertSelectSourceColumns.Resolved resolvePerColumnFully(
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
-<<<<<<< HEAD
-        return InsertSelectSourceColumns.resolve(
-                stmt, rel, target, source, SRC_NAME, null, sortKeyColumns, partitionColumns,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
-=======
         return gated(InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target,
-                new InsertSelectSourceColumns.ResolutionContext(source, SRC_NAME, null,
-                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null)),
+                stmt, rel, target, source, SRC_NAME, null,
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null),
                 sortKeyColumns, partitionColumns);
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     }
 
     /** The presence gates the sources apply after resolveUngated: a fed, non-degenerate key and fed partition columns. */
@@ -1525,9 +1510,8 @@ public class InsertSelectSourceColumnsTest {
                 + " FROM " + FILES_CALL, context.getSessionVariable().getSqlMode());
         SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target,
-                new InsertSelectSourceColumns.ResolutionContext(filesTable(sourceCols), SRC_NAME, null,
-                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context));
+                stmt, rel, target, filesTable(sourceCols), SRC_NAME, null,
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
         return InsertSelectSourceColumns.withGeneratedColumns(
                 resolved, target, sampledColumns, reading, context, SRC_NAME, null);
     }
@@ -1657,7 +1641,7 @@ public class InsertSelectSourceColumnsTest {
 
     @Test
     public void unsampledGeneratedColumnIsIgnored() {
-        // A generated column outside the sort key, partition columns and rollup keys never reaches
+        // A generated column outside the sort key and partition columns never reaches
         // the sampler, so an expression the sampler could not evaluate must not decline the load.
         Column payload = new Column("payload", TypeFactory.createVarcharType(64), true);
         Column payloadKey = generatedColumn("payload_key", TypeFactory.createVarcharType(64),
@@ -2098,10 +2082,9 @@ public class InsertSelectSourceColumnsTest {
     }
 
     @Test
-    public void sampledColumnsListsBaseKeyThenPartitionThenRollupKeys() {
-        Assertions.assertEquals(List.of("k", "p", "r1", "r2"),
-                InsertSelectSourceColumns.sampledColumns(List.of(col("k")), List.of(col("p")),
-                                List.of(new SecondaryIndexSpec(7L, List.of(col("r1"), col("r2")))))
+    public void sampledColumnsListsSortKeyThenPartitionColumns() {
+        Assertions.assertEquals(List.of("k1", "k2", "p"),
+                InsertSelectSourceColumns.sampledColumns(List.of(col("k1"), col("k2")), List.of(col("p")))
                         .stream().map(Column::getName).toList());
     }
 

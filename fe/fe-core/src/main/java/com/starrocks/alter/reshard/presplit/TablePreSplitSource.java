@@ -123,26 +123,17 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-<<<<<<< HEAD
-        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
                 insertStmt, selectRelation, target, resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
-=======
-        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
-                insertStmt, selectRelation, target,
-                new InsertSelectSourceColumns.ResolutionContext(resolvedSource.sourceTable(),
-                        resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                        InsertSelectSourceColumns.SchemaPairing.EXACT, context));
+                InsertSelectSourceColumns.SchemaPairing.EXACT, context);
         if (resolved == null) {
             return null;
         }
         // The executor's projections throw stays as the fail-safe for a metadata race between here and sampling.
-        List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         resolved = InsertSelectSourceColumns.admitSampledColumns(resolved, target, sortKeyColumns, partitionColumns,
-                secondaryIndexSpecs, InsertSelectSourceColumns.InputReading.AS_SELECTED, context,
+                InsertSelectSourceColumns.InputReading.AS_SELECTED, context,
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias());
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
         if (resolved == null) {
             return null;
         }

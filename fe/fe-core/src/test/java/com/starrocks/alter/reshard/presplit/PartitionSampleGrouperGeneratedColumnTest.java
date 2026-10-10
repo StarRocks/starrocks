@@ -103,7 +103,7 @@ public class PartitionSampleGrouperGeneratedColumnTest {
 
         List<PartitionSamples> out = PartitionSampleGrouper.groupSpecified(
                 samples(row(1001L, "2025-10-01 00:00:00"), row(1001L, "2025-11-01 00:00:00")),
-                table, connectContext, db.getId(), /*totalFileBytes=*/ 0L, Set.of(), scope);
+                table, connectContext, db.getId(), /*totalFileBytes=*/ 0L, scope);
 
         // The November row belongs to a partition outside the PARTITION(...) list and is dropped.
         Assertions.assertEquals(1, out.size());
@@ -123,7 +123,7 @@ public class PartitionSampleGrouperGeneratedColumnTest {
             List<PartitionSamples> out = PartitionSampleGrouper.group(
                     samples(row(1001L, "2025-11-01 00:00:00"), row(1001L, "2025-11-01 00:00:00"),
                             row(1001L, "2025-12-01 00:00:00"), row(1001L, null)),
-                    table, connectContext, db.getId(), /*totalFileBytes=*/ 0L, Set.of());
+                    table, connectContext, db.getId(), /*totalFileBytes=*/ 0L);
 
             Assertions.assertEquals(List.of("p1001_20251101000000", "p1001_20251201000000"),
                     out.stream().map(PartitionSamples::partitionName).toList());

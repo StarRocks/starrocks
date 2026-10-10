@@ -634,6 +634,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         // resource. Warehouse-id alignment MUST come first: ConnectContext
         // discards the resource on a mismatched warehouse during planning.
         ConnectContext sampleContext = Mockito.mock(ConnectContext.class);
+        SessionVariable sessionVariable = Mockito.mock(SessionVariable.class);
+        Mockito.when(sampleContext.getSessionVariable()).thenReturn(sessionVariable);
         ComputeResource computeResource = Mockito.mock(ComputeResource.class);
         Mockito.when(computeResource.getWarehouseId()).thenReturn(42L);
 
@@ -646,8 +648,8 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         inOrder.verify(sampleContext).setCurrentComputeResource(computeResource);
         inOrder.verify(sampleContext).setNeedQueued(false);
         inOrder.verify(sampleContext).setStartTime();
-        // queryTimeoutSeconds == 0 → no cap applied, session variable untouched.
-        Mockito.verify(sampleContext, Mockito.never()).getSessionVariable();
+        // queryTimeoutSeconds == 0 → no timeout cap applied.
+        Mockito.verify(sessionVariable, Mockito.never()).setQueryTimeoutS(Mockito.anyInt());
     }
 
     @Test

@@ -96,9 +96,8 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         sourceTable = withInferredColumnTypes(insertStmt, filesRelation, sourceTable, selectRelation, where,
-                InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns, secondaryIndexSpecs));
+                InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns));
         if (sourceTable == null) {
             return null;
         }
@@ -116,41 +115,14 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         if (resolved == null) {
             return null;
         }
-<<<<<<< HEAD
-        // ATTRIBUTED: a sampled column the sampler cannot reproduce. The resolver distinguishes
-        // a projected expression from an omitted source mapping, so each gets its own reason.
-        Column unfed = InsertSelectSourceColumns.firstUnfedColumn(sortKeyColumns, resolved);
-        if (unfed == null) {
-            unfed = InsertSelectSourceColumns.firstUnfedColumn(partitionColumns, resolved);
-        }
-        if (unfed != null) {
-            if (resolved.unsupportedProjectionTargets().contains(unfed.getName().toLowerCase())) {
-                PreSplitMetrics.recordEligibilitySkip(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION);
-                LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" has a projection the "
-                        + "sampler cannot reproduce; skipping pre-split", target.getName(), unfed.getName());
-            } else {
-                PreSplitMetrics.recordEligibilitySkip(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN);
-                LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" has no FILES source "
-                        + "column or literal projection; skipping pre-split", target.getName(), unfed.getName());
-            }
-            return null;
-        }
-        // UNATTRIBUTED, deliberately: every column IS sampleable, but an all-literal sort key has one value
-        // for every row, so no cut can separate them. That is a degenerate key, not a missing column --
-        // labelling it SOURCE_MISSING_SAMPLED_COLUMN would send an operator looking for a column that
-        // is not the problem. Only the sort key can still fail here: the partition columns were proven
-        // fed by firstUnfedColumn above, and being fed is all partitionColumnsSampleable asks.
-        if (!InsertSelectSourceColumns.sortKeySampleable(sortKeyColumns, resolved)) {
-=======
         // INSERT binds each SELECT output to a generated column's definition as selected, after column-type
         // push-down may have read a FILES column at a target column's type.
         InsertSelectSourceColumns.InputReading reading = columnTypesMayBePushedDown(insertStmt, sourceTable)
                 ? InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN
                 : InsertSelectSourceColumns.InputReading.AS_SELECTED;
         resolved = InsertSelectSourceColumns.admitSampledColumns(resolved, target, sortKeyColumns, partitionColumns,
-                secondaryIndexSpecs, reading, context, filesRelation.getName(), /*sourceAlias*/ null);
+                reading, context, filesRelation.getName(), /*sourceAlias*/ null);
         if (resolved == null) {
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
             return null;
         }
         Map<String, String> targetToSource = resolved.targetToSource();

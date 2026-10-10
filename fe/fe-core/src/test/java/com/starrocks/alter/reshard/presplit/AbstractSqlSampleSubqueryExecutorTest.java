@@ -121,32 +121,6 @@ class AbstractSqlSampleSubqueryExecutorTest {
         inOrder.verify(sessionVariable).setQueryTimeoutS(137);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * The sample sub-query must read the BASE index, not a sibling rollup. Both async and sync
-     * MV/rollup rewrite must be disabled, and (like the timeout) applied AFTER the warehouse switch that
-     * re-clones the session variable — otherwise a coarser sibling rollup could be sampled once the
-     * table carries rollups, skewing the tablet boundaries.
-     */
-    @Test
-    void materializedViewRewriteDisabledAfterWarehouseSwitchSoItSurvives() throws Exception {
-        ConnectContext context = mock(ConnectContext.class);
-        SessionVariable sessionVariable = mock(SessionVariable.class);
-        when(context.getSessionVariable()).thenReturn(sessionVariable);
-        ComputeResource computeResource = mock(ComputeResource.class);
-        when(computeResource.getWarehouseId()).thenReturn(9L);
-
-        AbstractSqlSampleSubqueryExecutor.configureSampleContext(
-                context, computeResource, /*queryTimeoutSeconds=*/ 0, /*loadTimeZone=*/ null, SampleSessionSemantics.NONE);
-
-        InOrder inOrder = inOrder(context, sessionVariable);
-        inOrder.verify(context).setCurrentWarehouseId(9L);
-        inOrder.verify(sessionVariable).setEnableMaterializedViewRewrite(false);
-        inOrder.verify(sessionVariable).setEnableSyncMaterializedViewRewrite(false);
-    }
-
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     @Test
     void nonPositiveQueryTimeoutLeavesSessionTimeoutUntouched() throws Exception {
         ConnectContext context = mock(ConnectContext.class);
@@ -185,20 +159,7 @@ class AbstractSqlSampleSubqueryExecutorTest {
         inOrder.verify(context).setCurrentComputeResource(computeResource);
         inOrder.verify(sessionVariable).setSqlMode(loadSqlMode);
         inOrder.verify(sessionVariable).setTimeZone("Asia/Shanghai");
-        inOrder.verify(sessionVariable).setEnableMaterializedViewRewrite(false);
-        inOrder.verify(sessionVariable).setEnableSyncMaterializedViewRewrite(false);
         inOrder.verify(sessionVariable).setQueryTimeoutS(137);
-    }
-
-    @Test
-    void anAlterJobSampleKeepsTheSamplerSessionsOwnSettings() throws Exception {
-        // The internal-partition sampler serves alter jobs, which have no load session to carry.
-        PresplitTestSupport.SemanticsRecordingRunner runner = new PresplitTestSupport.SemanticsRecordingRunner();
-
-        new InternalPartitionSampleSubqueryExecutor(runner).execute(partitionRequest("db", "tbl", "p1",
-                List.of("k"), List.of(), List.of(), 0L, List.of(bigintColumn("k")), List.of()));
-
-        Assertions.assertEquals(List.of(SampleSessionSemantics.NONE), runner.received);
     }
 
     // ---------------------------------------------------------------------------
@@ -238,13 +199,8 @@ class AbstractSqlSampleSubqueryExecutorTest {
         StringBuilder capturedSql = new StringBuilder();
         AbstractSqlSampleSubqueryExecutor executor = fixedSpecExecutor(
                 new AbstractSqlSampleSubqueryExecutor.SampleSpec("t", null, totalBytes, mock(ComputeResource.class),
-<<<<<<< HEAD
                         List.of("`k`"), List.of(), List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 0L, false,
-                        scannedBytes, breakdown),
-=======
-                        List.of("`k`"), List.of(), List.of(bigintColumn("k")), List.of(), 0L, false,
                         scannedBytes, breakdown, SampleSessionSemantics.NONE),
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
                 capturedSql);
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
@@ -271,11 +227,8 @@ class AbstractSqlSampleSubqueryExecutorTest {
     void theFilteredInputEstimateCannotBeCombinedWithAFileSubset() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> new AbstractSqlSampleSubqueryExecutor.SampleSpec(
                 "t", "k > 1", 100L, mock(ComputeResource.class), List.of("`k`"), List.of(),
-<<<<<<< HEAD
-                List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 10L, true, 50L, List.of()));
-=======
-                List.of(bigintColumn("k")), List.of(), 10L, true, 50L, List.of(), SampleSessionSemantics.NONE));
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
+                List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 10L, true, 50L, List.of(),
+                SampleSessionSemantics.NONE));
     }
 
     private static AbstractSqlSampleSubqueryExecutor fixedSpecExecutor(

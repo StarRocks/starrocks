@@ -456,18 +456,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         if (loadTimeZone != null) {
             context.getSessionVariable().setTimeZone(loadTimeZone);
         }
-<<<<<<< HEAD
-=======
         sessionSemantics.applyTo(context.getSessionVariable());
-        // Pin the sample scan to the BASE index. setCurrentWarehouseId above re-clones the session
-        // variable, so (like the query_timeout below) disable BOTH async and sync MV/rollup rewrite
-        // AFTER the switch or the disable is dropped. Without this, once the table carries sibling
-        // rollups the sync-MV/rollup rewrite (on by default) could sample a coarser sibling and skew the
-        // tablet boundaries. Mirrors the rewrite-INSERT base pinning in
-        // LakeOnlineRewriteJobBase.runPartitionRewrite.
-        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
-        context.getSessionVariable().setEnableSyncMaterializedViewRewrite(false);
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }

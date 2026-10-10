@@ -143,26 +143,6 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
     }
 
     /**
-     * Projects each rollup's sort key the way the base sort key is projected: by the column's own name,
-     * except a generated column, which is projected as the expression the scan context carries for it.
-     */
-    @Override
-    protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
-        BrokerLoadScanContext context = requireBrokerLoadContext(request);
-        Map<String, String> constants = context.targetToConstantSql();
-        Map<String, String> expressions = context.targetToExpressionSql();
-        if (constants.isEmpty() && expressions.isEmpty()) {
-            return super.secondaryProjectionIdents(request);
-        }
-        Map<String, String> fileColumns = fileColumnsByName(request, constants, expressions);
-        List<String> idents = new ArrayList<>();
-        for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
-            idents.addAll(filesProjections(spec.sortKey(), fileColumns, constants, expressions));
-        }
-        return idents;
-    }
-
-    /**
      * The FILES column behind each directly projected column: the column's own name, since a Broker Load
      * reads a column by the target's name. Empty -- name identity -- unless a generated column is computed:
      * only then does {@link #filesProjections} need every other projected column mapped explicitly.

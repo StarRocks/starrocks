@@ -168,7 +168,6 @@ public final class BrokerLoadPreSplitHook {
         if (fileGroups == null || fileStatuses == null) {
             return;
         }
-<<<<<<< HEAD
         // Table-level eligibility: structural checks shared with the multi-partition
         // coordinator's defensive re-check. Per-partition checks (single physical
         // partition, single base tablet, empty partition) remain with the legacy
@@ -178,65 +177,22 @@ public final class BrokerLoadPreSplitHook {
         if (tableLevelSkip != null) {
             PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
             return;
-=======
-        try (PreSplitProfile.Scope ignored = profile == null
-                ? PreSplitProfile.startAttempt(context, LoadKind.BROKER_LOAD)
-                : PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
-            PreSplitProfile.recordTable(targetTable.getName());
-            // Table-level eligibility: structural checks shared with the multi-partition
-            // coordinator's defensive re-check. Per-partition checks (single physical
-            // partition, single base tablet, empty partition) remain with the legacy
-            // single-partition path; the multi-partition path runs them per-bucket
-            // after pre-create under its own short READ lock.
-            SkipReason tableLevelSkip = PreSplitTargets.findEligibleTable(database, targetTable);
-            if (tableLevelSkip != null) {
-                PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
-                PreSplitProfile.recordOutcome("SKIPPED: " + tableLevelSkip);
-                return;
-            }
-            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(targetTable);
-            List<Column> partitionColumns =
-                    targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn());
-            List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(targetTable);
-            List<Column> sampledColumns =
-                    InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns, secondaryIndexSpecs);
-            InsertSelectSourceColumns.Resolved generated =
-                    resolveGeneratedSampledColumns(targetTable, fileGroups, sampledColumns, context);
-            if (generated == null) {
-                return;
-            }
-            PreSplitPartitionScope partitionScope = partitionScopeOf(targetTable, fileGroups);
-            if (partitionScope == null) {
-                LOG.info("Sample-Based Tablet Pre-Split: Broker Load into table {} names partitions that no single "
-                        + "partition scope describes (temporary and normal partitions mixed, or one was dropped); "
-                        + "skipping pre-split", targetTable.getName());
-                PreSplitProfile.recordOutcome("SKIPPED: UNSUPPORTED_PARTITION_SCOPE");
-                return;
-            }
-            // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
-            // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
-            // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
-            BrokerLoadScanContext scanContext = new BrokerLoadScanContext(
-                    brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone(),
-                    // Copied, not aliased: this is the positional field layout a CSV file group with no
-                    // COLUMNS list inherits, and it must not shift under a later alter.
-                    List.copyOf(targetTable.getBaseSchema()),
-                    generated.targetToConstantSql(), generated.targetToExpressionSql(),
-                    generatedColumnInputs(targetTable, sampledColumns),
-                    // Copied by value now: outside an FE failover this context holds the submitter's own live
-                    // session, the one LoadPlanner reads as well.
-                    SampleSessionSemantics.capture(context.getSessionVariable()));
-            PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
-                    scanContext,
-                    sortKeyColumns,
-                    partitionColumns,
-                    sumFileBytes(fileStatuses),
-                    computeResource,
-                    secondaryIndexSpecs,
-                    preSplitEnabled);
-            PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context,
-                    partitionScope);
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
+        }
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(targetTable);
+        List<Column> partitionColumns =
+                targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn());
+        List<Column> sampledColumns = InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns);
+        InsertSelectSourceColumns.Resolved generated =
+                resolveGeneratedSampledColumns(targetTable, fileGroups, sampledColumns, context);
+        if (generated == null) {
+            return;
+        }
+        PreSplitPartitionScope partitionScope = partitionScopeOf(targetTable, fileGroups);
+        if (partitionScope == null) {
+            LOG.info("Sample-Based Tablet Pre-Split: Broker Load into table {} names partitions that no single "
+                    + "partition scope describes (temporary and normal partitions mixed, or one was dropped); "
+                    + "skipping pre-split", targetTable.getName());
+            return;
         }
         // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
         // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
@@ -245,15 +201,21 @@ public final class BrokerLoadPreSplitHook {
                 brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone(),
                 // Copied, not aliased: this is the positional field layout a CSV file group with no
                 // COLUMNS list inherits, and it must not shift under a later alter.
-                List.copyOf(targetTable.getBaseSchema()));
+                List.copyOf(targetTable.getBaseSchema()),
+                generated.targetToConstantSql(), generated.targetToExpressionSql(),
+                generatedColumnInputs(targetTable, sampledColumns),
+                // Copied by value now: outside an FE failover this context holds the submitter's own live
+                // session, the one LoadPlanner reads as well.
+                SampleSessionSemantics.capture(context.getSessionVariable()));
         PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
                 scanContext,
-                MetaUtils.getRangeDistributionColumns(targetTable),
-                targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
+                sortKeyColumns,
+                partitionColumns,
                 sumFileBytes(fileStatuses),
                 computeResource,
                 preSplitEnabled);
-        PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
+        PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context,
+                partitionScope);
     }
 
     /**

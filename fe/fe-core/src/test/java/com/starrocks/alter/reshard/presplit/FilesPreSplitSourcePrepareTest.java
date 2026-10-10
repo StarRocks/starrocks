@@ -96,24 +96,6 @@ public class FilesPreSplitSourcePrepareTest {
         Assertions.assertEquals(List.of(EXP_ID), prepared.sortKeyColumns());
     }
 
-<<<<<<< HEAD
-=======
-    @Test
-    public void rollupWhoseKeyIsOnlyTheLiteralIsDeclined() {
-        // The base key (exp_id) is sampleable; a rollup keyed only on the literal dt is degenerate
-        // and must decline the whole load.
-        Assertions.assertNull(prepareCustomerStatement(List.of(DT)));
-    }
-
-    @Test
-    public void rollupWhoseKeyMixesTheLiteralWithAFileColumnIsAdmitted() {
-        PreSplitFlow.Prepared prepared = prepareCustomerStatement(List.of(DT, EXP_ID));
-
-        Assertions.assertNotNull(prepared);
-        Assertions.assertEquals(1, prepared.secondaryIndexSpecs().size());
-    }
-
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     /**
      * Runs prepare() on the customer statement against target (exp_id, grp_id, bucket_id, dt DATE),
      * ORDER BY (exp_id), PARTITION BY (dt), with one rollup keyed on {@code rollupSortKey} when it is
@@ -304,7 +286,7 @@ public class FilesPreSplitSourcePrepareTest {
 
         PreSplitFlow.Prepared prepared = prepareOverwriteStatement("exp_id, activity_date",
                 List.of(EXP_ID, ACTIVITY_DATE), ACTIVITY_MONTH, List.of(EXP_ID, ACTIVITY_DATE), /*analyzed*/ false,
-                new PreSplitProfile(), ACTIVITY_MONTH);
+                ACTIVITY_MONTH);
 
         Assertions.assertNotNull(prepared, "a generated partition column over a FILES column must be sampled");
         Assertions.assertEquals(Map.of("activity_date_month", MONTH_SQL),
@@ -316,18 +298,15 @@ public class FilesPreSplitSourcePrepareTest {
     @Test
     public void generatedPartitionColumnWhoseInputTheFileLacksHasItsOwnSkipReason() {
         // The column is computed by the table, not missing from the file: it must not be reported as
-        // source_missing_sampled_column, and the profile must name it.
+        // source_missing_sampled_column.
         long missingBefore = eligibilitySkips(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN);
         long generatedBefore = eligibilitySkips(SkipReason.UNSUPPORTED_GENERATED_COLUMN);
-        PreSplitProfile profile = new PreSplitProfile();
 
         Assertions.assertNull(prepareOverwriteStatement("exp_id", List.of(EXP_ID, ACTIVITY_DATE), ACTIVITY_MONTH,
-                List.of(EXP_ID), /*analyzed*/ false, profile, ACTIVITY_MONTH));
+                List.of(EXP_ID), /*analyzed*/ false, ACTIVITY_MONTH));
 
         Assertions.assertEquals(missingBefore, eligibilitySkips(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN));
         Assertions.assertEquals(generatedBefore + 1L, eligibilitySkips(SkipReason.UNSUPPORTED_GENERATED_COLUMN));
-        Assertions.assertEquals("SKIPPED: UNSUPPORTED_GENERATED_COLUMN (activity_date_month)",
-                profile.toRuntimeProfile().getInfoString("Outcomes"));
     }
 
     @Test
@@ -361,17 +340,14 @@ public class FilesPreSplitSourcePrepareTest {
     public void overwriteChecksTheRetypeAgainstTheFileTypesReadAgain() {
         // The file stores x as a DATETIME; the bound table reports m's type, DATE, against which n would look safe.
         long computedBefore = eligibilitySkips(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION);
-        PreSplitProfile profile = new PreSplitProfile();
         try (MockedConstruction<TableFunctionTable> reRead =
                 reReadFilesSchema(List.of(EXP_ID, new Column("x", DateType.DATETIME)), List.of())) {
             Assertions.assertNull(prepareOverwriteStatement(COMPUTED_OVER_RETYPED, List.of(EXP_ID, N, M), N,
-                    List.of(EXP_ID, new Column("x", DateType.DATE)), /*analyzed*/ true, profile));
+                    List.of(EXP_ID, new Column("x", DateType.DATE)), /*analyzed*/ true));
             Assertions.assertEquals(1, reRead.constructed().size());
         }
 
         Assertions.assertEquals(computedBefore + 1L, eligibilitySkips(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION));
-        Assertions.assertEquals("SKIPPED: UNSUPPORTED_SAMPLED_PROJECTION (n)",
-                profile.toRuntimeProfile().getInfoString("Outcomes"));
     }
 
     @Test
@@ -382,7 +358,7 @@ public class FilesPreSplitSourcePrepareTest {
         try (MockedConstruction<TableFunctionTable> reRead = reReadFilesSchema(List.of(EXP_ID, TS),
                 List.of(PresplitTestSupport.brokerFileStatus("s3://b/x.parquet", 1024L)))) {
             PreSplitFlow.Prepared prepared = prepareOverwriteStatement(COMPUTED_OVER_UNCHANGED, List.of(EXP_ID, TS, DT),
-                    DT, List.of(EXP_ID, TS), /*analyzed*/ true, new PreSplitProfile());
+                    DT, List.of(EXP_ID, TS), /*analyzed*/ true);
 
             Assertions.assertNotNull(prepared, "a computed key over an unchanged column must still be sampled");
             InsertFromFilesScanContext scanContext = (InsertFromFilesScanContext) prepared.scanContext();
@@ -401,7 +377,7 @@ public class FilesPreSplitSourcePrepareTest {
                     throw new DdlException("simulated file listing failure");
                 })) {
             Assertions.assertNull(prepareOverwriteStatement(COMPUTED_OVER_UNCHANGED, List.of(EXP_ID, TS, DT), DT,
-                    List.of(EXP_ID, TS), /*analyzed*/ true, new PreSplitProfile()));
+                    List.of(EXP_ID, TS), /*analyzed*/ true));
         }
         Assertions.assertEquals(computedBefore, eligibilitySkips(SkipReason.UNSUPPORTED_SAMPLED_PROJECTION));
     }
@@ -411,7 +387,7 @@ public class FilesPreSplitSourcePrepareTest {
         // Without a push-down function the hook ran before analysis, so the bound table carries the file's types.
         try (MockedConstruction<TableFunctionTable> reRead = reReadFilesSchema(List.of(EXP_ID, TS), List.of())) {
             Assertions.assertNotNull(prepareOverwriteStatement(COMPUTED_OVER_UNCHANGED, List.of(EXP_ID, TS, DT), DT,
-                    List.of(EXP_ID, TS), /*analyzed*/ false, new PreSplitProfile()));
+                    List.of(EXP_ID, TS), /*analyzed*/ false));
             Assertions.assertTrue(reRead.constructed().isEmpty());
         }
     }
@@ -423,8 +399,7 @@ public class FilesPreSplitSourcePrepareTest {
         try (MockedConstruction<TableFunctionTable> reRead = reReadFilesSchema(List.of(EXP_ID, TS, BUCKET_ID),
                 List.of())) {
             PreSplitFlow.Prepared prepared = prepareOverwriteStatement("exp_id, ts", "bucket_id > 10",
-                    /*analyzeWhere*/ true, List.of(EXP_ID, TS), TS, List.of(EXP_ID, TS, BUCKET_ID), /*analyzed*/ true,
-                    new PreSplitProfile());
+                    /*analyzeWhere*/ true, List.of(EXP_ID, TS), TS, List.of(EXP_ID, TS, BUCKET_ID), /*analyzed*/ true);
 
             Assertions.assertNotNull(prepared);
             Assertions.assertTrue(reRead.constructed().isEmpty());
@@ -442,7 +417,7 @@ public class FilesPreSplitSourcePrepareTest {
                 List.of(PresplitTestSupport.brokerFileStatus("s3://b/x.parquet", 1024L)))) {
             PreSplitFlow.Prepared prepared = prepareOverwriteStatement("exp_id, activity_date",
                     List.of(EXP_ID, ACTIVITY_DATE), ACTIVITY_MONTH, List.of(EXP_ID, ACTIVITY_DATE), /*analyzed*/ true,
-                    new PreSplitProfile(), ACTIVITY_MONTH);
+                    ACTIVITY_MONTH);
 
             Assertions.assertNotNull(prepared);
             Assertions.assertEquals(1, reRead.constructed().size());
@@ -473,8 +448,7 @@ public class FilesPreSplitSourcePrepareTest {
         try (MockedConstruction<TableFunctionTable> reRead = reReadFilesSchema(List.of(EXP_ID, TS, BUCKET_ID),
                 List.of(PresplitTestSupport.brokerFileStatus("s3://b/x.parquet", 1024L)))) {
             PreSplitFlow.Prepared prepared = prepareOverwriteStatement("exp_id, ts", "abs(bucket_id) > 10",
-                    /*analyzeWhere*/ false, List.of(EXP_ID, TS), TS, List.of(EXP_ID, TS), /*analyzed*/ true,
-                    new PreSplitProfile());
+                    /*analyzeWhere*/ false, List.of(EXP_ID, TS), TS, List.of(EXP_ID, TS), /*analyzed*/ true);
 
             Assertions.assertNotNull(prepared, "the predicate analyzes against the schema read again");
             Assertions.assertEquals(1, reRead.constructed().size());
@@ -492,7 +466,7 @@ public class FilesPreSplitSourcePrepareTest {
                     List.of(PresplitTestSupport.brokerFileStatus("s3://b/x.parquet", 1024L)))) {
                 PreSplitFlow.Prepared prepared = prepareOverwriteStatement("exp_id, ts", where,
                         /*analyzeWhere*/ true, List.of(EXP_ID, TS), TS, List.of(EXP_ID, TS, PAYLOAD),
-                        /*analyzed*/ true, new PreSplitProfile());
+                        /*analyzed*/ true);
 
                 Assertions.assertNotNull(prepared, where);
                 Assertions.assertNotNull(((InsertFromFilesScanContext) prepared.scanContext()).wherePredicateSql(),
@@ -529,16 +503,16 @@ public class FilesPreSplitSourcePrepareTest {
     }
 
     /**
-     * prepare() in a profile attempt on {@code INSERT INTO t BY NAME SELECT <select> FROM FILES(...)} into
+     * prepare() on {@code INSERT INTO t BY NAME SELECT <select> FROM FILES(...)} into
      * {@code targetColumns} plus {@code generated}, ORDER BY (exp_id), PARTITION BY ({@code partitionColumn}), whose
      * bound FILES table reports {@code boundSchema}. {@code analyzed} adds a no-op push-down function, as on INSERT
      * OVERWRITE.
      */
     private static PreSplitFlow.Prepared prepareOverwriteStatement(
             String select, List<Column> targetColumns, Column partitionColumn, List<Column> boundSchema,
-            boolean analyzed, PreSplitProfile profile, Column... generated) {
+            boolean analyzed, Column... generated) {
         return prepareOverwriteStatement(select, /*where*/ null, /*analyzeWhere*/ false, targetColumns,
-                partitionColumn, boundSchema, analyzed, profile, generated);
+                partitionColumn, boundSchema, analyzed, generated);
     }
 
     /**
@@ -547,7 +521,7 @@ public class FilesPreSplitSourcePrepareTest {
      */
     private static PreSplitFlow.Prepared prepareOverwriteStatement(
             String select, String where, boolean analyzeWhere, List<Column> targetColumns, Column partitionColumn,
-            List<Column> boundSchema, boolean analyzed, PreSplitProfile profile, Column... generated) {
+            List<Column> boundSchema, boolean analyzed, Column... generated) {
         InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement("INSERT INTO t BY NAME SELECT " + select
                 + " FROM FILES(\"path\" = \"s3://b/*\", \"format\" = \"parquet\")"
                 + (where == null ? "" : " WHERE " + where), SqlModeHelper.MODE_DEFAULT);
@@ -591,8 +565,7 @@ public class FilesPreSplitSourcePrepareTest {
         Config.files_enable_insert_push_down_column_type = true;
         MetricRepo.hasInit = true;
         try (MockedConstruction<QueryAnalyzer> ignoredAnalyzer = Mockito.mockConstruction(QueryAnalyzer.class);
-                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
-                PreSplitProfile.Scope ignoredAttempt = PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target)).thenReturn(List.of(EXP_ID));
             return new FilesPreSplitSource().prepare(stmt, selectRelation, target, /*database*/ null, context);
         } finally {

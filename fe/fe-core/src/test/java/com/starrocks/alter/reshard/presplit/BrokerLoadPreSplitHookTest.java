@@ -14,11 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Column;
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -55,17 +51,11 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.MONTH_SQL
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.activityMonth;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
-<<<<<<< HEAD
-import static org.mockito.Mockito.mock;
-=======
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 import static org.mockito.Mockito.when;
 
 /**
@@ -496,8 +486,6 @@ public class BrokerLoadPreSplitHookTest {
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target)).thenReturn(List.of(ACCOUNT_ID));
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, BASE_INDEX_META_ID))
-                    .thenReturn(List.of(ACCOUNT_ID));
 
             invokeHook(context, target, fileGroups, List.of(List.<TBrokerFileStatus>of()), /*sessionPreSplitEnabled*/ true);
 
@@ -557,22 +545,19 @@ public class BrokerLoadPreSplitHookTest {
         when(target.getPartitionInfo().isPartitioned()).thenReturn(true);
         partition(target, 1L, "p1", false);
         partition(target, 9L, "tp1", true);
-        PreSplitProfile profile = new PreSplitProfile();
+        List<BrokerFileGroup> fileGroups = List.of(fileGroupNamingPartitions(1L), fileGroupNamingPartitions(9L));
+        Assertions.assertNull(BrokerLoadPreSplitHook.partitionScopeOf(target, fileGroups));
 
         try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
                 MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target)).thenReturn(List.of(ACCOUNT_ID));
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(target, BASE_INDEX_META_ID))
-                    .thenReturn(List.of(ACCOUNT_ID));
 
             BrokerLoadPreSplitHook.maybeRunPreSplit(mockConnectContextWithSessionPreSplit(true), mock(Database.class),
-                    target, mock(BrokerDesc.class), List.of(fileGroupNamingPartitions(1L), fileGroupNamingPartitions(9L)),
+                    target, mock(BrokerDesc.class), fileGroups,
                     List.of(List.<TBrokerFileStatus>of(), List.<TBrokerFileStatus>of()), mock(ComputeResource.class),
-                    () -> false, profile, /*sessionPreSplitEnabled*/ null);
+                    () -> false, /*sessionPreSplitEnabled*/ null);
 
             flow.verify(() -> PreSplitFlow.dispatch(any(), any(), any(), any(), any(), any(), any()), never());
-            Assertions.assertEquals("SKIPPED: UNSUPPORTED_PARTITION_SCOPE",
-                    profile.toRuntimeProfile().getInfoString("Outcomes"));
         }
     }
 

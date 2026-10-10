@@ -366,26 +366,6 @@ class InsertFromTableSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Builds a request whose context map covers every (lower-cased target -> source) pair
-     * in {@code targetToSource}, with the given base sort key and rollup specs. Base sort-key
-     * columns and each rollup spec carry TARGET columns; the executor remaps to source names.
-     */
-    private static SampleRequest rollupRequest(
-            OlapTable sourceTable,
-            Map<String, String> targetToSource,
-            List<Column> baseSortKeyColumns,
-            List<SecondaryIndexSpec> rollups) {
-        ComputeResource computeResource = Mockito.mock(ComputeResource.class);
-        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                sourceTable, "`db`.`src`", targetToSource, /*where=*/ null, computeResource);
-        return new SampleRequest(
-                scanContext, baseSortKeyColumns, rollups, List.of(),
-                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
-    }
-
     @Test
     void projectsAComputedPartitionColumnAsTheExpressionCastToTheColumnType() throws Exception {
         // A generated partition column has no source column: the sample evaluates its definition over
@@ -413,5 +393,4 @@ class InsertFromTableSampleSubqueryExecutorTest {
         List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals("2025-11-01 00:00:00", rows.get(0).partitionSourceTuple().get(1).getStringValue());
     }
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
 }

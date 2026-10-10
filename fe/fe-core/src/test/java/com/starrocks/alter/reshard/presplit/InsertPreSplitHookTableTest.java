@@ -99,10 +99,6 @@ import static org.mockito.Mockito.when;
  */
 public class InsertPreSplitHookTableTest {
 
-<<<<<<< HEAD
-=======
-    private static final long BASE_INDEX_META_ID = 10L;
-
     private static final Column GEN_K = bigintColumn("k");
     private static final Column GEN_V = bigintColumn("v");
     private static final Column GEN_DT = new Column("dt", DateType.DATETIME, true);
@@ -121,7 +117,6 @@ public class InsertPreSplitHookTableTest {
     private static final Expr WHERE_FOLDED_DECIMAL =
             SqlParser.parseSqlToExpr("v < CAST(concat('1', '.5') AS DECIMAL(10, 1))", SqlModeHelper.MODE_DEFAULT);
 
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     private boolean savedConfigInsertFromTable;
 
     @BeforeEach
@@ -1046,43 +1041,6 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void prepareBuildsSecondaryIndexSpecsForRollup() throws Exception {
-        // A range target carrying a rollup: prepare must emit one SecondaryIndexSpec per
-        // visible rollup, carrying that rollup's TARGET sort-key columns (the remap to
-        // source names happens later, in the executor, via the scan-context map).
-        try (SourceFixture fixture = sourceFixture()) {
-            fixture.withVisibleRollup(/*rollupMetaId=*/ 202L, List.of("k"));
-
-            PreSplitFlow.Prepared prepared = fixture.prepare();
-
-            Assertions.assertNotNull(prepared, "prepare must build a Prepared for the rollup target");
-            Assertions.assertEquals(1, prepared.secondaryIndexSpecs().size(),
-                    "one visible rollup -> one secondary index spec");
-            SecondaryIndexSpec spec = prepared.secondaryIndexSpecs().get(0);
-            Assertions.assertEquals(202L, spec.indexMetaId());
-            Assertions.assertEquals(List.of("k"),
-                    spec.sortKey().stream().map(Column::getName).collect(java.util.stream.Collectors.toList()),
-                    "spec carries the rollup's TARGET sort-key columns");
-        }
-    }
-
-    @Test
-    public void prepareSkipsWhenRollupSortKeyUnmappable() throws Exception {
-        // A rollup whose sort-key column has no source mapping (e.g. a range DUP rollup whose
-        // ORDER BY promotes a generated column -- absent from the non-generated base-schema map)
-        // must skip pre-split cleanly (prepare returns null), not build a spec that later fails
-        // the sample. Here "g" is not among the fixture's non-generated base columns {k, v}.
-        try (SourceFixture fixture = sourceFixture()) {
-            fixture.withVisibleRollup(/*rollupMetaId=*/ 203L, List.of("g"));
-
-            Assertions.assertNull(fixture.prepare(),
-                    "a rollup sort-key column with no source mapping must skip pre-split");
-        }
-    }
-
-    @Test
     public void prepareComputesAGeneratedPartitionColumnFromTheSourceColumnItReads() throws Exception {
         try (SourceFixture fixture = sourceFixture()) {
             fixture.withGeneratedPartitionColumn();
@@ -1099,7 +1057,7 @@ public class InsertPreSplitHookTableTest {
     @Test
     public void prepareDeclinesAGeneratedPartitionColumnWhoseInputTheColumnListOmits() throws Exception {
         // INSERT INTO t (k, v) SELECT k, v FROM src: dt is defaulted, so dt_month cannot be sampled. The
-        // skip must name the generated column in the metric, the log and the profile.
+        // skip must name the generated column in the metric and the log.
         try (SourceFixture fixture = sourceFixture()) {
             fixture.withGeneratedPartitionColumn();
             SelectRelation selectRelation =
@@ -1107,11 +1065,10 @@ public class InsertPreSplitHookTableTest {
             SelectList projection = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
             when(selectRelation.getSelectList()).thenReturn(projection);
             when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("k", "v"));
-            PreSplitProfile profile = new PreSplitProfile();
 
             boolean savedHasInit = MetricRepo.hasInit;
             MetricRepo.hasInit = true;
-            try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_TABLE)) {
+            try {
                 String reason = SkipReason.UNSUPPORTED_GENERATED_COLUMN.name().toLowerCase();
                 long before = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(reason).getValue();
 
@@ -1122,8 +1079,6 @@ public class InsertPreSplitHookTableTest {
             } finally {
                 MetricRepo.hasInit = savedHasInit;
             }
-            Assertions.assertEquals("SKIPPED: UNSUPPORTED_GENERATED_COLUMN (dt_month)",
-                    profile.toRuntimeProfile().getInfoString("Outcomes"));
         }
     }
 
@@ -1149,7 +1104,6 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
     public void prepareSkipsTemporaryTableSource() throws Exception {
         // The sampler runs as ROOT in a fresh statistics context that cannot see the user's
         // session temporary tables, so a temp-table source would be sampled as the shadowed
@@ -1496,26 +1450,6 @@ public class InsertPreSplitHookTableTest {
         }
 
         /**
-<<<<<<< HEAD
-=======
-         * Adds one visible rollup ({@code rollupMetaId}) with the given sort-key columns to
-         * the target's visible-index set, alongside the base index, so prepare builds a
-         * secondary index spec for it.
-         */
-        private void withVisibleRollup(long rollupMetaId, List<String> rollupSortKeyColumnNames) {
-            com.starrocks.catalog.MaterializedIndexMeta baseMeta =
-                    mock(com.starrocks.catalog.MaterializedIndexMeta.class);
-            when(baseMeta.getIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
-            com.starrocks.catalog.MaterializedIndexMeta rollupMeta =
-                    mock(com.starrocks.catalog.MaterializedIndexMeta.class);
-            when(rollupMeta.getIndexMetaId()).thenReturn(rollupMetaId);
-            when(targetTable.getVisibleIndexMetas()).thenReturn(List.of(baseMeta, rollupMeta));
-            when(targetTable.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
-            metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(targetTable), eq(rollupMetaId)))
-                    .thenReturn(columnsOf(rollupSortKeyColumnNames));
-        }
-
-        /**
          * Target (k, v, dt DATETIME) plus dt_month AS date_trunc('month', dt), PARTITION BY (dt_month), from source
          * (k, v, dt DATETIME). The columns are built at class load: parsing needs the GlobalStateMgr this fixture mocks.
          */
@@ -1527,7 +1461,6 @@ public class InsertPreSplitHookTableTest {
         }
 
         /**
->>>>>>> e982e19 ([BugFix] Pre-split loads whose partition or sort-key column is a generated column (#80390))
          * Re-points the source resolution so the source table resolves to the SAME
          * instance as the target (INSERT INTO t SELECT * FROM t), stubbing the
          * source-side accessors prepare reads on the target.

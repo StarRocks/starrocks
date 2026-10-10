@@ -1123,10 +1123,10 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
     /** A sample of one parquet file for the generated-column target, whose scan context carries no base schema. */
     private static SampleRequest generatedRequest(BrokerFileGroup fileGroup, List<Column> sortKey,
-                                                  List<SecondaryIndexSpec> rollups, List<Column> partitionColumns) {
+                                                  List<Column> partitionColumns) {
         return new SampleRequest(generatedColumnScanContext(List.of(fileGroup),
                 List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))), List.of()),
-                sortKey, rollups, partitionColumns, /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+                sortKey, partitionColumns, /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
     }
 
     private static StringBuilder runCapturingSql(SampleRequest request) throws Exception {
@@ -1155,16 +1155,6 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
-    void generatedRollupSortKeyIsProjectedAsItsExpression() throws Exception {
-        StringBuilder sql = runCapturingSql(generatedRequest(mockFileGroup("parquet"), List.of(ACCOUNT_ID),
-                List.of(new SecondaryIndexSpec(/*indexMetaId=*/ 1001L, List.of(ACTIVITY_MONTH, ACCOUNT_ID))), List.of()));
-
-        Assertions.assertTrue(sql.toString().startsWith(
-                "SELECT /*+ SET_VAR(time_zone='UTC') */ `account_id`, CAST(" + MONTH_SQL + " AS datetime), `account_id` "
-                        + "FROM FILES("), sql.toString());
-    }
-
-    @Test
     void csvSchemaDeclaresTheColumnsAGeneratedColumnReads() throws Exception {
         // No COLUMNS list: the file's fields are the non-generated base columns in order, and activity_date
         // -- read by the generated partition column -- must be declared with its own type.
@@ -1186,8 +1176,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         Mockito.when(fileGroup.getColumnExprList())
                 .thenReturn(List.of(identityColumn("account_id"), identityColumn("activity_date")));
 
-        StringBuilder sql = runCapturingSql(generatedRequest(fileGroup, List.of(ACTIVITY_MONTH, ACCOUNT_ID), List.of(),
-                List.of()));
+        StringBuilder sql = runCapturingSql(generatedRequest(fileGroup, List.of(ACTIVITY_MONTH, ACCOUNT_ID), List.of()));
 
         Assertions.assertTrue(sql.toString().startsWith(
                 "SELECT /*+ SET_VAR(time_zone='UTC') */ CAST(" + MONTH_SQL + " AS datetime), `account_id` FROM FILES("),
@@ -1202,7 +1191,7 @@ class BrokerLoadSampleSubqueryExecutorTest {
         Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(identityColumn("account_id"),
                 identityColumn("activity_date"), identityColumn("tenant_id")));
 
-        StringBuilder sql = runCapturingSql(generatedRequest(fileGroup, List.of(ACCOUNT_ID), List.of(),
+        StringBuilder sql = runCapturingSql(generatedRequest(fileGroup, List.of(ACCOUNT_ID),
                 List.of(TENANT_ID, ACTIVITY_MONTH)));
 
         Assertions.assertTrue(sql.toString().startsWith(
