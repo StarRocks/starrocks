@@ -18,8 +18,15 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -88,5 +95,39 @@ public class MaterializedViewExceptionsTest {
         assertTrue(MaterializedViewExceptions.inactiveReasonForBreakingFailure(
                         new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
                 .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
+    }
+
+    @Test
+    public void testEveryBreakingReasonIsSortedForForceRefresh() throws Exception {
+        Set<String> sorted = MaterializedViewExceptions.BREAKING_REASON_RECOVERED_BY_FORCE.keySet();
+        Set<String> produced = new HashSet<>();
+        List<String> messages = new ArrayList<>(List.of("a failure carrying no marker"));
+        for (Field field : MaterializedViewExceptions.class.getFields()) {
+            if (Modifier.isStatic(field.getModifiers()) && field.getType() == String.class
+                    && field.getName().endsWith("_MARKER")) {
+                messages.add((String) field.get(null));
+            }
+        }
+        for (String message : messages) {
+            String reason = MaterializedViewExceptions.inactiveReasonForBreakingFailure(
+                    new RuntimeException(message), "mv1");
+            List<String> matched = sorted.stream().filter(reason::startsWith).toList();
+            assertEquals(1, matched.size(), "decide whether REFRESH ... FORCE recovers a view inactive for: " + reason);
+            produced.add(matched.get(0));
+        }
+        assertEquals(sorted, produced);
+    }
+
+    @Test
+    public void testForceRefreshRecoversOnlyABrokenOrUnreachableBaseline() {
+        assertTrue(MaterializedViewExceptions.isRecoveredByForceRefresh(
+                MaterializedViewExceptions.inactiveReasonForIncrementalBreaking("mv1")));
+        assertTrue(MaterializedViewExceptions.isRecoveredByForceRefresh(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE + "mv1"));
+        assertFalse(MaterializedViewExceptions.isRecoveredByForceRefresh(
+                MaterializedViewExceptions.INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH + "mv1"));
+        assertFalse(MaterializedViewExceptions.isRecoveredByForceRefresh(
+                MaterializedViewExceptions.inactiveReasonForConsecutiveFailures("mv1")));
+        assertFalse(MaterializedViewExceptions.isRecoveredByForceRefresh(null));
     }
 }

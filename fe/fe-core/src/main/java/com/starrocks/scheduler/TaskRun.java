@@ -478,6 +478,9 @@ public class TaskRun implements Comparable<TaskRun> {
                     throw e;
                 }
             }
+            if (processor instanceof MVTaskRunProcessor mvProcessor) {
+                mvProcessor.restoreInactiveIfNotRebuilt();
+            }
             if (Constants.TaskSource.MV.equals(task.getSource()) && Config.max_task_consecutive_fail_count > 0 &&
                     task.getConsecutiveFailCount() >= Config.max_task_consecutive_fail_count) {
                 LOG.warn("Task {} has failed {} times continuously, so we disable it",
