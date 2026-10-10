@@ -205,13 +205,24 @@ struct H3Point {
 };
 
 StatusOr<H3Point> h3_parse_point(Slice wkb) {
-    // Keep structural validation independent of producer metadata. For an XY
-    // POINT it also guarantees both coordinates exist at these fixed offsets.
-    ASSIGN_OR_RETURN(const auto info, inspect_geo_wkb(wkb));
-    if (info.dimension != GEO_DIMENSION_XY || info.geometry_type != 1) {
-        return Status::InvalidArgument("H3_FromGeo requires XY POINT");
+    // An XY POINT has a fixed-size header and two doubles. Validate that
+    // complete structure directly, without decoding it twice via the generic
+    // recursive inspector. Producer validation metadata is never trusted.
+    constexpr size_t kPointWkbSize = 1 + sizeof(uint32_t) + 2 * sizeof(double);
+    const bool little_endian = wkb.size != 0 && wkb.data[0] == 1;
+    uint32_t type = 0;
+    if (wkb.size == kPointWkbSize && (little_endian || wkb.data[0] == 0)) {
+        std::memcpy(&type, wkb.data + 1, sizeof(type));
+        if (little_endian != (std::endian::native == std::endian::little)) type = std::byteswap(type);
     }
-    const bool little_endian = wkb.data[0] == 1;
+    if (type != 1) {
+        // Keep the existing diagnostics and limits for malformed or unsupported
+        // payloads, including dimensional/SRID flags and trailing bytes.
+        ASSIGN_OR_RETURN(const auto info, inspect_geo_wkb(wkb));
+        if (info.dimension != GEO_DIMENSION_XY || info.geometry_type != 1) {
+            return Status::InvalidArgument("H3_FromGeo requires XY POINT");
+        }
+    }
     const auto read_coordinate = [&](size_t offset) {
         uint64_t bits;
         std::memcpy(&bits, wkb.data + offset, sizeof(bits));
