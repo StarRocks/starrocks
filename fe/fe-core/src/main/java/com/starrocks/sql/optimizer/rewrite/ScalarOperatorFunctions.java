@@ -1431,6 +1431,14 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createLargeInt(first.getLargeInt().remainder(second.getLargeInt()));
     }
 
+    @ConstantFunction(name = "mod", argTypes = {DOUBLE, DOUBLE}, returnType = DOUBLE)
+    public static ConstantOperator modDouble(ConstantOperator first, ConstantOperator second) {
+        if (second.getDouble() == 0.0) {
+            return handleDivisionByZero(FloatType.DOUBLE);
+        }
+        return ConstantOperator.createDouble(first.getDouble() % second.getDouble());
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "mod", argTypes = {DECIMALV2, DECIMALV2}, returnType = DECIMALV2),
             @ConstantFunction(name = "mod", argTypes = {DECIMAL32, DECIMAL32}, returnType = DECIMAL32),
