@@ -193,9 +193,6 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
 
     // 4. Global channel: publish MinMax filters of the range candidates to
     // remote consumers.
-    for (auto* rf_desc : _rf_descs) {
-        rf_desc->set_is_pipeline(true);
-    }
     RETURN_IF_ERROR(publish_global_range_filters(state, candidates));
     return Status::OK();
 }
@@ -256,6 +253,8 @@ Status NLJoinContext::finish_one_right_sinker(int32_t sinker_id, RuntimeState* s
             _build_chunks = _build_stream_builder.build();
             RETURN_IF_ERROR(_init_runtime_filter(state));
         } else {
+            RETURN_IF_ERROR(
+                    publish_global_range_filters(state, make_range_filter_candidates(_rf_descs, _rf_conjuncts_ctx)));
             _notify_runtime_filter_collector(state);
         }
 

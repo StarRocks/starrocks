@@ -243,14 +243,28 @@ with probe as (
 )
 select count(*) from probe p join [broadcast] nl_grf_build_big_${uuid0} b on p.c_int < b.c_int + 1;
 
+-- Force a real NLJoin build spill. Only CROSS JOIN selects the spillable NLJoin operator
+-- (see CrossJoinNode::decompose_to_pipeline); the disabled CBO rules below keep this a CROSS
+-- JOIN instead of rewriting the ON predicate into an INNER JOIN, so the spill path is covered.
 set enable_spill = true;
 set spill_mode = "force";
+set pipeline_dop = 2;
+set spillable_operator_mask = 16;
+set spill_operator_min_bytes = 0;
+set spill_mem_table_size = 4096;
+set cbo_disabled_rules = "TF_PUSH_DOWN_JOIN_CLAUSE,TF_PUSH_DOWN_PREDICATE_JOIN";
 
 with probe as (
     select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
 )
-select count(*) from probe p join [broadcast] nl_grf_build_big_${uuid0} b on p.c_int > b.c_int;
+select count(*) from probe x cross join [broadcast] nl_grf_build_big_${uuid0} b on x.c_int > b.c_int
+where x.c_int > b.c_int;
 
+set cbo_disabled_rules = "";
+set spillable_operator_mask = -1;
+set spill_operator_min_bytes = 52428800;
+set spill_mem_table_size = 104857600;
+set pipeline_dop = 0;
 set enable_spill = false;
 set spill_mode = "auto";
 
@@ -290,3 +304,43 @@ with probe as (
     select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
 )
 select count(*) from probe p join nl_grf_build_all_null_${uuid0} b on p.c_int > b.c_int;
+
+-- A build-side expression that can fail (division by zero) must not abort the query
+-- when the probe side never reaches the join; when the probe is non-empty the
+-- expression is genuinely evaluated and the failure must still surface.
+set enable_global_runtime_filter = true;
+set sql_mode = 'ERROR_FOR_DIVISION_BY_ZERO';
+
+-- empty probe: folding the range boundary evaluates the build expression, but the
+-- failure is tolerated and the join itself never runs -> 0 rows, no error
+select count(*) from
+    (select * from nl_grf_probe_${uuid0} where c_int > 1000000) p
+    join [broadcast] nl_grf_build_multi_${uuid0} b on p.c_double > b.c_double / (b.c_double - 10);
+
+-- non-empty probe: the join evaluates the erroring expression -> still reports the error
+with probe as (
+    select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
+)
+select count(*) from probe p join [broadcast] nl_grf_build_multi_${uuid0} b on p.c_double > b.c_double / (b.c_double - 10);
+
+-- A later build chunk fails; the other RF must still filter out the probe rows.
+set pipeline_dop = 1;
+with probe as (
+    select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
+)
+select count(*) from probe p
+join [broadcast] (select c_int from nl_grf_build_big_${uuid0} order by c_int limit 10000) b
+on p.c_double > 1.0 / (b.c_int - 9999)
+and p.c_double > b.c_int + 1000000.0;
+set pipeline_dop = 0;
+
+set sql_mode = '';
+
+drop table nl_grf_probe_${uuid0};
+drop table nl_grf_dim_${uuid0};
+drop table nl_grf_build_multi_${uuid0};
+drop table nl_grf_build_one_${uuid0};
+drop table nl_grf_build_null_mixed_${uuid0};
+drop table nl_grf_build_all_null_${uuid0};
+drop table nl_grf_build_empty_${uuid0};
+drop table nl_grf_build_big_${uuid0};

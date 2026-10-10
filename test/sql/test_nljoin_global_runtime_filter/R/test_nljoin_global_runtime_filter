@@ -317,12 +317,43 @@ set enable_spill = true;
 set spill_mode = "force";
 -- result:
 -- !result
+set pipeline_dop = 2;
+-- result:
+-- !result
+set spillable_operator_mask = 16;
+-- result:
+-- !result
+set spill_operator_min_bytes = 0;
+-- result:
+-- !result
+set spill_mem_table_size = 4096;
+-- result:
+-- !result
+set cbo_disabled_rules = "TF_PUSH_DOWN_JOIN_CLAUSE,TF_PUSH_DOWN_PREDICATE_JOIN";
+-- result:
+-- !result
 with probe as (
     select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
 )
-select count(*) from probe p join [broadcast] nl_grf_build_big_${uuid0} b on p.c_int > b.c_int;
+select count(*) from probe x cross join [broadcast] nl_grf_build_big_${uuid0} b on x.c_int > b.c_int
+where x.c_int > b.c_int;
 -- result:
 190
+-- !result
+set cbo_disabled_rules = "";
+-- result:
+-- !result
+set spillable_operator_mask = -1;
+-- result:
+-- !result
+set spill_operator_min_bytes = 52428800;
+-- result:
+-- !result
+set spill_mem_table_size = 104857600;
+-- result:
+-- !result
+set pipeline_dop = 0;
+-- result:
 -- !result
 set enable_spill = false;
 -- result:
@@ -381,4 +412,66 @@ with probe as (
 select count(*) from probe p join nl_grf_build_all_null_${uuid0} b on p.c_int > b.c_int;
 -- result:
 0
+-- !result
+set enable_global_runtime_filter = true;
+-- result:
+-- !result
+set sql_mode = 'ERROR_FOR_DIVISION_BY_ZERO';
+-- result:
+-- !result
+select count(*) from
+    (select * from nl_grf_probe_${uuid0} where c_int > 1000000) p
+    join [broadcast] nl_grf_build_multi_${uuid0} b on p.c_double > b.c_double / (b.c_double - 10);
+-- result:
+0
+-- !result
+with probe as (
+    select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
+)
+select count(*) from probe p join [broadcast] nl_grf_build_multi_${uuid0} b on p.c_double > b.c_double / (b.c_double - 10);
+-- result:
+[REGEX].*Division by zero.*
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+with probe as (
+    select p.* from nl_grf_probe_${uuid0} p join [shuffle] nl_grf_dim_${uuid0} d on p.c_int = d.c_int
+)
+select count(*) from probe p
+join [broadcast] (select c_int from nl_grf_build_big_${uuid0} order by c_int limit 10000) b
+on p.c_double > 1.0 / (b.c_int - 9999)
+and p.c_double > b.c_int + 1000000.0;
+-- result:
+0
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+drop table nl_grf_probe_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_dim_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_multi_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_one_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_null_mixed_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_all_null_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_empty_${uuid0};
+-- result:
+-- !result
+drop table nl_grf_build_big_${uuid0};
+-- result:
 -- !result

@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "column/binary_column.h"
-#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/decimalv3_column.h"
@@ -224,6 +223,46 @@ TEST(NLJoinRuntimeFilterTest, MinMaxFilterSerdeRoundTrip) {
     ctx.use_merged_selection = false;
     restored->get_min_max_filter()->evaluate(probe.get(), &ctx);
     expect_filter_eq(ctx.selection, {0, 1, 1});
+}
+
+TEST(NLJoinRuntimeFilterTest, RangeFiltersKeepDecimal256AndInfinity) {
+    MinMaxRuntimeFilter<TYPE_DECIMAL256> decimal_accumulator;
+    decimal_accumulator.insert(int256_t{10});
+    decimal_accumulator.insert(int256_t{-5});
+    EXPECT_TRUE(decimal_accumulator.evaluate_min_max(int256_t{5}));
+    EXPECT_FALSE(decimal_accumulator.evaluate_min_max(int256_t{11}));
+
+    ObjectPool pool;
+    auto* decimal =
+            MinMaxRuntimeFilter<TYPE_DECIMAL256>::create_with_range<true>(&pool, int256_t{10}, /*close_interval=*/true);
+    EXPECT_FALSE(decimal->is_empty_range());
+    EXPECT_TRUE(decimal->evaluate_min_max(int256_t{11}));
+    EXPECT_FALSE(decimal->evaluate_min_max(int256_t{9}));
+
+    const auto double_infinity = std::numeric_limits<double>::infinity();
+    MinMaxRuntimeFilter<TYPE_DOUBLE> double_accumulator;
+    double_accumulator.insert(double_infinity);
+    EXPECT_TRUE(double_accumulator.evaluate_min_max(double_infinity));
+    EXPECT_FALSE(double_accumulator.evaluate_min_max(std::numeric_limits<double>::max()));
+
+    auto* double_greater =
+            MinMaxRuntimeFilter<TYPE_DOUBLE>::create_with_range<true>(&pool, 10.0, /*close_interval=*/true);
+    EXPECT_TRUE(double_greater->evaluate_min_max(double_infinity));
+    auto* double_less =
+            MinMaxRuntimeFilter<TYPE_DOUBLE>::create_with_range<false>(&pool, 10.0, /*close_interval=*/true);
+    EXPECT_TRUE(double_less->evaluate_min_max(-double_infinity));
+
+    const auto float_infinity = std::numeric_limits<float>::infinity();
+    MinMaxRuntimeFilter<TYPE_FLOAT> float_accumulator;
+    float_accumulator.insert(-float_infinity);
+    EXPECT_TRUE(float_accumulator.evaluate_min_max(-float_infinity));
+    EXPECT_FALSE(float_accumulator.evaluate_min_max(std::numeric_limits<float>::lowest()));
+
+    auto* float_greater =
+            MinMaxRuntimeFilter<TYPE_FLOAT>::create_with_range<true>(&pool, 10.0f, /*close_interval=*/true);
+    EXPECT_TRUE(float_greater->evaluate_min_max(float_infinity));
+    auto* float_less = MinMaxRuntimeFilter<TYPE_FLOAT>::create_with_range<false>(&pool, 10.0f, /*close_interval=*/true);
+    EXPECT_TRUE(float_less->evaluate_min_max(-float_infinity));
 }
 
 } // namespace starrocks

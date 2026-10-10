@@ -43,8 +43,19 @@ bool is_greater_predicate(TExprOpcode::type op) {
     return op == TExprOpcode::GT || op == TExprOpcode::GE;
 }
 
+template <class Result, class Func>
+Result type_dispatch_range_boundary(LogicalType type, Result fallback, Func func) {
+    return type_dispatch_filter(type, fallback, [&]<LogicalType LT>() -> Result {
+        if constexpr (lt_is_json<LT> || lt_is_variant<LT> || LT == TYPE_GEOGRAPHY || LT == TYPE_GEOMETRY) {
+            return fallback;
+        } else {
+            return func.template operator()<LT>();
+        }
+    });
+}
+
 bool is_boundary_supported_type(LogicalType type) {
-    return type_dispatch_filter(type, false, []<LogicalType LT>() { return !lt_is_json<LT> && !lt_is_variant<LT>; });
+    return type_dispatch_range_boundary(type, false, []<LogicalType LT>() { return true; });
 }
 
 bool is_range_filter_candidate(const std::vector<NLJoinRangeFilterCandidate>& candidates,
@@ -57,7 +68,7 @@ bool is_range_filter_candidate(const std::vector<NLJoinRangeFilterCandidate>& ca
 
 ColumnPtr compute_min_max_boundary(LogicalType type, TExprOpcode::type op, const Columns& columns) {
     const bool is_greater = is_greater_predicate(op);
-    return type_dispatch_filter(type, ColumnPtr(), [is_greater, &columns]<LogicalType LT>() -> ColumnPtr {
+    return type_dispatch_range_boundary(type, ColumnPtr(), [is_greater, &columns]<LogicalType LT>() -> ColumnPtr {
         using CppType = RunTimeCppType<LT>;
         bool has_boundary = false;
         CppType boundary{};
@@ -101,7 +112,6 @@ std::vector<NLJoinRangeFilterCandidate> make_range_filter_candidates(
             continue;
         }
         auto* build_expr = root->get_child(1);
-        // JSON/VARIANT values have no ordering usable for min/max pruning.
         if (!is_boundary_supported_type(build_expr->type().type)) {
             continue;
         }
@@ -117,26 +127,34 @@ std::vector<NLJoinRangeFilterCandidate> make_range_filter_candidates(
     return candidates;
 }
 
+Status compute_build_side_boundary(NLJoinRangeFilterCandidate& candidate, const std::vector<ChunkPtr>& build_chunks) {
+    const LogicalType type = candidate.build_expr->type().type;
+    for (const auto& chunk : build_chunks) {
+        if (chunk == nullptr || chunk->is_empty()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto column, candidate.conjunct->evaluate(candidate.build_expr, chunk.get()));
+        Columns values;
+        values.reserve(2);
+        values.emplace_back(std::move(column));
+        if (candidate.boundary != nullptr) {
+            values.emplace_back(candidate.boundary);
+        }
+        candidate.boundary = compute_min_max_boundary(type, candidate.op, values);
+    }
+    return Status::OK();
+}
+
 Status compute_build_side_boundaries(std::vector<NLJoinRangeFilterCandidate>& candidates,
                                      const std::vector<ChunkPtr>& build_chunks, bool& is_build_chunk_invalid) {
     for (auto& candidate : candidates) {
-        const LogicalType type = candidate.build_expr->type().type;
-        for (const auto& chunk : build_chunks) {
-            if (chunk == nullptr || chunk->is_empty()) {
-                continue;
-            }
-            ASSIGN_OR_RETURN(auto column, candidate.conjunct->evaluate(candidate.build_expr, chunk.get()));
-            Columns values;
-            values.reserve(2);
-            values.emplace_back(std::move(column));
-            if (candidate.boundary != nullptr) {
-                values.emplace_back(candidate.boundary);
-            }
-            candidate.boundary = compute_min_max_boundary(type, candidate.op, values);
+        auto status = compute_build_side_boundary(candidate, build_chunks);
+        if (!status.ok()) {
+            candidate.boundary.reset();
+            continue;
         }
+        is_build_chunk_invalid |= candidate.boundary == nullptr;
     }
-    is_build_chunk_invalid = std::any_of(candidates.begin(), candidates.end(),
-                                         [](const auto& candidate) { return candidate.boundary == nullptr; });
     return Status::OK();
 }
 
@@ -184,6 +202,7 @@ Status publish_global_range_filters(RuntimeState* state, const std::vector<NLJoi
                 state->obj_pool(), candidate.build_expr->type().type, is_greater_predicate(candidate.op),
                 /*close_interval=*/true, candidate.boundary, candidate.desc->join_mode());
         DCHECK(filter != nullptr);
+        candidate.desc->set_is_pipeline(true);
         candidate.desc->set_runtime_filter(filter);
         publish_descs.push_back(candidate.desc);
     }
