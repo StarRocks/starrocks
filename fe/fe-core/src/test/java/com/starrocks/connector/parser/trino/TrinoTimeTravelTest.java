@@ -14,6 +14,10 @@
 
 package com.starrocks.connector.parser.trino;
 
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryPeriod;
@@ -22,10 +26,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
