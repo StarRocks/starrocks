@@ -123,6 +123,28 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testPartitionOnlyPredicateSkipsMetadataIo() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM partitioned_table WHERE pt >= DATE '2000-01-01'");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertEquals(0, indexMetadataLoads.get());
+    }
+
+    @Test
+    public void testPartitionAndScalarPredicateStillLoadsMetadata() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM partitioned_table WHERE pt >= DATE '2000-01-01' AND pk = '1'");
+
+        assertContains(plan, "index[");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    }
+
+    @Test
     public void testVectorTopNPlanningThroughMetadataMgr() throws Exception {
         String plan = getLogicalFragmentPlan(
                 "SELECT pk, approx_l2_distance([1.0, 2.0], embedding) AS score "

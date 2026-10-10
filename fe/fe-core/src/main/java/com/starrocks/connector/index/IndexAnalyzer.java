@@ -84,6 +84,17 @@ public final class IndexAnalyzer {
                 .anyMatch(conjunct -> normalizeScalarPredicate(conjunct).isPresent());
     }
 
+    /** Excludes partition pruning predicates before any remote index metadata is loaded. */
+    public static boolean hasIndexablePredicateShape(LogicalScanOperator scan) {
+        if (scan.getPredicate() == null) {
+            return false;
+        }
+        IndexAnalyzer analyzer = forScan(ConnectorIndexMetadata.empty(), scan);
+        return Utils.extractConjuncts(scan.getPredicate()).stream()
+                .anyMatch(conjunct -> normalizeScalarPredicate(conjunct).isPresent()
+                        && !analyzer.isPartitionPredicate(conjunct));
+    }
+
     /** Splits a predicate into connector-indexable conjuncts and residual conjuncts. */
     public PredicateAnalysis analyzePredicate(ScalarOperator predicate) {
         if (predicate == null) {

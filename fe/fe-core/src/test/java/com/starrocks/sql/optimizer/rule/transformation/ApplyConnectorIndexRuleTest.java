@@ -42,6 +42,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.FloatType;
@@ -176,6 +178,32 @@ public class ApplyConnectorIndexRuleTest {
         Assertions.assertFalse(rule.check(input, null));
         Assertions.assertTrue(rule.transform(input, null).isEmpty());
         Assertions.assertEquals(0, loads.get());
+    }
+
+    @Test
+    public void testPartitionPredicateShapesSkipMetadataLoad() {
+        PaimonTable partitionedTable = new PaimonTable() {
+            @Override
+            public List<String> getPartitionColumnNames() {
+                return List.of("id");
+            }
+        };
+        Column id = new Column("id", IntegerType.INT);
+        ApplyPredicateIndexRule rule = new ApplyPredicateIndexRule(
+                OperatorType.LOGICAL_PAIMON_SCAN, ignored -> {
+                    Assertions.fail("Partition-only predicates must not load index metadata");
+                    return ConnectorIndexMetadata.empty();
+                });
+        for (ScalarOperator predicate : List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, idColumn, ConstantOperator.createInt(7)),
+                new InPredicateOperator(false, List.of(idColumn, ConstantOperator.createInt(7))),
+                new IsNullPredicateOperator(false, idColumn))) {
+            LogicalPaimonScanOperator scan = new LogicalPaimonScanOperator(partitionedTable,
+                    Map.of(idColumn, id), Map.of(id, idColumn), -1, predicate);
+            OptExpression input = OptExpression.create(scan);
+            Assertions.assertFalse(rule.check(input, null));
+            Assertions.assertTrue(rule.transform(input, null).isEmpty());
+        }
     }
 
     @Test

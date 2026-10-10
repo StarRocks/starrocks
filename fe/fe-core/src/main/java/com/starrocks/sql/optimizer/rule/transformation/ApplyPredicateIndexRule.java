@@ -57,7 +57,7 @@ public class ApplyPredicateIndexRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalScanOperator scan = (LogicalScanOperator) input.getOp();
         return scan.getIndexCondition() == null
-                && IndexAnalyzer.hasIndexablePredicateShape(scan.getPredicate());
+                && IndexAnalyzer.hasIndexablePredicateShape(scan);
     }
 
     @Override

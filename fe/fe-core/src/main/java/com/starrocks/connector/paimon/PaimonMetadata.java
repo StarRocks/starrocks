@@ -136,7 +136,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -146,7 +145,6 @@ import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
-    private static final long INDEX_METADATA_FAILURE_LOG_INTERVAL_MS = Duration.ofMinutes(1).toMillis();
 
     public static final List<String> PARTITION_NULL_VALUES = ImmutableList.of("__DEFAULT_PARTITION__", "null");
     private static final String VIEW_DIALECTS_KEY = "starrocks";
@@ -158,7 +156,6 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
     private final PaimonIndexMetadataCache indexMetadataCache;
-    private final AtomicLong lastIndexMetadataFailureLogTimeMs = new AtomicLong(Long.MIN_VALUE);
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<Map<String, String>> branches = new ThreadLocal<>();
 
@@ -793,21 +790,12 @@ public class PaimonMetadata implements ConnectorMetadata {
         } catch (RuntimeException e) {
             // Caffeine does not cache loader exceptions, so a transient catalog/object-store
             // failure can be retried by the next query instead of becoming an empty cached result.
-            if (shouldLogIndexMetadataFailure(lastIndexMetadataFailureLogTimeMs, System.currentTimeMillis())) {
+            if (indexMetadataCache.shouldLogFailure(System.currentTimeMillis())) {
                 LOG.warn("Failed to load Paimon index metadata for {}.{}.{} at snapshot {}",
                         catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), snapshotId, e);
             }
             return ConnectorIndexMetadata.empty();
         }
-    }
-
-    static boolean shouldLogIndexMetadataFailure(AtomicLong lastLogTimeMs, long nowMs) {
-        long previous = lastLogTimeMs.get();
-        if (previous != Long.MIN_VALUE && nowMs >= previous
-                && nowMs - previous < INDEX_METADATA_FAILURE_LOG_INTERVAL_MS) {
-            return false;
-        }
-        return lastLogTimeMs.compareAndSet(previous, nowMs);
     }
 
     static String resolveIndexBranch(Map<String, String> nativeOptions, String requestedBranch) {

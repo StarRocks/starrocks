@@ -19,11 +19,15 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.connector.index.ConnectorIndexMetadata;
 
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /** Connector-scoped cache for immutable, snapshot-bound index metadata. */
 final class PaimonIndexMetadataCache {
+    private static final long FAILURE_LOG_INTERVAL_MS = Duration.ofMinutes(1).toMillis();
     private final Cache<PaimonIndexMetadataCacheKey, ConnectorIndexMetadata> cache;
+    // Query metadata instances share this connector-scoped limiter, just like the cache.
+    private final AtomicLong lastFailureLogTimeMs = new AtomicLong(Long.MIN_VALUE);
 
     PaimonIndexMetadataCache(Duration ttl) {
         this(ttl, 1000L);
@@ -41,6 +45,15 @@ final class PaimonIndexMetadataCache {
 
     ConnectorIndexMetadata get(PaimonIndexMetadataCacheKey key, Supplier<ConnectorIndexMetadata> loader) {
         return cache.get(key, ignored -> loader.get());
+    }
+
+    boolean shouldLogFailure(long nowMs) {
+        long previous = lastFailureLogTimeMs.get();
+        if (previous != Long.MIN_VALUE && nowMs >= previous
+                && nowMs - previous < FAILURE_LOG_INTERVAL_MS) {
+            return false;
+        }
+        return lastFailureLogTimeMs.compareAndSet(previous, nowMs);
     }
 
     void invalidateTable(String catalogName, String databaseName, String tableName) {

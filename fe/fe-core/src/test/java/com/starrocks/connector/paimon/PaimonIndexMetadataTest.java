@@ -25,6 +25,12 @@ import com.starrocks.connector.index.VectorIndexMetric;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Verifications;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.FileStore;
 import org.apache.paimon.Snapshot;
@@ -54,11 +60,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -505,10 +512,57 @@ public class PaimonIndexMetadataTest {
 
     @Test
     public void testIndexMetadataFailureLogIsRateLimited() {
-        AtomicLong lastLogTime = new AtomicLong(Long.MIN_VALUE);
-        Assertions.assertTrue(PaimonMetadata.shouldLogIndexMetadataFailure(lastLogTime, 1_000L));
-        Assertions.assertFalse(PaimonMetadata.shouldLogIndexMetadataFailure(lastLogTime, 1_001L));
-        Assertions.assertTrue(PaimonMetadata.shouldLogIndexMetadataFailure(lastLogTime, 61_000L));
+        PaimonIndexMetadataCache cache = new PaimonIndexMetadataCache(Duration.ofMinutes(1));
+        Assertions.assertTrue(cache.shouldLogFailure(1_000L));
+        Assertions.assertFalse(cache.shouldLogFailure(1_001L));
+        Assertions.assertTrue(cache.shouldLogFailure(61_000L));
+        // A clock correction must not suppress diagnostics indefinitely.
+        Assertions.assertTrue(cache.shouldLogFailure(500L));
+        Assertions.assertFalse(cache.shouldLogFailure(501L));
+        Assertions.assertTrue(new PaimonIndexMetadataCache(Duration.ofMinutes(1)).shouldLogFailure(501L));
+    }
+
+    @Test
+    public void testFailureLogThrottleIsSharedAcrossQueryMetadata() throws Exception {
+        FileStoreTable nativeTable = mock(FileStoreTable.class);
+        SnapshotManager snapshotManager = mock(SnapshotManager.class);
+        Snapshot snapshot = mock(Snapshot.class);
+        when(nativeTable.rowType()).thenReturn(new RowType(List.of(new DataField(0, "id", new IntType()))));
+        when(nativeTable.snapshotManager()).thenReturn(snapshotManager);
+        when(snapshotManager.tryGetSnapshot(11L)).thenReturn(snapshot);
+        when(snapshot.id()).thenReturn(11L);
+        when(nativeTable.schemaManager()).thenThrow(new IllegalStateException("metadata unavailable"));
+        PaimonTable table = new PaimonTable("paimon", "db", "tbl", List.of(), nativeTable);
+        PaimonIndexMetadataCache cache = new PaimonIndexMetadataCache(Duration.ofMinutes(1));
+        PaimonMetadata firstQuery = new PaimonMetadata("paimon", null, null, null, cache);
+        PaimonMetadata secondQuery = new PaimonMetadata("paimon", null, null, null, cache);
+
+        AtomicInteger warnings = new AtomicInteger();
+        AbstractAppender appender = new AbstractAppender("paimon-index-failure-test", null, null) {
+            @Override
+            public void append(LogEvent event) {
+                if (event.getLevel() == Level.WARN && event.getMessage().getFormattedMessage()
+                        .startsWith("Failed to load Paimon index metadata")) {
+                    warnings.incrementAndGet();
+                }
+            }
+        };
+        Logger logger = (Logger) LogManager.getLogger(PaimonMetadata.class);
+        Level oldLevel = logger.getLevel();
+        appender.start();
+        logger.addAppender(appender);
+        Configurator.setLevel(PaimonMetadata.class.getName(), Level.WARN);
+        try {
+            Assertions.assertTrue(firstQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
+            Assertions.assertTrue(secondQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
+            Assertions.assertEquals(1, warnings.get());
+            // Failures are retried by each query, despite sharing the log throttle.
+            verify(nativeTable, times(2)).schemaManager();
+        } finally {
+            Configurator.setLevel(PaimonMetadata.class.getName(), oldLevel);
+            logger.removeAppender(appender);
+            appender.stop();
+        }
     }
 
     @Test
