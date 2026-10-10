@@ -37,6 +37,136 @@ starrocks_detect_parallelism() {
     echo "${cpu_count}"
 }
 
+starrocks_detect_total_ram_gb() {
+    local ram_kb=""
+    if starrocks_is_darwin; then
+        local ram_bytes
+        ram_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+        if [[ -n "${ram_bytes}" && "${ram_bytes}" =~ ^[0-9]+$ && "${ram_bytes}" -gt 0 ]]; then
+            echo "$(( ram_bytes / 1024 / 1024 / 1024 ))"
+            return 0
+        fi
+    elif [[ -r /proc/meminfo ]]; then
+        ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+        if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
+            local ram_gb_host=$(( ram_kb / 1024 / 1024 ))
+            local cgroup_bytes=""
+            cgroup_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+
+            if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+                local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+                if [[ "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
+                    echo "${cgroup_gb}"
+                    return 0
+                fi
+            fi
+            echo "${ram_gb_host}"
+            return 0
+        fi
+    fi
+    echo 0
+}
+
+starrocks_detect_linker_type() {
+    local explicit_linker="${STARROCKS_LINKER:-}"
+    if [[ -n "${explicit_linker}" ]]; then
+        case "${explicit_linker}" in
+            *lld*|*mold*|*gold*) echo "modern" ; return 0 ;;
+            *bfd*)               echo "legacy" ; return 0 ;;
+        esac
+    fi
+
+    if starrocks_is_darwin; then
+        echo "modern"
+        return 0
+    fi
+
+    if [[ "$(uname -m)" != "aarch64" ]]; then
+        local gcc_version
+        gcc_version="$(${CC:-gcc} -dumpversion 2>/dev/null || echo 0)"
+        if [[ "${gcc_version%%.*}" -ge 14 ]]; then
+            local glibc_version
+            glibc_version="$(ldd --version 2>/dev/null | awk 'NR==1 {print $NF; exit}' || true)"
+            if [[ -n "${glibc_version}" ]]; then
+                local major="${glibc_version%%.*}"
+                local minor="${glibc_version#*.}"
+                minor="${minor%%.*}"
+                if [[ "${major}" -lt 2 ]] || [[ "${major}" -eq 2 && "${minor}" -lt 29 ]]; then
+                    echo "modern"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+
+    # Inspect the default system ld flavor
+    local ld_version_output
+    if command -v ld >/dev/null 2>&1; then
+        ld_version_output="$(ld -v 2>&1 || true)"
+        case "${ld_version_output}" in
+            *LLD*|*lld*|*mold*|*GNU\ gold*)
+                echo "modern"
+                return 0
+                ;;
+        esac
+    fi
+    
+    echo "legacy"
+}
+
+starrocks_detect_ut_parallelism() {
+    # 1. Caller-supplied environment variable takes precedence
+    if [[ -n "${PARALLEL:-}" && "${PARALLEL}" =~ ^[0-9]+$ && "${PARALLEL}" -gt 0 ]]; then
+        echo "${PARALLEL}"
+        return 0
+    fi
+
+    # 2. Darwin host defaults to 100% core parallelism
+    if starrocks_is_darwin; then
+        starrocks_detect_parallelism
+        return 0
+    fi
+
+    local cpus
+    cpus="$(starrocks_detect_parallelism)"
+    if [[ -z "${cpus}" || ! "${cpus}" =~ ^[0-9]+$ || "${cpus}" -lt 1 ]]; then
+        cpus=1
+    fi
+
+    local linker_type="${1:-}"
+    [[ -z "${linker_type}" ]] && linker_type="$(starrocks_detect_linker_type)"
+
+    # 3. Legacy GNU BFD: preserve conservative 25% CPU throttle to avoid linker OOM
+    if [[ "${linker_type}" == "legacy" ]]; then
+        local legacy_parallel=$(( cpus / 4 + 1 ))
+        echo "${legacy_parallel}"
+        return 0
+    fi
+
+    # 4. Modern linkers (LLD, mold, gold): scale up to CPU count, capped by RAM availability
+    # Peak template instantiation and LLD link uses ~1.5 - 2.0 GiB per concurrent job.
+    local ram_gb="${2:-}"
+    [[ -z "${ram_gb}" ]] && ram_gb="$(starrocks_detect_total_ram_gb)"
+    local target_parallel="${cpus}"
+
+    if [[ -n "${ram_gb}" && "${ram_gb}" =~ ^[0-9]+$ && "${ram_gb}" -gt 0 ]]; then
+        local ram_safe_jobs=$(( ram_gb / 2 ))
+        if [[ "${ram_safe_jobs}" -lt 1 ]]; then
+            ram_safe_jobs=1
+        fi
+        if [[ "${target_parallel}" -gt "${ram_safe_jobs}" ]]; then
+            target_parallel="${ram_safe_jobs}"
+        fi
+    fi
+
+    if [[ "${target_parallel}" -lt 1 ]]; then
+        target_parallel=1
+    fi
+
+    echo "${target_parallel}"
+}
+
 starrocks_default_ut_thin_archive() {
     if starrocks_is_darwin; then
         echo "OFF"
