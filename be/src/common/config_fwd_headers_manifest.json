@@ -342,6 +342,7 @@
         "json_flat_null_factor",
         "json_flat_sparsity_factor",
         "json_flat_column_max",
+        "json_max_parse_nesting_depth",
         "json_flat_remain_filter_max_bytes"
       ]
     },
