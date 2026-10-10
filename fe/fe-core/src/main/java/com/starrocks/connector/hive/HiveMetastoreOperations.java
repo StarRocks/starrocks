@@ -357,6 +357,11 @@ public class HiveMetastoreOperations {
         metastore.invalidateAll();
     }
 
+    /** Drops this table from this level's cache only; the levels below are left to their own owners. */
+    public void invalidateTable(String dbName, String tableName) {
+        metastore.invalidateTable(dbName, tableName);
+    }
+
     public void updateTableStatistics(String dbName, String tableName, Function<HivePartitionStats, HivePartitionStats> update) {
         metastore.updateTableStatistics(dbName, tableName, update);
     }

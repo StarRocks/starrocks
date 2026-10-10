@@ -15,8 +15,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
@@ -24,6 +22,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -34,7 +33,6 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -66,13 +64,12 @@ public class MVCreateLockTest extends MVTestBase {
      */
     @Test
     public void testExternalBaseTableIsResolvedOutsideTheLock() throws Exception {
-        Map<String, Boolean> resolvedUnderLock = Maps.newConcurrentMap();
+        LockProbe resolved = LockProbe.onAnyThread();
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<Table> getTableWithIdentifier(Invocation invocation, ConnectContext context,
                                                           BaseTableInfo baseTableInfo) {
-                resolvedUnderLock.merge(baseTableInfo.getTableName(), LockHoldDepth.isUnderLock(),
-                        Boolean::logicalOr);
+                resolved.record(baseTableInfo.getTableName());
                 return invocation.proceed(context, baseTableInfo);
             }
         };
@@ -83,10 +80,7 @@ public class MVCreateLockTest extends MVTestBase {
                 "PROPERTIES ('replication_num' = '1')\n" +
                 "AS SELECT l_orderkey, l_suppkey FROM hive0.partitioned_db.lineitem_par;");
         try {
-            // Without this the assertion below passes on an absent key, i.e. whenever the probe never fired.
-            Assertions.assertTrue(resolvedUnderLock.containsKey("lineitem_par"),
-                    "the external base table was never resolved, the probe proves nothing: " + resolvedUnderLock);
-            Assertions.assertEquals(Boolean.FALSE, resolvedUnderLock.get("lineitem_par"),
+            resolved.assertReachedOutsideTheLock("lineitem_par",
                     "an external base table must not be resolved while a metadata lock is held");
         } finally {
             starRocksAssert.dropMaterializedView("test.create_lock_external_mv");

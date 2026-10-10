@@ -22,19 +22,18 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.types.Types;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -42,8 +41,6 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.type.IntegerType.INT;
 
@@ -55,9 +52,7 @@ import static com.starrocks.type.IntegerType.INT;
  */
 public class NoSnapshotTableLockTest extends PlanTestBase {
 
-    private volatile Thread testThread;
-    private final AtomicBoolean listedUnderLock = new AtomicBoolean();
-    private final AtomicInteger listCalls = new AtomicInteger();
+    private LockProbe probe;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -66,25 +61,13 @@ public class NoSnapshotTableLockTest extends PlanTestBase {
                 "properties (\"path\"=\"hdfs://127.0.0.1:10000/file_tbl/\", \"format\"=\"parquet\")");
     }
 
-    @AfterEach
-    public void tearDown() {
-        testThread = null;
-    }
-
     /** Samples the lock on every file listing the test thread makes; the listing itself returns one file. */
     private void probeFileListing() {
-        testThread = Thread.currentThread();
-        listedUnderLock.set(false);
-        listCalls.set(0);
+        probe = LockProbe.onCurrentThread();
         new MockUp<FileTable>() {
             @Mock
             public List<RemoteFileDesc> getFileDescsFromHdfs() {
-                if (Thread.currentThread() == testThread) {
-                    listCalls.incrementAndGet();
-                    if (LockHoldDepth.isUnderLock()) {
-                        listedUnderLock.set(true);
-                    }
-                }
+                probe.record("getFileDescsFromHdfs");
                 return Lists.newArrayList(new RemoteFileDesc("f0.parquet", "snappy", 0, 0, ImmutableList.of()));
             }
         };
@@ -101,8 +84,7 @@ public class NoSnapshotTableLockTest extends PlanTestBase {
     public void testFileTableListsFilesOutsideTheLock() throws Exception {
         probeFileListing();
         getFragmentPlan("select * from test.file_tbl");
-        Assertions.assertTrue(listCalls.get() > 0, "the probe never saw a file listing");
-        Assertions.assertFalse(listedUnderLock.get(), "a FileTable listed its files under the meta lock");
+        probe.assertReachedOutsideTheLock("getFileDescsFromHdfs", "a FileTable listed its files under the meta lock");
     }
 
     /**
@@ -124,8 +106,7 @@ public class NoSnapshotTableLockTest extends PlanTestBase {
     public void testFileTableJoinedWithOlapTableListsFilesOutsideTheLock() throws Exception {
         probeFileListing();
         getFragmentPlan("select * from test.t0 join test.file_tbl on t0.v1 = file_tbl.v1");
-        Assertions.assertTrue(listCalls.get() > 0, "the probe never saw a file listing");
-        Assertions.assertFalse(listedUnderLock.get(), "a FileTable listed its files under the meta lock");
+        probe.assertReachedOutsideTheLock("getFileDescsFromHdfs", "a FileTable listed its files under the meta lock");
     }
 
     /**

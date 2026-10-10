@@ -47,6 +47,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
+import com.starrocks.sql.analyzer.InsertSourceRefresher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -213,8 +214,7 @@ public class StatementPlanner {
             // consume (a view behind a branch that was never reached, a body the "still current" check
             // rejected) must not be offered to the next one. Same for a write target the analyzer did not
             // come to collect -- a statement that failed before it reached its target, say.
-            session.getPreResolvedViewBodies().clear();
-            session.getPreResolvedWriteTargets().clear();
+            session.getPreResolvedState().clear();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
@@ -316,7 +316,9 @@ public class StatementPlanner {
                     InsertAnalyzer.analyzeWithDeferredLock(insertStmt, session, takeLock);
                     Analyzer.AnalyzerVisitor.analyzeSubmitTaskOnly(insertStmt, (SubmitTaskStmt) statement, session);
                 } else {
-                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                    // The SELECT does not need the lock: refresh its remaining sources before taking it.
+                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock,
+                            () -> refreshRemainingInsertSources(statement, session));
                 }
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
@@ -330,9 +332,22 @@ public class StatementPlanner {
                 }
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
+        }
+    }
+
+    /**
+     * The pre-pass above refreshes the sources of an INSERT it reaches; this refreshes the rest and rebinds them,
+     * now that analysis has expanded every view and subquery. Outside the lock on the deferred path, under it on
+     * the locked one. Only for an INSERT about to be planned: a SUBMIT TASK plans its INSERT when the task runs,
+     * and refreshes then.
+     */
+    private static void refreshRemainingInsertSources(StatementBase statement, ConnectContext session) {
+        if (statement instanceof InsertStmt insertStmt && InsertSourceRefresher.isEnabled(session)) {
+            InsertSourceRefresher.refreshRemaining(insertStmt.getQueryStatement(), session);
         }
     }
 
