@@ -129,6 +129,15 @@ protected:
         return seg_name;
     }
 
+    std::string generate_sst_file(int64_t txn_id) {
+        auto sst_name = lake::gen_sst_filename(txn_id);
+        auto sst_path = _tablet_mgr->sst_location(_tablet_id, sst_name);
+        ASSIGN_OR_ABORT(auto f, fs::new_writable_file(sst_path));
+        CHECK_OK(f->append(sst_path));
+        CHECK_OK(f->close());
+        return sst_name;
+    }
+
     std::string generate_segment_file_for_tablet(int64_t tablet_id, int64_t txn_id) {
         auto seg_name = lake::gen_segment_filename(txn_id);
         auto seg_path = _tablet_mgr->segment_location(tablet_id, seg_name);
@@ -2186,6 +2195,8 @@ TEST_F(LakeServiceTest, test_abort) {
         log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
         log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
         log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        log.mutable_op_write()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_write()->add_ssts(); // a segment without a pre-built sstable
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2205,6 +2216,8 @@ TEST_F(LakeServiceTest, test_abort) {
                 generate_segment_file(txn_id));
         log.mutable_op_compaction()->set_new_segment_offset(0);
         log.mutable_op_compaction()->set_new_segment_count(2);
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
+        log.mutable_op_compaction()->add_ssts()->set_name(generate_sst_file(txn_id));
         ASSERT_OK(_tablet_mgr->put_txn_log(log));
 
         logs.emplace_back(log);
@@ -2255,6 +2268,14 @@ TEST_F(LakeServiceTest, test_abort) {
         }
         for (auto&& s : log.op_compaction().output_rowset().segment_metas()) {
             EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s.filename())));
+        }
+        for (auto&& f : log.op_write().ssts()) {
+            if (!f.name().empty()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
+            }
+        }
+        for (auto&& f : log.op_compaction().ssts()) {
+            EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(_tablet_id, f.name())));
         }
         for (auto&& r : log.op_schema_change().rowsets()) {
             for (auto&& s : r.segment_metas()) {

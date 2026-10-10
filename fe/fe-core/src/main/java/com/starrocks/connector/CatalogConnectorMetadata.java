@@ -289,6 +289,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        normal.invalidateTableForRead(srDbName, table);
+    }
+
+    @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.dbExists(context, dbName);

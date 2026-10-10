@@ -75,6 +75,13 @@ public final class PreResolvedState {
      */
     public static final Slot<CreateTarget> CREATE_TARGET = new Slot<>("create target");
 
+    /**
+     * A source table an INSERT ... SELECT already refreshed for this statement, as reloaded after that refresh
+     * ({@link InsertSourceRefresher}), filed under the table's own catalog, database and table names. Read, never
+     * taken.
+     */
+    public static final Slot<Table> REFRESHED_SOURCE = new Slot<>("refreshed source");
+
     private record Key(Slot<?> slot, String catalog, String db, String tbl) {
     }
 

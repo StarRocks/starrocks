@@ -26,6 +26,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
@@ -43,15 +44,20 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/pk_tablet_unsort_sst_writer.h"
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/transactions.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/vacuum_full.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
@@ -155,6 +161,31 @@ protected:
         return chunk->num_rows();
     }
 
+    // Writes three 100-row chunks of distinct keys in `txn_id`. The caller turns on enable_load_spill and sets a 1-byte
+    // write_buffer_size and pk_index_eager_build_threshold_bytes, so every chunk spills and the spill merge in
+    // finish() builds the persistent index sstables: a load builds them only on that path.
+    std::unique_ptr<DeltaWriter> write_spilled_load(int64_t tablet_id, int64_t txn_id) {
+        std::vector<uint32_t> indexes(100);
+        for (uint32_t i = 0; i < indexes.size(); i++) {
+            indexes[i] = i;
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        for (int i = 0; i < 3; i++) {
+            auto chunk = generate_data(indexes.size(), i * indexes.size());
+            CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        }
+        return delta_writer;
+    }
+
     constexpr static const char* const kTestDirectory = "test_pk_tablet_sst_writer";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -169,7 +200,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
     const int64_t tablet_id = 12345;
 
     // Create PkTabletSSTWriter
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
 
     // Test reset_sst_writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -199,7 +230,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_basic_operations) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
     const int64_t tablet_id = 67890;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
 
     // Reset writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -226,7 +257,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_multiple_chunks) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
     const int64_t tablet_id = 11111;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
 
     // Test append_sst_record before reset - should fail
     auto chunk = generate_data(10);
@@ -249,7 +280,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_error_handling) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
     const int64_t tablet_id = 22222;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
 
     // Reset writer
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -273,7 +304,7 @@ TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_empty_chunk) {
 TEST_F(PkTabletSSTWriterTest, test_pk_tablet_sst_writer_reuse) {
     const int64_t tablet_id = 33333;
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
 
     // First use
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
@@ -351,6 +382,137 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
+}
+
+// A load that wrote its txn log and was then aborted with cleanup (some other tablet had already committed):
+// abort_txn must delete the persistent index sstables the load built, not only its segments.
+TEST_F(PkTabletSSTWriterTest, test_abort_txn_deletes_eager_built_sst) {
+    ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
+    ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_eager_build_threshold_bytes, 1);
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    auto delta_writer = write_spilled_load(tablet_id, txn_id);
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_GT(txn_log->op_write().ssts_size(), 0);
+    for (const auto& sst : txn_log->op_write().ssts()) {
+        EXPECT_EQ(txn_id, extract_txn_id_prefix(sst.name()).value_or(0)) << sst.name();
+        ASSERT_TRUE(fs::path_exist(_tablet_mgr->sst_location(tablet_id, sst.name())));
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(txn_id);
+    txn_info.set_combined_txn_log(false);
+    abort_txn(_tablet_mgr.get(), tablet_id, std::span<const TxnInfoPB>(&txn_info, 1));
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+
+    for (const auto& sst : txn_log->op_write().ssts()) {
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(tablet_id, sst.name()))) << sst.name();
+    }
+    for (const auto& segment : txn_log->op_write().rowset().segment_metas()) {
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(tablet_id, segment.filename())));
+    }
+}
+
+// A load whose writers finished but whose txn log was never persisted (the load was cancelled before the sender
+// wrote it) leaves its sstables with nothing that references them, and abort_txn has no txn log to clean up from.
+// The sstables carry the load's txn id, so full vacuum keeps them while the transaction may still be active and
+// reclaims them once it has finished. An sstable the persistent index built for itself carries no txn id and is
+// never deleted by full vacuum.
+TEST_F(PkTabletSSTWriterTest, test_full_vacuum_reclaims_sst_of_cancelled_load) {
+    ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
+    ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_eager_build_threshold_bytes, 1);
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    auto delta_writer = write_spilled_load(tablet_id, txn_id);
+    ASSIGN_OR_ABORT(auto txn_log, delta_writer->finish_with_txnlog(kDontWriteTxnLog));
+    delta_writer->close();
+    ASSERT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(tablet_id, txn_id)));
+    ASSERT_GT(txn_log->op_write().ssts_size(), 0);
+
+    const auto index_sst_path = _tablet_mgr->sst_location(tablet_id, gen_sst_filename());
+    {
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(index_sst_path));
+        ASSERT_OK(wf->append("index sstable"));
+        ASSERT_OK(wf->close());
+    }
+
+    auto full_vacuum = [&](int64_t min_active_txn_id) {
+        VacuumFullRequest request;
+        request.set_partition_id(_partition_id);
+        request.set_tablet_id(tablet_id);
+        request.set_min_active_txn_id(min_active_txn_id);
+        request.set_grace_timestamp(0);
+        request.set_min_check_version(0);
+        request.set_max_check_version(0);
+        VacuumFullResponse response;
+        vacuum_full(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    };
+
+    // The transaction may still be active: keep its sstables.
+    full_vacuum(txn_id);
+    for (const auto& sst : txn_log->op_write().ssts()) {
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->sst_location(tablet_id, sst.name()))) << sst.name();
+    }
+
+    // The transaction has finished: its unreferenced sstables and segments are orphans.
+    full_vacuum(txn_id + 1);
+    for (const auto& sst : txn_log->op_write().ssts()) {
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->sst_location(tablet_id, sst.name()))) << sst.name();
+    }
+    for (const auto& segment : txn_log->op_write().rowset().segment_metas()) {
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(tablet_id, segment.filename())));
+    }
+    EXPECT_TRUE(fs::path_exist(index_sst_path));
+}
+
+// A load that spilled is cancelled (KILL QUERY) while its spilled blocks are being merged. The merge does not observe
+// the cancel and still writes the load's segments and sstables. finish() must then fail instead of marking the tablet
+// writer finished, so close() deletes those files: FE aborts such a load without cleanup (no tablet has committed)
+// and the txn log that would name them is never persisted.
+TEST_F(PkTabletSSTWriterTest, test_cancel_during_spill_merge_deletes_sst) {
+    ConfigResetGuard<bool> guard0(&config::enable_load_spill, true);
+    ConfigResetGuard<int64_t> guard1(&config::write_buffer_size, 1);
+    ConfigResetGuard<int64_t> guard2(&config::pk_index_eager_build_threshold_bytes, 1);
+    const int64_t tablet_id = _tablet_metadata->id();
+    const int64_t txn_id = next_id();
+    auto delta_writer = write_spilled_load(tablet_id, txn_id);
+
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments", [&](void*) {
+        delta_writer->cancel(Status::Cancelled("cancelled while merging spilled blocks"));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("SpillMemTableSink::merge_blocks_to_segments");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    auto res = delta_writer->finish_with_txnlog();
+    ASSERT_TRUE(res.status().is_cancelled()) << res.status();
+
+    // The load's files this txn wrote to the data directory.
+    auto list_txn_files = [&]() {
+        std::vector<std::string> names;
+        auto data_dir = join_path(_tablet_mgr->tablet_root_location(tablet_id), kSegmentDirectoryName);
+        CHECK_OK(_fs->iterate_dir(data_dir, [&](std::string_view name) {
+            if (extract_txn_id_prefix(name).value_or(0) == txn_id) {
+                names.emplace_back(name);
+            }
+            return true;
+        }));
+        return names;
+    };
+    auto written = list_txn_files();
+    ASSERT_TRUE(std::any_of(written.begin(), written.end(), [](const auto& name) { return is_sst(name); }));
+
+    delta_writer->close();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    EXPECT_TRUE(list_txn_files().empty());
+    EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(tablet_id, txn_id)));
 }
 
 TEST_F(PkTabletSSTWriterTest, test_parallel_execution_data_import) {
@@ -904,7 +1066,7 @@ TEST_P(PkTabletSSTWriterBigintKeyTest, test_try_enable_pk_index_eager_build_sing
 TEST_P(PkTabletSSTWriterBigintKeyTest, test_sst_build_single_bigint_pk_ascending_data) {
     auto tablet_id = _tablet_metadata->id();
 
-    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto pk_sst_writer = std::make_unique<PkTabletSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDirectory);
     ASSERT_OK(pk_sst_writer->reset_sst_writer(location_provider, _fs));
 
@@ -1021,7 +1183,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> max_mem_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
-    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
 
     std::vector<std::pair<std::string, int>> rows;
@@ -1073,7 +1235,8 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage) {
 
     // The exact map footprint is also the spill boundary: reaching it must clear the in-memory map.
     config::l0_max_mem_usage = static_cast<int64_t>(expected_map_usage);
-    auto spill_writer = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto spill_writer =
+            std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(spill_writer->reset_sst_writer(lp, _fs));
     ASSERT_OK(spill_writer->append_sst_record(chunk, &order));
     EXPECT_LT(spill_writer->memory_usage(), expected_map_usage);
@@ -1115,7 +1278,8 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage_across_spills)
     size_t one_round_usage = 0;
     {
         ConfigResetGuard<int64_t> no_spill_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
-        auto probe = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+        auto probe =
+                std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
         ASSERT_OK(probe->reset_sst_writer(lp, _fs));
         empty_usage = probe->memory_usage();
         auto chunk = round_chunk(0);
@@ -1128,7 +1292,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage_across_spills)
 
     // One round now reaches the bound exactly, so every round fills the map and spills it.
     ConfigResetGuard<int64_t> spill_guard(&config::l0_max_mem_usage, static_cast<int64_t>(one_round_usage));
-    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<TestPkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
     for (int round = 0; round < kRounds; ++round) {
         auto chunk = round_chunk(round);
@@ -1145,7 +1309,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_memory_usage_across_spills)
 
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {
     const int64_t tablet_id = _tablet_metadata->id();
-    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
 
@@ -1166,7 +1330,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_basic_no_dup) {
 
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_requires_order) {
     const int64_t tablet_id = _tablet_metadata->id();
-    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
 
@@ -1186,7 +1350,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_dedup_last_flushed_wins) {
     // and the loser's rowid is recorded for the delete vector.
     // Case A: row 1 has the larger order -> loser is rowid 0.
     {
-        auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+        auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
         ASSERT_OK(w->reset_sst_writer(lp, _fs));
         auto chunk = make_kv_chunk(_schema, {{"dup_key", 10}, {"dup_key", 20}});
         std::vector<uint64_t> order = {(static_cast<uint64_t>(1) << 32) | 0, (static_cast<uint64_t>(2) << 32) | 1};
@@ -1198,7 +1362,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_dedup_last_flushed_wins) {
     }
     // Case B: row 0 has the larger order -> loser is rowid 1.
     {
-        auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+        auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
         ASSERT_OK(w->reset_sst_writer(lp, _fs));
         auto chunk = make_kv_chunk(_schema, {{"dup_key", 10}, {"dup_key", 20}});
         std::vector<uint64_t> order = {(static_cast<uint64_t>(2) << 32) | 0, (static_cast<uint64_t>(1) << 32) | 1};
@@ -1216,7 +1380,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_overflow_merge_dedup) {
     // split across two intermediate SSTs and must be resolved by the finish-time k-way merge.
     ConfigResetGuard<int64_t> guard(&config::l0_max_mem_usage, 1);
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
-    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
 
     // append 1: key "A" at segment rowid 0, slot_idx 1 -> spilled to intermediate SST #1.
@@ -1245,7 +1409,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_overflow_merge_dedup) {
 TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_op_aware_reconcile) {
     const int64_t tablet_id = _tablet_metadata->id();
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
-    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
     auto order = [](uint32_t slot, uint32_t rowid) { return (static_cast<uint64_t>(slot) << 32) | rowid; };
 
@@ -1289,7 +1453,7 @@ TEST_F(PkTabletSSTWriterTest, test_unsort_sst_writer_overflow_merge_delete_wins)
     const int64_t tablet_id = _tablet_metadata->id();
     ConfigResetGuard<int64_t> guard(&config::l0_max_mem_usage, 1);
     auto lp = std::make_shared<FixedLocationProvider>(kTestDirectory);
-    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id);
+    auto w = std::make_unique<PkTabletUnsortSSTWriter>(_tablet_schema, _tablet_mgr.get(), tablet_id, next_id());
     ASSERT_OK(w->reset_sst_writer(lp, _fs));
     auto order = [](uint32_t slot, uint32_t rowid) { return (static_cast<uint64_t>(slot) << 32) | rowid; };
 
