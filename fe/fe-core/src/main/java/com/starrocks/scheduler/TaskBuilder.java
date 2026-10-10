@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
+import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -31,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -98,8 +100,11 @@ public class TaskBuilder {
         taskProperties.putAll(submitTaskStmt.getProperties());
         task.setProperties(taskProperties);
 
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
-        task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
+        task.setCreateUser(context.getCurrentUserIdentity().getUser());
+        task.setUserIdentity(context.getCurrentUserIdentity());
+        if (ResolvedAIFunctionDetector.contains(submitTaskStmt)) {
+            task.setExecutionIdentity(TaskExecutionIdentity.capture(context));
+        }
         task.setSchedule(submitTaskStmt.getSchedule());
         task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
         if (submitTaskStmt.getSchedule() == null) {

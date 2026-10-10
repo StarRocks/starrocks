@@ -27,6 +27,23 @@ public class AnalyzeCreatePipeTest {
     }
 
     @Test
+    public void testAIProjectionIsUnsupported() {
+        AnalyzeTestUtil.analyzeFail("create pipe ai_pipe as insert into t0 "
+                        + "select col_int, cast(ai_custom_query('provider', col_string) as bigint), 1 "
+                        + "from files('path'='fake://somewhere/1.parquet', 'format'='parquet')",
+                "AI functions are not supported in PIPE");
+    }
+
+    @Test
+    public void testAIFilterIsUnsupported() {
+        AnalyzeTestUtil.analyzeFail("create pipe ai_pipe as insert into t0 "
+                        + "select col_int, col_string, 1 "
+                        + "from files('path'='fake://somewhere/1.parquet', 'format'='parquet') "
+                        + "where ai_custom_query('provider', col_string) = 'yes'",
+                "AI functions are not supported in PIPE");
+    }
+
+    @Test
     public void testNormal() {
         {
             // pipe's database: not set

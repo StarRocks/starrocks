@@ -23,6 +23,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -44,6 +45,49 @@ public class NativeAccessController implements AccessController {
             throws AccessDeniedException {
         checkObjectTypeAction(context, privilegeType, ObjectType.SYSTEM,
                 null);
+    }
+
+    @Override
+    public void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (!PrivilegeType.USAGE.equals(privilegeType) || family == null) {
+            throw new AccessDeniedException();
+        }
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            // Validate the family before the global grant shortcut; unknown AI metadata must fail closed.
+            PEntryObject object = manager.provider.generateObject(ObjectType.AI_FUNCTION, List.of(family));
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            if (!manager.provider.check(ObjectType.SYSTEM, PrivilegeType.USE_AI_FUNCTIONS, null, collection)
+                    && !manager.provider.check(ObjectType.AI_FUNCTION, privilegeType, object, collection)) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to check action[{}] on AI FUNCTION {}", privilegeType, family, e);
+            throw new AccessDeniedException();
+        }
+    }
+
+    @Override
+    public void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (!PrivilegeType.USAGE.equals(privilegeType) || provider == null) {
+            throw new AccessDeniedException();
+        }
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            // Authorize the resolved incarnation, never a second lookup by its reusable name.
+            PEntryObject object = new AIProviderPEntryObject(provider.getId());
+            if (!manager.provider.check(ObjectType.AI_PROVIDER, privilegeType, object, collection)) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to check action[{}] on AI PROVIDER {}", privilegeType, provider.getName(), e);
+            throw new AccessDeniedException();
+        }
     }
 
     @Override

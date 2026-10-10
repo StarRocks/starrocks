@@ -6,6 +6,8 @@ sidebar_position: 22
 
 # ai_embed
 
+函数和 Provider 的授权要求见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+
 通过 SYSTEM OpenAI 兼容 embeddings 端点生成文本向量。返回可为 NULL 的 `ARRAY<FLOAT>`，不是 Snowflake VECTOR 类型。使用此函数前，请先升级所有 FE 和 BE 节点。
 
 :::warning

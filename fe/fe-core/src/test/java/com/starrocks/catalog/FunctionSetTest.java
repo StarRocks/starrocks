@@ -436,6 +436,30 @@ public class FunctionSetTest {
     }
 
     @Test
+    public void testGrantableAIFunctionFamiliesRejectMalformedMetadata() {
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("AI_COMPLETE"));
+        for (String name : List.of("ai_query", "lower", "missing_ai", "db.ai_complete", "*", " ai_complete")) {
+            Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(name));
+        }
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(null));
+
+        Function overload = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> "ai_complete".equals(fn.functionName())).findFirst().orElseThrow();
+        overload.setUserVisible(false);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setUserVisible(true);
+        overload.setBinaryType(TFunctionBinaryType.BUILTIN);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setBinaryType(TFunctionBinaryType.AI);
+        overload.setAiModelSource(null);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setAiModelSource(TAIModelSource.PROVIDER);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setAiModelSource(TAIModelSource.SYSTEM);
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("ai_complete"));
+    }
+
+    @Test
     public void testAICompletePolymorphicSpecializationPreservesMetadata() {
         Type mapType = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
         Type[][] concreteArgs = {

@@ -5,6 +5,8 @@ description: "設定済みの SYSTEM OpenAI 互換チャットエンドポイン
 
 # ai_complete
 
+関数と Provider の権限要件は [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+
 管理者が設定した SYSTEM チャットモデルを呼び出し、モデルが生成したテキストを返します。StarRocks は BE から非ストリーミングの OpenAI 互換チャット補完リクエストを送信します。
 
 :::warning

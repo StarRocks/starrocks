@@ -9,8 +9,10 @@ sidebar_position: 23
 `ai_custom_query` and `ai_custom_embedding` use the existing cluster-wide [AI provider registry](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md). They select a registered provider by name, not a row-varying remote model name. Upgrade every FE and BE before using these functions.
 
 :::warning
-Calls send input data outside the cluster and can incur provider charges. This feature does not add AI-function or provider-object invocation privileges. Provider management still requires SYSTEM OPERATE, and existing table, column, and view checks still apply, but these checks do not provide per-provider call isolation. Allow only trusted query users to use providers approved for their data and cost requirements.
+Calls send input data outside the cluster and can incur provider charges. Grant only approved function families and providers to query users. Provider management still requires SYSTEM OPERATE; existing table, column, and view checks also apply.
 :::
+
+For function and provider privilege requirements, see [AI function privileges](ai_functions.mdx#ai-function-privileges).
 
 ## Syntax
 
@@ -46,7 +48,7 @@ Provider API keys are stored in the FE metadata journal and image and sent to ex
 
 ## Query snapshots and SYSTEM compatibility
 
-Each physical execution plan captures a provider's configuration when first needed and reuses it for all calls to that provider in the same plan. Calls eliminated by the optimizer do not resolve provider metadata. Later ALTER or DROP does not change the captured configuration or cancel an in-flight query. A newly built plan, including replanning for a retry or a subsequent prepared EXECUTE, captures current metadata.
+Each physical execution plan captures a provider's configuration when first needed and reuses it for all calls to that provider in the same plan. Authorization checks all resolved AI calls before optimization. Only surviving physical AI calls capture execution configurations; each captured provider is authorized again by UUID before its configuration enters the plan. Later ALTER or DROP does not change the captured configuration or cancel an in-flight query. A newly built plan, including replanning for a retry or a subsequent prepared EXECUTE, captures current metadata.
 
 Query dumps do not capture provider metadata. Offline replay of named-provider calls is not supported and must not substitute a live provider with the same name.
 

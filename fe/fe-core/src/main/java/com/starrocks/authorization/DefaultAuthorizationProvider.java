@@ -65,7 +65,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.CREATE_GLOBAL_FUNCTION,
                 PrivilegeType.CREATE_STORAGE_VOLUME,
                 PrivilegeType.CREATE_WAREHOUSE,
-                PrivilegeType.SECURITY));
+                PrivilegeType.SECURITY,
+                PrivilegeType.USE_AI_FUNCTIONS));
 
         typeToActionList.put(ObjectType.USER, Lists.newArrayList(
                 PrivilegeType.IMPERSONATE));
@@ -118,6 +119,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 PrivilegeType.USAGE,
                 PrivilegeType.ALTER,
                 PrivilegeType.DROP));
+
+        typeToActionList.put(ObjectType.AI_FUNCTION, Lists.newArrayList(PrivilegeType.USAGE));
+        typeToActionList.put(ObjectType.AI_PROVIDER, Lists.newArrayList(PrivilegeType.USAGE));
     }
 
     public static final String UNEXPECTED_TYPE = "unexpected type ";
@@ -191,6 +195,10 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return PipePEntryObject.generate(objectTokens);
         } else if (ObjectType.WAREHOUSE.equals(objectType)) {
             return WarehousePEntryObject.generate(objectTokens);
+        } else if (ObjectType.AI_FUNCTION.equals(objectType)) {
+            return AIFunctionPEntryObject.generate(objectTokens);
+        } else if (ObjectType.AI_PROVIDER.equals(objectType)) {
+            return AIProviderPEntryObject.generate(objectTokens);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

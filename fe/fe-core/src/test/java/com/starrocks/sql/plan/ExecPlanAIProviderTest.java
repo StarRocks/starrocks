@@ -54,7 +54,7 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
     public void testCachedProviderIsRevalidatedForEachCapability() {
         AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
         Mockito.when(manager.getProvider("shared")).thenReturn(provider("shared", AIProviderType.CHAT, "chat-model"));
-        ExecPlan plan = new ExecPlan();
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
             Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(project(call(chatTemplate, "shared")));
             Map<SlotId, Expr> incompatible = project(call(embeddingTemplate, "shared"));
@@ -81,7 +81,7 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
         Mockito.when(manager.getProvider("recoverable")).thenReturn(null,
                 provider("recoverable", AIProviderType.EMBEDDING, "embedding-model"), unsupported,
                 provider("recoverable", AIProviderType.CHAT, "recovered-model"));
-        ExecPlan plan = new ExecPlan();
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         FunctionCallExpr original = call(chatTemplate, "recoverable");
         Map<SlotId, Expr> project = project(original);
         try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
@@ -110,7 +110,7 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
             Mockito.when(manager.getProvider(names.get(i)))
                     .thenReturn(provider(names.get(i), AIProviderType.CHAT, "model-" + i));
         }
-        ExecPlan plan = new ExecPlan();
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
             for (int i = 0; i < names.size(); i++) {
                 FunctionCallExpr original = call(chatTemplate, names.get(i));
@@ -137,7 +137,7 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
         AIProviderMgr manager = Mockito.mock(AIProviderMgr.class);
         AIProvider metadata = provider("once", AIProviderType.CHAT, "original-model");
         Mockito.when(manager.getProvider("once")).thenReturn(metadata);
-        ExecPlan plan = new ExecPlan();
+        ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
         try (MockedStatic<GlobalStateMgr> ignored = mockProviderManager(manager)) {
             Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(project(call(chatTemplate, "once")));
             metadata.mergeParams(Map.of("model", "updated-model", "api_key", "updated-key"));
@@ -206,8 +206,11 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
     }
 
     private static MockedStatic<GlobalStateMgr> mockProviderManager(AIProviderMgr manager) {
+        GlobalStateMgr original = GlobalStateMgr.getCurrentState();
         GlobalStateMgr state = Mockito.mock(GlobalStateMgr.class);
         Mockito.when(state.getAIProviderMgr()).thenReturn(manager);
+        Mockito.when(state.getAuthorizer()).thenReturn(original.getAuthorizer());
+        Mockito.when(state.getAuthorizationMgr()).thenReturn(original.getAuthorizationMgr());
         MockedStatic<GlobalStateMgr> mocked = Mockito.mockStatic(GlobalStateMgr.class, Mockito.CALLS_REAL_METHODS);
         mocked.when(GlobalStateMgr::getCurrentState).thenReturn(state);
         return mocked;

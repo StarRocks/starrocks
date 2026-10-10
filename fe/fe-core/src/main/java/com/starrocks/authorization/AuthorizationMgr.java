@@ -106,14 +106,17 @@ public class AuthorizationMgr {
                     });
 
     public static class UserPrivKey {
-        public UserIdentity userIdentity;
-        public Set<String> groups;
-        public Set<Long> roleIds;
+        public final UserIdentity userIdentity;
+        public final Set<String> groups;
+        public final Set<Long> roleIds;
+        private final boolean ephemeral;
 
         public UserPrivKey(UserIdentity userIdentity, Set<String> groups, Set<Long> roleIds) {
             this.userIdentity = userIdentity;
-            this.groups = groups;
-            this.roleIds = roleIds;
+            this.groups = Set.copyOf(groups);
+            this.roleIds = roleIds == null ? null : Set.copyOf(roleIds);
+            // UserIdentity equality does not distinguish native and ephemeral users, but their grants differ.
+            this.ephemeral = userIdentity.isEphemeral();
         }
 
         @Override
@@ -122,13 +125,14 @@ public class AuthorizationMgr {
                 return false;
             }
             UserPrivKey that = (UserPrivKey) o;
-            return Objects.equals(userIdentity, that.userIdentity) && Objects.equals(groups, that.groups) &&
+            return ephemeral == that.ephemeral && Objects.equals(userIdentity, that.userIdentity) &&
+                    Objects.equals(groups, that.groups) &&
                     Objects.equals(roleIds, that.roleIds);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(userIdentity, groups, roleIds);
+            return Objects.hash(userIdentity, groups, roleIds, ephemeral);
         }
     }
 
@@ -184,6 +188,7 @@ public class AuthorizationMgr {
                     ObjectType.PIPE,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.WAREHOUSE);
             for (ObjectType objectType : objectTypes) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -206,7 +211,8 @@ public class AuthorizationMgr {
                     PrivilegeType.CREATE_RESOURCE_GROUP,
                     PrivilegeType.CREATE_GLOBAL_FUNCTION,
                     PrivilegeType.CREATE_STORAGE_VOLUME,
-                    PrivilegeType.SECURITY);
+                    PrivilegeType.SECURITY,
+                    PrivilegeType.USE_AI_FUNCTIONS);
             initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, dbAdminSystemGrant, null, false);
 
             for (ObjectType t : Arrays.asList(
@@ -220,6 +226,7 @@ public class AuthorizationMgr {
                     ObjectType.FUNCTION,
                     ObjectType.GLOBAL_FUNCTION,
                     ObjectType.STORAGE_VOLUME,
+                    ObjectType.AI_PROVIDER,
                     ObjectType.PIPE)) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, t, provider.getAvailablePrivType(t));
             }
@@ -324,6 +331,7 @@ public class AuthorizationMgr {
                 || ObjectType.CATALOG.equals(objectType)
                 || ObjectType.RESOURCE_GROUP.equals(objectType)
                 || ObjectType.STORAGE_VOLUME.equals(objectType)
+                || ObjectType.AI_PROVIDER.equals(objectType)
                 || ObjectType.WAREHOUSE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*")));
@@ -615,6 +623,7 @@ public class AuthorizationMgr {
                 roleIdList.add(roleId);
             }
         } finally {
+            invalidateGroupInCache(groupName);
             unlockForRoleUpdate();
         }
 
@@ -632,6 +641,7 @@ public class AuthorizationMgr {
                 roleSet.add(roleId);
             }
         } finally {
+            invalidateGroupInCache(groupName);
             unlockForRoleUpdate();
         }
     }
@@ -795,6 +805,7 @@ public class AuthorizationMgr {
                 roleIdList.add(roleId);
             }
         } finally {
+            invalidateGroupInCache(groupName);
             unlockForRoleUpdate();
         }
 
@@ -812,6 +823,7 @@ public class AuthorizationMgr {
                 }
             }
         } finally {
+            invalidateGroupInCache(groupName);
             unlockForRoleUpdate();
         }
     }
@@ -1080,7 +1092,9 @@ public class AuthorizationMgr {
             if (userIdentity.isEphemeral()) {
                 Preconditions.checkState(roleIdsSpecified != null,
                         "ephemeral use should always have current role ids specified");
-                validRoleIds = roleIdsSpecified;
+                // Preserve the authenticated session's active roles, including role-only internal RPCs.
+                // Copy them before merging groups so neither the session nor its cache key is mutated.
+                validRoleIds = new HashSet<>(roleIdsSpecified);
             } else {
                 // Merge privileges directly granted to user first.
                 UserPrivilegeCollectionV2 userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
@@ -1151,9 +1165,9 @@ public class AuthorizationMgr {
         Set<Long> badRoles = getAllDescendantsUnlocked(roleId);
         List<UserPrivKey> badKeys = new ArrayList<>();
         for (UserPrivKey pair : ctxToMergedPrivilegeCollections.asMap().keySet()) {
-            Set<Long> roleIds = pair.roleIds;
-            if (roleIds == null) {
-                roleIds = getRoleIdsByUser(pair.userIdentity);
+            Set<Long> roleIds = new HashSet<>(pair.roleIds == null ? getRoleIdsByUser(pair.userIdentity) : pair.roleIds);
+            for (String group : pair.groups) {
+                roleIds.addAll(groupToRoleList.getOrDefault(group, Set.of()));
             }
 
             for (long badRoleId : badRoles) {
@@ -1166,6 +1180,16 @@ public class AuthorizationMgr {
         for (UserPrivKey pair : badKeys) {
             ctxToMergedPrivilegeCollections.invalidate(pair);
         }
+    }
+
+    private void invalidateGroupInCache(String groupName) {
+        List<UserPrivKey> badKeys = new ArrayList<>();
+        for (UserPrivKey key : ctxToMergedPrivilegeCollections.asMap().keySet()) {
+            if (key.groups.contains(groupName)) {
+                badKeys.add(key);
+            }
+        }
+        ctxToMergedPrivilegeCollections.invalidateAll(badKeys);
     }
 
     /**

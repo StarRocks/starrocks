@@ -9,6 +9,8 @@ SHOW GRANTS displays all the privileges that have been granted to a user or role
 
 For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/authorization/user_privs.md).
 
+AI grants use the same output: `USE AI FUNCTIONS ON SYSTEM`, `USAGE ON AI FUNCTION`, and `USAGE ON AI PROVIDER`. Provider names are quoted, and grants on a deleted provider are omitted. Provider grants refer to UUIDs, so recreating a provider with the same name does not restore its old grants.
+
 :::tip
 All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.
 :::

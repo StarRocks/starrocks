@@ -9,6 +9,8 @@ description: "SHOW GRANTS displays all the privileges that have been granted to 
 
 查看当前用户，指定用户，或指定角色的权限信息。
 
+AI 权限沿用相同输出格式：`USE AI FUNCTIONS ON SYSTEM`、`USAGE ON AI FUNCTION` 和 `USAGE ON AI PROVIDER`。Provider 名称使用引号，已删除 Provider 的授权不再展示。Provider 授权绑定 UUID，因此同名重建不会恢复旧授权。
+
 :::tip
 
 每个用户都可以查看自己和自己所拥有角色的权限信息。只有拥有 `user_admin` 角色的用户才可以查看指定用户或角色的权限信息。

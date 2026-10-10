@@ -67,6 +67,8 @@ public class ObjectType {
     public static final ObjectType STORAGE_VOLUME = new ObjectType(12);
     public static final ObjectType PIPE = new ObjectType(13);
     public static final ObjectType COLUMN = new ObjectType(14);
+    public static final ObjectType AI_FUNCTION = new ObjectType(15);
+    public static final ObjectType AI_PROVIDER = new ObjectType(16);
 
     /**
      * NOTICE: ObjectType cannot use a value exceeding 20000, please follow the above sequence number
@@ -88,6 +90,8 @@ public class ObjectType {
             STORAGE_VOLUME,
             PIPE,
             COLUMN,
+            AI_FUNCTION,
+            AI_PROVIDER,
             WAREHOUSE
     ).build();
 
@@ -107,6 +111,8 @@ public class ObjectType {
                     .put(12, new Pair<>("STORAGE VOLUME", "STORAGE VOLUMES"))
                     .put(13, new Pair<>("PIPE", "PIPES"))
                     .put(14, new Pair<>("COLUMN", "COLUMNS"))
+                    .put(15, new Pair<>("AI FUNCTION", "AI FUNCTIONS"))
+                    .put(16, new Pair<>("AI PROVIDER", "AI PROVIDERS"))
                     .put(20003, new Pair<>("WAREHOUSE", "WAREHOUSES"))
                     .build();
 

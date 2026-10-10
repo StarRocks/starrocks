@@ -16,13 +16,18 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -30,6 +35,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -37,8 +43,29 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class ResolvedAIFunctionDetectorTest {
+    @Test
+    public void testPrepareWrapperIsTraversed() {
+        FunctionCallExpr ai = resolvedAI("prepared");
+        PrepareStmt prepared = new PrepareStmt("prepared", new QueryStatement(values(ai)), List.of());
+        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(prepared));
+    }
+
+    @Test
+    public void testDataCacheAndSubmitWrappersAreTraversed() {
+        FunctionCallExpr ai = resolvedAI("cached");
+        InsertStmt insert = new InsertStmt(new QueryStatement(values(ai)), NodePosition.ZERO);
+        DataCacheSelectStatement cache = new DataCacheSelectStatement(insert, Map.of(), NodePosition.ZERO);
+        SubmitTaskStmt submit = new SubmitTaskStmt(new TaskName("db", "cache_task"), 0, cache, NodePosition.ZERO);
+
+        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(cache));
+        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(submit));
+        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(
+                new SubmitTaskStmt(new TaskName("db", "insert_task"), 0, insert, NodePosition.ZERO)));
+    }
+
     @Test
     public void testResolvedMetadataControlsDetection() {
         FunctionCallExpr unresolvedAIName = new FunctionCallExpr("ai_complete", List.of());
