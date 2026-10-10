@@ -35,6 +35,16 @@ Status write_combined_txn_log(const CombinedTxnLogPB& logs, const std::set<int64
     return tablet_mgr->put_combined_txn_log(logs, expected_tablet_ids);
 }
 
+void borrow_shard_infos(const ::google::protobuf::RepeatedPtrField<std::string>& shard_infos) {
+    auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+    if (tablet_mgr == nullptr) {
+        return;
+    }
+    for (const auto& info : shard_infos) {
+        tablet_mgr->borrow_shard_info(info);
+    }
+}
+
 namespace {
 
 void mark_failure(const Status& status, std::atomic<bool>* has_error, Status* final_status) {

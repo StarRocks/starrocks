@@ -315,10 +315,20 @@ public:
 
     // Pick a tablet id from `candidates` that is already known to this worker's staros
     // shard cache (so that later location_provider calls can resolve it without issuing
-    // a get-shard-info RPC to StarMgr). Falls back to the first candidate when none is
-    // local or when USE_STAROS is not enabled. Callers must ensure `candidates` is not
-    // empty.
+    // a get-shard-info RPC to StarMgr). When none is local, a candidate whose shard info
+    // the owner handed over (see `borrow_shard_info`) resolves without the RPC too. Falls
+    // back to the first candidate when neither exists or when USE_STAROS is not enabled.
+    // Callers must ensure `candidates` is not empty.
     int64_t pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates);
+
+    // Shared-data only. The serialized shard info of |tablet_id| if this node owns the tablet,
+    // empty otherwise. See StarOSWorker::export_shard_info.
+    std::string export_shard_info(int64_t tablet_id);
+
+    // Shared-data only. Keeps a shard info produced by `export_shard_info` on the tablet's owner,
+    // so this node resolves the tablet's directory without a starmgr RPC although it does not
+    // own the tablet. See StarOSWorker::borrow_shard_info.
+    void borrow_shard_info(const std::string& serialized);
 
     Status drop_local_cache(const std::string& path);
     void prune_metacache();

@@ -2715,6 +2715,36 @@ TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all
     EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
 }
 
+// A tablet whose shard info its owner handed over resolves without a starmgr RPC too, so it is the
+// anchor when no candidate is local. A local candidate still wins.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_prefers_borrowed_over_remote) {
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
+
+    StarOSWorker owner;
+    staros::starlet::ShardInfo borrowed;
+    borrowed.id = 401;
+    borrowed.hash_code = 0;
+    ASSERT_TRUE(owner.add_shard(borrowed).ok());
+    auto exported = owner.export_shard_info(401);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+    _tablet_manager->borrow_shard_info(*exported);
+    // The tablet manager only hands out shard infos of tablets this node owns.
+    EXPECT_TRUE(_tablet_manager->export_shard_info(401).empty());
+
+    std::vector<int64_t> candidates{400, 401, 402};
+    EXPECT_EQ(401, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+
+    staros::starlet::ShardInfo local;
+    local.id = 402;
+    local.hash_code = 0;
+    ASSERT_TRUE(worker->add_shard(local).ok());
+    EXPECT_EQ(402, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+    EXPECT_FALSE(_tablet_manager->export_shard_info(402).empty());
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks

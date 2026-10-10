@@ -583,7 +583,8 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // the anchor is local we avoid a cross-node get-shard-info RPC; when it is not (e.g.
 // FE picked an aggregator that does not own any tablet in the batch), the worker has
 // to fall back to remote fetch. See the FE-side LakeAggregator.chooseAggregatorNode
-// for the companion optimization.
+// for the companion optimization. The load coordinator cannot be chosen that way, so
+// the tablet owners hand it their shard info instead, see `borrow_shard_info`.
 int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates) {
     DCHECK(!candidates.empty());
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -592,8 +593,36 @@ int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& c
             return tablet_id;
         }
     }
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        for (int64_t tablet_id : candidates) {
+            if (worker->has_borrowed_shard_info(tablet_id)) {
+                return tablet_id;
+            }
+        }
+    }
 #endif
     return candidates.front();
+}
+
+std::string TabletManager::export_shard_info(int64_t tablet_id) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto info_or = worker->export_shard_info(tablet_id); info_or.ok()) {
+            return std::move(info_or).value();
+        }
+    }
+#endif
+    return {};
+}
+
+void TabletManager::borrow_shard_info(const std::string& serialized) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto st = worker->borrow_shard_info(serialized); !st.ok()) {
+            LOG(WARNING) << "failed to keep the shard info handed over by a tablet owner: " << st;
+        }
+    }
+#endif
 }
 
 // Refuse to persist a bundle that does not cover every tablet in |expected_tablet_ids|.
