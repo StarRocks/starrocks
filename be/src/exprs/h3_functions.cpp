@@ -36,6 +36,7 @@
 #include "column/nullable_column.h"
 #include "exprs/geo_functions.h"
 #include "geo/geo_measurements.h"
+#include "geo/geo_types.h"
 #include "geo/wkb.h"
 #include "types/geo_wkb.h"
 
@@ -245,6 +246,22 @@ struct H3ArrayBuilder {
         values->reserve(values->size() + cells.size());
         for (size_t i = 0; i < cells.size(); ++i) {
             values->append(static_cast<int64_t>(cells[i]));
+        }
+        nulls->append(0);
+        offsets->append(static_cast<uint32_t>(values->size()));
+        return Status::OK();
+    }
+
+    // Copy validated H3 cells in bounded blocks for polygon results. Valid
+    // cell indexes have the sign bit clear, so their BIGINT bits are unchanged.
+    Status append_bulk(const std::vector<H3Index>& cells) {
+        static_assert(sizeof(H3Index) == sizeof(int64_t));
+        if (cells.size() > std::numeric_limits<uint32_t>::max() - values->size()) {
+            return Status::InvalidArgument("H3 array offset limit exceeded");
+        }
+        values->reserve(values->size() + cells.size());
+        if (!cells.empty()) {
+            values->append_numbers(cells.data(), cells.size() * sizeof(H3Index));
         }
         nulls->append(0);
         offsets->append(static_cast<uint32_t>(values->size()));
@@ -625,7 +642,18 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
             RETURN_IF_ERROR(result.append({}));
             continue;
         }
-        ASSIGN_OR_RETURN(const bool valid, spherical_is_valid(*geometry));
+        bool valid;
+        if (geometry->type == WkbGeometryType::POLYGON && geometry->rings.size() == 1) {
+            const auto& ring = geometry->rings.front();
+            GeoCoordinateList coordinates;
+            coordinates.list.reserve(ring.size());
+            for (size_t i = 0; i < ring.size(); ++i) {
+                coordinates.add({ring[i].x, ring[i].y});
+            }
+            valid = starrocks::GeoPolygon::is_valid_ring(coordinates);
+        } else {
+            ASSIGN_OR_RETURN(valid, spherical_is_valid(*geometry));
+        }
         if (!valid) return Status::InvalidArgument("H3_PolygonToCells requires valid spherical GEOGRAPHY topology");
         std::vector<std::unique_ptr<H3PolygonComponent> > components;
         components.reserve(count);
@@ -645,7 +673,10 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
             components.push_back(std::move(component));
         }
         std::vector<H3Index> cells;
-        cells.reserve(static_cast<size_t>(slots));
+        const bool single_component = components.size() == 1;
+        if (!single_component) {
+            cells.reserve(static_cast<size_t>(slots));
+        }
         for (const auto& component : components) {
             std::vector<H3Index> scratch;
             scratch.assign(static_cast<size_t>(component->slots), 0);
@@ -662,20 +693,35 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
                 }
             }
             if (error != E_SUCCESS) return h3_error("H3_PolygonToCells", error);
+            if (single_component) {
+                cells = std::move(scratch);
+                continue;
+            }
             for (H3Index cell : scratch) {
                 if (cell == H3_NULL) continue;
                 if (!isValidCell(cell)) return Status::InternalError("H3_PolygonToCells returned invalid cell");
                 cells.push_back(cell);
             }
         }
-        std::unordered_set<H3Index> seen;
-        seen.reserve(cells.size());
         size_t write = 0;
-        for (size_t i = 0; i < cells.size(); ++i) {
-            if (seen.insert(cells[i]).second) cells[write++] = cells[i];
+        if (single_component) {
+            // Both pinned H3 fills already emit unique cells for one component.
+            // Compact their allocated slab in place and retain its output order.
+            for (size_t i = 0; i < cells.size(); ++i) {
+                const H3Index cell = cells[i];
+                if (cell == H3_NULL) continue;
+                if (!isValidCell(cell)) return Status::InternalError("H3_PolygonToCells returned invalid cell");
+                cells[write++] = cell;
+            }
+        } else {
+            std::unordered_set<H3Index> seen;
+            seen.reserve(cells.size());
+            for (size_t i = 0; i < cells.size(); ++i) {
+                if (seen.insert(cells[i]).second) cells[write++] = cells[i];
+            }
         }
         cells.resize(write);
-        RETURN_IF_ERROR(result.append(cells));
+        RETURN_IF_ERROR(result.append_bulk(cells));
     }
     return result.build(size, constant);
 }
