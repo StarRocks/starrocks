@@ -14,13 +14,20 @@
 
 package com.starrocks.connector.lance;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.starrocks.catalog.Column;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import static com.starrocks.type.BooleanType.BOOLEAN;
 import static com.starrocks.type.DateType.DATE;
@@ -35,6 +42,90 @@ import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceApiConverter {
+    private static final String CHILDREN = "children";
+
+    /** Convert the schema read by Lance; never silently substitute a type or discard a field. */
+    static List<Column> fromSchema(JsonObject schema) {
+        if (schema == null || !schema.has("fields")) {
+            throw new StarRocksConnectorException("Lance dataset has no schema");
+        }
+        List<Column> columns = new ArrayList<>();
+        Set<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        for (JsonElement value : schema.getAsJsonArray("fields")) {
+            JsonObject field = value.getAsJsonObject();
+            String name = field.get("name").getAsString();
+            if (!names.add(name)) {
+                throw new StarRocksConnectorException("Ambiguous Lance column name: " + name);
+            }
+            columns.add(new Column(name, fromFieldType(field),
+                    field.get("nullable").getAsBoolean()));
+        }
+        if (columns.isEmpty()) {
+            throw new StarRocksConnectorException("Lance dataset has an empty schema");
+        }
+        return columns;
+    }
+
+    private static Type fromFieldType(JsonObject field) {
+        JsonObject type = field.getAsJsonObject("type");
+        String name = type.get("name").getAsString();
+        switch (name) {
+            case "list":
+            case "largelist":
+            case "fixedsizelist":
+                if (field.getAsJsonArray(CHILDREN).size() != 1) {
+                    throw new StarRocksConnectorException("Invalid Lance list field");
+                }
+                return new ArrayType(fromFieldType(field.getAsJsonArray(CHILDREN).get(0).getAsJsonObject()));
+            case "struct":
+                ArrayList<StructField> fields = new ArrayList<>();
+                for (JsonElement value : field.getAsJsonArray(CHILDREN)) {
+                    JsonObject child = value.getAsJsonObject();
+                    fields.add(new StructField(child.get("name").getAsString(), fromFieldType(child)));
+                }
+                return new StructType(fields);
+            case "int":
+                int bits = type.get("bitWidth").getAsInt();
+                if (List.of(8, 16, 32, 64).contains(bits)) {
+                    return parseType((type.get("isSigned").getAsBoolean() ? "int" : "uint") + bits);
+                }
+                break;
+            case "floatingpoint":
+                switch (type.get("precision").getAsString()) {
+                    case "HALF":
+                    case "SINGLE":
+                        return FLOAT;
+                    case "DOUBLE":
+                        return DOUBLE;
+                    default:
+                        break;
+                }
+                break;
+            case "decimal":
+                int precision = type.get("precision").getAsInt();
+                int scale = type.get("scale").getAsInt();
+                if (type.get("bitWidth").getAsInt() == 128 && precision > 0 && precision <= 38
+                        && scale >= 0 && scale <= precision) {
+                    return TypeFactory.createUnifiedDecimalType(precision, scale);
+                }
+                break;
+            case "timestamp":
+                return DATETIME;
+            case "date":
+                return "DAY".equals(type.get("unit").getAsString()) ? DATE : DATETIME;
+            case "bool":
+                return BOOLEAN;
+            case "utf8":
+            case "largeutf8":
+                return VARCHAR;
+            case "binary":
+            case "largebinary":
+                return VARBINARY;
+            default:
+                break;
+        }
+        throw new StarRocksConnectorException("Unsupported Lance field type: " + name);
+    }
 
     /**
      * Maps safe string representations of Apache Arrow / Lance data types to StarRocks Types recursively.
@@ -54,13 +145,22 @@ public class LanceApiConverter {
             return INT;
         } else if (lower.equals("int64") || lower.equals("bigint")) {
             return BIGINT;
+        } else if (lower.equals("uint8")) {
+            return SMALLINT;
+        } else if (lower.equals("uint16")) {
+            return INT;
+        } else if (lower.equals("uint32")) {
+            return BIGINT;
+        } else if (lower.equals("uint64")) {
+            return TypeFactory.createUnifiedDecimalType(20, 0);
         } else if (lower.equals("float16") || lower.equals("float32") || lower.equals("float")) {
             return FLOAT;
         } else if (lower.equals("float64") || lower.equals("double")) {
             return DOUBLE;
-        } else if (lower.equals("string") || lower.equals("utf8") || lower.equals("varchar")) {
+        } else if (lower.equals("string") || lower.equals("utf8") || lower.equals("varchar") || lower.equals("large_string")
+                || lower.equals("large_utf8")) {
             return VARCHAR;
-        } else if (lower.equals("binary") || lower.equals("varbinary")) {
+        } else if (lower.equals("binary") || lower.equals("varbinary") || lower.equals("large_binary")) {
             return VARBINARY;
         } else if (lower.equals("date") || lower.equals("date32")) {
             return DATE;
