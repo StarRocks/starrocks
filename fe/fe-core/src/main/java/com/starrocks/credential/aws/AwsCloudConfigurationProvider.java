@@ -51,6 +51,10 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 
 public class AwsCloudConfigurationProvider implements CloudConfigurationProvider {
 
+    // Iceberg REST vended-credential expiry, epoch millis (iceberg-aws's
+    // S3FileIOProperties.SESSION_TOKEN_EXPIRES_AT_MS, which is not public).
+    public static final String S3_SESSION_TOKEN_EXPIRES_AT_MS = "s3.session-token-expires-at-ms";
+
     public AwsCloudCredential buildGlueCloudCredential(HiveConf hiveConf) {
         Preconditions.checkNotNull(hiveConf);
         AwsCloudCredential awsCloudCredential = new AwsCloudCredential(
