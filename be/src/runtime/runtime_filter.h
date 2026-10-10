@@ -685,8 +685,11 @@ public:
     bool is_full_range() const {
         if constexpr (IsSlice<CppType>) {
             return _min == Slice::min_value() && _max == Slice::max_value();
-        } else if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
+        } else if constexpr (std::is_integral_v<CppType>) {
             return _min == std::numeric_limits<CppType>::lowest() && _max == std::numeric_limits<CppType>::max();
+        } else if constexpr (std::is_floating_point_v<CppType>) {
+            return _min == -std::numeric_limits<CppType>::infinity() &&
+                   _max == std::numeric_limits<CppType>::infinity();
         } else if constexpr (IsDate<CppType>) {
             return _min == DateValue::MIN_DATE_VALUE && _max == DateValue::MAX_DATE_VALUE;
         } else if constexpr (IsTimestamp<CppType>) {
@@ -1085,8 +1088,8 @@ private:
             _min = std::numeric_limits<CppType>::max();
             _max = std::numeric_limits<CppType>::lowest();
         } else if constexpr (std::is_floating_point_v<CppType>) {
-            _min = std::numeric_limits<CppType>::max();
-            _max = std::numeric_limits<CppType>::lowest();
+            _min = std::numeric_limits<CppType>::infinity();
+            _max = -std::numeric_limits<CppType>::infinity();
         } else if constexpr (IsDate<CppType>) {
             _min = DateValue::MAX_DATE_VALUE;
             _max = DateValue::MIN_DATE_VALUE;
@@ -1100,8 +1103,8 @@ private:
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.
-            _min = RunTimeTypeLimits<Type>::min_value();
-            _max = RunTimeTypeLimits<Type>::max_value();
+            _min = RunTimeTypeLimits<Type>::max_value();
+            _max = RunTimeTypeLimits<Type>::min_value();
         }
     }
     void _init_full_range() {
@@ -1112,8 +1115,8 @@ private:
             _max = std::numeric_limits<CppType>::max();
             _min = std::numeric_limits<CppType>::lowest();
         } else if constexpr (std::is_floating_point_v<CppType>) {
-            _max = std::numeric_limits<CppType>::max();
-            _min = std::numeric_limits<CppType>::lowest();
+            _max = std::numeric_limits<CppType>::infinity();
+            _min = -std::numeric_limits<CppType>::infinity();
         } else if constexpr (IsDate<CppType>) {
             _max = DateValue::MAX_DATE_VALUE;
             _min = DateValue::MIN_DATE_VALUE;
@@ -1127,8 +1130,8 @@ private:
             // for json vaue, cpp type is JsonValue*
             // but min/max value type is JsonValue
             // and JsonValue needs special serialization handling.
-            _max = RunTimeTypeLimits<Type>::min_value();
-            _min = RunTimeTypeLimits<Type>::max_value();
+            _max = RunTimeTypeLimits<Type>::max_value();
+            _min = RunTimeTypeLimits<Type>::min_value();
         }
     }
 

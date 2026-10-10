@@ -26,11 +26,9 @@ namespace starrocks {
 
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
                                                                                       ExprContext* conjunct,
-                                                                                      Chunk* chunk) {
+                                                                                      ColumnPtr res) {
     auto left_child = conjunct->root()->get_child(0);
     auto right_child = conjunct->root()->get_child(1);
-    // all of the child(1) in expr is in build chunk
-    ASSIGN_OR_RETURN(auto res, conjunct->evaluate(right_child, chunk));
     DCHECK_EQ(res->size(), 1);
     ColumnPtr col;
     if (res->is_constant()) {
