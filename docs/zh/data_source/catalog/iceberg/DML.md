@@ -119,6 +119,10 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
    INSERT OVERWRITE partition_tbl_1 partition(dt='2023-09-01',id=1) SELECT 'close';
    ```
 
+### Parquet 数据页版本
+
+对于 Parquet 数据文件，Iceberg 表属性 `write.parquet.page-version` 支持 `v1` 或 `v2`（不区分大小写）。未设置时，StarRocks 写入 DataPage V1。无效值会导致写入失败。如果数据文件的列中包含 BOOLEAN 类型（包括嵌套在数组、映射或结构中的 BOOLEAN），DataPage V2 写入会被拒绝，因为 StarRocks 读取器目前无法解码其 RLE 编码的值。此属性不用于配置位置删除文件。Parquet 数据页版本与 Iceberg 表格式版本不同。
+
 ## DELETE
 
 您可以使用 DELETE 语句根据指定条件从 Iceberg 表中删除数据。此功能在 StarRocks v4.1 及更高版本中受支持。

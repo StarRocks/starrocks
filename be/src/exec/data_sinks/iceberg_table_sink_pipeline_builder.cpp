@@ -39,6 +39,12 @@ namespace starrocks {
 
 namespace {
 
+void set_parquet_data_page_version(const TIcebergTableSink& sink, std::map<std::string, std::string>* options) {
+    if (sink.__isset.parquet_data_page_version) {
+        (*options)[formats::ParquetWriterOptions::DATA_PAGE_VERSION] = sink.parquet_data_page_version;
+    }
+}
+
 std::unordered_map<std::string, formats::FileColumnId> build_top_level_field_id_map(
         const std::vector<TIcebergSchemaField>& fields) {
     std::unordered_map<std::string, formats::FileColumnId> field_ids_by_name;
@@ -294,6 +300,7 @@ Status IcebergTableSinkPipelineBuilder::create_data_sink_context(
     data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    set_parquet_data_page_version(t_iceberg_sink, &data_sink_ctx->options);
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
@@ -516,6 +523,7 @@ Status IcebergTableSinkPipelineBuilder::create_row_delta_sink_context(
     data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format;
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
+    set_parquet_data_page_version(t_iceberg_sink, &data_sink_ctx->options);
     if (t_iceberg_sink.__isset.target_max_file_size) {
         data_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }

@@ -14,7 +14,10 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
+#include <arrow/io/memory.h>
 #include <gtest/gtest.h>
+#include <parquet/column_page.h>
+#include <parquet/column_reader.h>
 #include <parquet/file_reader.h>
 #include <parquet/metadata.h>
 
@@ -771,6 +774,73 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
+}
+
+TEST_F(ParquetFileWriterTest, TestDataPageV2) {
+    std::vector type_descs{TYPE_INT_DESC};
+    _writer_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnTestHelper::build_column<int32_t>({1, 2, 3}), 0);
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_OK(writer->close().io_status);
+
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_NE(read_chunk, nullptr);
+    parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+
+    ASSIGN_OR_ASSERT_FAIL(auto file, _fs.new_random_access_file(_file_path));
+    ASSIGN_OR_ASSERT_FAIL(auto file_size, file->get_size());
+    std::string contents(file_size, '\0');
+    ASSERT_OK(file->read_at_fully(0, contents.data(), file_size));
+    std::shared_ptr<arrow::io::RandomAccessFile> source(arrow::io::BufferReader::FromString(std::move(contents)));
+    auto parquet_reader = ::parquet::ParquetFileReader::Open(source);
+    auto page_reader = parquet_reader->RowGroup(0)->GetColumnPageReader(0);
+    std::shared_ptr<::parquet::Page> page;
+    do {
+        page = page_reader->NextPage();
+        ASSERT_NE(page, nullptr);
+    } while (page->type() == ::parquet::PageType::DICTIONARY_PAGE);
+    EXPECT_EQ(page->type(), ::parquet::PageType::DATA_PAGE_V2);
+}
+
+TEST_F(ParquetFileWriterTest, TestDataPageV2RejectsBoolean) {
+    _writer_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+    auto result = _create_writer({TYPE_BOOLEAN_DESC});
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("BOOLEAN"), std::string::npos);
+}
+
+TEST_F(ParquetFileWriterTest, TestDataPageV2RejectsNestedBoolean) {
+    _writer_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+    auto result = _create_writer({TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC)});
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("BOOLEAN"), std::string::npos);
+}
+
+TEST_F(ParquetFileWriterTest, TestDataPageVersionFactoryValidation) {
+    std::vector type_descs{TYPE_INT_DESC};
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    auto fs = std::make_shared<MemoryFileSystem>();
+    std::map<std::string, std::string> options = {{ParquetWriterOptions::DATA_PAGE_VERSION, "v2"}};
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                            column_evaluators, std::nullopt, nullptr, nullptr);
+    ASSERT_OK(factory.init());
+    options[ParquetWriterOptions::DATA_PAGE_VERSION] = "2.6";
+    auto invalid_factory =
+            ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                     column_evaluators, std::nullopt, nullptr, nullptr);
+    EXPECT_NE(invalid_factory.init().to_string().find("page-version"), std::string::npos);
+
+    std::vector boolean_types{TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC)};
+    auto boolean_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(boolean_types));
+    options[ParquetWriterOptions::DATA_PAGE_VERSION] = "v2";
+    auto boolean_factory =
+            ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(boolean_types),
+                                     boolean_evaluators, std::nullopt, nullptr, nullptr);
+    ASSERT_OK(boolean_factory.init());
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteJson) {
