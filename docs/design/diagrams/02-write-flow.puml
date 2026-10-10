@@ -1,0 +1,70 @@
+@startuml
+' Source of truth for 02-write-flow.png -- see ../README.md to regenerate.
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+autonumber
+title Write (encrypt) flow
+
+participant "SQL client" as C
+participant "FE\n(StarRocks)" as FE
+participant "Iceberg lib\n(in the FE process)" as ICE
+participant "BE" as BE
+participant "Object store" as OBJ
+participant "KMS" as KMS
+participant "Iceberg catalog" as CAT
+
+C -> FE : INSERT / DELETE / UPDATE / MERGE\non an encryption-enabled iceberg table
+note over FE
+  A table is encrypted iff it declares encryption.key-id.
+  IcebergEncryption.writeSignalOrNull reads that property --
+  NOT the manager's type -- because the commit path reads the
+  same property; deciding it two different ways would encrypt
+  a file whose commit records no key.
+  Refused here if the table declares encryption but the catalog
+  supplied a PlaintextEncryptionManager.
+end note
+note over FE
+  All three sinks derive the signal from that one place:
+  IcebergTableSink (INSERT), IcebergDeleteSink (DELETE) and
+  IcebergRowDeltaSink (UPDATE / MERGE), so a position-delete
+  file is encrypted exactly like a data file.
+end note
+
+== Data file (and position-delete file) ==
+FE -> BE : sink encryption info -- algorithm + DEK length, NO key
+note over FE
+  Algorithm is always AES_GCM_V1. Iceberg has no cipher table
+  property, and GCM is the only PME mode that authenticates page
+  DATA -- AES_GCM_CTR_V1 would leave pages unauthenticated.
+end note
+note over BE
+  generate a fresh per-file DEK with RAND_bytes
+  (length validated in {16,24,32}) plus a 16-byte AAD prefix
+end note
+BE -> OBJ : write PME-encrypted Parquet\nencrypted footer, single footer key, no per-column keys
+BE --> FE : return PLAINTEXT file_dek and aad_prefix
+note over BE : zeroize the DEK (OPENSSL_cleanse) on writer destroy
+
+== Commit ==
+note over FE
+  key_metadata = StandardKeyMetadata(DEK, aad_prefix), applied to
+  data files AND position-delete files alike.
+  -- the data key IN THE CLEAR. Safe only because the
+  manifest carrying it is encrypted below.
+  An encrypted table whose file arrives with NO key, or a key of
+  the wrong length, is refused rather than committed.
+end note
+FE -> ICE : commit data file + key_metadata
+note over ICE : generate manifest key + AAD prefix\n(driver side, secure RNG)
+ICE -> OBJ : write manifest as AES-GCM stream (AGS1)\ncarrying each data file's key_metadata
+ICE -> OBJ : write manifest list as AES-GCM stream (AGS1)\ncarrying each manifest's key, prefix, length
+note over ICE
+  pack the manifest-list key + prefix + length into a key
+  metadata object and encrypt it with a KEK, using the KEK
+  creation timestamp as the AES-GCM AAD
+end note
+ICE -> KMS : wrap the KEK with the table master key
+KMS --> ICE : wrapped KEK
+ICE -> CAT : metadata.json (NOT encrypted):\nencryption-keys = [wrapped KEK, encrypted ML key metadata]\nsnapshot.key-id = KEK_ID
+note over KMS : one KMS call per KEK, not per file
+@enduml
