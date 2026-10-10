@@ -1,0 +1,64 @@
+diff --git a/src/tinycthread.h b/src/tinycthread.h
+--- a/src/tinycthread.h
++++ b/src/tinycthread.h
+@@ -461,11 +461,11 @@
+   typedef struct {
+     LONG volatile status;
+     CRITICAL_SECTION lock;
+-  } once_flag;
+-  #define ONCE_FLAG_INIT {0,}
++  } tct_once_flag;
++  #define TCT_ONCE_FLAG_INIT {0,}
+ #else
+-  #define once_flag pthread_once_t
+-  #define ONCE_FLAG_INIT PTHREAD_ONCE_INIT
++  #define tct_once_flag pthread_once_t
++  #define TCT_ONCE_FLAG_INIT PTHREAD_ONCE_INIT
+ #endif
+ 
+ /** Invoke a callback exactly once
+@@ -474,9 +474,9 @@
+  * @param func Callback to invoke.
+  */
+ #if defined(_TTHREAD_WIN32_)
+-  void call_once(once_flag *flag, void (*func)(void));
++  void tct_call_once(tct_once_flag *flag, void (*func)(void));
+ #else
+-  #define call_once(flag,func) pthread_once(flag,func)
++  #define tct_call_once(flag,func) pthread_once(flag,func)
+ #endif
+ 
+ 
+diff --git a/src/tinycthread.c b/src/tinycthread.c
+--- a/src/tinycthread.c
++++ b/src/tinycthread.c
+@@ -925,7 +925,7 @@
+ #endif /* _TTHREAD_EMULATE_TIMESPEC_GET_ */
+ 
+ #if defined(_TTHREAD_WIN32_)
+-void call_once(once_flag *flag, void (*func)(void))
++void tct_call_once(tct_once_flag *flag, void (*func)(void))
+ {
+   /* The idea here is that we use a spin lock (via the
+      InterlockedCompareExchange function) to restrict access to the
+diff --git a/src/rest.c b/src/rest.c
+--- a/src/rest.c
++++ b/src/rest.c
+@@ -23,7 +23,7 @@
+ #include "rest.h"
+ #include "tinycthread.h"
+ 
+-static once_flag rest_global_init_once = ONCE_FLAG_INIT;
++static tct_once_flag rest_global_init_once = TCT_ONCE_FLAG_INIT;
+ 
+ static void unittest_url_encode (void);
+ 
+@@ -42,7 +42,7 @@
+ }
+ 
+ static void rest_init (void) {
+-        call_once(&rest_global_init_once, rest_init_cb);
++        tct_call_once(&rest_global_init_once, rest_init_cb);
+ }
+ 
+ 

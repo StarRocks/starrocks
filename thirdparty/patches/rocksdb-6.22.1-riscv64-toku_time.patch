@@ -1,0 +1,18 @@
+diff --git a/utilities/transactions/lock/range/range_tree/lib/portability/toku_time.h b/utilities/transactions/lock/range/range_tree/lib/portability/toku_time.h
+index 4425a4a..c4ce2c0 100644
+--- a/utilities/transactions/lock/range/range_tree/lib/portability/toku_time.h
++++ b/utilities/transactions/lock/range/range_tree/lib/portability/toku_time.h
+@@ -133,6 +133,13 @@ static inline tokutime_t toku_time_now(void) {
+   return result;
+ #elif defined(__powerpc__)
+   return __ppc_get_timebase();
++#elif defined(__riscv) && (__riscv_xlen == 64)
++  // RISC-V 64: read the cycle CSR (CPU cycle counter since boot), the
++  // equivalent of aarch64 cntvct_el0. A single rdcycle returns the full
++  // 64-bit cycle counter on RV64.
++  uint64_t cycles;
++  __asm__ __volatile__("rdcycle %0" : "=r"(cycles));
++  return cycles;
+ #else
+ #error No timer implementation for this platform
+ #endif
