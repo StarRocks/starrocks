@@ -21,6 +21,7 @@
 #include <limits>
 #include <utility>
 
+#include "base/coding.h"
 #include "fmt/format.h"
 
 namespace starrocks {
@@ -736,17 +737,13 @@ Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics sem
 }
 
 void append_uint32(uint32_t value, std::string* output) {
-    for (size_t i = 0; i < sizeof(uint32_t); ++i) {
-        output->push_back(static_cast<char>((value >> (i * 8)) & 0xff));
-    }
+    put_fixed32_le(output, value);
 }
 
 void append_double(double value, std::string* output) {
     uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(double));
-    for (size_t i = 0; i < sizeof(double); ++i) {
-        output->push_back(static_cast<char>((bits >> (i * 8)) & 0xff));
-    }
+    put_fixed64_le(output, bits);
 }
 
 Status write_wkb(const WkbGeometry& geometry, std::string* output) {
