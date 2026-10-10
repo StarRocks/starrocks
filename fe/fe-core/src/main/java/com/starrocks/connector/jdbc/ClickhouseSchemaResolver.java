@@ -119,7 +119,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case Types.VARCHAR:
-                return TypeFactory.createVarcharType(65533);
+                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
@@ -145,7 +145,7 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                     return TypeFactory.createUnifiedDecimalType(precision, scale);
                 }
             case Types.TIME_WITH_TIMEZONE, Types.TIMESTAMP_WITH_TIMEZONE:
-                return TypeFactory.createVarcharType(65533);
+                return TypeFactory.createVarcharType(TypeFactory.getOlapMaxVarcharLength());
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
