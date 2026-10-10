@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
+import com.google.common.base.Utf8;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -38,7 +39,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
+public class ConsolidateLikesRule extends OnlyOnceScalarOperatorRewriteRule {
 
     public static final ConsolidateLikesRule INSTANCE = new ConsolidateLikesRule();
     private static final Set<Character> REGEX_META_CHARS = "^$.*+?|(){}[]".chars()
@@ -54,6 +55,10 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
     private static final String C_ESCAPED_NL_S = "\\n";
     private static final String C_ESCAPED_CR_S = "\\r";
     private static final String C_ESCAPED_TAB_S = "\\t";
+    // Hyperscan rejects regular expression patterns larger than 16,000 UTF-8 bytes
+    // (Grey::limitPatternLength in hyperscan's grey.cpp); exceeding it falls back to a much
+    // slower RE2 path. Bail out to raw LIKE predicates instead of building an oversized pattern.
+    private static final int HYPERSCAN_MAX_PATTERN_BYTES = 16_000;
 
     private ConsolidateLikesRule() {
     }
@@ -144,7 +149,12 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
                 .map(re -> "(" + re + ")")
                 .collect(Collectors.joining("|"));
 
-        ConstantOperator regexPattern = ConstantOperator.createVarchar("^(" + regexp + ")$");
+        String anchoredRegexp = "^(" + regexp + ")$";
+        if (Utf8.encodedLength(anchoredRegexp) > HYPERSCAN_MAX_PATTERN_BYTES) {
+            return Optional.empty();
+        }
+
+        ConstantOperator regexPattern = ConstantOperator.createVarchar(anchoredRegexp);
 
         ScalarOperator regexOp =
                 new LikePredicateOperator(LikePredicateOperator.LikeType.REGEXP, columnRef, regexPattern);
@@ -241,23 +251,113 @@ public class ConsolidateLikesRule extends TopDownScalarOperatorRewriteRule {
     }
 
     @Override
-    public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
-                                                 ScalarOperatorRewriteContext context) {
+    public ScalarOperator apply(ScalarOperator root, ScalarOperatorRewriteContext context) {
         int consolidateMin = Optional.ofNullable(ConnectContext.get())
                 .map(ConnectContext::getSessionVariable)
                 .map(SessionVariable::getLikePredicateConsolidateMin)
                 .orElse(0);
-        if (consolidateMin < 1) {
-            return predicate;
+        if (root == null || consolidateMin < 1) {
+            return root;
         }
+        return rewrite(root, consolidateMin, context);
+    }
+
+    /**
+     * Consolidate each maximal OR/AND group exactly once. The scalar rewriter's normal
+     * top-down traversal would visit a group rejected for exceeding hyperscan's pattern-length
+     * limit and then its smaller same-connective children, consolidating a partial subgroup
+     * instead of leaving the whole rejected group as plain LIKE predicates.
+     */
+    private static ScalarOperator rewrite(ScalarOperator operator, int consolidateMin,
+                                          ScalarOperatorRewriteContext context) {
+        if (!(operator instanceof CompoundPredicateOperator)) {
+            return rewriteChildren(operator, consolidateMin, context);
+        }
+
+        CompoundPredicateOperator predicate = (CompoundPredicateOperator) operator;
         if (predicate.isOr()) {
             List<ScalarOperator> disjuncts = Utils.extractDisjunctive(predicate);
-            return handleDisjuncts(disjuncts, consolidateMin).map(Utils::compoundOr).orElse(predicate);
+            return rewriteDisjuncts(predicate, disjuncts, consolidateMin, context);
         } else if (predicate.isAnd()) {
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
-            return handleConjuncts(conjuncts, consolidateMin).map(Utils::compoundAnd).orElse(predicate);
-        } else {
-            return predicate;
+            return rewriteConjuncts(predicate, conjuncts, consolidateMin, context);
         }
+        return rewriteChildren(predicate, consolidateMin, context);
+    }
+
+    private static ScalarOperator rewriteDisjuncts(CompoundPredicateOperator predicate,
+                                                    List<ScalarOperator> disjuncts,
+                                                    int consolidateMin,
+                                                    ScalarOperatorRewriteContext context) {
+        return handleDisjuncts(disjuncts, consolidateMin)
+                .map(ops -> rewriteConsolidatedGroup(changed(Utils.compoundOr(ops), context), true,
+                        consolidateMin, context))
+                .orElseGet(() -> rewriteSameCompoundChildren(predicate, true, consolidateMin,
+                        context));
+    }
+
+    private static ScalarOperator rewriteConjuncts(CompoundPredicateOperator predicate,
+                                                    List<ScalarOperator> conjuncts,
+                                                    int consolidateMin,
+                                                    ScalarOperatorRewriteContext context) {
+        return handleConjuncts(conjuncts, consolidateMin)
+                .map(ops -> rewriteConsolidatedGroup(changed(Utils.compoundAnd(ops), context), false,
+                        consolidateMin, context))
+                .orElseGet(() -> rewriteSameCompoundChildren(predicate, false, consolidateMin,
+                        context));
+    }
+
+    private static ScalarOperator rewriteChildren(ScalarOperator operator, int consolidateMin,
+                                                   ScalarOperatorRewriteContext context) {
+        for (int i = 0; i < operator.getChildren().size(); i++) {
+            ScalarOperator child = operator.getChild(i);
+            ScalarOperator rewrittenChild = rewrite(child, consolidateMin, context);
+            if (rewrittenChild != child) {
+                operator.setChild(i, rewrittenChild);
+                context.change();
+            }
+        }
+        return operator;
+    }
+
+    private static ScalarOperator rewriteConsolidatedGroup(ScalarOperator operator, boolean isOr,
+                                                            int consolidateMin,
+                                                            ScalarOperatorRewriteContext context) {
+        if (operator instanceof CompoundPredicateOperator && isSameCompoundType(
+                (CompoundPredicateOperator) operator, isOr)) {
+            return rewriteSameCompoundChildren((CompoundPredicateOperator) operator, isOr,
+                    consolidateMin, context);
+        }
+        return rewrite(operator, consolidateMin, context);
+    }
+
+    private static ScalarOperator rewriteSameCompoundChildren(CompoundPredicateOperator predicate, boolean isOr,
+                                                               int consolidateMin,
+                                                               ScalarOperatorRewriteContext context) {
+        for (int i = 0; i < predicate.getChildren().size(); i++) {
+            ScalarOperator child = predicate.getChild(i);
+            ScalarOperator rewrittenChild;
+            if (child instanceof CompoundPredicateOperator &&
+                    isSameCompoundType((CompoundPredicateOperator) child, isOr)) {
+                rewrittenChild = rewriteSameCompoundChildren((CompoundPredicateOperator) child, isOr,
+                        consolidateMin, context);
+            } else {
+                rewrittenChild = rewrite(child, consolidateMin, context);
+            }
+            if (rewrittenChild != child) {
+                predicate.setChild(i, rewrittenChild);
+                context.change();
+            }
+        }
+        return predicate;
+    }
+
+    private static boolean isSameCompoundType(CompoundPredicateOperator predicate, boolean isOr) {
+        return isOr ? predicate.isOr() : predicate.isAnd();
+    }
+
+    private static ScalarOperator changed(ScalarOperator operator, ScalarOperatorRewriteContext context) {
+        context.change();
+        return operator;
     }
 }
