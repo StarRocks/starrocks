@@ -793,8 +793,7 @@ TEST_F(ParquetFileWriterTest, TestDataPageV2) {
     ASSIGN_OR_ASSERT_FAIL(auto file_size, file->get_size());
     std::string contents(file_size, '\0');
     ASSERT_OK(file->read_at_fully(0, contents.data(), file_size));
-    std::shared_ptr<arrow::io::RandomAccessFile> source(
-            arrow::io::BufferReader::FromString(std::move(contents)));
+    std::shared_ptr<arrow::io::RandomAccessFile> source(arrow::io::BufferReader::FromString(std::move(contents)));
     auto parquet_reader = ::parquet::ParquetFileReader::Open(source);
     auto page_reader = parquet_reader->RowGroup(0)->GetColumnPageReader(0);
     std::shared_ptr<::parquet::Page> page;
@@ -818,23 +817,22 @@ TEST_F(ParquetFileWriterTest, TestDataPageVersionFactoryValidation) {
             ColumnSlotIdEvaluator::from_types(type_descs));
     auto fs = std::make_shared<MemoryFileSystem>();
     std::map<std::string, std::string> options = {{ParquetWriterOptions::DATA_PAGE_VERSION, "v2"}};
-    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options,
-                                            _make_type_names(type_descs), column_evaluators, std::nullopt, nullptr,
-                                            nullptr);
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                            column_evaluators, std::nullopt, nullptr, nullptr);
     ASSERT_OK(factory.init());
     options[ParquetWriterOptions::DATA_PAGE_VERSION] = "2.6";
-    auto invalid_factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options,
-                                                    _make_type_names(type_descs), column_evaluators, std::nullopt,
-                                                    nullptr, nullptr);
+    auto invalid_factory =
+            ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(type_descs),
+                                     column_evaluators, std::nullopt, nullptr, nullptr);
     EXPECT_NE(invalid_factory.init().to_string().find("page-version"), std::string::npos);
 
     std::vector boolean_types{TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC)};
     auto boolean_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
             ColumnSlotIdEvaluator::from_types(boolean_types));
     options[ParquetWriterOptions::DATA_PAGE_VERSION] = "v2";
-    auto boolean_factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options,
-                                                    _make_type_names(boolean_types), boolean_evaluators, std::nullopt,
-                                                    nullptr, nullptr);
+    auto boolean_factory =
+            ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(boolean_types),
+                                     boolean_evaluators, std::nullopt, nullptr, nullptr);
     EXPECT_NE(boolean_factory.init().to_string().find("BOOLEAN"), std::string::npos);
 }
 

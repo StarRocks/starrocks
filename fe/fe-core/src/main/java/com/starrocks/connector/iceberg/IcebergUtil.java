@@ -52,6 +52,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -72,7 +73,7 @@ public final class IcebergUtil {
         }
         Preconditions.checkArgument("v1".equalsIgnoreCase(value) || "v2".equalsIgnoreCase(value),
                 "write.parquet.page-version must be v1 or v2: %s", value);
-        return value.toLowerCase(java.util.Locale.ROOT);
+        return value.toLowerCase(Locale.ROOT);
     }
 
     public static String fileName(String path) {
