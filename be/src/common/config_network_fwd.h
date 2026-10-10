@@ -97,6 +97,16 @@ CONF_Int64(brpc_socket_max_unwritten_bytes, "1073741824");
 // brpc re-reads the flag on every pooled get/return, so updating this config takes effect immediately.
 CONF_mInt32(brpc_max_connection_pool_size, "100");
 
+// Max number of RPCs a single brpc stub may have in flight. `0` or below disables the limit.
+// Under brpc_connection_type "pooled" a stub holds exactly one pooled connection per in-flight RPC,
+// so this doubles as a hard cap on the connections one stub opens to its peer; the cap per peer is
+// this value multiplied by brpc_max_connections_per_server. Under "single" the limit still applies
+// but bounds no connections, because one connection multiplexes every in-flight RPC.
+// An RPC that exceeds the limit fails immediately rather than waiting, so keep the value well above
+// the peak concurrency and treat it as a safety valve. Set brpc_max_connection_pool_size no lower
+// than this value, otherwise the connections above the pool capacity still churn.
+CONF_mInt32(brpc_max_inflight_rpc_per_stub, "0");
+
 // If the amount of data to be sent by a single channel of brpc exceeds brpc_socket_max_unwritten_bytes
 // it will cause rpc to report an error. We add configuration to ignore rpc overload.
 // This may cause process memory usage to rise.

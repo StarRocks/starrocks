@@ -44,6 +44,9 @@ public:
                 LOG(WARNING) << "Fail to reset channel: " << st.to_string();
             }
         }
+        // Paired with the acquire the stub's channel does before issuing the RPC. Released before
+        // _done runs so the slot is free again even if the callback issues another RPC.
+        _stub->release_inflight();
         _done->Run();
         delete this;
     }

@@ -261,6 +261,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：客户端为每个远程服务器端点缓存的空闲连接数。仅在 `brpc_connection_type` 为 `"pooled"` 时生效。该值是空闲连接缓存的容量，而非连接数上限：没有空闲连接可用时总是会新建连接，归还连接时若池中已有该数量的连接则将其关闭。若该值低于对单个对端的在途 RPC 峰值，超出的部分会被反复建立和关闭，效果类似短连接，并消耗临时端口，因此建议不低于该峰值。增大该值会增加文件描述符数量以及空闲连接占用的内存。取值为 `0` 或负数时将禁用连接复用，此时 `"pooled"` 的行为等同于 `"short"`。修改该值立即生效，且仅影响此后归还的连接。
 - 引入版本：v4.2.0
 
+### brpc_max_inflight_rpc_per_stub
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个 bRPC stub 允许的在途 RPC 数上限。取值为 `0` 或负数时禁用该限制，即默认不限制。当 `brpc_connection_type` 为 `"pooled"` 时，一个 stub 每有一个在途 RPC 就会从连接池中取走一条连接，因此该值同时也是单个 stub 对其对端的连接数上限；对单个对端的上限为该值乘以 `brpc_max_connections_per_server`。当 `brpc_connection_type` 为 `"single"` 时该限制依然生效，但不限制连接数，因为所有在途 RPC 复用同一条连接。超出限制的 RPC 会立即失败而不会等待，因此请将该值设置为明显高于并发峰值，将其视为保护性阈值而非常规限流手段。请将 `brpc_max_connection_pool_size` 设置为不低于该值，否则超出池容量的连接仍会被反复建立和关闭。
+- 引入版本：v4.2.0
+
 ### brpc_max_connections_per_server
 
 - 默认值：1
