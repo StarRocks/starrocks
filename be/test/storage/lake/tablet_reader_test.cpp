@@ -1389,10 +1389,11 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     auto st = reader->open(params);
     ASSERT_FALSE(st.ok());
     ASSERT_GE(total_hits.load(), 2);
-    // The other task's successful read must still be included after the error path waits for it.
+    // The injected error precedes rowset->read(), so only the other task reads a segment.
+    // Its successful read must still be included after the error path waits for it.
     EXPECT_EQ(2, reader->stats().rowsets_read_count);
-    EXPECT_EQ(2, reader->stats().segments_read_count);
-    EXPECT_EQ(2, reader->stats().phy_segments_count);
+    EXPECT_EQ(1, reader->stats().segments_read_count);
+    EXPECT_EQ(1, reader->stats().phy_segments_count);
 }
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
