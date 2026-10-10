@@ -1816,6 +1816,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "expected 'non-append-only' in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
+        Assertions.assertTrue(chain.contains("REFRESH MATERIALIZED VIEW `" + dbName + "`.`" + mv.getName() + "` FORCE"),
+                "expected the hint to name the view with its database, got: " + chain);
     }
 
     @Test

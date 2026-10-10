@@ -143,6 +143,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         if (!mv.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
+<<<<<<< HEAD
+=======
+            if (MaterializedViewExceptions.isRecoveredByForceRefresh(mv.getInactiveReason())) {
+                errorMsg += " " + MaterializedViewExceptions.recoverByRebuildHint(db.getFullName(), mv.getName());
+            }
+>>>>>>> 489629bc8df... [BugFix] Quote the materialized view name when FORCE activates it and in its recovery hint (#64945)
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
