@@ -375,11 +375,22 @@ public class InsertPlanner {
             // too); either way the finally below leaves it held, as the caller expects.
             plannerMetaLocker.unlock();
             ExecPlan plan;
+            Throwable planFailure = null;
             try {
                 plan = doPlan(insertStmt, session);
+            } catch (Throwable t) {
+                planFailure = t;
+                throw t;
             } finally {
                 try (Timer ignore = Tracers.watchScope("Lock")) {
                     StatementPlanner.lock(plannerMetaLocker);
+                } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                    // A bounded re-acquire that ran out must not hide why planning failed: report that failure,
+                    // as the caller would have seen it had the lock come back.
+                    if (planFailure == null) {
+                        throw e;
+                    }
+                    planFailure.addSuppressed(e);
                 }
             }
             long validateAgainst = planStartTime;

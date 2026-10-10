@@ -231,12 +231,19 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         // round trip (e.g. a JDBC getDb) with the lock held and no protection. Pre-resolve those relations here,
         // as StatementPlanner does; the locked analyzer reuses a pre-resolved external relation. The IVM branch
         // below regenerates the AST under the lock and so resolves its external tables there, as before.
+        // The task run reuses this context across retries and batches, while only StatementPlanner#plan clears
+        // what a pre-pass captured. Drop anything a previous attempt left (a lock timeout throws before the
+        // locked analyzer consumed it), or its view bodies -- with external tables resolved back then -- would
+        // be expanded here in place of the current ones.
+        ctx.getPreResolvedState().clear();
         if (Config.enable_experimental_external_table_preparse) {
             try (Timer ignored = Tracers.watchScope("MVRefreshPreResolveExternalTables")) {
                 new QueryAnalyzer(ctx).analyzeExternalTablesOnly(insertStmt);
             }
         }
         ExecPlan execPlan = null;
+        // Planning may let go of the lock and take it back (the optimistic INSERT path); hold that to the same bound.
+        locker.setAcquireTimeoutMs(Config.mv_refresh_try_lock_timeout_ms);
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
                     "failed to acquire planner meta lock within %d ms when preparing refresh plan",
@@ -266,9 +273,15 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
+            } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                // Same as the first acquisition timing out: the task run retries it as a lock failure.
+                throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: %s " +
+                        "when planning the refresh", db.getFullName(), mv.getName(), e.getMessage()));
             }
         } finally {
             locker.unlock();
+            // The IVM branch regenerates the AST, so the bodies captured above may never have been taken.
+            ctx.getPreResolvedState().clear();
         }
 
         final InsertStmt finalInsertStmt = insertStmt;
