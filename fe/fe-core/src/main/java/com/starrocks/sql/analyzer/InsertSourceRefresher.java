@@ -109,17 +109,16 @@ public final class InsertSourceRefresher {
             return;
         }
         Table bound = relation.getTable();
-        Table forPlanning = reloaded.forQueryPlanning();
-        if (bound == reloaded || bound == forPlanning) {
+        if (bound == reloaded) {
             return;
         }
         // The analyzed statement -- its scope, the relation's column map -- was built from the columns of the bound
         // table; a table whose columns differ in anything planning reads would not fit it.
-        if (!sameSchema(bound, forPlanning)) {
+        if (!sameSchema(bound, reloaded)) {
             throw new SemanticException("The schema of table %s changed while the statement was being planned, " +
                     "please retry", keyOf(bound).toString());
         }
-        relation.setTable(forPlanning);
+        relation.setTable(reloaded);
     }
 
     private static boolean sameSchema(Table a, Table b) {

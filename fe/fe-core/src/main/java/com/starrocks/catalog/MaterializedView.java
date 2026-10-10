@@ -2643,101 +2643,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * The outcome of re-getting one external ref base table ahead of time: the table (empty when it is not
-     * found), or the failure the lookup threw.
-     */
-    private record RefreshedBaseTable(Optional<Table> table, RuntimeException failure) {
-        Optional<Table> get() {
-            if (failure != null) {
-                throw failure;
-            }
-            return table;
-        }
-    }
-
-    /**
-     * External ref base tables re-got ahead of time, consulted by {@link #refreshBaseTable} on this thread only.
-     * Set by {@link PreResolvedRefBaseTables#enter()}.
-     */
-    private static final ThreadLocal<Map<BaseTableInfo, RefreshedBaseTable>> PRE_RESOLVED_REF_BASE_TABLES =
-            new ThreadLocal<>();
-
-    /**
-     * Re-gets every external ref base table that {@link #refreshBaseTable} would re-get, so a caller about
-     * to take a metadata lock can make the connector round trips first and then run the analysis under the
-     * lock inside {@link PreResolvedRefBaseTables#enter()}.
-     *
-     * <p>A failed lookup is kept, not thrown: refreshBaseTable rethrows it where the original lookup would
-     * have thrown, so errors surface at the same point and in the same order as without pre-resolving.
-     */
-    public PreResolvedRefBaseTables preResolveRefBaseTables() {
-        Map<BaseTableInfo, RefreshedBaseTable> resolved = Maps.newHashMap();
-        List<Optional<? extends Map<Table, ?>>> refMaps =
-                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
-        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
-            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
-                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
-                if (!isRefreshedPerQuery(table)
-                        || baseTableInfo == null || resolved.containsKey(baseTableInfo)) {
-                    continue;
-                }
-                try {
-                    resolved.put(baseTableInfo, new RefreshedBaseTable(MvUtils.getTable(baseTableInfo), null));
-                } catch (RuntimeException e) {
-                    resolved.put(baseTableInfo, new RefreshedBaseTable(null, e));
-                }
-            }
-        }
-        return new PreResolvedRefBaseTables(resolved);
-    }
-
-    public static final class PreResolvedRefBaseTables {
-        private final Map<BaseTableInfo, RefreshedBaseTable> tables;
-
-        private PreResolvedRefBaseTables(Map<BaseTableInfo, RefreshedBaseTable> tables) {
-            this.tables = tables;
-        }
-
-        /**
-         * Makes refreshBaseTable on the current thread use these tables until the returned scope is closed.
-         */
-        public Scope enter() {
-            Map<BaseTableInfo, RefreshedBaseTable> previous = PRE_RESOLVED_REF_BASE_TABLES.get();
-            PRE_RESOLVED_REF_BASE_TABLES.set(tables);
-            return () -> {
-                if (previous == null) {
-                    PRE_RESOLVED_REF_BASE_TABLES.remove();
-                } else {
-                    PRE_RESOLVED_REF_BASE_TABLES.set(previous);
-                }
-            };
-        }
-
-        public interface Scope extends AutoCloseable {
-            @Override
-            void close();
-        }
-    }
-
-    /**
-     * Whether a cached ref base table is re-got from its catalog for each query ({@link #refreshBaseTable}); the
-     * pre-resolve ({@link #preResolveRefBaseTables}) must cover exactly these.
-     */
-    private static boolean isRefreshedPerQuery(Table table) {
-        return table instanceof IcebergTable || table instanceof DeltaLakeTable;
-    }
-
-    /**
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
      * Since the table is cached in the Optional, needs to refresh it again for each query.
      */
     private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
         Map<Table, K> result = Maps.newHashMap();
         for (Map.Entry<Table, K> e : cached.entrySet()) {
             Table table = e.getKey();
-            if (isRefreshedPerQuery(table)) {
+            if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
                 Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache

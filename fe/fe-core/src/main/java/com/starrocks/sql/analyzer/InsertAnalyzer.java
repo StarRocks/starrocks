@@ -854,24 +854,12 @@ public class InsertAnalyzer {
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (database == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
         Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
-=======
-        TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        // An external target was resolved before the lock was taken; see PreResolvedState#WRITE_TARGET.
-        Table table = session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableNameObj, () -> {
-            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
-            if (database == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
-            return MetaUtils.getSessionAwareTable(session, database, tableNameObj);
-        });
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KeysType;
@@ -263,16 +265,12 @@ public class DeleteAnalyzer {
 
         TableRef tableRef = deleteStatement.getTableRef();
         TableName tableName = TableName.fromTableRef(tableRef);
-<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
-=======
-        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
 
         // Handle Iceberg table delete

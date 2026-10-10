@@ -18,16 +18,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
 import com.starrocks.catalog.Database;
-=======
-import com.starrocks.catalog.IcebergTable;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.JoinRelation;
@@ -45,6 +42,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.type.NullType;
 
@@ -78,16 +76,12 @@ public class UpdateAnalyzer {
         TableRef tableRef = AnalyzerUtils.normalizedTableRef(updateStmt.getTableRef(), session);
         updateStmt.setTableRef(tableRef);
         TableName tableName = TableName.fromTableRef(tableRef);
-<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
         if (db == null) {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
-=======
-        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 
         if (table instanceof MaterializedView) {
             throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"

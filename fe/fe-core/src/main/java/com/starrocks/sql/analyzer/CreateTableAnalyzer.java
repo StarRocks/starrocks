@@ -105,16 +105,7 @@ public class CreateTableAnalyzer {
         final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-<<<<<<< HEAD
         Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
-=======
-        // A CTAS into an external catalog had both answers fetched before the meta lock; see
-        // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
-        PreResolvedState.CreateTarget preResolved = context.getPreResolvedState().take(
-                PreResolvedState.CREATE_TARGET, com.starrocks.catalog.TableName.fromTableRef(tableRef));
-        Database dbObj = preResolved != null ? preResolved.db()
-                : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         if (dbObj == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }

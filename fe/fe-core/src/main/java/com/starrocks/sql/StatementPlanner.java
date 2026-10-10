@@ -45,11 +45,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.analyzer.InsertSourceRefresher;
-import com.starrocks.sql.analyzer.PipeAnalyzer;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -201,14 +197,8 @@ public class StatementPlanner {
             }
             // Whatever the pre-pass captured belongs to this statement only: anything expansion did not
             // consume (a view behind a branch that was never reached, a body the "still current" check
-<<<<<<< HEAD
             // rejected) must not be offered to the next one.
-            session.getPreResolvedViewBodies().clear();
-=======
-            // rejected) must not be offered to the next one. Same for a write target the analyzer did not
-            // come to collect -- a statement that failed before it reached its target, say.
             session.getPreResolvedState().clear();
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
@@ -337,8 +327,6 @@ public class StatementPlanner {
     }
 
     /**
-<<<<<<< HEAD
-=======
      * The pre-pass above refreshes the sources of an INSERT it reaches; this refreshes the rest and rebinds them,
      * now that analysis has expanded every view and subquery. Outside the lock on the deferred path, under it on
      * the locked one. Only for an INSERT about to be planned: a SUBMIT TASK plans its INSERT when the task runs,
@@ -351,30 +339,6 @@ public class StatementPlanner {
     }
 
     /**
-     * The SELECT whose files() the pre-pass in {@link #analyzeStatement} resolves before the lock, for a
-     * statement the INSERT branch there does not cover. A CTAS target does not exist until execution, and
-     * CREATE PIPE analyzes its INSERT from inside PipeAnalyzer, after the lock of the outer statement is
-     * already held -- so neither reaches the deferred-lock path. SUBMIT TASK carries either an INSERT
-     * (handled by that branch) or a CTAS.
-     */
-    private static QueryStatement queryWithFilesToPreResolve(StatementBase statement) {
-        if (statement instanceof QueryStatement queryStatement) {
-            return queryStatement;
-        }
-        if (statement instanceof CreateTableAsSelectStmt ctas) {
-            return ctas.getQueryStatement();
-        }
-        if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getCreateTableAsSelectStmt() != null) {
-            return submitTaskStmt.getCreateTableAsSelectStmt().getQueryStatement();
-        }
-        if (statement instanceof CreatePipeStmt createPipeStmt && createPipeStmt.getInsertStmt() != null) {
-            return createPipeStmt.getInsertStmt().getQueryStatement();
-        }
-        return null;
-    }
-
-    /**
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
      * The private copies planning will work off, plus the instant they were taken.
      *
      * @param originalOlapTables   the live tables the copies were made from, to revalidate against at the end

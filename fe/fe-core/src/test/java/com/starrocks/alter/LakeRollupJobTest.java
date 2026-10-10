@@ -26,10 +26,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.LeaderDaemon;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.qe.ConnectContext;
@@ -43,7 +39,6 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
-import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -287,20 +282,8 @@ public class LakeRollupJobTest {
         }
     }
 
-<<<<<<< HEAD
     @Test
     public void testCreateSyncMvWithEnableFileBundling() throws Exception {
-=======
-    /**
-     * Whether {@link LakeRollupJob#lakePublishVersion} was holding a metadata lock when it published,
-     * sampled inside the faked transport. Static because the faked transport is a static method.
-     */
-    private static LockProbe publishProbe;
-
-    @Test
-    public void testCreateSyncMvWithEnableFileBundling() throws Exception {
-        publishProbe = LockProbe.onAnyThread();
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -317,15 +300,7 @@ public class LakeRollupJobTest {
                     Map<Long, Double> compactionScores,
                     Map<Long, com.starrocks.proto.TabletStatPB> tabletStats)
                     throws NoAliveBackendException, RpcException {
-<<<<<<< HEAD
                 // Do nothing, just return successfully
-=======
-                // Publishing is a BE RPC. Sample the lock depth where the real transport would be
-                // contacted: the job reads the partition's tablets under the table's READ lock, but the
-                // publish itself has to happen after that lock is dropped, or every waiter on the table
-                // -- transaction publish included -- pays the round trip.
-                publishProbe.record("publish");
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
             }
         };
 
@@ -350,12 +325,6 @@ public class LakeRollupJobTest {
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
 
-<<<<<<< HEAD
-=======
-        publishProbe.assertReachedOutsideTheLock("publish",
-                "lakePublishVersion published while holding an FE metadata lock");
-
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
         for (Partition partition : table.getPartitions()) {
             long partitionId = partition.getId();
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -408,44 +377,4 @@ public class LakeRollupJobTest {
         Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE base_table_lw\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    k3 int\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('light_weight_tablet_creation' = 'true');");
-
-        LakeRollupJob job = createJob(
-                "create materialized view mv_lw as select k2, k1 from base_table_lw order by k2;");
-        OlapTable lwTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(DB).getTable("base_table_lw");
-        Assertions.assertTrue(lwTable.isLightWeightTabletCreation());
-
-        AtomicBoolean sendCalled = new AtomicBoolean(false);
-        new MockUp<LakeRollupJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
-                                             com.starrocks.common.util.concurrent.MarkedCountDownLatch<Long, Long> latch,
-                                             long timeoutSeconds) {
-                sendCalled.set(true);
-            }
-        };
-
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-        Assertions.assertFalse(sendCalled.get(),
-                "sendAgentTaskAndWait must not be invoked when light_weight_tablet_creation is enabled");
-    }
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 }

@@ -98,7 +98,6 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
-import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -473,38 +472,6 @@ public class IcebergTable extends Table {
         return table;
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * A private copy of a table published in an internal database (ENGINE=ICEBERG from a resource), for one
-     * query to plan and run on. The published object is shared by every query and read without the meta lock,
-     * and a query writes to the table it plans on: it loads the native table lazily, installs its own metrics
-     * reporter, fills the partition caches and clears the native table when it ends. On the copy those stay
-     * with the query. The native table is handed over as it is -- possibly still unloaded, in which case the
-     * copy loads it for itself -- and the related MVs and constraints are shared, since the planner only reads
-     * them.
-     */
-    public IcebergTable copyForQuery() {
-        IcebergTable table = new IcebergTable(id, name, catalogName, resourceName, catalogDBName, catalogTableName,
-                comment, fullSchema, nativeTable, icebergProperties);
-        table.createTime = createTime;
-        table.relatedMaterializedViews = relatedMaterializedViews;
-        table.setUniqueConstraints(getUniqueConstraints());
-        table.setForeignKeyConstraints(getForeignKeyConstraints());
-        return table;
-    }
-
-    /**
-     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
-     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
-     * resolved per query already.
-     */
-    @Override
-    public Table forQueryPlanning() {
-        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
-    }
-
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
     // Read-spec partition fields whose source column exists in the read schema. Time travel uses the
     // targeted snapshot's spec (see getReadSpec), so partition fields added by later spec evolution
     // are not exposed; ordinary reads keep the current spec.
