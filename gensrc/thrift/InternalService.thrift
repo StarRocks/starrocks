@@ -427,6 +427,11 @@ struct TQueryOptions {
   // Maximum number of elements in an array produced by an array function. The query fails once an
   // array exceeds it. Only array_agg enforces it so far. <=0 disables the limit. Default 0.
   226: optional i64 max_array_length = 0;
+
+  // Enable fused JSON-extract fast path (simdjson::ondemand) for get_json_*(VARCHAR, VARCHAR)
+  // and json_query_from_string. Default true; set false to fall back to the legacy
+  // parse_json+JsonPath::extract pipeline.
+  228: optional bool enable_json_extract_fusion = true;
 }
 
 // A scan range plus the parameters needed to execute that scan.
