@@ -20,28 +20,35 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.SelectList;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
- * INSERT-from-FILES pre-split source. Matches only the strict bare
- * {@code INSERT INTO target SELECT * FROM FILES(...)} shape. {@link #prepare}
- * triggers FILES() schema inference, enforces by-position name alignment
- * between the target and the inferred FILES schema, and builds an
- * {@link InsertFromFilesScanContext} for the shared flow.
+ * INSERT-from-FILES pre-split source. Matches {@code INSERT INTO target SELECT ... FROM FILES(...)}
+ * for every projection shape the sampler can reproduce in its own
+ * {@code SELECT <key> FROM FILES(<verbatim properties>)} sub-query: a bare star, an explicit column
+ * list, expressions on non-key columns, safe deterministic expressions on key columns
+ * ({@code date_trunc('day', ts) AS dt}), generated sort-key and partition columns computed from the
+ * FILES columns they read, and an optional WHERE clause. {@link #prepare} triggers
+ * FILES() schema inference, gates the WHERE predicate, maps the projection onto the target with
+ * {@link InsertSelectSourceColumns}, and builds an {@link InsertFromFilesScanContext} for the
+ * shared flow.
  */
 final class FilesPreSplitSource implements InsertPreSplitSource {
 
@@ -59,7 +66,7 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
 
     @Override
     public boolean matches(InsertStmt insertStmt, SelectRelation selectRelation) {
-        return isStraightStarProjection(selectRelation)
+        return InsertPreSplitHook.hasSupportedProjectionShape(selectRelation)
                 && selectRelation.getRelation() instanceof FileTableFunctionRelation;
     }
 
@@ -71,115 +78,86 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         if (sourceTable == null) {
             return null;
         }
-        if (!schemasAlignForByPositionInsert(insertStmt, target, sourceTable)) {
+        // The parser drops any alias written on FILES(...) (AstBuilder#visitFileTableFunction keeps
+        // only the property list), so no alias is ever in scope and the sole qualifier a slot may
+        // carry is the relation's own synthetic name -- which the sampler's own FILES() call carries
+        // too, so such a predicate re-resolves inside the sub-query.
+        // Fold plan-time constants in the user's context before the gate, so the ROOT sampler
+        // never evaluates a function that reads session state (time zone, query start time).
+        Expr where = SamplingPredicateGate.foldPlanTimeConstants(selectRelation.getWhereClause(), context);
+        if (where == null && selectRelation.getWhereClause() != null) {
             return null;
         }
-        InsertFromFilesScanContext scanContext =
-                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
-                        context.getSessionVariable().getTimeZone());
+        if (!SamplingPredicateGate.isDeterministicAndSafe(where, filesRelation.getName(), /*sourceAlias*/ null)) {
+            return null;
+        }
+        String wherePredicateSql = where == null ? null : SamplingPredicateGate.toSql(where);
+
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
+        sourceTable = withInferredColumnTypes(insertStmt, filesRelation, sourceTable, selectRelation, where,
+                InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns));
+        if (sourceTable == null) {
+            return null;
+        }
+        // Checked only now, against the column types the sampler's own FILES() call infers: the schema has just been
+        // read again where push-down rewrote it.
+        if (where != null && !SamplingPredicateGate.whereEvaluatesAsTheLoad(where, sourceTable.getFullVisibleSchema(),
+                filesRelation.getName(), /*sourceAlias*/ null, context, targetNameForLog(insertStmt))) {
+            return null;
+        }
+        // The data tier evaluates its projections over the same FILES() rows, so a safe computed key is admitted.
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
+                insertStmt, selectRelation, target, sourceTable,
+                filesRelation.getName(), /*sourceAlias*/ null,
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
+        if (resolved == null) {
+            return null;
+        }
+        // INSERT binds each SELECT output to a generated column's definition as selected, after column-type
+        // push-down may have read a FILES column at a target column's type.
+        InsertSelectSourceColumns.InputReading reading = columnTypesMayBePushedDown(insertStmt, sourceTable)
+                ? InsertSelectSourceColumns.InputReading.AS_SELECTED_AFTER_PUSH_DOWN
+                : InsertSelectSourceColumns.InputReading.AS_SELECTED;
+        resolved = InsertSelectSourceColumns.admitSampledColumns(resolved, target, sortKeyColumns, partitionColumns,
+                reading, context, filesRelation.getName(), /*sourceAlias*/ null);
+        if (resolved == null) {
+            return null;
+        }
+        Map<String, String> targetToSource = resolved.targetToSource();
+        InsertFromFilesScanContext scanContext =
+                new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
+                        context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql,
+                        resolved.targetToConstantSql(), resolved.targetToExpressionSql(),
+                        SampleSessionSemantics.capture(context.getSessionVariable()));
+        // Deliberately the WHOLE file byte total even when a predicate narrows the load: FILES()
+        // exposes no row count, so the data tier has no denominator to turn its observed hit ratio
+        // into a filtered size the way the table path does. Sizing from the full input can only
+        // over-split, and pre-split is a sizing optimization -- under-sizing would be the harmful
+        // direction.
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 sumFileBytes(sourceTable), context.getCurrentComputeResource());
     }
 
     /**
-     * Verifies that, under by-position INSERT mapping, the target column at
-     * every ordinal has the same name as the FILES column at the same ordinal.
-     *
-     * <p>Required because the load and the sampler resolve the source column
-     * differently: the load writes FILES column N into target column N (by
-     * position), while the sampler reads the source by name (it issues
-     * {@code SELECT <target_sort_key_name> FROM FILES(...)}). When FILES has
-     * the columns in a different order than the target, the two resolutions
-     * diverge — the sampler computes boundaries from a different column than
-     * the load actually writes, producing wrong split points.
-     *
-     * <p>The check is skipped when the INSERT uses by-name mapping
-     * ({@link InsertStmt#isColumnMatchByName()}): in that mode the load also
-     * pairs columns by name, so the sampler's by-name read matches.
-     *
-     * <p>Package-private (not private) so the unit test can drive it without
-     * mocking the full eligibility chain that precedes it.
+     * Whether the load may read a directly projected FILES column at a target column's type
+     * ({@code InsertAnalyzer#pushDownTargetTableSchemaToFiles}): never when FILES declares its own schema,
+     * otherwise when the FE config or the statement's {@code enable_push_down_schema} turns it on. A plain
+     * INSERT reaches this hook before analysis parses that property, so its raw value is read as well;
+     * anything but "false" counts as on, which only makes the check stricter.
      */
-    static boolean schemasAlignForByPositionInsert(
-            InsertStmt insertStmt, OlapTable targetTable, TableFunctionTable sourceTable) {
-        if (insertStmt.isColumnMatchByName()) {
+    private static boolean columnTypesMayBePushedDown(InsertStmt insertStmt, TableFunctionTable sourceTable) {
+        if (sourceTable.hasExplicitSchema()) {
+            return false;
+        }
+        if (Config.files_enable_insert_push_down_column_type || insertStmt.isEnablePushDownSchema()) {
             return true;
         }
-        // The effective target columns are the explicit column list when present
-        // (a partial list omits non-key columns, which are defaulted), otherwise
-        // the full base schema. The load writes FILES column N into effective
-        // target column N by position; requiring name equality at every ordinal
-        // makes the sampler's by-name read of a sort-key column resolve to the
-        // same FILES column the load writes into that key.
-        List<String> targetColumnNames = effectiveTargetColumnNames(insertStmt, targetTable);
-        List<Column> sourceColumns = sourceTable.getFullSchema();
-        if (targetColumnNames.size() != sourceColumns.size()) {
-            return false;
-        }
-        for (int ordinal = 0; ordinal < targetColumnNames.size(); ordinal++) {
-            String targetName = targetColumnNames.get(ordinal);
-            String sourceName = sourceColumns.get(ordinal).getName();
-            if (!targetName.equalsIgnoreCase(sourceName)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Target column names in INSERT (by-position) order: the explicit target
-     * column list when present, otherwise the base (non-generated) schema names.
-     */
-    private static List<String> effectiveTargetColumnNames(InsertStmt insertStmt, OlapTable targetTable) {
-        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-        if (targetColumnNames != null && !targetColumnNames.isEmpty()) {
-            return targetColumnNames;
-        }
-        return targetTable.getBaseSchemaWithoutGeneratedColumn().stream()
-                .map(Column::getName)
-                .collect(Collectors.toList());
-    }
-
-    /**
-     * Verifies the SelectRelation is exactly {@code SELECT * FROM <from>}: a
-     * single bare star projection with no qualifier, no {@code EXCLUDE}, no
-     * alias, no {@code DISTINCT}, and no WHERE/GROUP BY/HAVING/ORDER BY/LIMIT.
-     *
-     * <p>The sampler synthesizes its own {@code SELECT <sort_key> FROM
-     * FILES(<verbatim properties>)} and ignores any wrapper. Any projection
-     * transform, filter, or row-changing clause here would make the sampled
-     * boundaries diverge from what the load actually writes.
-     */
-    private static boolean isStraightStarProjection(SelectRelation selectRelation) {
-        SelectList selectList = selectRelation.getSelectList();
-        if (selectList == null || selectList.isDistinct()) {
-            return false;
-        }
-        List<SelectListItem> items = selectList.getItems();
-        if (items.size() != 1) {
-            return false;
-        }
-        SelectListItem onlyItem = items.get(0);
-        if (!onlyItem.isStar()) {
-            return false;
-        }
-        if (onlyItem.getTblName() != null) {
-            return false;
-        }
-        if (!onlyItem.getExcludedColumns().isEmpty()) {
-            return false;
-        }
-        if (onlyItem.getAlias() != null) {
-            return false;
-        }
-        return !selectRelation.hasWhereClause()
-                && !selectRelation.hasGroupByClause()
-                && !selectRelation.hasHavingClause()
-                && !selectRelation.hasOrderByClause()
-                && !selectRelation.hasLimit();
+        Map<String, String> properties = insertStmt.getProperties();
+        String statementValue = properties == null
+                ? null : properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA);
+        return statementValue != null && !"false".equalsIgnoreCase(statementValue.trim());
     }
 
     /**
@@ -199,6 +177,47 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         }
         Table boundTable = filesRelation.getTable();
         return boundTable instanceof TableFunctionTable resolved ? resolved : null;
+    }
+
+    /**
+     * {@code boundTable} with the column types inferred from the {@code FILES()} properties, as the sampler's own call
+     * infers them. The INSERT OVERWRITE
+     * paths run this hook on a statement already analyzed, and analysis applied column-type push-down to the bound
+     * table in place, so its types are the target's rather than the file's. The sampler infers the schema afresh,
+     * so the schema is read again here, without push-down -- but only when a source column's type can matter
+     * ({@link #readsSourceColumnTypes}). {@code null} when that read fails.
+     *
+     * @param where the WHERE clause after plan-time folding, or {@code null}
+     */
+    private static TableFunctionTable withInferredColumnTypes(
+            InsertStmt insertStmt, FileTableFunctionRelation filesRelation, TableFunctionTable boundTable,
+            SelectRelation selectRelation, Expr where, List<Column> sampledColumns) {
+        if (filesRelation.getPushDownSchemaFunc() == null || boundTable.hasExplicitSchema()
+                || !readsSourceColumnTypes(selectRelation, where, sampledColumns)) {
+            return boundTable;
+        }
+        try {
+            return new TableFunctionTable(boundTable.getProperties());
+        } catch (DdlException | RuntimeException failure) {
+            LOG.info("Sample-Based Tablet Pre-Split: re-reading the FILES() schema failed for table {}; skipping: {}",
+                    targetNameForLog(insertStmt), failure.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Whether a source column's type can matter to the sample: a computed or constant SELECT item, a generated sampled
+     * column, or a folded WHERE clause that still holds a call. Only such a WHERE is analyzed against the column
+     * types, to check that each call binds to a built-in function ({@link SamplingPredicateGate#evaluatesAsTheLoad});
+     * a WHERE clause without one needs no such check. (The load may still compare a pushed-down column at another
+     * type than the sampler; this re-read does not address that.)
+     */
+    private static boolean readsSourceColumnTypes(SelectRelation selectRelation, Expr where,
+                                                  List<Column> sampledColumns) {
+        return (where != null && where.containsSubclass(FunctionCallExpr.class))
+                || sampledColumns.stream().anyMatch(Column::isGeneratedColumn)
+                || selectRelation.getSelectList().getItems().stream()
+                        .anyMatch(item -> !item.isStar() && !(item.getExpr() instanceof SlotRef));
     }
 
     private static long sumFileBytes(TableFunctionTable sourceTable) {

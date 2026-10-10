@@ -219,4 +219,43 @@ public class OperatorFunctionCheckerTest {
         assertTrue(OperatorFunctionChecker.onlyContainFEConstantFunctions(cast(IntegerType.BIGINT, IntegerType.INT)).first);
         assertTrue(OperatorFunctionChecker.onlyContainFEConstantFunctions(cast(VarcharType.VARCHAR, DateType.DATE)).first);
     }
+
+    /**
+     * A drop condition on a source column can only be mapped onto its generated partition column when
+     * the expression never sends two values of the column to one partition value.
+     */
+    @Test
+    public void testIsOneToOne() {
+        ColumnRefOperator intCol = new ColumnRefOperator(1, IntegerType.INT, "c1", true);
+        ColumnRefOperator dtCol = new ColumnRefOperator(2, DateType.DATETIME, "dt", true);
+        ColumnRefOperator strCol = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
+        CastOperator widened = new CastOperator(IntegerType.BIGINT, intCol);
+
+        assertTrue(OperatorFunctionChecker.isOneToOne(intCol));
+        assertTrue(OperatorFunctionChecker.isOneToOne(widened));
+        assertTrue(OperatorFunctionChecker.isOneToOne(cast(DateType.DATE, DateType.DATETIME)));
+        // 100 - c1 and c1 + 1: adding or subtracting a constant is a bijection even when it wraps
+        assertTrue(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT,
+                ImmutableList.of(ConstantOperator.createBigint(100), widened))));
+        assertTrue(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.ADD, IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(1)))));
+
+        // many-to-one, whether or not they preserve the order
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                ImmutableList.of(ConstantOperator.createVarchar("day"), dtCol))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
+                ImmutableList.of(strCol, ConstantOperator.createVarchar("%Y-%m-%d")))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR,
+                ImmutableList.of(widened))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.MULTIPLY, IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(2)))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator("int_divide", IntegerType.BIGINT,
+                ImmutableList.of(widened, ConstantOperator.createBigint(10)))));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(DateType.DATETIME, DateType.DATE)));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(IntegerType.BIGINT, IntegerType.INT)));
+        assertFalse(OperatorFunctionChecker.isOneToOne(cast(VarcharType.VARCHAR, IntegerType.BIGINT)));
+        // two columns, or none
+        assertFalse(OperatorFunctionChecker.isOneToOne(new CallOperator(FunctionSet.ADD, IntegerType.BIGINT,
+                ImmutableList.of(widened, widened))));
+    }
 }

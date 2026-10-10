@@ -18,14 +18,25 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.utframe.UtFrameUtils;
 import io.trino.hive.$internal.org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntSupplier;
 
 public class ConnectorAnalyzeTaskQueueTest {
     private static ConnectContext ctx;
@@ -94,7 +105,123 @@ public class ConnectorAnalyzeTaskQueueTest {
         queue.schedulePendingTask();
         Assertions.assertEquals(1, queue.getPendingTaskSize());
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        // task2 is kept pending until task1 of the same table finishes
+        waitUntil(queue::getRunningTaskSize, 0);
         queue.schedulePendingTask();
         Assertions.assertEquals(0, queue.getPendingTaskSize());
+    }
+
+    private static class BlockingTask extends ConnectorAnalyzeTask {
+        private final CountDownLatch latch = new CountDownLatch(1);
+        private final AtomicInteger runCount;
+
+        BlockingTask(Triple<String, Database, Table> tableTriple, Set<String> columns, AtomicInteger runCount) {
+            super(tableTriple, columns);
+            this.runCount = runCount;
+        }
+
+        @Override
+        public Optional<AnalyzeStatus> run() {
+            runCount.incrementAndGet();
+            try {
+                latch.await(60, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return Optional.empty();
+        }
+
+        void finish() {
+            latch.countDown();
+        }
+    }
+
+    private static void waitUntil(IntSupplier actual, int expected) {
+        for (int i = 0; i < 1000 && actual.getAsInt() != expected; i++) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        Assertions.assertEquals(expected, actual.getAsInt());
+    }
+
+    private static Triple<String, Database, Table> getOrdersTableTriple() {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(ctx, "hive0",
+                "partitioned_db", "orders");
+        return StatisticsUtils.getTableTripleByUUID(ctx, table.getUUID());
+    }
+
+    @Test
+    public void testScheduleSameTableWhileRunning() {
+        Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
+        String tableUUID = tableTriple.getRight().getUUID();
+        int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
+        Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        ExecutorService pool = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(2, 2,
+                "connector-trigger-analyze-test-pool", false);
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(pool);
+            AtomicInteger runCount = new AtomicInteger();
+            BlockingTask task1 = new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey"), runCount);
+            queue.addPendingTask(tableUUID, task1);
+            queue.schedulePendingTask();
+            waitUntil(runCount::get, 1);
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+
+            // a task for the same table with remaining columns is accepted while task1 is running,
+            // but it must not be dispatched (and must not overwrite the running entry) until task1 finishes
+            BlockingTask task2 = new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey", "o_custkey"), runCount);
+            Assertions.assertTrue(queue.addPendingTask(tableUUID, task2));
+            queue.schedulePendingTask();
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, runCount.get());
+
+            task1.finish();
+            waitUntil(queue::getRunningTaskSize, 0);
+
+            queue.schedulePendingTask();
+            Assertions.assertEquals(0, queue.getPendingTaskSize());
+            waitUntil(runCount::get, 2);
+            Assertions.assertEquals(1, queue.getRunningTaskSize());
+
+            task2.finish();
+            waitUntil(queue::getRunningTaskSize, 0);
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testScheduleRejectedBySubmitPool() {
+        Triple<String, Database, Table> tableTriple = getOrdersTableTriple();
+        String tableUUID = tableTriple.getRight().getUUID();
+        int oldLimit = Config.connector_table_query_trigger_analyze_max_running_task_num;
+        Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
+        try {
+            ConnectorAnalyzeTaskQueue queue = new ConnectorAnalyzeTaskQueue(command -> {
+                throw new RejectedExecutionException("mock rejected");
+            });
+            AtomicInteger runCount = new AtomicInteger();
+            queue.addPendingTask(tableUUID, new BlockingTask(tableTriple, Sets.newHashSet("o_orderkey"), runCount));
+
+            // rejected task must not leak in running tasks and must be kept pending for the next round
+            Assertions.assertDoesNotThrow(queue::schedulePendingTask);
+            Assertions.assertEquals(0, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertFalse(queue.isMaxRunningConcurrencyReached());
+
+            // retried in the next round, still not leaked
+            Assertions.assertDoesNotThrow(queue::schedulePendingTask);
+            Assertions.assertEquals(0, queue.getRunningTaskSize());
+            Assertions.assertEquals(1, queue.getPendingTaskSize());
+            Assertions.assertEquals(0, runCount.get());
+        } finally {
+            Config.connector_table_query_trigger_analyze_max_running_task_num = oldLimit;
+        }
     }
 }

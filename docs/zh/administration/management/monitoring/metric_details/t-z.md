@@ -21,6 +21,19 @@ description: "Alphabetical t - z"
 - 单位: 字节
 - 描述: tablet元数据使用的内存。
 
+## `tablet_pre_split_data_tier_file_selection`
+
+- 单位: 计数
+- 类型: 累计
+- 标签: `mode` — `subset`（只扫描了部分文件，扫描量由 `tablet_pre_split_data_tier_scan_byte_limit` 控制）、`under_limit`（输入未超过上限，扫描了全部文件）、`disabled`（上限为 `0`，扫描了全部文件）、`all_selected`（输入超过上限，但以整个文件为单位选取、每个分区至少一个文件并满足最少文件数后，仍选中了全部文件）、`partition_from_file_data`（输入超过上限，但分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列，取子集可能漏掉整个分区，因此扫描了全部文件）、`path_not_expressible`（仅 `INSERT INTO ... SELECT FROM FILES()`：选中文件的路径含有 FILES 无法作为精确路径处理的字符，即 `,`、`*`、`?`、`[`、`{`、`\`、主机名之后路径中的 `:` 或首尾空白，因此改用语句自身的 `path` 扫描全部文件）。
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入在 data tier 的采样总次数，按扫描文件的选取方式细分。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 单位: -
+- 类型: 直方图
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入每次在 data tier 采样时扫描的字节数占输入总字节数的百分比，向下取整，因此 `100` 表示扫描了全部文件。
+
 ## `tablet_schema_mem_bytes`
 
 - 单位: 字节

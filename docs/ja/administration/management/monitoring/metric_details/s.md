@@ -462,8 +462,37 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。
-- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+- ラベル: `reason`。スキップの理由で、値は下の表のとおりです。表中のサンプリング対象列とは、ターゲットテーブルのパーティション列とソートキー列を指します。
+- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+
+どの取り込みでも記録されうる値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `disabled_by_config` | 取り込み種別に対応する FE パラメータ `enable_tablet_pre_split_for_*` が無効。 |
+| `disabled_by_session` | セッションで `enable_tablet_pre_split` が `false` に設定されている。 |
+| `not_range_distribution` | ターゲットテーブルが Range 分散ではない。 |
+| `table_not_normal` | ターゲットテーブルが NORMAL 状態ではない（ALTER 実行中など）。 |
+| `unsupported_sort_key` | ソートキーが空、またはソートキーにスカラー型でない列がある。 |
+| `has_materialized_view_or_rollup` | ターゲットテーブルに可視のロールアップまたは同期マテリアライズドビューがある。 |
+| `metadata_not_resolved` | パーティションまたはそのベースインデックスが見つからない。通常は取り込み中に ALTER が実行されたため。 |
+| `multiple_base_index_tablets` | パーティションのベースインデックスに既に複数のタブレットがある。同じパーティションへの再取り込みでよく起きる。 |
+| `partition_not_empty` | パーティションに既にデータがある。 |
+| `source_missing_sampled_column` | サンプリング対象列に対応するソース列またはリテラルが取り込みにない（`FILES()` のファイルにその列がない、INSERT のターゲット列リストが省略しているなど）。 |
+| `unsupported_sampled_projection` | サンプリング対象列が、サンプラーで再現できない式（`from_unixtime(ts)` や NULL など）、または型のプッシュダウンで別の列の型として読み取られる `FILES()` の列から供給される。 |
+| `unsupported_generated_column` | サンプリング対象列が、サンプラーで値を計算できない生成列。列名と具体的な理由は FE ログに記録される。 |
+| `estimate_unavailable` | External Catalog のテーブルからの INSERT で、テーブル統計からソーステーブルのサイズを見積もれないため、タブレット数を決められない。 |
+
+1 回の取り込みで複数のパーティションに書き込む場合に、パーティション単位で記録される値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `unsupported_partition_column_type` | パーティション列の型をサンプリングできない（STRUCT、ARRAY など）。 |
+| `invalid_partition_value` | サンプリングしたパーティション値から有効なパーティションを作れない（NOT NULL 列の NULL、パースできない日付など）。 |
+| `grouper_empty` | パーティションごとにグループ化する際、すべてのサンプル行が破棄された。 |
+| `no_matching_partition` | 手動 Range パーティションのテーブルで、サンプリングした値が取り込みの書き込み先となるどのレンジにも含まれない。その値は破棄され、新しいパーティションは作成されない。 |
+| `stale_catalog_state` | サンプリング後、事前分割の前にパーティションが消えた（並行する DROP や REPLACE など）。 |
+| `partition_not_eligible_post_create` | 事前作成後にパーティションが条件を満たさなくなった。通常は既にデータがあるか、複数のタブレットを持つため。 |
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -501,7 +530,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: マルチパーティション経路（P2-a）のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はサンプル数が多いパーティションを残し、サンプル数が少ない末尾を切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
+- 説明: マルチパーティション経路のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はデータ量の多いパーティション（data tier が一部のファイルだけをサンプリングし、かつパーティション値がファイルパスから取られる場合はバイト数、それ以外はサンプル数で判断）を残し、少ないものを切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

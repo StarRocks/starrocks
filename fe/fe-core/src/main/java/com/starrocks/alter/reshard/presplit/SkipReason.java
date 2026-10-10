@@ -38,6 +38,31 @@ public enum SkipReason {
     MULTIPLE_BASE_INDEX_TABLETS,
     PARTITION_NOT_EMPTY,
     UNSUPPORTED_SORT_KEY,
+    /**
+     * A column the sampler has to project -- the sort key or a
+     * partition source column -- is absent from the resolved INSERT projection. Reached by an
+     * INSERT-from-FILES whose target column is legitimately absent from the inferred
+     * {@code FILES()} schema (a {@code BY NAME} load defaults it, or reads it NULL under
+     * {@code fill_mismatch_column_with=null}), and by an INSERT whose explicit target column list
+     * omits a nullable partition column.
+     *
+     * <p>Deliberately NOT recorded for a projection-shape rejection (a duplicate output name, a
+     * by-position arity mismatch, a foreign-qualified slot), a computed or NULL projection, a
+     * generated column, nor for a key made only of literals:
+     * those decline for reasons that have nothing to do with a missing column, and a wrong reason
+     * sends an operator to the wrong place.
+     */
+    SOURCE_MISSING_SAMPLED_COLUMN,
+    /**
+     * A sampled INSERT column is supplied by an expression the sampler cannot reproduce, or reads a FILES
+     * column that column-type push-down reads at another target column's type.
+     */
+    UNSUPPORTED_SAMPLED_PROJECTION,
+    /**
+     * A sampled column is a generated column the sampler cannot compute the way the load does. The FE
+     * log names the exact reason.
+     */
+    UNSUPPORTED_GENERATED_COLUMN,
     /** Catalog snapshot did not resolve the partition or base index — load surfaces this error. */
     METADATA_NOT_RESOLVED,
     /** Pre-submit phase (sample + plan + build job) exceeded its timeout. */
@@ -54,6 +79,11 @@ public enum SkipReason {
     UNSUPPORTED_PARTITION_COLUMN_TYPE,
     /** A sampled partition tuple could not be turned into a usable AddPartitionClause (formatter null or analyzer threw). */
     INVALID_PARTITION_VALUE,
+    /**
+     * Manually range-partitioned target: a sampled partition tuple lies outside every declared range
+     * the load may write. Dropped rather than pre-created -- the load rejects those rows itself.
+     */
+    NO_MATCHING_PARTITION,
     /** Grouping produced no usable target partitions (every row dropped). */
     GROUPER_EMPTY,
     /**
@@ -78,4 +108,9 @@ public enum SkipReason {
      * load between the grouper snapshot and the coordinator's re-resolve.
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
+    /**
+     * INSERT from table: the source is an external-catalog table whose size cannot be estimated from
+     * its table statistics, so the tablet count cannot be chosen.
+     */
+    ESTIMATE_UNAVAILABLE,
 }

@@ -466,8 +466,37 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Labels: `reason` — the SkipReason enum value (lower-cased). Per-load values: `not_range_distribution`, `table_not_normal`, `has_materialized_view_or_rollup`, `unsupported_sort_key`, `metadata_not_resolved`, `multiple_base_index_tablets`, `partition_not_empty`, `disabled_by_config`, `disabled_by_session`. Multi-partition (P2-a) per-partition values: `unsupported_partition_column_type` (partition source column type cannot be projected, e.g. STRUCT/ARRAY), `invalid_partition_value` (sampled partition cell can't be formatted into an `AddPartitionClause`, e.g. null in a non-nullable column or unparseable date), `grouper_empty` (every sample row was dropped by the formatter/analyzer), `stale_catalog_state` (partition was seen by the grouper but disappeared before the coordinator re-resolved it under READ lock — concurrent partition drop/replace), `partition_not_eligible_post_create` (the post-pre-create eligibility re-check failed, typically because the partition is non-empty or now has multiple tablets).
-- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition (P2-a) path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
+- Labels: `reason`, the skip reason. The values are listed in the tables below. A sampled column is a partition column or a sort-key column of the target table.
+- Description: Total Sample-Based Tablet Pre-Split invocations that the FE-side eligibility gate declined before any sampler ran, broken down by the specific reason. Operators can use this counter to attribute "pre-split not running" to a single eligibility branch at a glance. In the multi-partition path the same counter also records per-partition skip reasons emitted by the grouper and the per-partition re-resolve.
+
+Values recorded for any load:
+
+| `reason` | Recorded when |
+| --- | --- |
+| `disabled_by_config` | The `enable_tablet_pre_split_for_*` FE parameter for this load type is off. |
+| `disabled_by_session` | The session sets `enable_tablet_pre_split` to `false`. |
+| `not_range_distribution` | The target table does not use range distribution. |
+| `table_not_normal` | The target table is not in the NORMAL state, for example during an ALTER. |
+| `unsupported_sort_key` | The sort key is empty, or a sort-key column is not of a scalar type. |
+| `has_materialized_view_or_rollup` | The target table has a visible rollup or synchronous materialized view. |
+| `metadata_not_resolved` | The partition or its base index cannot be found, usually because an ALTER ran during the load. |
+| `multiple_base_index_tablets` | The partition's base index already has more than one tablet, which is common when a partition is loaded again. |
+| `partition_not_empty` | The partition already holds data. |
+| `source_missing_sampled_column` | A sampled column has no source column or literal in the load, for example because the `FILES()` file lacks it or the INSERT column list omits it. |
+| `unsupported_sampled_projection` | A sampled column comes from an expression the sampler cannot reproduce, such as `from_unixtime(ts)` or NULL, or from a `FILES()` column that type push-down reads at another column's type. |
+| `unsupported_generated_column` | A sampled column is a generated column the sampler cannot compute. The FE log names the column and the reason. |
+| `estimate_unavailable` | An INSERT from an external-catalog table cannot be sized from its table statistics, so the tablet count cannot be chosen. |
+
+Values recorded per partition, when a load writes several partitions:
+
+| `reason` | Recorded when |
+| --- | --- |
+| `unsupported_partition_column_type` | A partition column has a type that cannot be sampled, such as STRUCT or ARRAY. |
+| `invalid_partition_value` | A sampled partition value cannot form a valid partition, such as NULL in a NOT NULL column or a date that cannot be parsed. |
+| `grouper_empty` | Every sampled row was dropped while grouping rows by partition. |
+| `no_matching_partition` | On a manually range-partitioned table, a sampled value falls outside every range the load can write. The value is dropped, and no partition is created for it. |
+| `stale_catalog_state` | A partition disappeared between sampling and pre-split, for example through a concurrent DROP or REPLACE. |
+| `partition_not_eligible_post_create` | After it was created, the partition no longer qualifies, usually because it holds data or has more than one tablet. |
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -505,7 +534,7 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+- Description: Multi-partition counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the heaviest partitions (by input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise by sample count) and drops the lightest; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

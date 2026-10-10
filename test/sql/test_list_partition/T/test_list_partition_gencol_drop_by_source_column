@@ -1,0 +1,21 @@
+-- name: test_list_partition_gencol_drop_by_source_column
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+-- The partition value is date_trunc('day', c1). A drop condition on c1 used to be widened onto the
+-- partition value, so c1 < '2024-01-02 00:00:00' dropped the 2024-01-02 partition as well.
+CREATE TABLE t_multi (c1 datetime NOT NULL, v int NOT NULL)
+DUPLICATE KEY(c1)
+PARTITION BY v, date_trunc('day', c1)
+DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_multi values ('2024-01-01 10:00:00', 1), ('2024-01-02 13:00:00', 1), ('2024-01-03 09:00:00', 1);
+
+alter table t_multi drop partitions where c1 < '2024-01-02 00:00:00';
+alter table t_multi drop partitions where c1 = '2024-01-02 12:00:00';
+select c1 from t_multi order by c1;
+
+alter table t_multi drop partitions where date_trunc('day', c1) < '2024-01-02 00:00:00';
+select c1 from t_multi order by c1;
+
+drop database test_db_${uuid0} force;

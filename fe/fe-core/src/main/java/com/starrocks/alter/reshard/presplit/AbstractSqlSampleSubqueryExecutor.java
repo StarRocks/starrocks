@@ -45,8 +45,8 @@ import java.util.stream.Collectors;
  * <p>Subclasses implement {@link #resolveSampleSpec} to supply the FROM clause
  * SQL, an optional WHERE predicate, the total input byte count, the compute
  * resource, and the projected column identifier lists. Everything else —
- * sampling-rate math, SQL synthesis, BE invocation, JSON row decode — is shared
- * here.
+ * sampling-rate math, projection de-duplication, SQL synthesis, BE invocation,
+ * and JSON row decode — is shared here.
  */
 abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecutor {
 
@@ -82,19 +82,31 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * ({@code 0} = uncapped); the production runner applies it via
      * {@code query_timeout} on the sample context so an over-budget sample is
      * cancelled by the BE. Test stubs return canned batches and ignore it.
+     *
+     * <p>{@code loadTimeZone} is the zone the load reads its source in, and {@code sessionSemantics} are the load
+     * session's variables the sub-query must parse and evaluate under ({@link SampleSessionSemantics}); the
+     * production runner sets both on the sample session. Test stubs implement the three-argument form, which the
+     * default five-argument form calls, ignoring both.
      */
     @FunctionalInterface
     interface SampleQueryRunner {
         List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
                 throws StarRocksException;
+
+        default List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+                                       String loadTimeZone, SampleSessionSemantics sessionSemantics)
+                throws StarRocksException {
+            return run(sampleSql, computeResource, queryTimeoutSeconds);
+        }
     }
 
     /**
      * Inputs the template needs from a concrete subclass. The FROM clause SQL
      * and optional WHERE predicate are expressed as raw SQL fragments; the byte
      * total and compute resource drive sampling-rate computation and sub-query
-     * routing; the projected identifier lists define the SELECT projection in
-     * sort-key order followed by partition-source order.
+     * routing; the projected identifier lists define the logical sort-key and
+     * partition-source slots. SQL generation may reuse an earlier result ordinal
+     * when both lists contain the same expression.
      *
      * <p>The projection ident lists and the column lists are paired
      * POSITIONALLY: {@code sortKeyProjectionIdents.get(i)} is the SQL the SELECT
@@ -103,6 +115,11 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * decode in lock-step even when a subclass remaps which source columns back
      * a target column, so the two halves cannot silently desync. Each ident must
      * already be backtick-quoted (e.g. via {@link SqlUtils#getIdentSql}).
+     *
+     * <p>{@code scannedInputBytes} is what the sample actually reads and sizes its rate for;
+     * {@code totalInputBytes} is the whole input, which the estimates report. {@code sessionSemantics} are the load
+     * session's variables the sub-query runs under; the constructor that does not take them carries
+     * {@link SampleSessionSemantics#NONE}.
      */
     protected record SampleSpec(
             String fromClauseSql,
@@ -114,7 +131,10 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             List<Column> sortKeyColumns,
             List<Column> partitionSourceColumns,
             long totalInputRows,
-            boolean estimateFilteredInput) {
+            boolean estimateFilteredInput,
+            long scannedInputBytes,
+            List<Estimates.PartitionSourceBytes> partitionSourceBytes,
+            SampleSessionSemantics sessionSemantics) {
         public SampleSpec(
                 String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
                 ComputeResource computeResource, List<String> sortKeyProjectionIdents,
@@ -122,7 +142,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 List<Column> partitionSourceColumns) {
             this(fromClauseSql, whereClauseSqlOrNull, totalInputBytes, computeResource,
                     sortKeyProjectionIdents, partitionProjectionIdents, sortKeyColumns,
-                    partitionSourceColumns, 0L, false);
+                    partitionSourceColumns, 0L, false, totalInputBytes, List.of(), SampleSessionSemantics.NONE);
         }
 
         public SampleSpec {
@@ -132,11 +152,22 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             Objects.requireNonNull(partitionProjectionIdents, "partitionProjectionIdents");
             Objects.requireNonNull(sortKeyColumns, "sortKeyColumns");
             Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
+            Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
+            Objects.requireNonNull(sessionSemantics, "sessionSemantics");
             if (totalInputBytes < 0) {
                 throw new IllegalArgumentException("totalInputBytes must be non-negative, was " + totalInputBytes);
             }
             if (totalInputRows < 0) {
                 throw new IllegalArgumentException("totalInputRows must be non-negative, was " + totalInputRows);
+            }
+            if (scannedInputBytes < 0 || scannedInputBytes > totalInputBytes) {
+                throw new IllegalArgumentException("scannedInputBytes must be within [0, " + totalInputBytes
+                        + "], was " + scannedInputBytes);
+            }
+            // The filtered estimate extrapolates the scanned input's hit ratio to totalInputRows, which
+            // is only sound when the scanned input IS the whole input.
+            if (estimateFilteredInput && scannedInputBytes != totalInputBytes) {
+                throw new IllegalArgumentException("the filtered-input estimate cannot be combined with a file subset");
             }
         }
     }
@@ -162,8 +193,21 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private static SampleQueryRunner defaultRunner(String executorName) {
         Objects.requireNonNull(executorName, "executorName");
         SimpleExecutor simpleExecutor = new SimpleExecutor(executorName, TResultSinkType.HTTP_PROTOCAL);
-        return (sampleSql, computeResource, queryTimeoutSeconds) ->
-                runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds);
+        return new SampleQueryRunner() {
+            @Override
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds)
+                    throws StarRocksException {
+                return run(sampleSql, computeResource, queryTimeoutSeconds, null, SampleSessionSemantics.NONE);
+            }
+
+            @Override
+            public List<TResultBatch> run(String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+                                          String loadTimeZone, SampleSessionSemantics sessionSemantics)
+                    throws StarRocksException {
+                return runViaSimpleExecutor(simpleExecutor, sampleSql, computeResource, queryTimeoutSeconds,
+                        loadTimeZone, sessionSemantics);
+            }
+        };
     }
 
     /**
@@ -177,16 +221,18 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     @Override
     public final SampleExecution execute(SampleRequest request) throws StarRocksException {
         SampleSpec spec = resolveSampleSpec(request);
-        double samplingRate = pickSamplingRate(spec.totalInputBytes());
+        double samplingRate = pickSamplingRate(spec.scannedInputBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
-        String sampleSql = buildSampleSql(
-                spec.fromClauseSql(), spec.whereClauseSqlOrNull(),
-                spec.sortKeyProjectionIdents(), spec.partitionProjectionIdents(),
-                samplingRate, rowLimit, request.getSeed());
+        ProjectionLayout projectionLayout = buildProjectionLayout(
+                spec.sortKeyProjectionIdents(), spec.partitionProjectionIdents());
+        String sampleSql = buildSampleSqlFromProjection(
+                spec.fromClauseSql(), spec.whereClauseSqlOrNull(), projectionLayout.projectedIdents(),
+                samplingRate, rowLimit, request.getSeed(), request.getScanContext().loadTimeZone());
         List<TResultBatch> resultBatches = runSampleQuery(
-                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds());
+                sampleSql, spec.computeResource(), request.getQueryTimeoutSeconds(),
+                request.getScanContext().loadTimeZone(), spec.sessionSemantics());
         List<SampleRow> rows = decodeRows(
-                resultBatches, spec.sortKeyColumns(), spec.partitionSourceColumns());
+                resultBatches, spec.sortKeyColumns(), spec.partitionSourceColumns(), projectionLayout);
         Estimates estimates = estimateInput(spec, samplingRate, rowLimit, rows.size());
         return new SampleExecution(rows.iterator(), estimates);
     }
@@ -201,7 +247,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private static Estimates estimateInput(SampleSpec spec, double samplingRate, int rowLimit, int sampledRows) {
         if (!spec.estimateFilteredInput() || spec.totalInputRows() <= 0L || sampledRows >= rowLimit
                 || samplingRate <= 0.0) {
-            return new Estimates(spec.totalInputBytes(), spec.totalInputRows());
+            return new Estimates(spec.totalInputBytes(), spec.totalInputRows(), spec.partitionSourceBytes());
         }
         long estimatedRows = Math.min(spec.totalInputRows(), Math.max(0L, Math.round(sampledRows / samplingRate)));
         long estimatedBytes = spec.totalInputBytes() == 0L ? 0L : Math.min(spec.totalInputBytes(),
@@ -233,36 +279,113 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     /**
      * Builds the sampling SELECT from the supplied FROM clause, optional WHERE
      * predicate, projected identifier lists, sampling rate, row limit, and seed.
-     * Projects every sort-key identifier followed by every partition-source
-     * identifier. The {@code ORDER BY rand(seed XOR 0x5...)} before {@code LIMIT}
-     * re-shuffles the {@code WHERE}-survivors so an over-rate truncation does not
-     * bias toward earlier files in scan order. When {@code whereClauseSqlOrNull}
-     * is null, only the Bernoulli rand filter is emitted in the WHERE clause.
+     * Projects every sort-key identifier followed by partition-source identifiers
+     * not already present in the SELECT list. The {@code ORDER BY rand(seed XOR
+     * 0x5...)} before {@code LIMIT} re-shuffles the {@code WHERE}-survivors so an
+     * over-rate truncation does not bias toward earlier files in scan order. When
+     * {@code whereClauseSqlOrNull} is null, only the Bernoulli rand filter is
+     * emitted in the WHERE clause.
      */
     @VisibleForTesting
     static String buildSampleSql(
             String fromClauseSql, String whereClauseSqlOrNull,
             List<String> sortKeyProjectionIdents, List<String> partitionProjectionIdents,
             double samplingRate, int rowLimit, long seed) {
+        ProjectionLayout projectionLayout = buildProjectionLayout(sortKeyProjectionIdents, partitionProjectionIdents);
+        return buildSampleSqlFromProjection(
+                fromClauseSql, whereClauseSqlOrNull, projectionLayout.projectedIdents(),
+                samplingRate, rowLimit, seed, null);
+    }
+
+    /**
+     * Keeps the sort-key projections in their existing positional order, then appends only
+     * partition-source expressions that have not already been selected. A partition column may
+     * therefore point at an earlier sort-key result ordinal. This is intentionally narrower than
+     * globally de-duplicating the projection: the existing sort-key positional contract remains
+     * byte-for-byte unchanged.
+     */
+    private static ProjectionLayout buildProjectionLayout(
+            List<String> sortKeyProjectionIdents, List<String> partitionProjectionIdents) {
         List<String> projected = new ArrayList<>(
                 sortKeyProjectionIdents.size() + partitionProjectionIdents.size());
         projected.addAll(sortKeyProjectionIdents);
-        projected.addAll(partitionProjectionIdents);
-        String projection = String.join(", ", projected);
+
+        List<Integer> partitionSourceOrdinals = new ArrayList<>(partitionProjectionIdents.size());
+        for (String partitionProjectionIdent : partitionProjectionIdents) {
+            int ordinal = findProjectionOrdinal(projected, partitionProjectionIdent);
+            if (ordinal < 0) {
+                ordinal = projected.size();
+                projected.add(partitionProjectionIdent);
+            }
+            partitionSourceOrdinals.add(ordinal);
+        }
+        return new ProjectionLayout(List.copyOf(projected), List.copyOf(partitionSourceOrdinals));
+    }
+
+    private static int findProjectionOrdinal(List<String> projectedIdents, String candidate) {
+        for (int ordinal = 0; ordinal < projectedIdents.size(); ordinal++) {
+            if (sameProjection(projectedIdents.get(ordinal), candidate)) {
+                return ordinal;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Quoted identifiers match case-insensitively, as column names do. Any other projection -- a cast
+     * literal or a computed expression -- must match exactly: a string literal inside it is data, so
+     * {@code concat('A', x)} and {@code concat('a', x)} are different values.
+     */
+    private static boolean sameProjection(String projected, String candidate) {
+        return isQuotedIdentifier(projected) && isQuotedIdentifier(candidate)
+                ? projected.equalsIgnoreCase(candidate)
+                : projected.equals(candidate);
+    }
+
+    private static boolean isQuotedIdentifier(String projection) {
+        int closingQuote = projection.length() - 1;
+        if (closingQuote < 1 || projection.charAt(0) != '`' || projection.charAt(closingQuote) != '`') {
+            return false;
+        }
+        int index = 1;
+        while (index < closingQuote) {
+            if (projection.charAt(index) == '`') {
+                if (index + 1 == closingQuote || projection.charAt(index + 1) != '`') {
+                    return false;
+                }
+                index += 2;
+            } else {
+                index++;
+            }
+        }
+        return true;
+    }
+
+    private static String buildSampleSqlFromProjection(
+            String fromClauseSql, String whereClauseSqlOrNull, List<String> projectedIdents,
+            double samplingRate, int rowLimit, long seed, String loadTimeZone) {
+        String projection = String.join(", ", projectedIdents);
         long orderShuffleSeed = seed ^ 0x5A5A5A5A5A5A5A5AL;
         String randFilter = "rand(" + seed + ") < " + Double.toString(samplingRate);
         String whereClause = whereClauseSqlOrNull == null
                 ? randFilter
                 : "(" + whereClauseSqlOrNull + ") AND " + randFilter;
+        // The hint records the load time zone in the sample SQL. configureSampleContext also applies
+        // it directly after switching warehouses, since SimpleExecutor on this branch does not
+        // apply SET_VAR hints before planning.
+        String timeZoneHint = loadTimeZone == null ? ""
+                : "/*+ SET_VAR(time_zone='" + SqlUtils.escapeSqlString(loadTimeZone) + "') */ ";
         return String.format(
-                "SELECT %s FROM %s WHERE %s ORDER BY rand(%d) LIMIT %d",
-                projection, fromClauseSql, whereClause, orderShuffleSeed, rowLimit);
+                "SELECT %s%s FROM %s WHERE %s ORDER BY rand(%d) LIMIT %d",
+                timeZoneHint, projection, fromClauseSql, whereClause, orderShuffleSeed, rowLimit);
     }
 
     private List<TResultBatch> runSampleQuery(
-            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds) throws StarRocksException {
+            String sampleSql, ComputeResource computeResource, int queryTimeoutSeconds,
+            String loadTimeZone, SampleSessionSemantics sessionSemantics) throws StarRocksException {
         try {
-            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds);
+            return sampleQueryRunner.run(sampleSql, computeResource, queryTimeoutSeconds, loadTimeZone,
+                    sessionSemantics);
         } catch (RuntimeException runtimeFailure) {
             throw new StarRocksException(
                     errorPrefix + "sample sub-query failed: " + runtimeFailure.getMessage(), runtimeFailure);
@@ -279,10 +402,11 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      */
     private static List<TResultBatch> runViaSimpleExecutor(
             SimpleExecutor simpleExecutor, String sampleSql, ComputeResource computeResource,
-            int queryTimeoutSeconds) {
+            int queryTimeoutSeconds, String loadTimeZone, SampleSessionSemantics sessionSemantics)
+            throws StarRocksException {
         ConnectContext priorContext = ConnectContext.get();
-        ConnectContext sampleContext = configureSampleContext(
-                StatisticUtils.buildConnectContext(), computeResource, queryTimeoutSeconds);
+        ConnectContext sampleContext = configureSampleContext(StatisticUtils.buildConnectContext(), computeResource,
+                queryTimeoutSeconds, loadTimeZone, sessionSemantics);
         sampleContext.setThreadLocalInfo();
         try {
             return simpleExecutor.executeDQL(sampleSql, sampleContext);
@@ -309,10 +433,16 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * leaves the built context's default timeout untouched. This is the seam
      * that makes the pre-submit deadline hard — {@code executeDQL} reads the
      * cap from {@code SessionVariable.toThrift()}, not from any SQL hint.
+     *
+     * <p>{@code sessionSemantics} -- the load session's variables that decide how the sub-query's expressions parse
+     * and evaluate -- go on the final session variable as well, before the sampler's own overrides so that no carried
+     * value can undo them. A variable that cannot be set fails the sample rather than letting it run in a session that
+     * only partly matches the load's.
      */
     @VisibleForTesting
     static ConnectContext configureSampleContext(
-            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds) {
+            ConnectContext context, ComputeResource computeResource, int queryTimeoutSeconds, String loadTimeZone,
+            SampleSessionSemantics sessionSemantics) throws StarRocksException {
         // setCurrentWarehouseId delegates to setCurrentWarehouse, which REPLACES the session-variable
         // object with a fresh warehouse-defaulted one (re-applying only tracked SET variables). The
         // pre-submit-budget query_timeout is applied via a direct setter (not a tracked SET), so it
@@ -321,6 +451,12 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         // pre-submit budget instead of failing fast and falling back.
         context.setCurrentWarehouseId(computeResource.getWarehouseId());
         context.setCurrentComputeResource(computeResource);
+        // Warehouse switching replaces the session defaults. Apply the captured load time zone
+        // afterward, even on branches whose SimpleExecutor does not apply SET_VAR hints.
+        if (loadTimeZone != null) {
+            context.getSessionVariable().setTimeZone(loadTimeZone);
+        }
+        sessionSemantics.applyTo(context.getSessionVariable());
         if (queryTimeoutSeconds > 0) {
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
         }
@@ -332,7 +468,8 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private List<SampleRow> decodeRows(
             List<TResultBatch> resultBatches,
             List<Column> sortKeyColumns,
-            List<Column> partitionSourceColumns) throws StarRocksException {
+            List<Column> partitionSourceColumns,
+            ProjectionLayout projectionLayout) throws StarRocksException {
         List<SampleRow> rows = new ArrayList<>();
         if (resultBatches == null) {
             return rows;
@@ -343,7 +480,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                 continue;
             }
             for (ByteBuffer rowBuffer : batchRows) {
-                rows.add(decodeRow(rowBuffer, sortKeyColumns, partitionSourceColumns));
+                rows.add(decodeRow(rowBuffer, sortKeyColumns, partitionSourceColumns, projectionLayout));
             }
         }
         return rows;
@@ -351,12 +488,13 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     /**
      * Decode one HTTP_PROTOCAL JSON row ({@code {"data":[<val0>, ...]}}) into a
-     * {@link SampleRow}. The JSON array carries
-     * {@code sortKeyColumns.size() + partitionSourceColumns.size()} cells in
-     * projection order: the first slice fills the row's sort-key tuple, the
-     * trailing slice fills its partition-source tuple. When
-     * {@code partitionSourceColumns} is empty the trailing slice is empty and
-     * the row collapses to the pre-extension single-tuple shape.
+     * {@link SampleRow}. The JSON array carries one cell per SQL projection in
+     * {@code projectionLayout}. The leading sort-key slice keeps its positional
+     * order. Each partition-source value is read from its mapped result ordinal,
+     * which may point into the sort-key slice when the same column serves both
+     * roles, or to a trailing partition-only cell. The logical {@link SampleRow}
+     * contract is unchanged: every role still gets a value in its own tuple even
+     * when the SQL selected that value only once.
      *
      * <p>Nullable columns accept JSON nulls and decode to
      * {@link com.starrocks.catalog.NullVariant}; non-nullable columns surface a
@@ -368,9 +506,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private SampleRow decodeRow(
             ByteBuffer rowBuffer,
             List<Column> sortKeyColumns,
-            List<Column> partitionSourceColumns) throws StarRocksException {
-        int expectedArity = sortKeyColumns.size() + partitionSourceColumns.size();
-        JsonArray dataArray = extractDataArray(rowBuffer, expectedArity);
+            List<Column> partitionSourceColumns,
+            ProjectionLayout projectionLayout) throws StarRocksException {
+        JsonArray dataArray = extractDataArray(rowBuffer, projectionLayout.projectedIdents().size());
         List<Variant> sortKeyValues = new ArrayList<>(sortKeyColumns.size());
         for (int columnIndex = 0; columnIndex < sortKeyColumns.size(); columnIndex++) {
             sortKeyValues.add(decodeCell(
@@ -379,7 +517,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         List<Variant> partitionSourceValues = new ArrayList<>(partitionSourceColumns.size());
         for (int columnIndex = 0; columnIndex < partitionSourceColumns.size(); columnIndex++) {
             partitionSourceValues.add(decodeCell(
-                    dataArray.get(sortKeyColumns.size() + columnIndex),
+                    dataArray.get(projectionLayout.partitionSourceOrdinals().get(columnIndex)),
                     partitionSourceColumns.get(columnIndex),
                     COLUMN_ROLE_PARTITION_SOURCE));
         }
@@ -444,6 +582,10 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private static final String COLUMN_ROLE_SORT_KEY = "sort-key";
     private static final String COLUMN_ROLE_PARTITION_SOURCE = "partition-source";
+
+    /** Physical SELECT list plus the result ordinal backing each logical partition-source slot. */
+    private record ProjectionLayout(List<String> projectedIdents, List<Integer> partitionSourceOrdinals) {
+    }
 
     /**
      * Converts a list of raw column names into backtick-quoted SQL identifiers
