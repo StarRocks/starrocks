@@ -328,7 +328,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 要排查存算分离集群中 Compaction 不及时导致的慢查询，可以在 SQL Profile 中查看单个 Fragment 内 `PhySegmentsCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则可能是 Compaction 不及时导致查询慢。
 
-`PhySegmentsCount` 仅在存算分离扫描中提供。对于存算一体集群，或不包含 `PhySegmentsCount` 的旧版本 Profile，改用单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。在存算分离扫描中，`SegmentsReadCount` 统计的是 segment 的读取次数，同一个 segment 被几个 split 读取就计几次，Tablet 内并行扫描时会随之变大。因此，存在 `PhySegmentsCount` 时应优先使用它；在存算分离并行扫描中使用回退计数器时，不能仅凭较高的比值判定存在 Compaction 问题。
+`PhySegmentsCount` 仅在存算分离扫描中提供。对于存算一体集群，或不包含 `PhySegmentsCount` 的旧版本 Profile，改用单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。在存算分离和存算一体扫描中，Tablet 内并行扫描都可能导致多个 split reader 在 `SegmentsReadCount` 中重复统计同一个 segment。因此，存在 `PhySegmentsCount` 时应优先使用它；在任一架构的并行扫描中使用回退计数器时，不能仅凭较高的比值判定存在 Compaction 问题。
 
 ### 集群最大 Compaction Score 很高
 

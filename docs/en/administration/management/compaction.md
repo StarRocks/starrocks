@@ -336,7 +336,7 @@ Since Compaction is crucial for query performance, it is recommended to regularl
 
 To identify slow queries caused by untimely Compaction in shared-data clusters, check the value of `PhySegmentsCount` divided by `TabletCount` within a single Fragment in the SQL Profile. If it is a large value, such as tens or more, untimely Compaction may be the cause of the slow query.
 
-`PhySegmentsCount` is available only for shared-data scans. For shared-nothing clusters, or profiles from older versions that do not include `PhySegmentsCount`, use `SegmentsReadCount` divided by `TabletCount` within a single Fragment instead. In shared-data scans, `SegmentsReadCount` counts a segment once for every split that reads it, so it also grows with intra-tablet parallelism. Prefer `PhySegmentsCount` when available; when using the fallback for parallel shared-data scans, a high ratio alone does not establish a compaction problem.
+`PhySegmentsCount` is available only for shared-data scans. For shared-nothing clusters, or profiles from older versions that do not include `PhySegmentsCount`, use `SegmentsReadCount` divided by `TabletCount` within a single Fragment instead. In both shared-data and shared-nothing scans, intra-tablet parallelism can cause `SegmentsReadCount` to count the same segment in multiple split readers. Prefer `PhySegmentsCount` when available; when using the fallback for parallel scans in either architecture, a high ratio alone does not establish a compaction problem.
 
 ### High Max Compaction Score in the cluster
 

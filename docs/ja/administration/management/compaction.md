@@ -338,7 +338,7 @@ Compaction はクエリパフォーマンスにとって重要であるため、
 
 共有データクラスタでタイムリーでない Compaction によって引き起こされるクエリの遅延を特定するには、SQL プロファイルの単一の Fragment 内で `PhySegmentsCount` を `TabletCount` で割った値を確認します。これが数十以上の大きな値である場合、タイムリーでない Compaction がクエリの遅延の原因である可能性があります。
 
-`PhySegmentsCount` は共有データスキャンでのみ提供されます。共有なしクラスタ、または `PhySegmentsCount` を含まない旧バージョンのプロファイルでは、代わりに単一の Fragment 内で `SegmentsReadCount` を `TabletCount` で割った値を使用します。共有データスキャンでは、`SegmentsReadCount` はセグメントを読み取った split ごとに 1 回カウントするため、Tablet 内並列スキャンでも増加します。`PhySegmentsCount` がある場合は優先して使用してください。共有データの並列スキャンで代替カウンターを使用する場合、比率が高いことだけでは Compaction の問題があると判断できません。
+`PhySegmentsCount` は共有データスキャンでのみ提供されます。共有なしクラスタ、または `PhySegmentsCount` を含まない旧バージョンのプロファイルでは、代わりに単一の Fragment 内で `SegmentsReadCount` を `TabletCount` で割った値を使用します。共有データスキャンと共有なしスキャンの両方で、Tablet 内並列スキャンにより、複数の split reader が `SegmentsReadCount` で同じセグメントを重複してカウントする可能性があります。`PhySegmentsCount` がある場合は優先して使用してください。どちらのアーキテクチャでも、並列スキャンで代替カウンターを使用する場合、比率が高いことだけでは Compaction の問題があると判断できません。
 
 ### クラスタ内の高い Max Compaction スコア
 
