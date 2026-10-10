@@ -90,14 +90,20 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     public PartitionDiff diff(PCellSortedSet srcRangeMap,
                               PCellSortedSet dstRangeMap) {
         Map<String, PCell> adds = null;
+        PCellSortedSet prunedAdd;
         try {
-            PCellSortedSet prunedAdd = pruneAddedPartitions(srcRangeMap);
+            prunedAdd = pruneAddedPartitions(srcRangeMap);
             adds = diffRange(prunedAdd, dstRangeMap);
         } catch (Exception e) {
             LOG.warn("failed to prune partitions when creating");
             throw new RuntimeException(e);
         }
-        Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
+        PCellSortedSet targetDstRangeMap = dstRangeMap;
+        if (rangeToInclude != null) {
+            targetDstRangeMap = PCellSortedSet.of(dstRangeMap);
+            targetDstRangeMap.removeIf(p -> !isRangeIncluded(((PRangeCell) p.cell()).getRange(), rangeToInclude));
+        }
+        Map<String, PCell> deletes = diffRange(targetDstRangeMap, prunedAdd);
         return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes));
     }
 
