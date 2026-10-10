@@ -112,6 +112,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
+    /**
+     * Applies an explicit refresh to {@code cache}. The loaded values replace the old ones; a requested key that is
+     * missing from the result (the loader could not load it, e.g. before the FE is ready) or a failed load invalidates
+     * the old value instead of leaving it in place as if it were current, so the next access loads it again.
+     */
+    private static <K, V> CompletableFuture<Void> applyRefresh(AsyncLoadingCache<K, V> cache, List<K> keys,
+                                                               CompletableFuture<Map<K, V>> future) {
+        return future.handle((result, e) -> {
+            if (e != null || result == null) {
+                cache.synchronous().invalidateAll(keys);
+                return null;
+            }
+            cache.synchronous().putAll(result);
+            if (result.size() < keys.size()) {
+                cache.synchronous().invalidateAll(
+                        keys.stream().filter(key -> !result.containsKey(key)).collect(Collectors.toList()));
+            }
+            return null;
+        });
+    }
+
     @Override
     public void refreshTableStatistic(Table table, boolean isSync) {
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
@@ -123,11 +144,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             TableStatsCacheLoader loader = new TableStatsCacheLoader();
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> future = loader.asyncLoadAll(statsCacheKeyList,
                     statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(tableStatsCache, statsCacheKeyList, future);
             if (isSync) {
-                Map<TableStatsCacheKey, Optional<Long>> result = future.get();
-                tableStatsCache.synchronous().putAll(result);
-            } else {
-                future.whenComplete((result, e) -> tableStatsCache.synchronous().putAll(result));
+                applied.get();
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refreshTableStatistic", e);
@@ -157,11 +176,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ColumnBasicStatsCacheLoader loader = new ColumnBasicStatsCacheLoader();
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(columnStatistics, cacheKeys, future);
             if (isSync) {
-                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = future.get();
-                columnStatistics.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> columnStatistics.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
@@ -187,11 +204,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ColumnHistogramStatsCacheLoader loader = new ColumnHistogramStatsCacheLoader();
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(histogramCache, cacheKeys, future);
             if (isSync) {
-                Map<ColumnStatsCacheKey, Optional<Histogram>> result = future.get();
-                histogramCache.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> histogramCache.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh histogram", e);
@@ -321,24 +336,29 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     @Override
     public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
         Preconditions.checkState(table != null);
-        if (!StatisticUtils.checkStatisticTableStateNormal()) {
-            return;
-        }
-
         List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
         for (String column : columns) {
             cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            // The loader cannot query before ready (e.g. journal replay at startup, or a lagging follower).
+            // Drop the old values so they are not served as current, and let the next access reload them.
+            connectorTableCachedStatistics.synchronous().invalidateAll(cacheKeys);
+            return;
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
         }
 
         try {
             ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(connectorTableCachedStatistics, cacheKeys, future);
             if (isSync) {
-                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
-                connectorTableCachedStatistics.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> connectorTableCachedStatistics.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh getConnectorTableStatistics", e);
@@ -709,12 +729,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
                     loader.asyncLoad(tableId, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = future.handle((res, e) -> {
+                // A failed refresh must not leave the old value in place as if it were current.
+                if (e != null || res == null) {
+                    multiColumnStats.synchronous().invalidate(tableId);
+                } else {
+                    multiColumnStats.synchronous().put(tableId, res);
+                }
+                return null;
+            });
             if (isSync) {
-                Optional<MultiColumnCombinedStatistics> result = future.get();
-                multiColumnStats.synchronous().put(tableId, result);
-            } else {
-                future.whenComplete((res, e) ->
-                        multiColumnStats.synchronous().put(tableId, res));
+                applied.get();
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refresh multi-column combined statistics", e);
