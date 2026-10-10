@@ -14,20 +14,14 @@
 
 package com.starrocks.planner;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
-import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
@@ -40,13 +34,11 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.Type;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class LanceScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(LanceScanNode.class);
@@ -95,8 +87,7 @@ public class LanceScanNode extends ScanNode {
 
     public void setupScanRangeLocations() {
         scanRangeLocationsList.clear();
-        List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
-        Preconditions.checkState(!nodeIds.isEmpty(), "No alive backend or compute node for Lance scan");
+        // Worker discovery belongs to scheduling, after query queue admission.
 
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -117,35 +108,6 @@ public class LanceScanNode extends ScanNode {
         TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
         scanRangeLocations.addToLocations(scanRangeLocation);
         scanRangeLocationsList.add(scanRangeLocations);
-    }
-
-    @VisibleForTesting
-    public List<Long> getAllAvailableBackendOrComputeIds() {
-        List<Long> allNodes = new ArrayList<>();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        if (RunMode.isSharedDataMode()) {
-            ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
-            if (ConnectContext.get() != null) {
-                computeResource = ConnectContext.get().getCurrentComputeResource();
-            }
-            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            allNodes = warehouseManager.getAliveComputeNodes(computeResource)
-                    .stream()
-                    .map(ComputeNode::getId)
-                    .collect(Collectors.toList());
-        } else {
-            allNodes = systemInfoService.getAvailableBackendIds();
-            if (allNodes == null) {
-                allNodes = new ArrayList<>();
-            } else {
-                allNodes = new ArrayList<>(allNodes);
-            }
-            List<Long> computeNodeIds = systemInfoService.getAvailableComputeNodeIds();
-            if (computeNodeIds != null) {
-                allNodes.addAll(computeNodeIds);
-            }
-        }
-        return allNodes;
     }
 
     @Override

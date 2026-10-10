@@ -16,10 +16,15 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.common.Config;
 import com.starrocks.planner.LanceScanNode;
+import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
+import com.starrocks.qe.scheduler.slot.SlotEstimatorFactory;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLanceScanOperator;
@@ -34,6 +39,8 @@ import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.LazyComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -42,6 +49,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class LancePhysicalPlanTest extends PlanTestBase {
     @BeforeAll
@@ -90,7 +101,7 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         Assertions.assertTrue(thrift.getHdfs_scan_node().getSql_predicates().contains("id > 10"));
         Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
         Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getScan_range()
-                .getHdfs_scan_range().isSetUse_lance_jni_reader());
+                .getHdfs_scan_range().isSetDeprecated_use_lance_jni_reader());
         Assertions.assertEquals(THdfsFileFormat.LANCE, scan.getScanRangeLocations(0).get(0).getScan_range()
                 .getHdfs_scan_range().getFile_format());
         Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getScan_range()
@@ -98,16 +109,48 @@ public class LancePhysicalPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testMissingWorkersIsReportedAsPlannerError() {
-        new MockUp<LanceScanNode>() {
+    public void testSharedDataPlanningDoesNotAcquireWorkers() {
+        new MockUp<RunMode>() {
             @Mock
-            public List<Long> getAllAvailableBackendOrComputeIds() {
-                return List.of();
+            public boolean isSharedDataMode() {
+                return true;
             }
         };
-        StarRocksPlannerException error = Assertions.assertThrows(StarRocksPlannerException.class, this::createPlan);
-        Assertions.assertTrue(error.getMessage().contains("No alive backend or compute node for Lance scan"));
+        ComputeResource original = connectContext.getCurrentComputeResource();
+        LazyComputeResource pending = LazyComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, () -> {
+            throw new AssertionError("Worker acquisition must wait until query queue admission");
+        });
+        connectContext.setCurrentComputeResource(pending);
+        try {
+            ExecPlan plan = createPlan();
+            Assertions.assertEquals(1, plan.getScanNodes().get(0).getScanRangeLocations(0).size());
+            Assertions.assertFalse(pending.isInitialized());
+        } finally {
+            connectContext.setCurrentComputeResource(original);
+        }
     }
+
+    @Test
+    public void testWholeDatasetScanUsesOneQueueSlot() {
+        String original = Config.query_queue_slots_estimator_strategy;
+        Config.query_queue_slots_estimator_strategy = "PBE";
+        try {
+            ExecPlan plan = createPlan();
+            QueryQueueOptions options = mock(QueryQueueOptions.class, RETURNS_DEEP_STUBS);
+            when(options.isEnableQueryQueueV2()).thenReturn(true);
+            when(options.v2().getNumWorkers()).thenReturn(8);
+            when(options.v2().getTotalSlots()).thenReturn(32);
+            Assertions.assertEquals(1, SlotEstimatorFactory.estimateSlotsForExplain(options, connectContext, plan));
+
+            DefaultCoordinator coordinator = mock(DefaultCoordinator.class, RETURNS_DEEP_STUBS);
+            when(coordinator.getExecutionDAG().getRootFragment().getPlanFragment()).thenReturn(plan.getFragments().get(0));
+            Assertions.assertEquals(1, new SlotEstimatorFactory.ParallelismBasedSlotsEstimator()
+                    .estimateSlots(options, connectContext, coordinator));
+        } finally {
+            Config.query_queue_slots_estimator_strategy = original;
+        }
+    }
+
     @Test
     public void testConnectorScanDisablesSingleNodeParallelSchedule() {
         boolean original = connectContext.getSessionVariable().enableSingleNodeSchedule();
