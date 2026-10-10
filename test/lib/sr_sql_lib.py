@@ -96,9 +96,9 @@ QUERY_TIMEOUT = int(os.environ.get("QUERY_TIMEOUT", 60))
 # A shared-data alter job is cancelled with this message when any transaction id is allocated,
 # anywhere in the cluster, between taking the watershed txn id and adding the shadow index
 # (LakeTableSchemaChangeJob / LakeRollupJob, the latter also building synchronous MVs). The job is
-# cleaned up and nothing is lost, so the statement can just be submitted again.
+# cleaned up and nothing is lost, so the statement can just be submitted again -- as often as it
+# takes until the wait's deadline: on a busy cluster several attempts in a row can be cancelled.
 ALTER_RERUN_MSG = "please re-run the alter table command"
-ALTER_RERUN_MAX_RETRY = 3
 # Columns of SHOW ALTER TABLE COLUMN (SchemaChangeProcDir) and of SHOW ALTER TABLE ROLLUP / SHOW
 # ALTER MATERIALIZED VIEW (RollupProcDir).
 SCHEMA_CHANGE_STATE_COL, SCHEMA_CHANGE_MSG_COL = 9, 10
@@ -153,6 +153,25 @@ def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name
     column, name = last_alter[2]
     actual = table_name if column == "TableName" else rollup_index_name
     return actual is not None and str(actual) == name
+
+
+# `install plugin from "http..."` downloads the plugin from an external URL. When that URL cannot be
+# reached the failure says nothing about StarRocks, so the case is skipped instead of failed.
+INSTALL_PLUGIN_URL_RE = re.compile(r'^\s*install\s+plugin\s+from\s+"(https?://([^/":]+)[^"]*)"', re.IGNORECASE)
+NETWORK_ERROR_RE = re.compile(r"timed out|Connection refused|Connection reset|No route to host", re.IGNORECASE)
+
+
+def skip_if_plugin_download_failed(sql, act):
+    """Raise SkipTest if `sql` installs a plugin from a URL and `act` is a network error reaching it."""
+    m = INSTALL_PLUGIN_URL_RE.match(sql)
+    if not m or not str(act).startswith("E: "):
+        return
+    url, host = m.group(1), m.group(2)
+    # UnknownHostException carries only the host name as its message. A 404 carries the full URL
+    # instead; that is not matched, because a removed plugin file is not a transient network issue.
+    if NETWORK_ERROR_RE.search(str(act)) or str(act).endswith("'%s')" % host):
+        log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
+        raise SkipTest("plugin download failed (network): %s" % act)
 
 
 class Filter(logging.Filter):
@@ -1492,6 +1511,7 @@ class StarrocksSQLApiLib(object):
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
+        skip_if_plugin_download_failed(sql, act)
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
@@ -2240,7 +2260,6 @@ class StarrocksSQLApiLib(object):
             # A case waiting for a cancel expects its own reason; only a wait for FINISHED retries.
             if (
                 expect_status == "FINISHED"
-                and rerun < ALTER_RERUN_MAX_RETRY
                 and time.monotonic() < deadline
                 and should_resubmit_alter(
                     last_alter, status, row[ROLLUP_MSG_COL], table_name, row[ROLLUP_INDEX_NAME_COL]
@@ -2747,7 +2766,7 @@ class StarrocksSQLApiLib(object):
                 return None
 
             tools.assert_true(
-                is_watershed_cancel(state, msg) and rerun < ALTER_RERUN_MAX_RETRY,
+                is_watershed_cancel(state, msg),
                 "alter job %s is CANCELLED, msg: %s" % (job_id, msg),
             )
             rerun += 1
@@ -2817,8 +2836,7 @@ class StarrocksSQLApiLib(object):
 
             rollup_index_name = res["result"][0][ROLLUP_INDEX_NAME_COL] if alter_type.upper() == "ROLLUP" else None
             if (
-                rerun < ALTER_RERUN_MAX_RETRY
-                and time.monotonic() < deadline
+                time.monotonic() < deadline
                 and should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name)
             ):
                 # Wait for the resubmitted job instead.

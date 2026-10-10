@@ -3673,7 +3673,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
+                "  |  other predicates: 2: v2 = 3: v3 + 4: v4");
 
         String sql2 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 < t0.v3 + t1.v4";
         ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
@@ -3696,7 +3696,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
+                "  |  other predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
     }
     
     @Test

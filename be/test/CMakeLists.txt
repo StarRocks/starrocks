@@ -618,6 +618,7 @@ set(EXEC_FILES
         ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/datacache_metrics_test.cpp
+        ./cache/mem_space_monitor_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp

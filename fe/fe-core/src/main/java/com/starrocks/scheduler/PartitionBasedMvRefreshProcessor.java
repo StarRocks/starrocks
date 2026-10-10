@@ -132,7 +132,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     // Set of table types that support adaptive materialized view (MV) refresh.
     //
-    // Internal tables (e.g., OLAP) have direct access to partition information,
+    // Internal tables (OLAP/cloud-native tables and materialized views, both shared-nothing
+    // and shared-data) have direct access to partition information,
     // enabling accurate and efficient adaptive MV refresh.
     //
     // For external tables (e.g., Hive, Iceberg, Hudi, Delta Lake),
@@ -142,11 +143,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // which currently only supports these external table types (since v3.3.0).
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH = EnumSet.of(
             Table.TableType.OLAP,
+            Table.TableType.CLOUD_NATIVE,
+            Table.TableType.MATERIALIZED_VIEW,
+            Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW,
             Table.TableType.HIVE,
             Table.TableType.ICEBERG,
             Table.TableType.HUDI,
             Table.TableType.DELTALAKE
     );
+
+    public static boolean isAdaptiveRefreshSupported(Table.TableType tableType) {
+        return SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(tableType);
+    }
 
     private Database db;
     private MaterializedView mv;
@@ -343,11 +351,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 return mvToRefreshedPartitions;
             }
 
-            boolean hasUnsupportedTableType = mv.getBaseTableTypes().stream()
-                    .anyMatch(type -> !SUPPORTED_TABLE_TYPES_FOR_ADAPTIVE_MV_REFRESH.contains(type));
-            if (hasUnsupportedTableType) {
-                logger.warn("Materialized view {} contains unsupported external tables. Using default refresh strategy.",
-                        mv.getId());
+            List<String> unsupportedTablesForAdaptiveRefresh = mv.getBaseTables().stream()
+                    .filter(table -> !isAdaptiveRefreshSupported(table.getType()))
+                    .map(table -> table.getName() + "(" + table.getType() + ")")
+                    .collect(Collectors.toList());
+            if (!unsupportedTablesForAdaptiveRefresh.isEmpty()) {
+                if (partitionRefreshStrategy == PartitionRefreshStrategy.ADAPTIVE) {
+                    logger.info("base tables {} do not support adaptive refresh, " +
+                            "fall back to STRICT refresh strategy", unsupportedTablesForAdaptiveRefresh);
+                }
                 filterPartitionByRefreshNumber(mvToRefreshedPartitions, mvPotentialPartitionNames, mv,
                         tentative);
             } else {

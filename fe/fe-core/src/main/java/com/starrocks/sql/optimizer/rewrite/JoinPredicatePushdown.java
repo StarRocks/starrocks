@@ -154,7 +154,10 @@ public class JoinPredicatePushdown {
     private OptExpression pushdownFilterPredicate(ScalarOperator predicateToPush) {
         LogicalJoinOperator join = joinOptExpression.getOp().cast();
 
-        if (join.isInnerOrCrossJoin() || join.getJoinType().isAsofInnerJoin()) {
+        if (join.getJoinType().isAsofInnerJoin()) {
+            return pushdownAsofFilterPredicate(predicateToPush);
+        }
+        if (join.isInnerOrCrossJoin()) {
             return pushdownOnPredicate(predicateToPush);
         }
 
@@ -227,6 +230,48 @@ public class JoinPredicatePushdown {
             newJoinOperator = join;
         }
 
+        return OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
+    }
+
+    // A filter above an ASOF join applies to the match it picked for each left row. Filtering the right input first
+    // makes the join pick another (earlier) right row instead of dropping the left row, so only the left side's
+    // conjuncts may go down; the others stay on the join as a post-join predicate, never merged into its ON clause.
+    // The exception is a right conjunct on the equi-join keys alone: it drops whole key groups, and a left row only
+    // picks its match inside the group of its own key, so the match it picks does not change.
+    private OptExpression pushdownAsofFilterPredicate(ScalarOperator predicateToPush) {
+        LogicalJoinOperator join = joinOptExpression.getOp().cast();
+        ColumnRefSet leftColumns = joinOptExpression.inputAt(0).getOutputColumns();
+        ColumnRefSet rightColumns = joinOptExpression.inputAt(1).getOutputColumns();
+        // the derivation also returns the ON conjuncts, which the match already satisfies
+        List<ScalarOperator> onConjuncts = Utils.extractConjuncts(join.getOnPredicate());
+        ColumnRefSet rightKeyColumns = new ColumnRefSet();
+        for (BinaryPredicateOperator eq : JoinHelper.getEqualsPredicate(leftColumns, rightColumns, onConjuncts)) {
+            for (ScalarOperator child : eq.getChildren()) {
+                if (child instanceof ColumnRefOperator && rightColumns.contains((ColumnRefOperator) child)) {
+                    rightKeyColumns.union((ColumnRefOperator) child);
+                }
+            }
+        }
+        List<ScalarOperator> remainingFilter = new ArrayList<>();
+        for (ScalarOperator e : Utils.extractConjuncts(predicateToPush)) {
+            if (onConjuncts.contains(e)) {
+                continue;
+            }
+            ColumnRefSet usedColumns = e.getUsedColumns();
+            if (Utils.canPushDownPredicate(e) && leftColumns.containsAll(usedColumns)) {
+                leftPushDown.add(e);
+            } else if (Utils.canPushDownPredicate(e) && rightKeyColumns.containsAll(usedColumns)) {
+                rightPushDown.add(e);
+            } else {
+                remainingFilter.add(e);
+            }
+        }
+        pushDownPredicate(joinOptExpression, leftPushDown, rightPushDown);
+        LogicalJoinOperator newJoinOperator = join;
+        if (!remainingFilter.isEmpty()) {
+            newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                    .setPredicate(Utils.compoundAnd(Utils.compoundAnd(remainingFilter), join.getPredicate())).build();
+        }
         return OptExpression.create(newJoinOperator, joinOptExpression.getInputs());
     }
 
@@ -355,7 +400,7 @@ public class JoinPredicatePushdown {
         boolean isLeftEmpty = leftPushDown.isEmpty();
         if (joinType.isAnyInnerJoin() || joinType.isRightSemiJoin()) {
             leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
-                optimizerContext.addPushdownNotNullPredicates(notNull);
+                recordPushdownNotNull(join.inputAt(0), notNull);
                 if (isLeftEmpty) {
                     leftPushDown.add(notNull);
                 }
@@ -364,13 +409,55 @@ public class JoinPredicatePushdown {
         boolean isRightEmpty = rightPushDown.isEmpty();
         if (joinType.isAnyInnerJoin() || joinType.isLeftSemiJoin()) {
             rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
-                optimizerContext.addPushdownNotNullPredicates(notNull);
+                recordPushdownNotNull(join.inputAt(1), notNull);
                 if (isRightEmpty) {
                     rightPushDown.add(notNull);
                 }
             });
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
+    }
+
+    // A recorded NULL rejection lets an outer join below turn into an inner join (convertOuterToInner), dropping the
+    // NULL-extended rows before they reach this join. That is only right if no operator on the way down picks or
+    // computes its output rows from other input rows (a limit, a top-n, a window), so do not record it past one.
+    private void recordPushdownNotNull(OptExpression child, IsNullPredicateOperator notNull) {
+        if (!isRowDependentOnTheWay(child, notNull.getUsedColumns())) {
+            optimizerContext.addPushdownNotNullPredicates(notNull);
+        }
+    }
+
+    // Walk down the inputs carrying the columns until the operator producing them.
+    private static boolean isRowDependentOnTheWay(OptExpression root, ColumnRefSet columns) {
+        OptExpression current = root;
+        while (current != null) {
+            if (dependsOnOtherRows(current.getOp())) {
+                return true;
+            }
+            OptExpression next = null;
+            for (OptExpression input : current.getInputs()) {
+                if (outputColumns(input).containsAll(columns)) {
+                    next = input;
+                    break;
+                }
+            }
+            current = next;
+        }
+        return false;
+    }
+
+    private static boolean dependsOnOtherRows(Operator op) {
+        return op.hasLimit() || op.getOpType() == OperatorType.LOGICAL_LIMIT ||
+                op.getOpType() == OperatorType.LOGICAL_TOPN || op.getOpType() == OperatorType.LOGICAL_WINDOW ||
+                op.getOpType() == OperatorType.LOGICAL_ASSERT_ONE_ROW ||
+                // an ASOF join picks each left row's match among the right rows
+                (op instanceof LogicalJoinOperator && ((LogicalJoinOperator) op).getJoinType().isAsofJoin());
+    }
+
+    // an input created by a rewrite of this pass may not have its logical property derived yet
+    private static ColumnRefSet outputColumns(OptExpression expression) {
+        return expression.getLogicalProperty() != null ? expression.getOutputColumns() :
+                expression.getRowOutputInfo().getOutputColumnRefSet();
     }
 
     private JoinOperator deriveJoinType(JoinOperator originalType, ScalarOperator newJoinOnPredicate) {
