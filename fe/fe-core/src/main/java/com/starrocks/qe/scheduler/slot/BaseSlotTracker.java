@@ -293,11 +293,14 @@ public abstract class BaseSlotTracker {
     public List<LogicalSlot> peakExpiredSlots() {
         final long nowMs = System.currentTimeMillis();
         List<LogicalSlot> expiredSlots = new ArrayList<>();
+        // slotsOrderByExpiredTime is ordered by the PENDING deadline, but expiry is the ALLOCATED deadline
+        // (start + query_timeout), so the two orders disagree: stopping at the first unexpired slot let one
+        // slot with a long query_timeout keep every later-ordered, already-expired slot allocated forever
+        // (e.g. slots leaked by a leader change). Check every slot.
         for (LogicalSlot slot : slotsOrderByExpiredTime) {
-            if (!slot.isAllocatedExpired(nowMs)) {
-                break;
+            if (slot.isAllocatedExpired(nowMs)) {
+                expiredSlots.add(slot);
             }
-            expiredSlots.add(slot);
         }
         return expiredSlots;
     }
