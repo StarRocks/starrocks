@@ -123,19 +123,11 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-<<<<<<< HEAD
-        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
                 insertStmt, selectRelation, target,
                 new InsertSelectSourceColumns.ResolutionContext(resolvedSource.sourceTable(),
                         resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
-                sortKeyColumns, partitionColumns);
-=======
-        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
-                insertStmt, selectRelation, target, resolvedSource.sourceTable(),
-                resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                InsertSelectSourceColumns.SchemaPairing.EXACT, context);
->>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
+                        InsertSelectSourceColumns.SchemaPairing.EXACT, context));
         if (resolved == null) {
             return null;
         }

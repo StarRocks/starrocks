@@ -177,16 +177,10 @@ public class InsertSelectSourceColumnsTest {
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
-<<<<<<< HEAD
-        return InsertSelectSourceColumns.resolve(
+        return gated(InsertSelectSourceColumns.resolveUngated(
                 stmt, rel, target,
                 new InsertSelectSourceColumns.ResolutionContext(source, normalizedSourceName, sourceAlias,
-                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
-=======
-        return gated(InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target, source, normalizedSourceName, sourceAlias,
-                InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
->>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
+                        InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null)),
                 sortKeyColumns, partitionColumns);
     }
 
@@ -207,16 +201,10 @@ public class InsertSelectSourceColumnsTest {
     private static InsertSelectSourceColumns.Resolved resolvePerColumnFully(
             InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
-<<<<<<< HEAD
-        return InsertSelectSourceColumns.resolve(
+        return gated(InsertSelectSourceColumns.resolveUngated(
                 stmt, rel, target,
                 new InsertSelectSourceColumns.ResolutionContext(source, SRC_NAME, null,
-                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null),
-                sortKeyColumns, partitionColumns);
-=======
-        return gated(InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target, source, SRC_NAME, null,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null),
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, /*computedProjectionContext*/ null)),
                 sortKeyColumns, partitionColumns);
     }
 
@@ -229,7 +217,6 @@ public class InsertSelectSourceColumnsTest {
             return null;
         }
         return resolved;
->>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
     }
 
     private static Map<String, String> sourceMapOf(InsertSelectSourceColumns.Resolved resolved) {
@@ -1526,8 +1513,9 @@ public class InsertSelectSourceColumnsTest {
                 + " FROM " + FILES_CALL, context.getSessionVariable().getSqlMode());
         SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
-                stmt, rel, target, filesTable(sourceCols), SRC_NAME, null,
-                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
+                stmt, rel, target,
+                new InsertSelectSourceColumns.ResolutionContext(filesTable(sourceCols), SRC_NAME, null,
+                        InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context));
         return InsertSelectSourceColumns.withGeneratedColumns(
                 resolved, target, sampledColumns, reading, context, SRC_NAME, null);
     }

@@ -125,43 +125,23 @@ final class InsertSelectSourceColumns {
                     Map<String, Type> targetToSourceType, Set<String> targetsReadingRetypedSource,
                     Map<String, String> generatedColumnFailures) {
 
-<<<<<<< HEAD
-    /**
-     * The source relation and projection rules used to resolve one INSERT-SELECT. A non-null
-     * {@code computedProjectionContext} admits safe computed expressions after folding their
-     * plan-time constants in the INSERT user's context; {@code null} leaves them unsupported.
-     */
-    record ResolutionContext(Table sourceTable, TableName normalizedSourceName, String sourceAlias,
-                             SchemaPairing pairing, ConnectContext computedProjectionContext) {
-    }
-
-    /**
-     * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
-     *
-     * @param insertStmt          the parsed INSERT statement
-     * @param selectRelation      the SELECT body of the INSERT
-     * @param targetTable         the INSERT target (range-distributed); the effective target
-     *                            columns are derived from it by {@link #effectiveTargetColumns}
-     * @param resolutionContext   the source relation and its projection rules
-     * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
-     * @param partitionColumns    partition columns of the target
-     * @return the resolved projection, or {@code null} when the projection is ambiguous or unsafe
-     */
-    static Resolved resolve(
-            InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, ResolutionContext resolutionContext,
-            List<Column> sortKeyColumns, List<Column> partitionColumns) {
-        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, resolutionContext);
-        if (resolved == null) {
-            return null;
-=======
         /** A projection whose source types are not tracked and that no generated column has been resolved against. */
         Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
                  Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets) {
             this(targetToSource, targetToConstantSql, targetToExpressionSql, unsupportedProjectionTargets,
                     Map.of(), Set.of(), Map.of());
->>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
         }
+    }
+
+    /**
+     * The source relation and projection rules used to resolve one INSERT-SELECT. A non-null
+     * {@code computedProjectionContext} admits a safe computed expression when {@link #foldedComputedProjection},
+     * folding its plan-time constants in the INSERT user's context, and
+     * {@link SamplingPredicateGate#evaluatesAsTheLoad} accept it; {@code null} leaves every computed output
+     * unsupported.
+     */
+    record ResolutionContext(Table sourceTable, TableName normalizedSourceName, String sourceAlias,
+                             SchemaPairing pairing, ConnectContext computedProjectionContext) {
     }
 
     /** How the load hands a generated column the values of the columns its definition reads. */
@@ -184,14 +164,6 @@ final class InsertSelectSourceColumns {
      * leaves unfed is not a shape problem: the caller applies the presence gates itself and names the
      * offending column via {@link #firstUnsampleable}.
      *
-<<<<<<< HEAD
-=======
-     * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
-     *                                  evaluate a computed projection: such a projection is admitted
-     *                                  when {@link #foldedComputedProjection}, folding in this context,
-     *                                  and {@link SamplingPredicateGate#evaluatesAsTheLoad} accept it.
-     *                                  {@code null} admits none, so every computed output stays unsupported.
->>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
      */
     static Resolved resolveUngated(
             InsertStmt insertStmt, SelectRelation selectRelation,
