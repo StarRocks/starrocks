@@ -50,6 +50,11 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.TransactionState;
+import mockit.Invocation;
+>>>>>>> 50ce0530a1d ([BugFix] Record the IVM refresh window on the transaction it commits with (#62830))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -1475,7 +1480,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Build a callback + capture owner A via beforeCommitted.
         IVMInsertLoadTxnCallback callback =
                 new IVMInsertLoadTxnCallback(mv.getMvId().getDbId(), mv.getId());
-        callback.beforeCommitted(null);
+        TransactionState txnState = insertTxnState();
+        callback.beforeCommitted(txnState);
 
         // Simulate a newer job taking over ownership between beforeCommitted and afterCommitted.
         String ownerB = "jobB-" + com.starrocks.common.util.UUIDUtil.genUUID();
@@ -1484,7 +1490,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // afterCommitted must detect the owner change and skip clearTempBaseTableInfoTvrDeltaState
         // so the newer job's pending state survives.
-        callback.afterCommitted(null);
+        callback.afterCommitted(txnState);
 
         MaterializedView afterMv = getMv("test_mv1");
         MaterializedView.AsyncRefreshContext ctxAfter = afterMv.getRefreshScheme().getAsyncRefreshContext();
