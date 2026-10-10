@@ -123,4 +123,41 @@ public class CTETransformerContext {
     public boolean isForceCTE(int cteId) {
         return forceCTEList.contains(cteId);
     }
+
+    // Snapshot all mutable state so a speculative "peek" transform whose result is discarded can be
+    // rolled back (see RelationTransformer.buildCTEAnchorAndProducer). A discarded peek must not leave
+    // its CTE registrations behind: cteRefIdMapping.size() feeds isForceInline(), so leftover
+    // registrations would drift the inline/reuse decision of later CTEs.
+    public Memento save() {
+        return new Memento(cteExpressions, cteRefIdMapping, cteIdToNodeCount, uniqueId.get(), forceCTEList);
+    }
+
+    public void restore(Memento memento) {
+        cteExpressions.clear();
+        cteExpressions.putAll(memento.cteExpressions);
+        cteRefIdMapping.clear();
+        cteRefIdMapping.putAll(memento.cteRefIdMapping);
+        cteIdToNodeCount.clear();
+        cteIdToNodeCount.putAll(memento.cteIdToNodeCount);
+        uniqueId.set(memento.uniqueId);
+        forceCTEList.clear();
+        forceCTEList.addAll(memento.forceCTEList);
+    }
+
+    public static final class Memento {
+        private final Map<Integer, ExpressionMapping> cteExpressions;
+        private final Map<Integer, Integer> cteRefIdMapping;
+        private final Map<Integer, Integer> cteIdToNodeCount;
+        private final int uniqueId;
+        private final List<Integer> forceCTEList;
+
+        private Memento(Map<Integer, ExpressionMapping> cteExpressions, Map<Integer, Integer> cteRefIdMapping,
+                        Map<Integer, Integer> cteIdToNodeCount, int uniqueId, List<Integer> forceCTEList) {
+            this.cteExpressions = new HashMap<>(cteExpressions);
+            this.cteRefIdMapping = new HashMap<>(cteRefIdMapping);
+            this.cteIdToNodeCount = new HashMap<>(cteIdToNodeCount);
+            this.uniqueId = uniqueId;
+            this.forceCTEList = Lists.newArrayList(forceCTEList);
+        }
+    }
 }
