@@ -333,6 +333,40 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testGetPartitionsByFilterPopulatesPartitionCache() {
+        AtomicInteger getPartitionsByNamesCalls = new AtomicInteger();
+        HiveMetaClient filteredClient = new HiveMetastoreTest.MockedHiveMetaClient() {
+            @Override
+            public List<org.apache.hadoop.hive.metastore.api.Partition> getPartitionsByFilter(
+                    String dbName, String tableName, String filter) {
+                return super.getPartitionsByNames(
+                        dbName, tableName, Lists.newArrayList("col1=1", "col1=2"));
+            }
+
+            @Override
+            public List<org.apache.hadoop.hive.metastore.api.Partition> getPartitionsByNames(
+                    String dbName, String tableName, List<String> partitionNames) {
+                getPartitionsByNamesCalls.incrementAndGet();
+                return super.getPartitionsByNames(dbName, tableName, partitionNames);
+            }
+        };
+        HiveMetastore filteredMetastore = new HiveMetastore(
+                filteredClient, "hive_catalog", MetastoreType.HMS);
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                filteredMetastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+
+        Map<String, Partition> filteredPartitions = cachingHiveMetastore.getPartitionsByFilter(
+                "db1", "table1", Lists.newArrayList("col1"), "col1 >= 1");
+        Map<String, Partition> cachedPartitions = cachingHiveMetastore.getPartitionsByNames(
+                "db1", "table1", Lists.newArrayList("col1=1", "col1=2"));
+
+        Assertions.assertEquals(2, filteredPartitions.size());
+        Assertions.assertEquals(2, cachedPartitions.size());
+        Assertions.assertEquals(0, getPartitionsByNamesCalls.get());
+    }
+
+    @Test
     public void testRefreshTable() {
         new Expectations(metastore) {
             {

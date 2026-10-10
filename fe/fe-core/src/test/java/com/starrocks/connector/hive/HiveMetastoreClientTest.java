@@ -24,6 +24,7 @@ import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.GetTableRequest;
 import org.apache.hadoop.hive.metastore.api.GetTableResult;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
+import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore;
 import org.apache.thrift.TException;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.net.SocketTimeoutException;
+import java.util.List;
 
 public class HiveMetastoreClientTest {
     @Test
@@ -104,5 +106,34 @@ public class HiveMetastoreClientTest {
         // otherwise get_table_req reads get_table's stale response and the Thrift seqid desyncs.
         Assertions.assertTrue(reconnected[0], "reconnect() should be invoked before the get_table_req fallback");
         Assertions.assertTrue(reqRanAfterReconnect[0], "get_table_req() must run after reconnect()");
+    }
+
+    @Test
+    public void testListPartitionsByFilter(@Mocked ThriftHiveMetastore.Iface client) throws Exception {
+        new MockUp<TSocket>() {
+            @Mock
+            public boolean isOpen() {
+                return true;
+            }
+        };
+
+        new MockUp<ThriftHiveMetastore.Client>() {
+            @Mock
+            public List<Partition> get_partitions_by_filter(
+                    String dbName, String tableName, String filter, short maxParts) {
+                Partition partition = new Partition();
+                partition.setValues(List.of("2026-05-25", "3091", "app_create"));
+                return List.of(partition);
+            }
+        };
+
+        Configuration configuration = new HiveConf();
+        configuration.set("metastore.thrift.uris", "thrift://127.0.0.1:1234");
+        HiveMetaStoreClient metaStoreClient = new HiveMetaStoreClient(configuration);
+        List<Partition> partitions = metaStoreClient.listPartitionsByFilter(
+                "dw", "dw_log_511", "s_date >= \"2026-05-25\"", (short) -1);
+
+        Assertions.assertEquals(1, partitions.size());
+        Assertions.assertEquals("2026-05-25", partitions.get(0).getValues().get(0));
     }
 }
