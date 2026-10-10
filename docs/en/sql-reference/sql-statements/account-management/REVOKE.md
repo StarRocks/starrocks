@@ -114,7 +114,7 @@ REVOKE
 
 ```SQL
 REVOKE  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...]}  | ALL DATABASES }
@@ -123,6 +123,7 @@ REVOKE
 
 * You must first run SET CATALOG before you run this command.
 * You can also use db.view to represent a view.
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the view via `EXPORT TABLE` is not supported.
 
   ```SQL
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -132,7 +133,7 @@ REVOKE
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL [DATABASES] }
@@ -141,6 +142,7 @@ REVOKE
 
 * You must first run SET CATALOG before you run this command.
 * You can also use db.mv to represent an mv.
+* For the EXPORT privilege, only grant and revoke are supported. Exporting the materialized view via `EXPORT TABLE` is not supported.
 
   ```SQL
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}
