@@ -27,6 +27,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DmlStmt;
@@ -52,6 +54,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
@@ -67,7 +71,9 @@ import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.generatedColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.stubGeneratedSchema;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -94,6 +100,24 @@ import static org.mockito.Mockito.when;
 public class InsertPreSplitHookTableTest {
 
     private static final long BASE_INDEX_META_ID = 10L;
+
+    private static final Column GEN_K = bigintColumn("k");
+    private static final Column GEN_V = bigintColumn("v");
+    private static final Column GEN_DT = new Column("dt", DateType.DATETIME, true);
+    private static final Column GEN_DT_MONTH =
+            generatedColumn("dt_month", DateType.DATETIME, "date_trunc('month', dt)", List.of(GEN_DT));
+    // Captured before any fixture mocks GlobalStateMgr: analysis resolves built-in functions in the real registry, the
+    // user's session variables are read by name through the real VariableMgr, and rendered literals are re-parsed with
+    // the real parser.
+    private static final com.starrocks.server.GlobalStateMgr REAL_GLOBAL_STATE =
+            com.starrocks.server.GlobalStateMgr.getCurrentState();
+    private static final Expr ABS_V = SqlParser.parseSqlToExpr("abs(v)", SqlModeHelper.MODE_DEFAULT);
+    private static final Expr WHERE_UPPER_V_V = SqlParser.parseSqlToExpr("upper(v, v) = 'a'", SqlModeHelper.MODE_DEFAULT);
+    private static final Expr WHERE_ON_GENERATED_DT_MONTH =
+            SqlParser.parseSqlToExpr("date_trunc('month', dt_month) >= '2026-01-01 00:00:00'", SqlModeHelper.MODE_DEFAULT);
+    // Folds to CAST(1.5 AS DECIMAL64(10,1)) in every sql_mode.
+    private static final Expr WHERE_FOLDED_DECIMAL =
+            SqlParser.parseSqlToExpr("v < CAST(concat('1', '.5') AS DECIMAL(10, 1))", SqlModeHelper.MODE_DEFAULT);
 
     private boolean savedConfigInsertFromTable;
 
@@ -840,6 +864,24 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void prepareCarriesTheUsersSessionSemanticsIntoTheScanContext() throws Exception {
+        SessionVariable userSession = new SessionVariable();
+        userSession.setSqlMode(SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_PIPES_AS_CONCAT);
+        userSession.setTimeZone("Asia/Shanghai");
+        userSession.setCboEqBaseType("varchar");
+        SampleSessionSemantics expected = SampleSessionSemantics.capture(userSession);
+
+        try (SourceFixture fixture = sourceFixture()) {
+            when(fixture.context.getSessionVariable()).thenReturn(userSession);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals(expected, scanContext.sessionSemantics());
+        }
+    }
+
+    @Test
     public void prepareAllowsExpressionOnNonKeyColumn() throws Exception {
         // target [k, v]; SELECT k, parse_json(v) FROM src. The sampler only needs
         // target key k, so the value expression is intentionally absent from the map.
@@ -960,6 +1002,54 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void prepareSkipsAWhereWhoseCallBindsNoBuiltin() throws Exception {
+        // upper is allowlisted by name, but no built-in upper takes two arguments.
+        try (SourceFixture fixture = sourceFixture()) {
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(WHERE_UPPER_V_V);
+
+            Assertions.assertNull(fixture.prepareScanContext());
+        }
+    }
+
+    @Test
+    public void prepareChecksTheWhereAgainstTheSourcesGeneratedColumnsToo() throws Exception {
+        // A WHERE clause may read a generated source column, which the projection mapping never sees.
+        try (SourceFixture fixture = sourceFixture()) {
+            when(fixture.sourceTable.getBaseSchema()).thenReturn(List.of(GEN_K, GEN_V, GEN_DT, GEN_DT_MONTH));
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectList selectList = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
+            when(selectRelation.getSelectList()).thenReturn(selectList);
+            when(selectRelation.getWhereClause()).thenReturn(WHERE_ON_GENERATED_DT_MONTH);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a WHERE clause may read a generated source column");
+            Assertions.assertEquals("(date_trunc('month', `dt_month`)) >= '2026-01-01 00:00:00'",
+                    scanContext.wherePredicateSql());
+        }
+    }
+
+    @Test
+    public void prepareSkipsAWhereWithADecimalLiteralTheSamplerWouldReadAsADouble() throws Exception {
+        // The check runs on the folded WHERE clause in the user's sql_mode: the folded 1.5 reads back as itself without
+        // DOUBLE_LITERAL and as a DOUBLE under it.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(selectRelation.getWhereClause()).thenReturn(WHERE_FOLDED_DECIMAL);
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+            Assertions.assertNotNull(scanContext);
+            Assertions.assertEquals("`v` < (CAST(1.5 AS DECIMAL64(10,1)))", scanContext.wherePredicateSql());
+
+            when(fixture.context.getSessionVariable().getSqlMode())
+                    .thenReturn(SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_DOUBLE_LITERAL);
+            Assertions.assertNull(fixture.prepareScanContext());
+        }
+    }
+
+    @Test
     public void prepareSourceEqualsTargetStillProducesScanContext() throws Exception {
         // INSERT INTO t SELECT * FROM t -- the source resolves to the SAME OlapTable
         // instance as the target. The hook holds no locks, so source == target is NOT
@@ -1011,6 +1101,72 @@ public class InsertPreSplitHookTableTest {
 
             Assertions.assertNull(fixture.prepare(),
                     "a rollup sort-key column with no source mapping must skip pre-split");
+        }
+    }
+
+    @Test
+    public void prepareComputesAGeneratedPartitionColumnFromTheSourceColumnItReads() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withGeneratedPartitionColumn();
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a generated partition column over a source column must be sampled");
+            Assertions.assertEquals(Map.of("dt_month", "date_trunc('month', CAST(`dt` AS DATETIME))"),
+                    scanContext.targetToExpressionSql());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v", "dt", "dt"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareDeclinesAGeneratedPartitionColumnWhoseInputTheColumnListOmits() throws Exception {
+        // INSERT INTO t (k, v) SELECT k, v FROM src: dt is defaulted, so dt_month cannot be sampled. The
+        // skip must name the generated column in the metric, the log and the profile.
+        try (SourceFixture fixture = sourceFixture()) {
+            fixture.withGeneratedPartitionColumn();
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectList projection = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
+            when(selectRelation.getSelectList()).thenReturn(projection);
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("k", "v"));
+            PreSplitProfile profile = new PreSplitProfile();
+
+            boolean savedHasInit = MetricRepo.hasInit;
+            MetricRepo.hasInit = true;
+            try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_TABLE)) {
+                String reason = SkipReason.UNSUPPORTED_GENERATED_COLUMN.name().toLowerCase();
+                long before = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(reason).getValue();
+
+                Assertions.assertNull(fixture.prepare());
+
+                Assertions.assertEquals(before + 1L,
+                        MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(reason).getValue().longValue());
+            } finally {
+                MetricRepo.hasInit = savedHasInit;
+            }
+            Assertions.assertEquals("SKIPPED: UNSUPPORTED_GENERATED_COLUMN (dt_month)",
+                    profile.toRuntimeProfile().getInfoString("Outcomes"));
+        }
+    }
+
+    @Test
+    public void prepareAdmitsASafeComputedPartitionColumn() throws Exception {
+        // SELECT k, abs(v) FROM src into PARTITION BY (v): the table path evaluates a safe computed key
+        // over the source rows, as the FILES path does.
+        try (SourceFixture fixture = sourceFixture()) {
+            when(fixture.target().getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(bigintColumn("v")));
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectListItem computed = mock(SelectListItem.class);
+            when(computed.isStar()).thenReturn(false);
+            when(computed.getExpr()).thenReturn(ABS_V);
+            SelectList projection = selectListOf(bareColumnItem("k"), computed);
+            when(selectRelation.getSelectList()).thenReturn(projection);
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a safe computed partition column must be sampled");
+            Assertions.assertEquals(Map.of("v", "abs(`v`)"), scanContext.targetToExpressionSql());
         }
     }
 
@@ -1275,6 +1431,10 @@ public class InsertPreSplitHookTableTest {
             this.metadataMgr = metadataMgr;
             when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
             globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
+            when(globalState.getFunction(any(), any())).thenAnswer(invocation ->
+                    REAL_GLOBAL_STATE.getFunction(invocation.getArgument(0), invocation.getArgument(1)));
+            when(globalState.getVariableMgr()).thenReturn(REAL_GLOBAL_STATE.getVariableMgr());
+            when(globalState.getSqlParser()).thenReturn(REAL_GLOBAL_STATE.getSqlParser());
             // Target db resolves first, then source db (both via getDb).
             when(metadataMgr.getDb(any(), any(), eq("target_db"))).thenReturn(targetDb);
             when(metadataMgr.getDb(any(), any(), eq("src_db"))).thenReturn(sourceDb);
@@ -1375,6 +1535,17 @@ public class InsertPreSplitHookTableTest {
             when(targetTable.getBaseIndexMetaId()).thenReturn(BASE_INDEX_META_ID);
             metaUtils.when(() -> MetaUtils.getRangeDistributionColumns(eq(targetTable), eq(rollupMetaId)))
                     .thenReturn(columnsOf(rollupSortKeyColumnNames));
+        }
+
+        /**
+         * Target (k, v, dt DATETIME) plus dt_month AS date_trunc('month', dt), PARTITION BY (dt_month), from source
+         * (k, v, dt DATETIME). The columns are built at class load: parsing needs the GlobalStateMgr this fixture mocks.
+         */
+        private void withGeneratedPartitionColumn() {
+            stubGeneratedSchema(targetTable, List.of(GEN_K, GEN_V, GEN_DT), GEN_DT_MONTH);
+            when(targetTable.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(GEN_DT_MONTH));
+            when(sourceTable.getVisibleColumnsWithoutGeneratedColumn()).thenReturn(List.of(GEN_K, GEN_V, GEN_DT));
+            when(sourceTable.getBaseSchema()).thenReturn(List.of(GEN_K, GEN_V, GEN_DT));
         }
 
         /**

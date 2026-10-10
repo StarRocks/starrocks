@@ -369,4 +369,21 @@ class BrokerLoadRowGroupStatisticsProviderTest {
     private static long totalRowCount(List<RowGroupStatistics> rowGroupStatistics) {
         return rowGroupStatistics.stream().mapToLong(RowGroupStatistics::getRowCount).sum();
     }
+
+    @Test
+    void generatedSortKeyColumnFallsBackToDataTier() {
+        // No footer describes a generated column; a same-named file column would not be the loaded value.
+        BrokerDesc brokerDesc = Mockito.mock(BrokerDesc.class);
+        Mockito.when(brokerDesc.hasBroker()).thenReturn(false);
+        Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
+        SampleRequest request = new SampleRequest(
+                new BrokerLoadScanContext(brokerDesc, List.of(parquetFileGroup()),
+                        List.of(List.of(new TBrokerFileStatus("s3://b/x.parquet", false, 1L, true))),
+                        Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(PresplitTestSupport.activityMonth()), Long.MAX_VALUE, /*seed=*/ 0L);
+
+        MetaTierUnavailableException thrown =
+                Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+        Assertions.assertTrue(thrown.getMessage().contains("generated column"), thrown.getMessage());
+    }
 }

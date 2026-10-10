@@ -54,6 +54,9 @@ import java.util.Objects;
  * <p>{@code wherePredicateSql} is the statement's WHERE clause rendered back to SQL, or
  * {@code null}. The data tier copies it into its sampling sub-query; the meta tier cannot apply a
  * predicate to a footer at all and declines the request when one is present.
+ *
+ * <p>{@code sessionSemantics} are the INSERT session's variables that decide how the predicate and the
+ * projections evaluate and how a timestamp decodes; the data tier sets them on its own session.
  */
 public record InsertFromFilesScanContext(
         TableFunctionTable sourceTable,
@@ -62,7 +65,8 @@ public record InsertFromFilesScanContext(
         Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> FILES column name
         String wherePredicateSql,                        // nullable
         Map<String, String> targetToConstantSql,
-        Map<String, String> targetToExpressionSql) implements ScanContext {
+        Map<String, String> targetToExpressionSql,
+        SampleSessionSemantics sessionSemantics) implements ScanContext {
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
@@ -70,6 +74,16 @@ public record InsertFromFilesScanContext(
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
         Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+        Objects.requireNonNull(sessionSemantics, "sessionSemantics");
+    }
+
+    /** The sample session keeps its own variables. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone,
+            Map<String, String> targetToSourceColumnNames, String wherePredicateSql,
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql) {
+        this(sourceTable, computeResource, loadTimeZone, targetToSourceColumnNames, wherePredicateSql,
+                targetToConstantSql, targetToExpressionSql, SampleSessionSemantics.NONE);
     }
 
     /** No key column is computed from FILES columns. */
