@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "common/status.h"
@@ -25,6 +26,7 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
+#include "storage/delta_column_group.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/versioned_tablet.h"
 
@@ -32,6 +34,7 @@ namespace starrocks {
 class Segment;
 class TabletColumn;
 class TabletIndex;
+class TabletSchema;
 class ThreadPool;
 class WritableFile;
 } // namespace starrocks
@@ -92,12 +95,45 @@ private:
     // build, dispatches to the per-index-type builder, finalizes the
     // IndexFileWriter, and fills the caller-supplied IDG entry.
     //
+    // `indexes` is the subset of _indexes_to_build whose column is served
+    // from the BASE segment on this rssid. Columns overlaid by a Delta
+    // Column Group are excluded and handled by rewrite_dcg_for_segment()
+    // instead — a `.idx` keyed by the base segment describes base values,
+    // which is not what a query reads for an overlaid column.
+    //
     // Leaves `out_entry` empty (no keys, no index_file) and writes no .idx when
     // none of the indexes can be built on this segment because their columns are
     // physically absent from it — see classify_index_for_segment(). The caller
     // drops such empty entries.
     Status build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset, uint32_t rssid,
-                                 IndexDeltaGroupEntryPB* out_entry);
+                                 const std::vector<TabletIndexPB>& indexes, IndexDeltaGroupEntryPB* out_entry);
+
+    // Rewrite the DCG-overlaid columns of one segment into a NEW `.cols`
+    // that carries the just-added index inlined in its footer, and describe
+    // it in `out_entry` so publish can append it as a newer DCG layer.
+    //
+    // Values are read from the currently effective overlay, so the rewrite is
+    // value-preserving: only the physical file changes, gaining an index.
+    // This is what makes ADD INDEX complete for a table that took a
+    // column-mode partial update BEFORE the alter — the pre-existing `.cols`
+    // was written when the column had no index and carries none, and the
+    // base `.idx` is (correctly) ignored for an overlaid column.
+    Status rewrite_dcg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset, uint32_t rssid,
+                                   const std::vector<TabletIndexPB>& indexes, TxnLogPB_OpAddIndex_DcgEntry* out_entry);
+
+    // Split _indexes_to_build for one segment into the columns served from
+    // the base segment and the columns overlaid by a DCG at _alter_version.
+    // `base_out` / `dcg_out` are cleared first. A tablet with no DCG at all
+    // short-circuits to "everything is base".
+    Status classify_indexes_for_segment(uint32_t rssid, std::vector<TabletIndexPB>* base_out,
+                                        std::vector<TabletIndexPB>* dcg_out);
+
+    // Build the write schema for the rewritten `.cols`: the overlaid columns
+    // only, with has_bitmap_index / is_bf_column set and the new TabletIndexPB
+    // present in table_indices, so SegmentWriter inlines the index. The flags
+    // cannot be read off the tablet schema here: apply_add_index() sets them
+    // at publish time, which is strictly after this code runs.
+    StatusOr<std::shared_ptr<TabletSchema>> build_dcg_write_schema(const std::vector<TabletIndexPB>& indexes);
 
     // What to do with one index on one segment.
     enum class IndexDisposition {
@@ -134,8 +170,8 @@ private:
     Status build_bloom_for_column(Segment* segment, const TabletColumn& column, IndexType index_type,
                                   const TabletIndexPB& ix, WritableFile* target_wfile, ColumnIndexMetaPB* out_meta);
 
-    // Best-effort remove every .idx file whose path we recorded in
-    // `_written_paths`. Called from `run()` when the overall build fails so
+    // Best-effort remove every .idx / rewritten .cols file whose path we
+    // recorded in `_written_paths`. Called from `run()` when the overall build fails so
     // we don't leak objects on S3 when the ADD INDEX fast path aborts and
     // the caller falls back to the legacy rewrite path. Errors here are
     // swallowed (logged): the cleanup is a courtesy, vacuum still reclaims
@@ -153,9 +189,14 @@ private:
     // (segment, index) pairs skipped for a physically absent column, summed across
     // the per-segment pool tasks so run() can log one aggregate line per tablet.
     std::atomic<int64_t> _skipped_pairs{0};
-    std::mutex _op_mtx;                      // protects concurrent writes to op_add_index.segment_entries
-    std::mutex _written_paths_mtx;           // protects _written_paths
-    std::vector<std::string> _written_paths; // absolute paths of .idx files created by build_idg_for_segment
+    std::mutex _op_mtx;            // protects concurrent writes to op_add_index.segment_entries / dcg_entries
+    std::mutex _written_paths_mtx; // protects _written_paths
+    // absolute paths of files created by this alter (.idx from
+    // build_idg_for_segment, rewritten .cols from rewrite_dcg_for_segment)
+    std::vector<std::string> _written_paths;
+    // DCG list per rssid at _alter_version, empty when the tablet has no DCG.
+    // Populated once in run() before any task is submitted, then read-only.
+    std::unordered_map<uint32_t, DeltaColumnGroupList> _dcgs_by_rssid;
 };
 
 } // namespace starrocks::lake
