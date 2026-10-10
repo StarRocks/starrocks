@@ -2015,7 +2015,11 @@ TEST_F(LakeTabletReaderSpit, test_failed_tablet_preparation_preserves_reads) {
                 EXPECT_NE(std::string::npos, status.to_string().find("upper_bound_included is required"));
             }
             const auto& stats = reader->stats();
+            // A segment-load error reaches only the first (two-segment) rowset. A coarse-range
+            // error happens after both rowsets (three segments) have been loaded successfully.
+            EXPECT_EQ(missing_segment ? 2 : 3, stats.lake_prepared_tablet_segments);
             EXPECT_EQ(missing_segment ? 1 : 3, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GE(stats.lake_prepared_tablet_segments, stats.lake_prepared_tablet_segments_opened);
             EXPECT_GT(stats.lake_prepared_tablet_io_ns, 0);
             EXPECT_GT(stats.lake_prepared_tablet_prepare_ns, 0);
             EXPECT_GT(stats.lake_prepared_tablet_segment_open_ns, 0);

@@ -206,6 +206,7 @@ struct OlapReaderStatistics {
     // break it down; the IO ones cover the footer and short key index reads.
     int64_t lake_prepared_tablet_prepare_ns = 0;
     int64_t lake_prepared_tablet_segment_open_ns = 0;
+    // Candidate segment slots in rowsets reached by tablet preparation, including failed loads.
     int64_t lake_prepared_tablet_segments = 0;
     int64_t lake_prepared_tablet_segments_opened = 0;
     int64_t lake_prepared_tablet_io_ns = 0;

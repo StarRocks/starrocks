@@ -716,8 +716,9 @@ Status TabletReader::build_prepared_tablet_read_state(const TabletReaderParams& 
     rowset_prepared_states.reserve(rowsets.size());
     SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_segment_open_ns);
     for (const auto& rowset : rowsets) {
+        // Include the failing rowset's candidate slots even if only some footers can be opened.
+        _stats.lake_prepared_tablet_segments += rowset->num_segments();
         ASSIGN_OR_RETURN(auto segments, rowset->segments(params.lake_io_opts, prepare_stats));
-        _stats.lake_prepared_tablet_segments += segments.size();
         std::vector<PreparedSegmentReadStatePtr> prepared_states;
         prepared_states.reserve(segments.size());
         for (size_t i = 0; i < segments.size(); ++i) {
