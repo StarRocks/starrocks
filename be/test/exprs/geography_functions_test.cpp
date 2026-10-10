@@ -2210,6 +2210,408 @@ TEST_F(geographyFunctionsTest, h3CellAndArrayContract) {
     EXPECT_FALSE(GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(2, 1)}).ok());
 }
 
+TEST_F(geographyFunctionsTest, h3ScalarCellsAcrossChunksAndNullableInputs) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    auto cells = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    auto resolutions = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    for (size_t row = 0; row < size; ++row) {
+        if (row % 7 == 0)
+            cells->append_nulls(1);
+        else
+            cells->append_datum(Datum(cell));
+        if (row % 11 == 0)
+            resolutions->append_nulls(1);
+        else
+            resolutions->append_datum(Datum(static_cast<int32_t>(row % 4)));
+    }
+    auto actual_resolution = GeoFunctions::h3_resolution(nullptr, {cells});
+    auto actual_parent = GeoFunctions::h3_to_parent(nullptr, {cells, resolutions});
+    ASSERT_TRUE(actual_resolution.ok()) << actual_resolution.status();
+    ASSERT_TRUE(actual_parent.ok()) << actual_parent.status();
+    EXPECT_EQ(size, (*actual_resolution)->size());
+    EXPECT_EQ(size, (*actual_parent)->size());
+    ColumnViewer<TYPE_INT> output_resolution(*actual_resolution);
+    ColumnViewer<TYPE_BIGINT> output_parent(*actual_parent);
+    for (size_t row = 0; row < size; ++row) {
+        EXPECT_EQ(row % 7 == 0, output_resolution.is_null(row));
+        EXPECT_EQ(row % 7 == 0 || row % 11 == 0, output_parent.is_null(row));
+        if (row % 7 != 0) {
+            EXPECT_EQ(3, output_resolution.value(row));
+        }
+        if (row % 7 != 0 && row % 11 != 0) {
+            H3Index expected = 0;
+            ASSERT_EQ(E_SUCCESS, cellToParent(cell, static_cast<int>(row % 4), &expected));
+            EXPECT_EQ(static_cast<int64_t>(expected), output_parent.value(row));
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarCellsRetainConstantAndEmptyResults) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    auto cells = ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size);
+    auto constant_resolution = GeoFunctions::h3_resolution(nullptr, {cells});
+    auto constant_parent =
+            GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(3, size)});
+    ASSERT_TRUE(constant_resolution.ok());
+    ASSERT_TRUE(constant_parent.ok());
+    EXPECT_TRUE((*constant_resolution)->is_constant());
+    EXPECT_TRUE((*constant_parent)->is_constant());
+    EXPECT_EQ(size, (*constant_resolution)->size());
+    EXPECT_EQ(size, (*constant_parent)->size());
+    EXPECT_EQ(3, ColumnViewer<TYPE_INT>(*constant_resolution).value(0));
+    EXPECT_EQ(cell, ColumnViewer<TYPE_BIGINT>(*constant_parent).value(0));
+
+    auto varying_resolution = Int32Column::create();
+    for (size_t row = 0; row < size; ++row) varying_resolution->append(row % 4);
+    auto varying_parent = GeoFunctions::h3_to_parent(nullptr, {cells, varying_resolution});
+    ASSERT_TRUE(varying_parent.ok()) << varying_parent.status();
+    EXPECT_FALSE((*varying_parent)->is_constant());
+    for (size_t row = 0; row < size; ++row) {
+        H3Index expected = 0;
+        ASSERT_EQ(E_SUCCESS, cellToParent(cell, static_cast<int>(row % 4), &expected));
+        EXPECT_EQ(static_cast<int64_t>(expected), ColumnViewer<TYPE_BIGINT>(*varying_parent).value(row));
+    }
+    auto empty = Int64Column::create();
+    auto empty_resolution = GeoFunctions::h3_resolution(nullptr, {empty});
+    auto empty_parent = GeoFunctions::h3_to_parent(nullptr, {empty, Int32Column::create()});
+    ASSERT_TRUE(empty_resolution.ok());
+    ASSERT_TRUE(empty_parent.ok());
+    EXPECT_EQ(0, (*empty_resolution)->size());
+    EXPECT_EQ(0, (*empty_parent)->size());
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarCellsRejectInvalidValuesAcrossCheckpoints) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    for (size_t invalid_row : {1023, 1024, 3072}) {
+        SCOPED_TRACE(invalid_row);
+        auto cells = Int64Column::create();
+        auto resolutions = Int32Column::create();
+        for (size_t row = 0; row < size; ++row) {
+            cells->append(row == invalid_row ? 0 : cell);
+            resolutions->append(row == invalid_row ? 4 : 3);
+        }
+        auto invalid_resolution = GeoFunctions::h3_resolution(nullptr, {cells});
+        auto invalid_parent_cell =
+                GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(3, size)});
+        auto invalid_parent_resolution = GeoFunctions::h3_to_parent(
+                nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size), resolutions});
+        ASSERT_FALSE(invalid_resolution.ok());
+        ASSERT_FALSE(invalid_parent_cell.ok());
+        ASSERT_FALSE(invalid_parent_resolution.ok());
+        EXPECT_TRUE(invalid_resolution.status().is_invalid_argument());
+        EXPECT_TRUE(invalid_parent_cell.status().is_invalid_argument());
+        EXPECT_TRUE(invalid_parent_resolution.status().is_invalid_argument());
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarCellsRetainCancellationAndQueryErrors) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3073;
+    for (bool constant : {false, true}) {
+        ColumnPtr cells;
+        if (constant)
+            cells = ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size);
+        else {
+            auto varying = Int64Column::create();
+            for (size_t row = 0; row < size; ++row) varying->append(cell);
+            cells = varying;
+        }
+        for (bool parent : {false, true}) {
+            RuntimeState state;
+            state.init_instance_mem_tracker();
+            std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
+                    &state, nullptr, TypeDescriptor(parent ? TYPE_BIGINT : TYPE_INT),
+                    parent ? std::vector<TypeDescriptor>{TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_INT)}
+                           : std::vector<TypeDescriptor>{TypeDescriptor(TYPE_BIGINT)}));
+            const auto evaluate = [&]() {
+                return parent ? GeoFunctions::h3_to_parent(
+                                        context.get(), {cells, ColumnHelper::create_const_column<TYPE_INT>(3, size)})
+                              : GeoFunctions::h3_resolution(context.get(), {cells});
+            };
+            state.set_is_cancelled(true);
+            auto cancelled = evaluate();
+            ASSERT_FALSE(cancelled.ok());
+            EXPECT_TRUE(cancelled.status().is_cancelled()) << cancelled.status();
+            state.set_is_cancelled(false);
+            state.set_process_status(Status::MemoryLimitExceeded("test H3 scalar query memory limit"));
+            auto limited = evaluate();
+            ASSERT_FALSE(limited.ok());
+            EXPECT_TRUE(limited.status().is_mem_limit_exceeded()) << limited.status();
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarOutputsMatchLibraryAtEveryResolution) {
+    auto cells = Int64Column::create();
+    auto parent_resolutions = Int32Column::create();
+    std::vector<H3Index> originals;
+    uint64_t state = 0x238ad937a41928c7ULL;
+    const auto random_unit = [&]() {
+        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+        return static_cast<double>(state >> 11) * (1.0 / 9007199254740992.0);
+    };
+    for (int resolution = 0; resolution <= 15; ++resolution) {
+        std::array<H3Index, 12> pentagons{};
+        ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+        std::vector<H3Index> at_resolution(pentagons.begin(), pentagons.end());
+        for (size_t sample = 0; sample < 32; ++sample) {
+            const LatLng location{(random_unit() * 178.0 - 89.0) * M_PI / 180.0,
+                                  (random_unit() * 360.0 - 180.0) * M_PI / 180.0};
+            H3Index cell = 0;
+            ASSERT_EQ(E_SUCCESS, latLngToCell(&location, resolution, &cell));
+            at_resolution.push_back(cell);
+        }
+        if (resolution == 0) {
+            std::array<H3Index, 122> base_cells{};
+            ASSERT_EQ(E_SUCCESS, getRes0Cells(base_cells.data()));
+            at_resolution.insert(at_resolution.end(), base_cells.begin(), base_cells.end());
+        }
+        for (H3Index cell : at_resolution) {
+            ASSERT_TRUE(isValidCell(cell));
+            originals.push_back(cell);
+            for (int parent_resolution = 0; parent_resolution <= resolution; ++parent_resolution) {
+                cells->append(static_cast<int64_t>(cell));
+                parent_resolutions->append(parent_resolution);
+            }
+        }
+    }
+    auto resolution_result = GeoFunctions::h3_resolution(nullptr, {cells});
+    auto parent_result = GeoFunctions::h3_to_parent(nullptr, {cells, parent_resolutions});
+    ASSERT_TRUE(resolution_result.ok()) << resolution_result.status();
+    ASSERT_TRUE(parent_result.ok()) << parent_result.status();
+    ASSERT_EQ(cells->size(), (*resolution_result)->size());
+    ASSERT_EQ(cells->size(), (*parent_result)->size());
+    EXPECT_FALSE((*resolution_result)->is_nullable());
+    EXPECT_FALSE((*parent_result)->is_nullable());
+    ColumnViewer<TYPE_INT> resolutions(*resolution_result);
+    ColumnViewer<TYPE_BIGINT> parents(*parent_result);
+    for (size_t row = 0; row < cells->size(); ++row) {
+        const auto cell = static_cast<H3Index>(cells->get_data()[row]);
+        H3Index expected_parent = 0;
+        ASSERT_EQ(E_SUCCESS, cellToParent(cell, parent_resolutions->get_data()[row], &expected_parent));
+        EXPECT_EQ(getResolution(cell), resolutions.value(row));
+        EXPECT_EQ(static_cast<int64_t>(expected_parent), parents.value(row));
+    }
+
+    // Exercise the constant-parent-resolution path, including both shift endpoints.
+    for (int parent_resolution = 0; parent_resolution <= 15; ++parent_resolution) {
+        auto eligible = Int64Column::create();
+        for (H3Index cell : originals) {
+            if (getResolution(cell) >= parent_resolution) eligible->append(static_cast<int64_t>(cell));
+        }
+        auto result = GeoFunctions::h3_to_parent(
+                nullptr, {eligible, ColumnHelper::create_const_column<TYPE_INT>(parent_resolution, eligible->size())});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ColumnViewer<TYPE_BIGINT> actual(*result);
+        for (size_t row = 0; row < eligible->size(); ++row) {
+            H3Index expected = 0;
+            ASSERT_EQ(E_SUCCESS,
+                      cellToParent(static_cast<H3Index>(eligible->get_data()[row]), parent_resolution, &expected));
+            EXPECT_EQ(static_cast<int64_t>(expected), actual.value(row));
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarRetainsFullCellValidationForMutatedIndexes) {
+    std::vector<H3Index> candidates = {0, std::numeric_limits<uint64_t>::max()};
+    const LatLng location{55.75 * M_PI / 180.0, 37.62 * M_PI / 180.0};
+    for (int resolution = 0; resolution <= 15; ++resolution) {
+        H3Index cell = 0;
+        ASSERT_EQ(E_SUCCESS, latLngToCell(&location, resolution, &cell));
+        candidates.push_back(cell);
+        for (int bit = 0; bit < 64; ++bit) candidates.push_back(cell ^ (uint64_t{1} << bit));
+        // Base cells 122..127 are invalid despite fitting the seven-bit field.
+        for (uint64_t base_cell = 122; base_cell < 128; ++base_cell) {
+            candidates.push_back((cell & ~(uint64_t{127} << 45)) | (base_cell << 45));
+        }
+        if (resolution != 0) {
+            std::array<H3Index, 12> pentagons{};
+            ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+            for (H3Index pentagon : pentagons) {
+                candidates.push_back(pentagon);
+                // A first nonzero direction of 1 is the deleted pentagon subsequence.
+                candidates.push_back(pentagon | (uint64_t{1} << (3 * (15 - resolution))));
+            }
+        }
+    }
+    for (H3Index raw : candidates) {
+        SCOPED_TRACE(raw);
+        const int64_t value = static_cast<int64_t>(raw);
+        auto cell = Int64Column::create();
+        cell->append(value);
+        auto resolution = GeoFunctions::h3_resolution(nullptr, {cell});
+        auto parent = GeoFunctions::h3_to_parent(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(0, 1)});
+        const bool valid = value > 0 && isValidCell(raw);
+        ASSERT_EQ(valid, resolution.ok());
+        ASSERT_EQ(valid, parent.ok());
+        if (!valid) {
+            const auto expected = Status::InvalidArgument("H3 requires a valid positive cell index");
+            EXPECT_EQ(expected.code(), resolution.status().code());
+            EXPECT_EQ(expected.message(), resolution.status().message());
+            EXPECT_EQ(expected.code(), parent.status().code());
+            EXPECT_EQ(expected.message(), parent.status().message());
+        } else {
+            H3Index expected = 0;
+            ASSERT_EQ(E_SUCCESS, cellToParent(raw, 0, &expected));
+            EXPECT_EQ(getResolution(raw), ColumnViewer<TYPE_INT>(*resolution).value(0));
+            EXPECT_EQ(static_cast<int64_t>(expected), ColumnViewer<TYPE_BIGINT>(*parent).value(0));
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ScalarConstantOperandsRetainNullAndErrorPrecedence) {
+    constexpr int64_t valid = 0x83754efffffffffLL;
+    const auto invalid_cell = Status::InvalidArgument("H3 requires a valid positive cell index");
+    const auto invalid_resolution = Status::InvalidArgument("H3 resolution must be between 0 and 15");
+    const auto wrong_parent = Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
+    auto cell_values = Int64Column::create();
+    cell_values->append(0);
+    cell_values->append(valid);
+    auto cell_nulls = NullColumn::create();
+    cell_nulls->append(1);
+    cell_nulls->append(0);
+    const ColumnPtr nullable_cells = NullableColumn::create(cell_values, cell_nulls);
+    auto resolution = GeoFunctions::h3_resolution(nullptr, {nullable_cells});
+    ASSERT_TRUE(resolution.ok()) << resolution.status();
+    EXPECT_TRUE((*resolution)->is_null(0));
+    EXPECT_EQ(3, ColumnViewer<TYPE_INT>(*resolution).value(1));
+
+    auto parent =
+            GeoFunctions::h3_to_parent(nullptr, {nullable_cells, ColumnHelper::create_const_column<TYPE_INT>(2, 2)});
+    ASSERT_TRUE(parent.ok()) << parent.status();
+    EXPECT_TRUE((*parent)->is_null(0));
+    H3Index expected_parent = 0;
+    ASSERT_EQ(E_SUCCESS, cellToParent(static_cast<H3Index>(valid), 2, &expected_parent));
+    EXPECT_EQ(static_cast<int64_t>(expected_parent), ColumnViewer<TYPE_BIGINT>(*parent).value(1));
+
+    auto resolution_values = Int32Column::create();
+    resolution_values->append(16);
+    resolution_values->append(2);
+    auto resolution_nulls = NullColumn::create();
+    resolution_nulls->append(1);
+    resolution_nulls->append(0);
+    const ColumnPtr nullable_resolutions = NullableColumn::create(resolution_values, resolution_nulls);
+    auto constant_cell = GeoFunctions::h3_to_parent(
+            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(valid, 2), nullable_resolutions});
+    ASSERT_TRUE(constant_cell.ok()) << constant_cell.status();
+    EXPECT_TRUE((*constant_cell)->is_null(0));
+    EXPECT_EQ(static_cast<int64_t>(expected_parent), ColumnViewer<TYPE_BIGINT>(*constant_cell).value(1));
+
+    // Invalid physical values hidden by NULL must never be validated eagerly.
+    const ColumnPtr all_null_resolutions = NullableColumn::create(Int32Column::create(3, 16), NullColumn::create(3, 1));
+    auto hidden_cell = GeoFunctions::h3_to_parent(
+            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 3), all_null_resolutions});
+    ASSERT_TRUE(hidden_cell.ok()) << hidden_cell.status();
+    const ColumnPtr all_null_cells = NullableColumn::create(Int64Column::create(3, 0), NullColumn::create(3, 1));
+    auto hidden_resolution =
+            GeoFunctions::h3_to_parent(nullptr, {all_null_cells, ColumnHelper::create_const_column<TYPE_INT>(16, 3)});
+    ASSERT_TRUE(hidden_resolution.ok()) << hidden_resolution.status();
+    for (size_t row = 0; row < 3; ++row) {
+        EXPECT_TRUE((*hidden_cell)->is_null(row));
+        EXPECT_TRUE((*hidden_resolution)->is_null(row));
+    }
+    auto empty = GeoFunctions::h3_to_parent(
+            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 0), Int32Column::create()});
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_EQ(0, (*empty)->size());
+
+    auto both_invalid = GeoFunctions::h3_to_parent(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
+                                                             ColumnHelper::create_const_column<TYPE_INT>(16, 1)});
+    ASSERT_FALSE(both_invalid.ok());
+    EXPECT_EQ(invalid_cell.code(), both_invalid.status().code());
+    EXPECT_EQ(invalid_cell.message(), both_invalid.status().message());
+    for (int target : {-1, 4, 16}) {
+        auto invalid = GeoFunctions::h3_to_parent(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(valid, 1),
+                                                            ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
+        ASSERT_FALSE(invalid.ok());
+        const auto& expected = target == 4 ? wrong_parent : invalid_resolution;
+        EXPECT_EQ(expected.code(), invalid.status().code());
+        EXPECT_EQ(expected.message(), invalid.status().message());
+    }
+    auto first_visible_invalid = GeoFunctions::h3_to_parent(
+            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 2), nullable_resolutions});
+    ASSERT_FALSE(first_visible_invalid.ok());
+    EXPECT_EQ(invalid_cell.code(), first_visible_invalid.status().code());
+    EXPECT_EQ(invalid_cell.message(), first_visible_invalid.status().message());
+
+    // An all-nonnull nullable input must retain the ordinary nonnullable output shape.
+    const ColumnPtr nonnull = NullableColumn::create(Int64Column::create(3, valid), NullColumn::create(3, 0));
+    auto nonnull_resolution = GeoFunctions::h3_resolution(nullptr, {nonnull});
+    auto nonnull_parent =
+            GeoFunctions::h3_to_parent(nullptr, {nonnull, ColumnHelper::create_const_column<TYPE_INT>(3, 3)});
+    ASSERT_TRUE(nonnull_resolution.ok()) << nonnull_resolution.status();
+    ASSERT_TRUE(nonnull_parent.ok()) << nonnull_parent.status();
+    EXPECT_FALSE((*nonnull_resolution)->is_nullable());
+    EXPECT_FALSE((*nonnull_parent)->is_nullable());
+}
+
+TEST_F(geographyFunctionsTest, h3ResolutionUniformResultStillValidatesEveryRow) {
+    constexpr size_t size = 3073;
+    for (int resolution = 0; resolution <= 15; ++resolution) {
+        SCOPED_TRACE(resolution);
+        std::array<H3Index, 12> pentagons{};
+        ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+        auto cells = Int64Column::create();
+        for (size_t row = 0; row < size; ++row) {
+            cells->append(static_cast<int64_t>(pentagons[row % pentagons.size()]));
+        }
+        ASSERT_FALSE(cells->is_constant());
+        auto uniform = GeoFunctions::h3_resolution(nullptr, {cells});
+        ASSERT_TRUE(uniform.ok()) << uniform.status();
+        EXPECT_TRUE((*uniform)->is_constant());
+        EXPECT_EQ(size, (*uniform)->size());
+        ColumnViewer<TYPE_INT> output(*uniform);
+        for (size_t row : {size_t{0}, size_t{1023}, size_t{1024}, size - 1}) {
+            EXPECT_EQ(resolution, output.value(row));
+        }
+
+        std::array<H3Index, 12> other_resolution{};
+        ASSERT_EQ(E_SUCCESS, getPentagons((resolution + 1) % 16, other_resolution.data()));
+        cells->get_data()[size - 1] = static_cast<int64_t>(other_resolution[0]);
+        auto mixed = GeoFunctions::h3_resolution(nullptr, {cells});
+        ASSERT_TRUE(mixed.ok()) << mixed.status();
+        EXPECT_FALSE((*mixed)->is_constant());
+        EXPECT_EQ(resolution, ColumnViewer<TYPE_INT>(*mixed).value(0));
+        EXPECT_EQ((resolution + 1) % 16, ColumnViewer<TYPE_INT>(*mixed).value(size - 1));
+
+        // The invalid cell has the same resolution bits as every preceding row.
+        cells->get_data()[size - 1] = static_cast<int64_t>(pentagons[0] | (H3Index{1} << 56));
+        auto invalid = GeoFunctions::h3_resolution(nullptr, {cells});
+        ASSERT_FALSE(invalid.ok());
+        const auto expected = Status::InvalidArgument("H3 requires a valid positive cell index");
+        EXPECT_EQ(expected.code(), invalid.status().code());
+        EXPECT_EQ(expected.message(), invalid.status().message());
+
+        auto nulls = NullColumn::create(size, 0);
+        nulls->get_data()[size - 1] = 1;
+        auto with_null = GeoFunctions::h3_resolution(nullptr, {NullableColumn::create(cells, nulls)});
+        ASSERT_TRUE(with_null.ok()) << with_null.status();
+        EXPECT_FALSE((*with_null)->is_constant());
+        EXPECT_TRUE((*with_null)->is_null(size - 1));
+        EXPECT_EQ(resolution, ColumnViewer<TYPE_INT>(*with_null).value(0));
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ParentConstantTargetPreservesEmptyAndInvalidCellPrecedence) {
+    auto empty = GeoFunctions::h3_to_parent(
+            nullptr, {Int64Column::create(), ColumnHelper::create_const_column<TYPE_INT>(16, 0)});
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    EXPECT_EQ(0, (*empty)->size());
+    for (int target : {-1, 0, 15, 16}) {
+        auto cells = Int64Column::create();
+        cells->append(0);
+        auto invalid =
+                GeoFunctions::h3_to_parent(nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(target, 1)});
+        ASSERT_FALSE(invalid.ok());
+        const auto expected = Status::InvalidArgument("H3 requires a valid positive cell index");
+        EXPECT_EQ(expected.code(), invalid.status().code());
+        EXPECT_EQ(expected.message(), invalid.status().message());
+    }
+}
+
 TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
     constexpr int64_t cell_value = 0x83754efffffffffLL;
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
