@@ -30,6 +30,7 @@
 #include "connector/file/scanner/arrow_scanner.h"
 #include "connector/file/scanner/avro_cpp_scanner.h"
 #include "connector/file/scanner/csv_scanner.h"
+#include "connector/file/scanner/json_scanner.h"
 #include "connector/file/scanner/orc_scanner.h"
 #include "connector/file/scanner/parquet_scanner.h"
 #include "exprs/expr_executor.h"
@@ -503,6 +504,10 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
 
         case TFileFormatType::FORMAT_AVRO:
             p_scanner = std::make_unique<AvroCppScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+        case TFileFormatType::FORMAT_JSON:
+            p_scanner = std::make_unique<JsonScanner>(state, &profile, sample_range, &counter, true);
             break;
 
         case TFileFormatType::FORMAT_ARROW:

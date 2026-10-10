@@ -50,6 +50,8 @@ A set of optional parameters that specify how to execute the pipe. Format: `"key
 
 ## Examples
 
+**Example 1: Load Parquet files**
+
 Create a pipe named `user_behavior_replica` in the current database to load the data of the sample dataset `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` to the `user_behavior_replica` table:
 
 ```SQL
@@ -75,6 +77,34 @@ SELECT * FROM FILES
 > Substitute your credentials for `AAA` and `BBB` in the above command. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user.
 
 This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../../integrations/csp_auth/authenticate_to_aws_resources.md) and [FILES](../../../sql-functions/table-functions/files.md).
+
+**Example 2: Load JSON files**
+
+Create a pipe to continuously load JSON files from an S3 path. Each file contains a top-level JSON array of records, and only the `id`, `name`, and `score` fields are needed:
+
+```SQL
+CREATE PIPE json_events_pipe
+PROPERTIES
+(
+    "AUTO_INGEST" = "TRUE"
+)
+AS
+INSERT INTO events
+SELECT * FROM FILES
+(
+    "path" = "s3://mybucket/events/",
+    "format" = "json",
+    "strip_outer_array" = "true",
+    "jsonpaths" = '["$.id", "$.name", "$.score"]',
+    "aws.s3.region" = "us-east-1",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+);
+```
+
+For JSON files where the data is nested under a root key (for example, `{"data": [{"id": 1, ...}]}`), also specify `"json_root" = "$.data"`.
+
+For more information about JSON loading parameters, see the [FILES](../../../sql-functions/table-functions/files.md) reference.
 
 ## References
 
