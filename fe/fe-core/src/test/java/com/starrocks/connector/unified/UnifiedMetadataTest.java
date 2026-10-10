@@ -180,7 +180,7 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testRouteToHiveConnector() throws DdlException {
+    public void testRouteToHiveConnector() throws DdlException, AlreadyExistsException {
         HiveTable hiveTable = new HiveTable();
 
         new Expectations() {
@@ -256,7 +256,7 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testRouteToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException {
+    public void testRouteToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException, AlreadyExistsException {
         Table icebergTable = new IcebergTable();
 
         new Expectations() {
@@ -352,7 +352,7 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testRouteToHudiConnector() throws DdlException {
+    public void testRouteToHudiConnector() throws DdlException, AlreadyExistsException {
         HudiTable hudiTable = new HudiTable();
 
         new Expectations() {
@@ -427,7 +427,7 @@ public class UnifiedMetadataTest {
     }
 
     @Test
-    public void testRouteToDeltaLakeConnector(@Mocked HiveTable hiveTable) throws DdlException {
+    public void testRouteToDeltaLakeConnector(@Mocked HiveTable hiveTable) throws DdlException, AlreadyExistsException {
         Table deltaLakeTable = new DeltaLakeTable();
 
         new Expectations() {
