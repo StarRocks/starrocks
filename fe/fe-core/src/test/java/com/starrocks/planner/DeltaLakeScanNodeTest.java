@@ -32,6 +32,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -168,7 +169,13 @@ public class DeltaLakeScanNodeTest {
 
         // Simulate partially consumed state
         Deencapsulation.setField(scanNode, "scanRangeSource", mockSource);
-        Deencapsulation.setField(scanNode, "reachLimit", true);
+        scanNode.setReachLimit();
+        new Verifications() {
+            {
+                mockSource.stopPrefetch();
+                times = 1;
+            }
+        };
 
         scanNode.prepareRetry();
 
