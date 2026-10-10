@@ -20,6 +20,8 @@ Icebergテーブルにデータを挿入します。この機能はv3.1以降で
 
 StarRocksの内部テーブルと同様に、Icebergテーブルに対して [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 権限を持っている場合、 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) ステートメントを使用して、StarRocksテーブルのデータをそのIcebergテーブルにシンクできます（現在、Parquet形式のIcebergテーブルのみがサポートされています）。
 
+Parquet データファイルでは、Iceberg テーブルプロパティ `write.parquet.compression-level` に整数を指定して、選択した圧縮コーデックのレベルを制御できます。指定できる範囲は ZSTD が -131072～22、GZIP が -1～9、Brotli が 0～11 です。その他のコーデックではレベルを明示的に指定できません。無効な値の場合は書き込みが失敗します。このプロパティを設定しない場合、Parquet ライターは選択したコーデックのデフォルトレベルを使用します。このレベルは位置削除ファイルには適用されません。
+
 ### 構文
 
 ```SQL

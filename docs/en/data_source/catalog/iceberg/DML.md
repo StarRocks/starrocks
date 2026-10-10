@@ -17,6 +17,8 @@ Inserts data into an Iceberg table. This feature is supported from v3.1 onwards.
 
 Similar to loading data into StarRocks native tables, if you have the [INSERT privilege](../../../administration/user_privs/authorization/privilege_item.md#table) on an Iceberg table, you can use the [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) statement to sink the data to the Iceberg table. Currently, only Parquet-formatted Iceberg tables are supported.
 
+For Parquet data files, set the Iceberg table property `write.parquet.compression-level` to an integer to control the selected codec's compression level. Accepted ranges are -131072 to 22 for ZSTD, -1 to 9 for GZIP, and 0 to 11 for Brotli. Other codecs do not support an explicit level. An invalid value rejects the write. If this property is absent, the Parquet writer uses its codec default. The level does not apply to position-delete files.
+
 ### Syntax
 
 ```SQL
