@@ -279,7 +279,7 @@ public final class InsertPreSplitHook {
      *       value (has a default, is nullable, auto-increment, or generated) —
      *       mirrors InsertAnalyzer's "must be explicitly mentioned" rule, so a list
      *       missing a required column is skipped rather than resharded;</li>
-     *   <li>every range-distribution (sort) key column is present — an omitted key
+     *   <li>every non-generated range-distribution (sort) key column is present — an omitted key
      *       is defaulted for every row, collapsing the data on that key and making
      *       split boundaries degenerate.</li>
      * </ul>
@@ -321,7 +321,9 @@ public final class InsertPreSplitHook {
             }
         }
         for (Column sortKey : sortKeyColumns) {
-            if (!listed.contains(sortKey.getName().toLowerCase())) {
+            // A generated sort-key column can never be listed; the sources compute it from the columns it
+            // reads, and decline with the reason when the list omits one of them.
+            if (!sortKey.isGeneratedColumn() && !listed.contains(sortKey.getName().toLowerCase())) {
                 return false;   // a sort-key column is missing -> degenerate split
             }
         }

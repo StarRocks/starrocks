@@ -19,6 +19,7 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.statistic.StatisticUtils;
@@ -71,7 +72,8 @@ class AbstractSqlSampleSubqueryExecutorTest {
         InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor();
         SampleRequest request = new SampleRequest(new InsertFromTableScanContext(
                 mock(OlapTable.class), "`db`.`src`", Map.of("k", "k"), null, resource, 1024L, 100L,
-                Map.of(), "America/Los_Angeles"), List.of(bigintColumn("k")), Long.MAX_VALUE, 0L)
+                Map.of(), Map.of(), "America/Los_Angeles", SampleSessionSemantics.NONE),
+                List.of(bigintColumn("k")), Long.MAX_VALUE, 0L)
                 .withQueryTimeoutSeconds(137);
 
         try (MockedStatic<StatisticUtils> statistics = mockStatic(StatisticUtils.class);
@@ -103,7 +105,7 @@ class AbstractSqlSampleSubqueryExecutorTest {
      * the warehouse/default timeout and block the load past the pre-submit budget.
      */
     @Test
-    void queryTimeoutIsAppliedAfterWarehouseSwitchSoItSurvives() {
+    void queryTimeoutIsAppliedAfterWarehouseSwitchSoItSurvives() throws Exception {
         ConnectContext context = mock(ConnectContext.class);
         SessionVariable sessionVariable = mock(SessionVariable.class);
         when(context.getSessionVariable()).thenReturn(sessionVariable);
@@ -111,7 +113,7 @@ class AbstractSqlSampleSubqueryExecutorTest {
         when(computeResource.getWarehouseId()).thenReturn(4242L);
 
         AbstractSqlSampleSubqueryExecutor.configureSampleContext(
-                context, computeResource, /*queryTimeoutSeconds=*/ 137);
+                context, computeResource, /*queryTimeoutSeconds=*/ 137, /*loadTimeZone=*/ null, SampleSessionSemantics.NONE);
 
         // The warehouse switch (which swaps the session variable) MUST precede the timeout setter.
         InOrder inOrder = inOrder(context, sessionVariable);
@@ -120,7 +122,7 @@ class AbstractSqlSampleSubqueryExecutorTest {
     }
 
     @Test
-    void nonPositiveQueryTimeoutLeavesSessionTimeoutUntouched() {
+    void nonPositiveQueryTimeoutLeavesSessionTimeoutUntouched() throws Exception {
         ConnectContext context = mock(ConnectContext.class);
         SessionVariable sessionVariable = mock(SessionVariable.class);
         when(context.getSessionVariable()).thenReturn(sessionVariable);
@@ -128,10 +130,36 @@ class AbstractSqlSampleSubqueryExecutorTest {
         when(computeResource.getWarehouseId()).thenReturn(7L);
 
         AbstractSqlSampleSubqueryExecutor.configureSampleContext(
-                context, computeResource, /*queryTimeoutSeconds=*/ 0);
+                context, computeResource, /*queryTimeoutSeconds=*/ 0, /*loadTimeZone=*/ null, SampleSessionSemantics.NONE);
 
         verify(context).setCurrentWarehouseId(7L);
         verify(sessionVariable, never()).setQueryTimeoutS(anyInt());
+    }
+
+    /**
+     * The load's semantic variables must land on the session variable the sub-query runs with: after the warehouse
+     * switch, which replaces that object, and before the sampler's own overrides, which a carried value must not undo.
+     */
+    @Test
+    void loadSessionSemanticsAreAppliedAfterTheWarehouseSwitchAndBeforeTheSamplerOverrides() throws Exception {
+        ConnectContext context = mock(ConnectContext.class);
+        SessionVariable sessionVariable = mock(SessionVariable.class);
+        when(context.getSessionVariable()).thenReturn(sessionVariable);
+        ComputeResource computeResource = mock(ComputeResource.class);
+        when(computeResource.getWarehouseId()).thenReturn(5L);
+        long loadSqlMode = SqlModeHelper.MODE_DEFAULT | SqlModeHelper.MODE_DOUBLE_LITERAL;
+        SampleSessionSemantics semantics = new SampleSessionSemantics(loadSqlMode,
+                Map.of(SessionVariable.TIME_ZONE, "Asia/Shanghai"));
+
+        AbstractSqlSampleSubqueryExecutor.configureSampleContext(
+                context, computeResource, /*queryTimeoutSeconds=*/ 137, /*loadTimeZone=*/ null, semantics);
+
+        InOrder inOrder = inOrder(context, sessionVariable);
+        inOrder.verify(context).setCurrentWarehouseId(5L);
+        inOrder.verify(context).setCurrentComputeResource(computeResource);
+        inOrder.verify(sessionVariable).setSqlMode(loadSqlMode);
+        inOrder.verify(sessionVariable).setTimeZone("Asia/Shanghai");
+        inOrder.verify(sessionVariable).setQueryTimeoutS(137);
     }
 
     // ---------------------------------------------------------------------------
@@ -172,7 +200,7 @@ class AbstractSqlSampleSubqueryExecutorTest {
         AbstractSqlSampleSubqueryExecutor executor = fixedSpecExecutor(
                 new AbstractSqlSampleSubqueryExecutor.SampleSpec("t", null, totalBytes, mock(ComputeResource.class),
                         List.of("`k`"), List.of(), List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 0L, false,
-                        scannedBytes, breakdown),
+                        scannedBytes, breakdown, SampleSessionSemantics.NONE),
                 capturedSql);
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
@@ -199,7 +227,8 @@ class AbstractSqlSampleSubqueryExecutorTest {
     void theFilteredInputEstimateCannotBeCombinedWithAFileSubset() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> new AbstractSqlSampleSubqueryExecutor.SampleSpec(
                 "t", "k > 1", 100L, mock(ComputeResource.class), List.of("`k`"), List.of(),
-                List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 10L, true, 50L, List.of()));
+                List.of(PresplitTestSupport.bigintColumn("k")), List.of(), 10L, true, 50L, List.of(),
+                SampleSessionSemantics.NONE));
     }
 
     private static AbstractSqlSampleSubqueryExecutor fixedSpecExecutor(

@@ -14,20 +14,30 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -168,6 +178,22 @@ public final class BrokerLoadPreSplitHook {
             PreSplitMetrics.recordEligibilitySkip(tableLevelSkip);
             return;
         }
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(targetTable);
+        List<Column> partitionColumns =
+                targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn());
+        List<Column> sampledColumns = InsertSelectSourceColumns.sampledColumns(sortKeyColumns, partitionColumns);
+        InsertSelectSourceColumns.Resolved generated =
+                resolveGeneratedSampledColumns(targetTable, fileGroups, sampledColumns, context);
+        if (generated == null) {
+            return;
+        }
+        PreSplitPartitionScope partitionScope = partitionScopeOf(targetTable, fileGroups);
+        if (partitionScope == null) {
+            LOG.info("Sample-Based Tablet Pre-Split: Broker Load into table {} names partitions that no single "
+                    + "partition scope describes (temporary and normal partitions mixed, or one was dropped); "
+                    + "skipping pre-split", targetTable.getName());
+            return;
+        }
         // The load session timezone. This same context feeds JobSpec.fromBrokerLoadJobSpec ->
         // loadPlanner.getContext() for the BE query globals, so it matches the offset the BE applies to
         // a UTC-adjusted / TIMESTAMP_INSTANT value. A non-fixed zone -> the readers defer to data tier.
@@ -175,15 +201,141 @@ public final class BrokerLoadPreSplitHook {
                 brokerDesc, fileGroups, fileStatuses, computeResource, context.getSessionVariable().getTimeZone(),
                 // Copied, not aliased: this is the positional field layout a CSV file group with no
                 // COLUMNS list inherits, and it must not shift under a later alter.
-                List.copyOf(targetTable.getBaseSchema()));
+                List.copyOf(targetTable.getBaseSchema()),
+                generated.targetToConstantSql(), generated.targetToExpressionSql(),
+                generatedColumnInputs(targetTable, sampledColumns),
+                // Copied by value now: outside an FE failover this context holds the submitter's own live
+                // session, the one LoadPlanner reads as well.
+                SampleSessionSemantics.capture(context.getSessionVariable()));
         PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(
                 scanContext,
-                MetaUtils.getRangeDistributionColumns(targetTable),
-                targetTable.getPartitionInfo().getPartitionColumns(targetTable.getIdToColumn()),
+                sortKeyColumns,
+                partitionColumns,
                 sumFileBytes(fileStatuses),
                 computeResource,
                 preSplitEnabled);
-        PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context);
+        PreSplitFlow.dispatch(database, targetTable, prepared, LoadKind.BROKER_LOAD, shouldAbort, context,
+                partitionScope);
+    }
+
+    /**
+     * Resolves the generated columns among {@code sampledColumns} over the columns every file group reads
+     * straight from its files, by name -- the inputs {@code Load} computes a generated column from. Returns
+     * a projection with empty maps when no sampled column is generated, or {@code null} after recording
+     * the skip when one cannot be computed.
+     */
+    static InsertSelectSourceColumns.Resolved resolveGeneratedSampledColumns(
+            OlapTable target, List<BrokerFileGroup> fileGroups, List<Column> sampledColumns, ConnectContext context) {
+        List<Column> generatedColumns = sampledColumns.stream().filter(Column::isGeneratedColumn).toList();
+        if (generatedColumns.isEmpty()) {
+            return new InsertSelectSourceColumns.Resolved(Map.of(), Map.of(), Map.of(), Set.of());
+        }
+        // Load converts each input to its column's type before computing a generated column, which is what the
+        // sampler does. The sampler's FILES() relation has no qualifier and every substituted reference is
+        // unqualified, so the safety rule never compares a table name here.
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.withGeneratedColumns(
+                columnsReadFromFiles(target, fileGroups), target, generatedColumns,
+                InsertSelectSourceColumns.InputReading.AS_COLUMN_TYPE, context, /*sourceName*/ null, /*sourceAlias*/ null);
+        InsertSelectSourceColumns.Unsampleable unsampleable = InsertSelectSourceColumns.firstUnsampleable(
+                generatedColumns, resolved, InsertSelectSourceColumns.InputReading.AS_COLUMN_TYPE);
+        if (unsampleable != null) {
+            unsampleable.record(target.getName());
+            return null;
+        }
+        return resolved;
+    }
+
+    /**
+     * The non-generated target columns every file group reads straight from its files, mapped to themselves
+     * by name: the bare entries of a COLUMNS list, or -- for a group with no COLUMNS list -- every
+     * non-generated column, which {@code Load.initColumns} reads by name. A column some group maps with SET
+     * is the mapped value even when its bare name is listed too ({@code Load} applies the SET entries
+     * last), so it is reported as an unsupported projection instead.
+     */
+    private static InsertSelectSourceColumns.Resolved columnsReadFromFiles(
+            OlapTable target, List<BrokerFileGroup> fileGroups) {
+        Map<String, String> namesByLowerCase = new HashMap<>();
+        for (Column column : target.getBaseSchemaWithoutGeneratedColumn()) {
+            namesByLowerCase.put(column.getName().toLowerCase(), column.getName());
+        }
+        Set<String> readByEveryGroup = new HashSet<>(namesByLowerCase.keySet());
+        Set<String> setMapped = new HashSet<>();
+        for (BrokerFileGroup fileGroup : fileGroups) {
+            List<ImportColumnDesc> columnExpressions = fileGroup.getColumnExprList();
+            if (columnExpressions == null || columnExpressions.isEmpty()) {
+                continue;
+            }
+            Set<String> named = new HashSet<>();
+            for (ImportColumnDesc columnExpression : columnExpressions) {
+                if (columnExpression.isColumn()) {
+                    named.add(columnExpression.getColumnName().toLowerCase());
+                } else {
+                    setMapped.add(columnExpression.getColumnName().toLowerCase());
+                }
+            }
+            // A list made only of SET mappings names no file field, so Load reads every column by its own name.
+            if (!named.isEmpty()) {
+                readByEveryGroup.retainAll(named);
+            }
+        }
+        readByEveryGroup.removeAll(setMapped);
+        setMapped.retainAll(namesByLowerCase.keySet());
+        Map<String, String> readFromFiles = new HashMap<>();
+        for (String name : readByEveryGroup) {
+            readFromFiles.put(name, namesByLowerCase.get(name));
+        }
+        return new InsertSelectSourceColumns.Resolved(readFromFiles, Map.of(), Map.of(), setMapped);
+    }
+
+    /**
+     * The partitions the load may write. A file group that names partitions ({@code PARTITION(...)}) turns
+     * automatic partition creation off for the whole load ({@code LoadPlanner}), so pre-split must neither
+     * create nor split a partition outside them; a group that names none may still write any existing
+     * partition. {@code unrestricted()} when no group names partitions, or the target is unpartitioned
+     * (its single partition carries the table's name); {@code null} when the named partitions mix real and
+     * temporary ones, or one has been dropped, which no single scope describes.
+     */
+    static PreSplitPartitionScope partitionScopeOf(OlapTable target, List<BrokerFileGroup> fileGroups) {
+        if (!target.getPartitionInfo().isPartitioned()
+                || fileGroups.stream().noneMatch(BrokerFileGroup::isSpecifyPartition)) {
+            return PreSplitPartitionScope.unrestricted();
+        }
+        Set<String> partitionNames = new LinkedHashSet<>();
+        Set<Boolean> temporary = new HashSet<>();
+        for (BrokerFileGroup fileGroup : fileGroups) {
+            if (!fileGroup.isSpecifyPartition()) {
+                for (Partition partition : target.getPartitions()) {
+                    partitionNames.add(partition.getName());
+                }
+                temporary.add(false);
+                continue;
+            }
+            for (long partitionId : fileGroup.getPartitionIds()) {
+                Partition partition = target.getPartition(partitionId);
+                if (partition == null) {
+                    return null;
+                }
+                partitionNames.add(partition.getName());
+                temporary.add(target.getPartition(partition.getName(), false) != partition);
+            }
+        }
+        return temporary.size() == 1
+                ? PreSplitPartitionScope.explicit(partitionNames, temporary.iterator().next()) : null;
+    }
+
+    /** The target columns the sampled generated columns read, which a CSV sample declares in its schema. */
+    private static List<Column> generatedColumnInputs(OlapTable target, List<Column> sampledColumns) {
+        Map<String, Column> inputs = new LinkedHashMap<>();
+        for (Column column : sampledColumns) {
+            if (!column.isGeneratedColumn()) {
+                continue;
+            }
+            for (SlotRef reference : column.getGeneratedColumnRef(target.getIdToColumn())) {
+                Column input = target.getIdToColumn().get(reference.getColumnId());
+                inputs.putIfAbsent(input.getName().toLowerCase(), input);
+            }
+        }
+        return List.copyOf(inputs.values());
     }
 
     private static long sumFileBytes(List<List<TBrokerFileStatus>> fileStatuses) {
