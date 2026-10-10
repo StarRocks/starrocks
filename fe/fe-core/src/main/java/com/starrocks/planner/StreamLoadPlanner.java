@@ -161,6 +161,10 @@ public class StreamLoadPlanner {
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
         List<Boolean> missAutoIncrementColumn = Lists.newArrayList();
+        // Flexible partial update: planned as asked or the load fails, never silently planned as a plain partial
+        // update. StreamLoadScanNode reads the same StreamLoadInfo flag.
+        boolean flexible = Load.resolveFlexiblePartialUpdate(destTable, streamLoadInfo.isFlexiblePartialUpdate(),
+                streamLoadInfo.getMergeConditionStr(), streamLoadInfo.getColumnExprDescs());
         if (streamLoadInfo.isPartialUpdate()) {
             destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs(),
                     missAutoIncrementColumn);
@@ -184,6 +188,13 @@ public class StreamLoadPlanner {
             }
         }
         if (isPrimaryKey) {
+            if (flexible) {
+                // The per-row column-set id, immediately before "__op" so that "__op" stays the last column.
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             // add op type column
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
@@ -225,6 +236,7 @@ public class StreamLoadPlanner {
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, destColumns,
                 olapTableSink.missAutoIncrementColumn());
         olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
+        olapTableSink.setFlexiblePartialUpdate(flexible);
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

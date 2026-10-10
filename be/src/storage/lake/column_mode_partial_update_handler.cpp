@@ -459,6 +459,13 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // 1. load update state first
     RETURN_IF_ERROR(_load_update_state(params));
 
+    // A flexible partial update is applied in row mode only (partial_update_mode=flexible_row), and the
+    // writer refuses one in column mode. Merged here, the NULL placeholders its update files hold in every
+    // cell a row did not declare would overwrite those columns.
+    if (params.op_write.has_txn_meta() && params.op_write.txn_meta().flexible_partial_update()) {
+        return Status::NotSupported("flexible partial update is not supported in column mode");
+    }
+
     const auto& txn_meta = params.op_write.txn_meta();
 
     // cid may shift across schema versions; recompute it from uid against the current

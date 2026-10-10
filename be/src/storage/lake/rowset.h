@@ -201,6 +201,25 @@ public:
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
                                                                       OlapReaderStatistics* stats);
 
+    // Like get_each_segment_iterator() -- same positional result, same tablet range, zero-row segments as
+    // empty iterators, lost segments as null -- but every segment is opened afresh with |segment_schema|
+    // instead of coming from the metacache with the rowset's tablet schema. For reading a column the
+    // tablet schema does not have, such as the hidden per-row column-set id "__cset__" of a flexible
+    // partial update (reserved unique id), which a Segment opened with the tablet schema has no reader for.
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_schema(
+            const Schema& schema, const TabletSchemaCSPtr& segment_schema, bool file_data_cache,
+            OlapReaderStatistics* stats);
+
+    // The |index|-th slot of get_each_segment_iterator_with_schema(), opening only that segment.
+    StatusOr<ChunkIteratorPtr> get_segment_iterator_with_schema(int index, const Schema& schema,
+                                                                const TabletSchemaCSPtr& segment_schema,
+                                                                bool file_data_cache, OlapReaderStatistics* stats);
+
+    // Flexible partial update: the per-row column-set ids stored in the hidden "__cset__" column of segment
+    // |index|, in the row order of get_each_segment_iterator(). Empty when no row of the segment belongs
+    // to this tablet.
+    StatusOr<std::vector<int16_t>> read_column_set_ids(int index);
+
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
     // |schema| read schema

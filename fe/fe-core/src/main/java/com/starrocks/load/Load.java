@@ -44,11 +44,13 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -120,6 +122,11 @@ public class Load {
     public static final String VERSION = "v1";
 
     public static final String LOAD_OP_COLUMN = "__op";
+    // Flexible partial update: the hidden per-row column-set id. A SMALLINT whose value indexes the load's
+    // column-set dictionary (RowsetTxnMetaPB.distinct_column_sets on the BE), so that each row updates only the
+    // columns it declares. Placed immediately before "__op", which stays the last column. Present only in a
+    // flexible plan.
+    public static final String LOAD_CSET_COLUMN = "__cset__";
 
     // load job meta
     private LoadErrorHub.Param loadErrorHubParam = new LoadErrorHub.Param();
@@ -335,6 +342,21 @@ public class Load {
                                    List<String> columnsFromPath, boolean isLoadJson,
                                    boolean partialUpdate, String routineLoadSourceType,
                                    ImportMetadataStmt metadata) throws StarRocksException {
+        initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, descriptorTable,
+                srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
+                columnsFromPath, isLoadJson, partialUpdate, false, routineLoadSourceType, metadata);
+    }
+
+    // `flexible`: the load is a flexible partial update (see checkFlexiblePartialUpdate), so the source tuple
+    // also carries the hidden per-row column-set id LOAD_CSET_COLUMN.
+    public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+                                   Map<String, Pair<String, List<String>>> columnToHadoopFunction,
+                                   Map<String, Expr> exprsByName, DescriptorTable descriptorTable, TupleDescriptor srcTupleDesc,
+                                   Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
+                                   boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+                                   List<String> columnsFromPath, boolean isLoadJson,
+                                   boolean partialUpdate, boolean flexible, String routineLoadSourceType,
+                                   ImportMetadataStmt metadata) throws StarRocksException {
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -462,6 +484,12 @@ public class Load {
                 metaByName.put(b.hiddenName, b);
                 copiedColumnExprs.add(new ImportColumnDesc(b.hiddenName));
             }
+        }
+        // Flexible partial update: declare the hidden per-row column-set id as a source field, like "__op".
+        // The json scanner does not read it from the data; it fills it with the id of the set of columns
+        // present in each row. The destination slot of the same name maps to it.
+        if (flexible) {
+            copiedColumnExprs.add(new ImportColumnDesc(Load.LOAD_CSET_COLUMN, null));
         }
 
         // generate a map for checking easily
@@ -619,6 +647,12 @@ public class Load {
                         slotDesc.setType(metaType);
                         slotDesc.setColumn(new Column(columnName, metaType));
                         slotDesc.setIsMaterialized(true);
+                    } else if (flexible && columnName.equals(Load.LOAD_CSET_COLUMN)) {
+                        // The hidden per-row column-set id of a flexible partial update, filled by the json
+                        // scanner.
+                        slotDesc.setType(IntegerType.SMALLINT);
+                        slotDesc.setColumn(new Column(columnName, IntegerType.SMALLINT));
+                        slotDesc.setIsMaterialized(true);
                     } else {
                         slotDesc.setType(VarcharType.VARCHAR);
                         slotDesc.setColumn(new Column(columnName, VarcharType.VARCHAR));
@@ -730,6 +764,99 @@ public class Load {
         // 3. reanalyze all exprs using new type in vectorized load or using varchar in old load
         analyzeMappingExprs(tbl, descriptorTable, srcTupleDesc, exprsByName, mvDefineExpr, slotDescByName, useVectorizedLoad);
         LOG.debug("after init column, exprMap: {}", exprsByName);
+    }
+
+    /**
+     * Reject a flexible partial update (each row updates only the columns present in it) that cannot be applied
+     * correctly. A shape that slips through would not fail: the load would report success and leave some column
+     * of some row silently unapplied, or overwritten with NULL. Rejects:
+     * <ul>
+     * <li>a table that is not a shared-data primary key table: only the shared-data primary key apply
+     * understands the per-row column sets;</li>
+     * <li>a range-distributed table: a split child applies a shared segment at an offset of its tablet range,
+     * which the per-row column sets are not addressed by;</li>
+     * <li>merge_condition: there is no flexible-aware conditional apply;</li>
+     * <li>a `columns` mapping with an expression, and a table with a generated column: a row's column set is
+     * the set of source columns present in that row, so a column computed from others is in no row's set and
+     * would never be applied;</li>
+     * <li>a table with an auto-increment column;</li>
+     * <li>a table with a column named {@link #LOAD_CSET_COLUMN}, which the plan addresses by name.</li>
+     * </ul>
+     */
+    public static void checkFlexiblePartialUpdate(Table tbl, String mergeCondition,
+                                                  List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (!tbl.isCloudNativeTableOrMaterializedView() || !(tbl instanceof OlapTable)
+                || ((OlapTable) tbl).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new DdlException("Flexible partial update is only supported on shared-data primary key tables");
+        }
+        OlapTable olapTable = (OlapTable) tbl;
+        if (olapTable.isRangeDistribution()) {
+            throw new DdlException("Flexible partial update is not supported on range-distributed tables");
+        }
+        // A row that omits a sort key column carries a NULL placeholder in it, and the BE orders the rows of a
+        // segment by their sort key values before the publish supplies the current value: the rewritten rows
+        // would leave a segment that is not sorted by its sort key, whose short key index then prunes wrongly. A sort key made only of primary key columns is fine: every
+        // row carries the whole primary key.
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
+        if (baseIndexMeta != null && baseIndexMeta.getSortKeyIdxes() != null) {
+            List<Column> indexSchema = baseIndexMeta.getSchema();
+            for (Integer sortKeyIdx : baseIndexMeta.getSortKeyIdxes()) {
+                if (sortKeyIdx != null && sortKeyIdx >= 0 && sortKeyIdx < indexSchema.size()
+                        && !indexSchema.get(sortKeyIdx).isKey()) {
+                    throw new DdlException("Flexible partial update is not supported on a table whose sort key"
+                            + " (ORDER BY) contains a non-primary-key column (column '"
+                            + indexSchema.get(sortKeyIdx).getName() + "')");
+                }
+            }
+        }
+        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+            throw new DdlException("Flexible partial update combined with merge_condition is not supported");
+        }
+        if (columnExprDescs != null) {
+            for (ImportColumnDesc desc : columnExprDescs) {
+                if (desc.isColumn() || LOAD_OP_COLUMN.equalsIgnoreCase(desc.getColumnName())) {
+                    continue;
+                }
+                throw new DdlException("Flexible partial update does not support column mappings or expressions"
+                        + " (column '" + desc.getColumnName() + "'): a row's column set is derived from the columns"
+                        + " present in that row, so a derived column would never be applied");
+            }
+        }
+        if (olapTable.hasGeneratedColumn()) {
+            throw new DdlException("Flexible partial update is not supported on a table with a generated column");
+        }
+        // Scan the schema rather than calling getColumn(name): names are case-insensitive (Table.nameToColumn).
+        for (Column col : olapTable.getBaseSchema()) {
+            if (col.isAutoIncrement()) {
+                throw new DdlException(
+                        "Flexible partial update is not supported on a table with an auto-increment column");
+            }
+            if (LOAD_CSET_COLUMN.equalsIgnoreCase(col.getName())) {
+                throw new DdlException("Flexible partial update is not supported on a table with a column named "
+                        + LOAD_CSET_COLUMN + " (the name is used for the hidden per-row column-set column)");
+            }
+        }
+    }
+
+    /**
+     * Decide whether a load that asks for a flexible partial update (partial_update_mode=flexible_row) is
+     * planned as one. It either is, or the load fails: the flexible bit is never dropped
+     * silently, because the same load planned as a plain partial update would overwrite the columns a row omits
+     * with NULL. Requires {@code Config.enable_flexible_partial_update}.
+     *
+     * @return true when the plan must carry the hidden {@link #LOAD_CSET_COLUMN} column
+     */
+    public static boolean resolveFlexiblePartialUpdate(Table tbl, boolean flexibleRequested, String mergeCondition,
+                                                       List<ImportColumnDesc> columnExprDescs) throws DdlException {
+        if (!flexibleRequested) {
+            return false;
+        }
+        if (!Config.enable_flexible_partial_update) {
+            throw new DdlException("Flexible partial update (partial_update_mode=flexible_row) requires "
+                    + "enable_flexible_partial_update to be enabled on the FE and the BE");
+        }
+        checkFlexiblePartialUpdate(tbl, mergeCondition, columnExprDescs);
+        return true;
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,

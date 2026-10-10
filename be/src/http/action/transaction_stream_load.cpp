@@ -492,6 +492,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible" ||
+                   http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible_row") {
+            // Flexible partial update is not supported on this endpoint. Refuse it rather than ignore it:
+            // run as a plain partial update of the union of the columns, the load would overwrite the
+            // columns a row omits with NULL.
+            return Status::NotSupported(fmt::format(
+                    "partial_update_mode={} is not supported by transaction stream load; use stream load instead",
+                    http_req->header(HTTP_PARTIAL_UPDATE_MODE)));
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {

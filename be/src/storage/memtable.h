@@ -33,6 +33,7 @@ class SlotDescriptor;
 class TabletSchema;
 
 class MemTableSink;
+class FlexibleRowMerger;
 
 struct MemtableStats {
     // The number of insert operation
@@ -120,6 +121,10 @@ public:
 
     const MemtableStats& get_stat() const { return _stats; }
 
+    // Flexible partial update: the rows of a repeated key are merged column by column instead of the last
+    // row replacing the others. `merger` must outlive the memtable.
+    void set_flexible_row_merger(FlexibleRowMerger* merger) { _flexible_row_merger = merger; }
+
 private:
     Status _merge();
 
@@ -127,7 +132,7 @@ private:
     Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
-    void _aggregate(bool is_final);
+    Status _aggregate(bool is_final);
 
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);
 
@@ -175,6 +180,7 @@ private:
 
     MemtableStats _stats;
     PrimaryKeyEncodingType _pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
+    FlexibleRowMerger* _flexible_row_merger = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

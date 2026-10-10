@@ -39,6 +39,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -54,6 +57,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
@@ -62,6 +66,7 @@ import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -183,6 +188,129 @@ public class StreamLoadPlannerTest {
                 CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+    }
+
+    private TStreamLoadPutRequest flexibleRequest() {
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setPartial_update(true);
+        request.setPartial_update_mode(TPartialUpdateMode.ROW_MODE);
+        request.setFlexible_partial_update(true);
+        request.setColumns("c1,c2");
+        return request;
+    }
+
+    // A flexible request on a shared-data primary key table is planned as one: the sink is told so.
+    @Test
+    public void testFlexiblePartialUpdatePlan() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                destTable.isCloudNativeTableOrMaterializedView();
+                minTimes = 0;
+                result = true;
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        boolean saved = Config.enable_flexible_partial_update;
+        Config.enable_flexible_partial_update = true;
+        try {
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(flexibleRequest(), db);
+            Assertions.assertTrue(streamLoadInfo.isFlexiblePartialUpdate());
+            StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+            planner.plan(streamLoadInfo.getId());
+            new Verifications() {
+                {
+                    sink.setFlexiblePartialUpdate(true);
+                    times = 1;
+                }
+            };
+        } finally {
+            Config.enable_flexible_partial_update = saved;
+        }
+    }
+
+    // With the feature off (the default) a flexible request fails, naming the config, instead of being planned
+    // as a plain partial update.
+    @Test
+    public void testFlexiblePartialUpdateRejectedWhenDisabled() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                destTable.isCloudNativeTableOrMaterializedView();
+                minTimes = 0;
+                result = true;
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+            }
+        };
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(flexibleRequest(), db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+        boolean saved = Config.enable_flexible_partial_update;
+        Config.enable_flexible_partial_update = false;
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "enable_flexible_partial_update",
+                    () -> planner.plan(streamLoadInfo.getId()));
+        } finally {
+            Config.enable_flexible_partial_update = saved;
+        }
+    }
+
+    // With the feature on, a table flexible partial update cannot apply to is an error too.
+    @Test
+    public void testFlexiblePartialUpdateRejectedOnUnsupportedTable() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                // Not stubbed: isCloudNativeTableOrMaterializedView() is false, a shared-nothing table.
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+            }
+        };
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(flexibleRequest(), db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+        boolean saved = Config.enable_flexible_partial_update;
+        Config.enable_flexible_partial_update = true;
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data primary key",
+                    () -> planner.plan(streamLoadInfo.getId()));
+        } finally {
+            Config.enable_flexible_partial_update = saved;
+        }
     }
 
     @Test

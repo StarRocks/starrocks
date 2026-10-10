@@ -29,6 +29,7 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "common/config_exec_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_pipe.h"
 #include "fs/fs_util.h"
@@ -48,7 +49,8 @@ protected:
                                                      const std::vector<TBrokerRangeDesc>& ranges,
                                                      const std::vector<std::string>& col_names,
                                                      size_t file_size_limit = 1024 * 1024,
-                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {}) {
+                                                     const std::vector<TRoutineLoadMetaColumn>& meta_cols = {},
+                                                     int64_t flexible_partial_update_txn_id = -1) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -91,6 +93,12 @@ protected:
 
         if (!meta_cols.empty()) {
             params->__set_stream_source_meta_columns(meta_cols);
+        }
+        if (flexible_partial_update_txn_id >= 0) {
+            // A flexible partial update: the plan carries the hidden "__cset__" slot (in col_names) and the
+            // readers intern the per-row column sets into the registry entry of this txn.
+            params->__set_flexible_partial_update(true);
+            params->__set_txn_id(flexible_partial_update_txn_id);
         }
 
         TBrokerScanRange* broker_scan_range = _pool.add(new TBrokerScanRange());
@@ -361,6 +369,64 @@ TEST_F(JsonScannerTest, test_json_without_path) {
     EXPECT_EQ("['reference', 'NigelRees', 'SayingsoftheCentury', 8.95]", chunk->debug_row(0));
     EXPECT_EQ("['fiction', 'EvelynWaugh', 'SwordofHonour', 12.99]", chunk->debug_row(1));
     ASSERT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
+}
+
+// Flexible partial update: the reader interns the set of columns present in each row (an explicit null
+// keeps the column in the set, "__op" is never a member) and writes the set-id into the hidden "__cset__"
+// slot. A payload field named "__cset__" is ignored: parsed into the slot it would give the column a second
+// value for the row and shift the set-ids of every later row of the chunk.
+TEST_F(JsonScannerTest, test_flexible_partial_update_column_sets) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/flexible_partial_update_test.json";
+    std::string json_data = R"(
+        {"k": 1, "c1": 10}
+        {"k": 2, "c2": null, "__cset__": 7, "c1": 20}
+        {"k": 3, "c1": 30}
+        {"k": 4, "__op": 1}
+    )";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);      // k
+    types.emplace_back(TYPE_INT);      // c1
+    types.emplace_back(TYPE_INT);      // c2
+    types.emplace_back(TYPE_SMALLINT); // __cset__
+    types.emplace_back(TYPE_TINYINT);  // __op
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    const int64_t txn_id = 987654321;
+    auto scanner =
+            create_json_scanner(types, ranges, {"k", "c1", "c2", LOAD_CSET_COLUMN, "__op"}, 1024 * 1024, {}, txn_id);
+    ASSERT_OK(scanner->open());
+
+    auto st = scanner->get_next();
+    ASSERT_OK(st);
+    ChunkPtr chunk = st.value();
+    ASSERT_EQ(5, chunk->num_columns());
+    ASSERT_EQ(4, chunk->num_rows());
+    for (size_t i = 0; i < chunk->num_columns(); ++i) {
+        EXPECT_EQ(4, chunk->get_column_by_index(i)->size()) << "column " << i;
+    }
+    // Set 0 = {c1, k}, set 1 = {c1, c2, k} (c2 present with null), set 2 = {k}.
+    EXPECT_EQ("[1, 10, NULL, 0, 0]", chunk->debug_row(0));
+    EXPECT_EQ("[2, 20, NULL, 1, 0]", chunk->debug_row(1));
+    EXPECT_EQ("[3, 30, NULL, 0, 0]", chunk->debug_row(2));
+    EXPECT_EQ("[4, NULL, NULL, 2, 1]", chunk->debug_row(3));
+
+    auto dict = FlexiblePartialUpdateRegistry::instance()->get(txn_id);
+    ASSERT_TRUE(dict != nullptr);
+    const std::vector<std::vector<std::string>> expected_sets = {{"c1", "k"}, {"c1", "c2", "k"}, {"k"}};
+    EXPECT_EQ(expected_sets, dict->snapshot());
+
+    // The readers give their reference back when the scanner goes away.
+    scanner.reset();
+    FlexiblePartialUpdateRegistry::instance()->erase(txn_id);
 }
 
 TEST_F(JsonScannerTest, test_debezium_json_load) {

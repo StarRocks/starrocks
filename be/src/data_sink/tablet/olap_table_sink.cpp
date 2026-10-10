@@ -52,6 +52,7 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/stack_util.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
@@ -100,6 +101,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _merge_condition = table_sink.merge_condition;
     _encryption_meta = table_sink.encryption_meta;
     _partial_update_mode = table_sink.partial_update_mode;
+    if (table_sink.__isset.flexible_partial_update) {
+        _flexible_partial_update = table_sink.flexible_partial_update;
+    }
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
@@ -275,6 +279,14 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _state = state;
+    // A flexible partial update ships the entries of the per-row column-set dictionary its json scanners
+    // intern with the requests whose rows use them (AddChunksRequestBuilder). The scanners release their
+    // references as they finish, which can be before the last requests are built, so the sink holds one
+    // from prepare (before any scanner runs) until close_wait. See FlexiblePartialUpdateRegistry.
+    if (_flexible_partial_update && !_cset_dict_retained) {
+        FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
+        _cset_dict_retained = true;
+    }
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
@@ -1027,6 +1039,9 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         return close_status.ok() ? _close_wait_status : close_status;
     }
     _close_wait_done = true;
+    // Give back the reference to the column-set dictionary taken in prepare(), on every way out: by now every
+    // node channel has acknowledged its eos, or the load failed.
+    DeferOp release_cset_dict([this] { _release_cset_dict(); });
 
     if (!_is_initialized) {
         _close_wait_status = close_status;
@@ -1059,6 +1074,13 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     }
     _close_wait_status = status;
     return status;
+}
+
+void OlapTableSink::_release_cset_dict() {
+    if (_cset_dict_retained) {
+        _cset_dict_retained = false;
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
 }
 
 void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc, Chunk* chunk,

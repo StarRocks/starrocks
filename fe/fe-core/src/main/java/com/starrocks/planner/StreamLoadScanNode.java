@@ -284,7 +284,8 @@ public class StreamLoadScanNode extends LoadScanNode {
                 exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate(),
-                streamLoadInfo.getRoutineLoadSourceType(), streamLoadInfo.getMetadata());
+                streamLoadInfo.isFlexiblePartialUpdate(), streamLoadInfo.getRoutineLoadSourceType(),
+                streamLoadInfo.getMetadata());
     }
 
     @Override
@@ -409,11 +410,21 @@ public class StreamLoadScanNode extends LoadScanNode {
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());
         paramCreateContext.params.setDest_tuple_id(desc.getId().asInt());
+        if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // Tells the BE json scanner that the plan carries the hidden per-row column-set slot and that it
+            // must fill it; the scanner never infers it from the slot names.
+            paramCreateContext.params.setFlexible_partial_update(true);
+        }
         if (needAssignBE) {
             paramCreateContext.params.setTxn_id(txnId);
             paramCreateContext.params.setDb_name(dbName);
             paramCreateContext.params.setTable_name(dstTable.getName());
             paramCreateContext.params.setLabel(label);
+        } else if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // The json scanner interns the per-row column sets in a dictionary keyed by the scan range's
+            // txn_id, and the tablet writers look it up by the load's txn_id, so the two must be the same.
+            // This node's own txnId is not set on this path; streamLoadInfo carries the load's.
+            paramCreateContext.params.setTxn_id(streamLoadInfo.getTxnId());
         }
 
         paramCreateContext.tupleDescriptor.computeMemLayout();

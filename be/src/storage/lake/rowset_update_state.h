@@ -28,6 +28,10 @@
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 
+namespace starrocks {
+struct RewriteVectorIndexOptions;
+} // namespace starrocks
+
 namespace starrocks::lake {
 
 using CrossPublishRowSelectorPtr = std::unique_ptr<CrossPublishRowSelector>;
@@ -210,6 +214,13 @@ private:
     Status _resolve_conflict_auto_increment(const RowsetUpdateStateParams& params,
                                             const std::vector<uint64_t>& new_rss_rowids, uint32_t segment_id,
                                             size_t& total_conflicts);
+
+    // Flexible partial update in row mode: merges the update file of segment |segment_id| into the current
+    // values of |value_column_ids| (already in the partial update state) through each row's column set,
+    // and writes the complete rows as a new segment described by |file_info|.
+    Status _rewrite_flexible_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, const FileInfo& src,
+                                     const std::vector<ColumnId>& value_column_ids,
+                                     RewriteVectorIndexOptions vector_index_opts, SegmentFileInfo* file_info);
 
     void _reset();
 

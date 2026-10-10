@@ -338,6 +338,9 @@ struct TBrokerScanRangeParams {
     // Routine-load source-metadata slots: each binds a hidden source slot to a per-message metadata
     // field. Empty for non-routine-load and for jobs without an INCLUDE METADATA clause.
     35: optional list<TRoutineLoadMetaColumn> stream_source_meta_columns
+    // Flexible partial update: the plan carries the hidden "__cset__" slot and the JSON scanner must fill
+    // it with each row's column-set id. Set only when FE planned the load as a flexible partial update.
+    36: optional bool flexible_partial_update
 }
 
 // Broker scan range

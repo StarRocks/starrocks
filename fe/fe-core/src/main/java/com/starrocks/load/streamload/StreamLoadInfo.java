@@ -87,6 +87,8 @@ public class StreamLoadInfo {
     private long execMemLimit = 0;
     private long loadMemLimit = 0;
     private boolean partialUpdate = false;
+    // Flexible partial update: each row updates only the columns present in it.
+    private boolean flexiblePartialUpdate = false;
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
@@ -267,6 +269,14 @@ public class StreamLoadInfo {
         this.partialUpdate = partialUpdate;
     }
 
+    public boolean isFlexiblePartialUpdate() {
+        return flexiblePartialUpdate;
+    }
+
+    public void setFlexiblePartialUpdate(boolean flexiblePartialUpdate) {
+        this.flexiblePartialUpdate = flexiblePartialUpdate;
+    }
+
     public TCompressionType getTransmisionCompressionType() {
         return compressionType;
     }
@@ -424,6 +434,21 @@ public class StreamLoadInfo {
         params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
         params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
         params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
+        if (params.isFlexiblePartialUpdate().orElse(false)) {
+            // A row can omit a column, as opposed to setting it to null, only in JSON.
+            if (formatType != TFileFormatType.FORMAT_JSON) {
+                throw new StarRocksException("flexible partial update is only supported for json format load");
+            }
+            if (!partialUpdate) {
+                throw new StarRocksException("flexible partial update requires partial_update=true");
+            }
+            // Only the row-mode apply understands the per-row column sets (partial_update_mode=flexible_row).
+            if (partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new StarRocksException(
+                        "flexible partial update is only supported in row mode (partial_update_mode=flexible_row)");
+            }
+            flexiblePartialUpdate = true;
+        }
 
         Optional<String> compressionType = params.getPayloadCompressionType();
         if (compressionType.isPresent()) {
