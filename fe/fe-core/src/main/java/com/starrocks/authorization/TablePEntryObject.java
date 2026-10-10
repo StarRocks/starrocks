@@ -62,13 +62,43 @@ public class TablePEntryObject implements PEntryObject {
         return catalogId;
     }
 
+    /**
+     * Constructs a table-like privilege object ({@link TablePEntryObject} and its subclasses)
+     * from its {@code [catalog, db, object]} (or {@code [db, object]}) tokens.
+     */
+    @FunctionalInterface
+    protected interface TablePEntryObjectFactory {
+        TablePEntryObject create(long catalogId, String databaseUUID, String tableUUID);
+    }
+
+    /**
+     * Resolves the privilege UUID of the object token for a given catalog/db.
+     */
+    @FunctionalInterface
+    protected interface ObjectUUIDResolver {
+        String resolve(String catalogName, String dbToken, String objectToken) throws PrivObjNotFoundException;
+    }
+
     public static TablePEntryObject generate(List<String> tokens) throws PrivilegeException {
+        return generateTableLikeObject(tokens, TablePEntryObject::new,
+                (catalogName, dbToken, tableToken) -> resolveObjectUUID(catalogName, dbToken, tableToken,
+                        table -> !table.isOlapView() && !table.isMaterializedView(), "table"));
+    }
+
+    /**
+     * Shared token-parsing logic for tables, views and materialized views. The only per-type
+     * variations are the concrete object constructed ({@code factory}) and how the internal-catalog
+     * object UUID is resolved/validated ({@code uuidResolver}).
+     */
+    protected static TablePEntryObject generateTableLikeObject(
+            List<String> tokens, TablePEntryObjectFactory factory, ObjectUUIDResolver uuidResolver)
+            throws PrivilegeException {
         String catalogName = null;
         long catalogId;
         if (tokens.size() == 3) {
             // This is true only when we are initializing built-in roles like root and db_admin
             if (tokens.get(0).equals("*")) {
-                return new TablePEntryObject(PrivilegeBuiltinConstants.ALL_CATALOGS_ID,
+                return factory.create(PrivilegeBuiltinConstants.ALL_CATALOGS_ID,
                         PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
             }
             catalogName = tokens.get(0);
@@ -101,45 +131,46 @@ public class TablePEntryObject implements PEntryObject {
         }
 
         if (Objects.equals(tokens.get(0), "*")) {
-            return new TablePEntryObject(
-                    catalogId,
+            return factory.create(catalogId,
                     PrivilegeBuiltinConstants.ALL_DATABASES_UUID,
                     PrivilegeBuiltinConstants.ALL_TABLES_UUID);
         }
 
         String dbUUID = DbPEntryObject.getDatabaseUUID(catalogName, tokens.get(0));
-        String tableUUID = getTableUUID(catalogName, tokens.get(0), tokens.get(1));
-        return new TablePEntryObject(catalogId, dbUUID, tableUUID);
+        String tableUUID = uuidResolver.resolve(catalogName, tokens.get(0), tokens.get(1));
+        return factory.create(catalogId, dbUUID, tableUUID);
     }
 
     /**
-     * for internal table, use {@link Table#getUUID()} as privilege id.
-     * for external table, use table name as privilege id.
+     * For an internal object, use {@link Table#getUUID()} as the privilege id (validating that the
+     * resolved table matches {@code internalTypeMatcher}); for an external object, use the object
+     * name directly. {@code objectDesc} is only used to build the "cannot find ..." error message.
      */
-    private static String getTableUUID(String catalogName, String dbToken, String tableToken)
-            throws PrivObjNotFoundException {
+    protected static String resolveObjectUUID(String catalogName, String dbToken, String objectToken,
+                                              java.util.function.Predicate<Table> internalTypeMatcher,
+                                              String objectDesc) throws PrivObjNotFoundException {
         Preconditions.checkArgument(!dbToken.equals("*"));
-        if (tableToken.equals("*")) {
+        if (objectToken.equals("*")) {
             return PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             Table table;
             try {
-                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbToken, tableToken);
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbToken, objectToken);
             } catch (StarRocksConnectorException e) {
-                throw new PrivObjNotFoundException("cannot find table " +
-                        tableToken + " in db " + dbToken + ", msg: " + e.getMessage());
+                throw new PrivObjNotFoundException("cannot find " + objectDesc + " " +
+                        objectToken + " in db " + dbToken + ", msg: " + e.getMessage());
             }
-            if (table == null || table.isOlapView() || table.isMaterializedView()) {
-                throw new PrivObjNotFoundException("cannot find table " +
-                        tableToken + " in db " + dbToken);
+            if (table == null || !internalTypeMatcher.test(table)) {
+                throw new PrivObjNotFoundException("cannot find " + objectDesc + " " +
+                        objectToken + " in db " + dbToken);
             }
             return table.getUUID();
         }
 
-        // for table in external catalog, return tableName directly without validation
-        return tableToken;
+        // for object in external catalog, return the object name directly without validation
+        return objectToken;
     }
 
     /**

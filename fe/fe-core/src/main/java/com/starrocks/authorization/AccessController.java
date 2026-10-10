@@ -93,6 +93,11 @@ public interface AccessController {
         throw new AccessDeniedException();
     }
 
+    default void checkAnyActionOnAnyView(ConnectContext context, String catalog, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
     default void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                              PrivilegeType privilegeType) throws AccessDeniedException {
         throw new AccessDeniedException();
@@ -104,6 +109,11 @@ public interface AccessController {
     }
 
     default void checkAnyActionOnAnyMaterializedView(ConnectContext context, String db)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAnyActionOnAnyMaterializedView(ConnectContext context, String catalog, String db)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
