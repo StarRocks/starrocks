@@ -71,6 +71,13 @@ public class PlannerMetaLocker implements AutoCloseable {
     private UUID queryId;
 
     /**
+     * Bound on every later acquisition through {@link #lockForPlanning()}, or negative for none. A caller that
+     * takes the lock with {@link #tryLock} sets it, so that a planner which releases the lock mid-way and takes
+     * it back -- the optimistic INSERT path -- waits no longer on the way back than the caller did going in.
+     */
+    private long acquireTimeoutMs = -1;
+
+    /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
      * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
      * so the table ids do not need to be ordered here.
@@ -144,6 +151,28 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     public boolean isEmpty() {
         return tables.isEmpty();
+    }
+
+    public void setAcquireTimeoutMs(long acquireTimeoutMs) {
+        this.acquireTimeoutMs = acquireTimeoutMs;
+    }
+
+    /**
+     * {@link #lock()}, unless {@link #setAcquireTimeoutMs} bounded the wait: then {@link #tryLock} with that bound,
+     * throwing {@link AcquireTimeoutException} when it runs out. Nothing is held after the throw.
+     */
+    public void lockForPlanning() {
+        if (acquireTimeoutMs < 0) {
+            lock();
+        } else if (!tryLock(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new AcquireTimeoutException(acquireTimeoutMs);
+        }
+    }
+
+    public static class AcquireTimeoutException extends RuntimeException {
+        public AcquireTimeoutException(long timeoutMs) {
+            super("failed to re-acquire the planner meta lock within " + timeoutMs + " ms");
+        }
     }
 
     public void lock() {

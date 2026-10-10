@@ -613,6 +613,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
+        // Planning may let go of the lock and take it back (the optimistic INSERT path); hold that to the same bound.
+        locker.setAcquireTimeoutMs(Config.mv_refresh_try_lock_timeout_ms);
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
             throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
         }
@@ -632,6 +634,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             try (ConnectContext.ScopeGuard guard = ctx.bindScope(); Timer ignored = Tracers.watchScope("MVRefreshPlanner")) {
                 ctx.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false); //already refreshed before
                 execPlan = StatementPlanner.planInsertStmt(locker, insertStmt, ctx);
+            } catch (PlannerMetaLocker.AcquireTimeoutException e) {
+                // Same as the first acquisition timing out: the task run retries it as a lock failure.
+                throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: %s " +
+                        "when planning the refresh", db.getFullName(), mv.getName(), e.getMessage()));
             }
         } finally {
             locker.unlock();
