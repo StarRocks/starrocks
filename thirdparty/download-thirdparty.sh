@@ -716,17 +716,6 @@ if [[ -d $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE ]] ; then
     echo "Finished patching $STREAMVBYTE_SOURCE"
 fi
 
-# patch hyperscan
-if [[ -d $TP_SOURCE_DIR/$HYPERSCAN_SOURCE ]] ; then
-    cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
-    if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
-        apply_patch -p1 $TP_PATCH_DIR/hyperscan-5.4.0.patch
-        touch $PATCHED_MARK
-    fi
-    cd -
-    echo "Finished patching $HYPERSCAN_SOURCE"
-fi
-
 # patch vpack
 if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
