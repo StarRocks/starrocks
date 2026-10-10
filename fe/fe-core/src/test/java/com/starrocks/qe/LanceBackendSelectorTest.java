@@ -68,12 +68,7 @@ public class LanceBackendSelectorTest {
     private static LanceScanNode newScan(String uri) {
         TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor();
         tuple.setTable(new LanceTable(1, "vectors", List.of(), uri));
-        LanceScanNode scan = new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode") {
-            @Override
-            public List<Long> getAllAvailableBackendOrComputeIds() {
-                return List.of(11L, 12L);
-            }
-        };
+        LanceScanNode scan = new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode");
         scan.setupScanRangeLocations();
         return scan;
     }
