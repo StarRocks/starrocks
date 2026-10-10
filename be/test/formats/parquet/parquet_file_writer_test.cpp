@@ -811,6 +811,13 @@ TEST_F(ParquetFileWriterTest, TestDataPageV2RejectsBoolean) {
     EXPECT_NE(result.status().to_string().find("BOOLEAN"), std::string::npos);
 }
 
+TEST_F(ParquetFileWriterTest, TestDataPageV2RejectsNestedBoolean) {
+    _writer_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
+    auto result = _create_writer({TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC)});
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("BOOLEAN"), std::string::npos);
+}
+
 TEST_F(ParquetFileWriterTest, TestDataPageVersionFactoryValidation) {
     std::vector type_descs{TYPE_INT_DESC};
     auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
@@ -833,7 +840,7 @@ TEST_F(ParquetFileWriterTest, TestDataPageVersionFactoryValidation) {
     auto boolean_factory =
             ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, options, _make_type_names(boolean_types),
                                      boolean_evaluators, std::nullopt, nullptr, nullptr);
-    EXPECT_NE(boolean_factory.init().to_string().find("BOOLEAN"), std::string::npos);
+    ASSERT_OK(boolean_factory.init());
 }
 
 TEST_F(ParquetFileWriterTest, TestWriteJson) {

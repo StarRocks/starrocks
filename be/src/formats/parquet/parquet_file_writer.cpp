@@ -56,18 +56,6 @@ namespace {
 constexpr auto kUnsupportedBooleanV2 =
         "Parquet DataPage V2 with BOOLEAN columns is not supported by the StarRocks reader (issue #78692)";
 
-bool contains_boolean(const TypeDescriptor& type) {
-    if (type.type == TYPE_BOOLEAN) {
-        return true;
-    }
-    for (const auto& child : type.children) {
-        if (contains_boolean(child)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 } // namespace
 
 DEFINE_FAIL_POINT(parquet_writer_close_failed);
@@ -373,13 +361,6 @@ Status ParquetFileWriterFactory::init() {
             _parsed_options->data_page_version = ::parquet::ParquetDataPageVersion::V2;
         } else {
             return Status::InvalidArgument(fmt::format("write.parquet.page-version must be v1 or v2: {}", it->second));
-        }
-    }
-    if (_parsed_options->data_page_version == ::parquet::ParquetDataPageVersion::V2) {
-        for (const auto& type : ColumnEvaluator::types(*_column_evaluators)) {
-            if (contains_boolean(type)) {
-                return Status::NotSupported(kUnsupportedBooleanV2);
-            }
         }
     }
     if (_options.contains(ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING)) {
