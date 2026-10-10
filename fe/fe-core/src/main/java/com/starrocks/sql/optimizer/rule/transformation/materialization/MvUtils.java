@@ -1576,7 +1576,15 @@ public class MvUtils {
                 materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
         if (storageCooldownTime != null) {
             // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
-            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            // The literal is re-parsed as a DATETIME by PropertyAnalyzer.analyzeDataProperty when the
+            // partition is added, in the session time zone it was rendered in. "never cool down" is
+            // 9999-12-31 23:59:59 at +08:00, so a session zone east of that renders year 10000, which
+            // the DATETIME parser rejects and adding the partition fails. Bound the value at the latest
+            // DATETIME the session zone can express.
+            long maxExpressibleMs = TimeUtils.MAX_DATETIME.atZone(TimeUtils.getTimeZone().toZoneId())
+                    .toInstant().toEpochMilli();
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(
+                    Math.min(Long.parseLong(storageCooldownTime), maxExpressibleMs));
             partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
         }
         return partitionProperties;
