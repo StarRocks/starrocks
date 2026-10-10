@@ -537,12 +537,52 @@ public class PaimonIndexMetadataTest {
         PaimonMetadata firstQuery = new PaimonMetadata("paimon", null, null, null, cache);
         PaimonMetadata secondQuery = new PaimonMetadata("paimon", null, null, null, cache);
 
+        assertSingleIndexWarning("Failed to load Paimon index metadata", () -> {
+            Assertions.assertTrue(firstQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
+            Assertions.assertTrue(secondQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
+        });
+        // Failures are retried by each query, despite sharing the log throttle.
+        verify(nativeTable, times(2)).schemaManager();
+    }
+
+    @Test
+    public void testSnapshotFailureLogThrottleIsSharedAcrossQueryMetadata() throws Exception {
+        for (boolean pinnedSnapshot : List.of(false, true)) {
+            FileStoreTable nativeTable = mock(FileStoreTable.class);
+            SnapshotManager snapshotManager = mock(SnapshotManager.class);
+            when(nativeTable.rowType()).thenReturn(new RowType(List.of(new DataField(0, "id", new IntType()))));
+            when(nativeTable.snapshotManager()).thenReturn(snapshotManager);
+            if (pinnedSnapshot) {
+                when(snapshotManager.tryGetSnapshot(11L)).thenThrow(new IllegalStateException("snapshot unavailable"));
+            } else {
+                when(snapshotManager.latestSnapshot()).thenThrow(new IllegalStateException("snapshot unavailable"));
+            }
+            PaimonTable table = new PaimonTable("paimon", "db", "tbl", List.of(), nativeTable);
+            PaimonIndexMetadataCache cache = new PaimonIndexMetadataCache(Duration.ofMinutes(1));
+            PaimonMetadata firstQuery = new PaimonMetadata("paimon", null, null, null, cache);
+            PaimonMetadata secondQuery = new PaimonMetadata("paimon", null, null, null, cache);
+            TvrTableSnapshot version = pinnedSnapshot ? TvrTableSnapshot.of(11L) : TvrTableSnapshot.empty();
+
+            assertSingleIndexWarning("Cannot resolve Paimon snapshot for index metadata", () -> {
+                Assertions.assertTrue(firstQuery.getIndexMetadata(table, version).isEmpty());
+                Assertions.assertTrue(secondQuery.getIndexMetadata(table, version).isEmpty());
+            });
+            if (pinnedSnapshot) {
+                verify(snapshotManager, times(2)).tryGetSnapshot(11L);
+            } else {
+                verify(snapshotManager, times(2)).latestSnapshot();
+            }
+            verify(nativeTable, times(0)).schemaManager();
+        }
+    }
+
+    private static void assertSingleIndexWarning(String prefix, Runnable requests) {
         AtomicInteger warnings = new AtomicInteger();
         AbstractAppender appender = new AbstractAppender("paimon-index-failure-test", null, null) {
             @Override
             public void append(LogEvent event) {
                 if (event.getLevel() == Level.WARN && event.getMessage().getFormattedMessage()
-                        .startsWith("Failed to load Paimon index metadata")) {
+                        .startsWith(prefix)) {
                     warnings.incrementAndGet();
                 }
             }
@@ -553,11 +593,8 @@ public class PaimonIndexMetadataTest {
         logger.addAppender(appender);
         Configurator.setLevel(PaimonMetadata.class.getName(), Level.WARN);
         try {
-            Assertions.assertTrue(firstQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
-            Assertions.assertTrue(secondQuery.getIndexMetadata(table, TvrTableSnapshot.of(11L)).isEmpty());
+            requests.run();
             Assertions.assertEquals(1, warnings.get());
-            // Failures are retried by each query, despite sharing the log throttle.
-            verify(nativeTable, times(2)).schemaManager();
         } finally {
             Configurator.setLevel(PaimonMetadata.class.getName(), oldLevel);
             logger.removeAppender(appender);

@@ -837,7 +837,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             return Optional.ofNullable(table.snapshotManager().latestSnapshot());
         } catch (Exception e) {
-            LOG.warn("Cannot resolve Paimon snapshot for index metadata: {}", e.getMessage());
+            if (indexMetadataCache.shouldLogFailure(System.currentTimeMillis())) {
+                LOG.warn("Cannot resolve Paimon snapshot for index metadata: {}", e.getMessage());
+            }
             return Optional.empty();
         }
     }

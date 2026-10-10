@@ -161,6 +161,20 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testBoundVectorCastPlanningThroughMetadataMgr() throws Exception {
+        // This is the SQL expression shape after binding a prepared vector parameter.
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk, approx_l2_distance(CAST('[ 1e0, 2.0 ]' AS ARRAY<FLOAT>), embedding) AS score "
+                        + "FROM vector_table ORDER BY score ASC LIMIT 10");
+
+        assertContains(plan, "index[");
+        assertContains(plan, "metric=L2");
+        assertContains(plan, "k=10");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+    }
+
+    @Test
     public void testVectorRankWindowIsNotAnnotated() throws Exception {
         String plan = getLogicalFragmentPlan(
                 "SELECT pk FROM (SELECT pk, RANK() OVER (ORDER BY "

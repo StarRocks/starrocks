@@ -346,6 +346,14 @@ public final class IndexAnalyzer {
     private static Optional<float[]> extractFloatArrayLiteral(ScalarOperator expression) {
         ScalarOperator unwrapped = expression;
         while (unwrapped instanceof CastOperator) {
+            // Prepared statements bind vector parameters as CAST(string AS ARRAY<FLOAT>).
+            // Preserve the cast's target type before looking through it for a literal array.
+            if (unwrapped.getType() instanceof ArrayType
+                    && ((ArrayType) unwrapped.getType()).getItemType().isFloatingPointType()
+                    && unwrapped.getChild(0) instanceof ConstantOperator
+                    && unwrapped.getChild(0).getType().isStringType()) {
+                return extractFloatArrayString((ConstantOperator) unwrapped.getChild(0));
+            }
             unwrapped = unwrapped.getChild(0);
         }
         if (!(unwrapped instanceof ArrayOperator) || !(unwrapped.getType() instanceof ArrayType)
@@ -361,6 +369,31 @@ public final class IndexAnalyzer {
                 return Optional.empty();
             }
             vector[i] = value.get();
+        }
+        return Optional.of(vector);
+    }
+
+    private static Optional<float[]> extractFloatArrayString(ConstantOperator constant) {
+        if (constant.isNull()) {
+            return Optional.empty();
+        }
+        String literal = constant.getVarchar().trim();
+        if (!literal.startsWith("[") || !literal.endsWith("]")) {
+            return Optional.empty();
+        }
+        // Keep empty tokens so empty arrays and missing/trailing elements cannot become vectors.
+        String[] elements = literal.substring(1, literal.length() - 1).split(",", -1);
+        float[] vector = new float[elements.length];
+        try {
+            for (int i = 0; i < elements.length; i++) {
+                vector[i] = Float.parseFloat(elements[i].trim());
+                if (!Float.isFinite(vector[i])) {
+                    return Optional.empty();
+                }
+            }
+        } catch (NumberFormatException e) {
+            // Recognition must not change the errors or semantics of the original SQL expression.
+            return Optional.empty();
         }
         return Optional.of(vector);
     }

@@ -209,6 +209,43 @@ public class IndexAnalyzerTest {
     }
 
     @Test
+    public void testVectorTopNRecognizesBoundStringCasts() {
+        IndexAnalyzer analyzer = new IndexAnalyzer(metadata);
+        for (ArrayType targetType : List.of(new ArrayType(FloatType.FLOAT), new ArrayType(FloatType.DOUBLE))) {
+            CastOperator queryVector = new CastOperator(targetType,
+                    ConstantOperator.createVarchar(" [ 1e0, +2.0 ] "));
+            CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                    List.of(vectorColumn, queryVector));
+            IndexAnalyzer.VectorTopNShape shape = IndexAnalyzer.analyzeVectorTopNShape(score, true).orElseThrow();
+            Assertions.assertArrayEquals(new float[] {1, 2}, shape.getQueryVector());
+            Assertions.assertTrue(analyzer.supportsVectorTopN(score, true));
+        }
+
+        CastOperator wrongDimension = new CastOperator(ArrayType.ARRAY_FLOAT,
+                ConstantOperator.createVarchar("[1, 2, 3]"));
+        Assertions.assertFalse(analyzer.supportsVectorTopN(new CallOperator(
+                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, wrongDimension)), true));
+    }
+
+    @Test
+    public void testVectorTopNRejectsInvalidBoundStringCasts() {
+        for (String literal : List.of("", "[]", "[ ]", "1,2", "[1,2", "1,2]", "[1,,2]", "[1,2,]",
+                "[null,2]", "[NaN,2]", "[Infinity,2]", "[1e50,2]", "[[1],2]", "[invalid,2]")) {
+            CastOperator queryVector = new CastOperator(ArrayType.ARRAY_FLOAT, ConstantOperator.createVarchar(literal));
+            Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
+                    FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, queryVector)), true).isEmpty(),
+                    literal);
+        }
+        for (ScalarOperator queryVector : List.of(
+                new CastOperator(ArrayType.ARRAY_FLOAT, ConstantOperator.createNull(VarcharType.VARCHAR)),
+                ConstantOperator.createVarchar("[1,2]"),
+                new CastOperator(new ArrayType(IntegerType.INT), ConstantOperator.createVarchar("[1,2]")))) {
+            Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
+                    FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, queryVector)), true).isEmpty());
+        }
+    }
+
+    @Test
     public void testVectorTopNRequiresMatchingDimensionAndNullSemantics() {
         ArrayOperator threeDimensions = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
                 List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2),
