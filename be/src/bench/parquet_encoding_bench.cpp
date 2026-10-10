@@ -19,7 +19,9 @@
 #include <memory>
 
 #include "base/compression/block_compression.h"
+#include "base/testutil/assert.h"
 #include "bench/bench_util.h"
+#include "column/fixed_length_column.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 
@@ -342,6 +344,64 @@ BENCHMARK_TEMPLATE(BMTestString, tparquet::Type::FIXED_LEN_BYTE_ARRAY, DECOMPRES
 BENCHMARK_TEMPLATE(BMTestString, tparquet::Type::FIXED_LEN_BYTE_ARRAY, SKIP)->Apply(CustomArgsSkipString);
 BENCHMARK_TEMPLATE(BMTestString, tparquet::Type::FIXED_LEN_BYTE_ARRAY, LOWCARD)->Apply(CustomArgsLowcardString);
 BENCHMARK_TEMPLATE(BMTestString, tparquet::Type::FIXED_LEN_BYTE_ARRAY, PREFIX)->Apply(CustomArgsLowcardString);
+
+// Compare selective materialization with the unchanged bulk path on identical
+// inputs. This measures value decoding/copying only, not page IO or decompression.
+template <tparquet::Type::type PT>
+static void BMPlainSelection(benchmark::State& state) {
+    using T = typename PhysicalTypeTraits<PT>::CppType;
+    const size_t rows = state.range(0);
+    const size_t retained_percent = state.range(1);
+    const bool clustered = state.range(2);
+    const bool use_filter = state.range(3);
+    std::vector<T> values(rows);
+    Filter filter(rows);
+    size_t retained_rows = 0;
+    for (size_t i = 0; i < rows; ++i) {
+        values[i] = static_cast<T>(1 + i % 127);
+        filter[i] = clustered ? i < rows * retained_percent / 100 : (i * 13 % 100) < retained_percent;
+        retained_rows += filter[i];
+    }
+    const EncodingInfo* encoding = nullptr;
+    CHECK_OK(EncodingInfo::get(PT, tparquet::Encoding::PLAIN, &encoding));
+    std::unique_ptr<Encoder> encoder;
+    CHECK_OK(encoding->create_encoder(&encoder));
+    CHECK_OK(encoder->append(reinterpret_cast<const uint8_t*>(values.data()), rows));
+    const Slice encoded = encoder->build();
+    std::unique_ptr<Decoder> decoder;
+    CHECK_OK(encoding->create_decoder(&decoder));
+    auto column = FixedLengthColumn<T>::create();
+    column->reserve(rows);
+    for (auto _ : state) {
+        column->reset_column();
+        CHECK_OK(decoder->set_data(encoded));
+        CHECK_OK(decoder->next_batch(rows, ColumnContentType::VALUE, column.get(),
+                                     use_filter ? filter.data() : nullptr));
+        benchmark::DoNotOptimize(column->immutable_data().data());
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * rows);
+    state.SetBytesProcessed(state.iterations() * rows * sizeof(T));
+    state.counters["retained_rows"] = retained_rows;
+}
+
+static void PlainSelectionArgs(benchmark::internal::Benchmark* benchmark) {
+    benchmark->ArgNames({"rows", "retained_percent", "clustered", "use_filter"});
+    for (int rows : {4096, 65536}) {
+        for (int retained : {0, 1, 5, 10, 19, 100}) {
+            for (int clustered : {0, 1}) {
+                for (int filtered : {0, 1}) {
+                    benchmark->Args({rows, retained, clustered, filtered});
+                }
+            }
+        }
+    }
+}
+
+BENCHMARK_TEMPLATE(BMPlainSelection, tparquet::Type::INT32)->Apply(PlainSelectionArgs);
+BENCHMARK_TEMPLATE(BMPlainSelection, tparquet::Type::INT64)->Apply(PlainSelectionArgs);
+BENCHMARK_TEMPLATE(BMPlainSelection, tparquet::Type::FLOAT)->Apply(PlainSelectionArgs);
+BENCHMARK_TEMPLATE(BMPlainSelection, tparquet::Type::DOUBLE)->Apply(PlainSelectionArgs);
 
 } // namespace starrocks::parquet
 
