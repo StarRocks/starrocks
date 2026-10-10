@@ -33,28 +33,8 @@ import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ListPartitionDesc;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.CharType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.DecimalType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.MapType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.StructType;
-import com.starrocks.type.Type;
-import com.starrocks.type.TypeFactory;
-import com.starrocks.type.VarbinaryType;
-import com.starrocks.type.VarcharType;
-import com.starrocks.type.VariantType;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.Metrics;
@@ -66,11 +46,7 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.types.Conversions;
-import org.apache.iceberg.types.EdgeAlgorithm;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.StructProjection;
 import org.junit.jupiter.api.Test;
@@ -80,11 +56,7 @@ import org.mockito.Mockito;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-<<<<<<< HEAD
-=======
 import java.nio.ByteOrder;
-import java.time.LocalDateTime;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;

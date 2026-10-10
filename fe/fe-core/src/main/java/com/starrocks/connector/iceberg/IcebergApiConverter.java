@@ -74,11 +74,7 @@ import org.apache.iceberg.view.ViewVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-<<<<<<< HEAD
-=======
-import java.math.BigDecimal;
 import java.math.BigInteger;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;

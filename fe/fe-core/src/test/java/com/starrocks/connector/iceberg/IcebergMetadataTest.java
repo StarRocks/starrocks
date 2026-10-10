@@ -156,13 +156,10 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
-<<<<<<< HEAD
-=======
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1143,7 +1140,7 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
-                Executors.newSingleThreadExecutor(), null);
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
                 "iceberg_table", "", Lists.newArrayList(), mockedNativeTableDecimal, Maps.newHashMap());
 
