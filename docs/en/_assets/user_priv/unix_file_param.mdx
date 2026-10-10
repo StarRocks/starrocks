@@ -4,6 +4,7 @@ The type of the group provider to create. Valid values:
 - `ldap`: Creates an LDAP group provider. When this value is set, you need to specify `ldap_info`, `ldap_search_group_arg`, `ldap_search_user_arg`, and optionally `ldap_cache_arg`.
 - `unix`: Creates a Unix group provider.
 - `file`: Creates a File group provider. When this value is set, you need to specify `group_file_url`.
+- `extension`: Creates a group provider backed by a static extension. When this value is set, you need to specify `provider_factory_class`.
 
 #### `group_file_url`
 

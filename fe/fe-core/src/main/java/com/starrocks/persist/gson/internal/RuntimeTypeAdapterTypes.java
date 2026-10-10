@@ -40,6 +40,7 @@ import com.starrocks.alter.reshard.ReshardingTablet;
 import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.SplittingTablet;
 import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.authentication.ExtensionGroupProvider;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.JWTSecurityIntegration;
@@ -355,7 +356,8 @@ public class RuntimeTypeAdapterTypes {
                 RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")
                         .registerSubtype(FileGroupProvider.class, "FileGroupProvider")
                         .registerSubtype(UnixGroupProvider.class, "UnixGroupProvider")
-                        .registerSubtype(LDAPGroupProvider.class, "LDAPGroupProvider");
+                        .registerSubtype(LDAPGroupProvider.class, "LDAPGroupProvider")
+                        .registerSubtype(ExtensionGroupProvider.class, "ExtensionGroupProvider");
         CLAZZ_TO_RUNTIME_TYPE_ADAPTOR_FACTORIES.put(GroupProvider.class, group_provider_runtime_type_adapter_factory);
 
         final RuntimeTypeAdapterFactory<Warehouse> warehouse_type_adapter_factory = RuntimeTypeAdapterFactory
