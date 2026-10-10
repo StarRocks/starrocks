@@ -21,7 +21,16 @@ array_difference(input)
 
 ## Return value
 
-Returns an array of the same data type and length as the array that you specify in the `input` parameter.
+Returns an array with the same length as `input`. The return element type is determined by the input element type as follows:
+
+| Input element type | Return element type |
+| --- | --- |
+| `BOOLEAN`, `TINYINT`, `SMALLINT`, `INT`, or `BIGINT` | `BIGINT` |
+| `LARGEINT` | `LARGEINT` |
+| `FLOAT` or `DOUBLE` | `DOUBLE` |
+| `DECIMAL(P, S)`, where `P <= 38` | `DECIMAL(min(P + 1, 38), S)` |
+
+`ARRAY<DECIMAL256>` (`P > 38`) is not supported.
 
 ## Examples
 
