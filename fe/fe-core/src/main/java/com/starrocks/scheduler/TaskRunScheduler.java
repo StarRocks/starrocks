@@ -169,6 +169,10 @@ public class TaskRunScheduler {
         return ImmutableSet.copyOf(runningTaskRunMap.values());
     }
 
+    public Set<TaskRun> getCopiedRunningSyncTaskRuns() {
+        return ImmutableSet.copyOf(runningSyncTaskRunMap.values());
+    }
+
     public boolean isTaskRunning(long taskId) {
         return runningTaskRunMap.containsKey(taskId);
     }
