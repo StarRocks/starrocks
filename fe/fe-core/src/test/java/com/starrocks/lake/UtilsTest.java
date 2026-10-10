@@ -18,6 +18,7 @@ package com.starrocks.lake;
 import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
+import com.starrocks.alter.reshard.SplittingTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -34,6 +35,7 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.LakeServiceWithMetrics;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -41,6 +43,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
@@ -51,6 +54,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -433,5 +437,157 @@ public class UtilsTest {
                 return new LakeServiceWithMetrics(null);
             }
         };
+    }
+
+    // Two nodes: node1 owns tablets 1 and 2 and publishes them; node2 owns 3 and 4, publishes 4 and
+    // turns 3 down with the given status (it is still applying an earlier request for it).
+    private void mockTwoNodePublish(ComputeNode node1, ComputeNode node2, int failedStatusCode,
+                                    boolean node2Resharding) {
+        PublishTabletsInfo node1Tablets = new PublishTabletsInfo();
+        node1Tablets.addTabletId(1L);
+        node1Tablets.addTabletId(2L);
+        PublishTabletsInfo node2Tablets = new PublishTabletsInfo();
+        node2Tablets.addTabletId(3L);
+        node2Tablets.addTabletId(4L);
+        if (node2Resharding) {
+            // A split op registered on node2 besides its plain tablets.
+            SplittingTablet splitting = new SplittingTablet(3L, Lists.newArrayList(30L, 31L));
+            node2Tablets.addReshardingTablet(splitting);
+        }
+        Map<ComputeNode, PublishTabletsInfo> assignment = new HashMap<>();
+        assignment.put(node1, node1Tablets);
+        assignment.put(node2, node2Tablets);
+
+        new MockUp<DnsCache>() {
+            @Mock
+            public String tryLookup(String hostname) {
+                return hostname;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new WarehouseManager();
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean isResourceAvailable(ComputeResource computeResource) {
+                return true;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Map<ComputeNode, PublishTabletsInfo> processTablets(List<Tablet> tablets,
+                                                                      ComputeResource computeResource,
+                                                                      WarehouseManager warehouseManager,
+                                                                      List<Long> rebuildPindexTabletIds,
+                                                                      long baseVersion, long newVersion) {
+                return assignment;
+            }
+        };
+        new MockUp<LakeServiceWithMetrics>() {
+            @Mock
+            public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+                PublishVersionResponse response = new PublishVersionResponse();
+                response.status = new StatusPB();
+                response.compactionScores = new HashMap<>();
+                if (request.tabletIds.contains(3L)) {
+                    response.failedTablets = Lists.newArrayList(3L);
+                    response.status.statusCode = failedStatusCode;
+                    response.status.errorMsgs = Lists.newArrayList(
+                            "The previous publish version task for tablet 3 has not finished");
+                    response.compactionScores.put(4L, 4.0);
+                } else {
+                    response.status.statusCode = 0;
+                    for (Long tabletId : request.tabletIds) {
+                        response.compactionScores.put(tabletId, (double) tabletId);
+                    }
+                }
+                return CompletableFuture.completedFuture(response);
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return new LakeServiceWithMetrics(null);
+            }
+        };
+    }
+
+    @Test
+    public void testPublishVersionBatchKeepsWhatOtherNodesPublished() throws Exception {
+        ComputeNode node1 = new ComputeNode(1001L, "127.0.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1002L, "127.0.0.2", 9040);
+        node2.setBrpcPort(9050);
+        mockTwoNodePublish(node1, node2, TStatusCode.RESOURCE_BUSY.getValue(), false);
+
+        List<Tablet> tablets = Lists.newArrayList(new LakeTablet(1L), new LakeTablet(2L), new LakeTablet(3L),
+                new LakeTablet(4L));
+        Map<Long, Double> compactionScores = new HashMap<>();
+        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        PublishVersionPartialFailureException ex = Assertions.assertThrows(
+                PublishVersionPartialFailureException.class,
+                () -> Utils.publishVersionBatch(tablets, Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
+                        compactionScores, nodeToTablets, WarehouseManager.DEFAULT_RESOURCE, null, null));
+
+        // Only the busy tablet is reported, and it is reported as "still in progress".
+        Assertions.assertEquals(Lists.newArrayList(3L), Lists.newArrayList(ex.getFailedTabletIds()));
+        Assertions.assertTrue(ex.isInProgress());
+        Assertions.assertTrue(ex.getMessage().contains("tablets [3]"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("127.0.0.2"), ex.getMessage());
+
+        // What the nodes did publish is kept for the caller: scores of 1, 2 (node1) and 4 (node2) ...
+        Assertions.assertEquals(3, compactionScores.size());
+        Assertions.assertEquals(4.0, compactionScores.get(4L));
+        Assertions.assertFalse(compactionScores.containsKey(3L));
+        // ... and the routing map names only published tablets, so their txn logs can be deleted later.
+        Assertions.assertEquals(Lists.newArrayList(1L, 2L), nodeToTablets.get(node1));
+        Assertions.assertEquals(Lists.newArrayList(4L), nodeToTablets.get(node2));
+    }
+
+    @Test
+    public void testPublishVersionBatchRealFailureIsNotInProgress() {
+        ComputeNode node1 = new ComputeNode(1003L, "127.0.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1004L, "127.0.0.2", 9040);
+        node2.setBrpcPort(9050);
+        mockTwoNodePublish(node1, node2, TStatusCode.INTERNAL_ERROR.getValue(), false);
+
+        List<Tablet> tablets = Lists.newArrayList(new LakeTablet(1L), new LakeTablet(3L));
+        PublishVersionPartialFailureException ex = Assertions.assertThrows(
+                PublishVersionPartialFailureException.class,
+                () -> Utils.publishVersionBatch(tablets, Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
+                        new HashMap<>(), new HashMap<>(), WarehouseManager.DEFAULT_RESOURCE, null, null));
+        Assertions.assertEquals(Lists.newArrayList(3L), Lists.newArrayList(ex.getFailedTabletIds()));
+        Assertions.assertFalse(ex.isInProgress());
+    }
+
+    @Test
+    public void testPublishVersionBatchReshardFailureStaysAllOrNothing() {
+        ComputeNode node1 = new ComputeNode(1005L, "127.0.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1006L, "127.0.0.2", 9040);
+        node2.setBrpcPort(9050);
+        mockTwoNodePublish(node1, node2, TStatusCode.RESOURCE_BUSY.getValue(), true);
+
+        List<Tablet> tablets = Lists.newArrayList(new LakeTablet(1L), new LakeTablet(3L));
+        // A node carrying a resharding op cannot be retried per tablet: the plain RpcException keeps
+        // the caller on the old whole-partition retry.
+        RpcException ex = Assertions.assertThrows(RpcException.class,
+                () -> Utils.publishVersionBatch(tablets, Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
+                        new HashMap<>(), new HashMap<>(), WarehouseManager.DEFAULT_RESOURCE, null, null));
+        Assertions.assertFalse(ex instanceof PublishVersionPartialFailureException);
+    }
+
+    @Test
+    public void testIsPublishInProgressStatus() {
+        Assertions.assertFalse(Utils.isPublishInProgressStatus(null));
+        Assertions.assertTrue(Utils.isPublishInProgressStatus(TStatusCode.RESOURCE_BUSY.getValue()));
+        Assertions.assertTrue(Utils.isPublishInProgressStatus(TStatusCode.TIMEOUT.getValue()));
+        Assertions.assertTrue(Utils.isPublishInProgressStatus(TStatusCode.PUBLISH_TIMEOUT.getValue()));
+        Assertions.assertFalse(Utils.isPublishInProgressStatus(TStatusCode.INTERNAL_ERROR.getValue()));
+        Assertions.assertFalse(Utils.isPublishInProgressStatus(TStatusCode.OK.getValue()));
     }
 }

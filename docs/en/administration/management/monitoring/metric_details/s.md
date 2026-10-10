@@ -457,6 +457,24 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of `publish-version-daemon` loop runs on this FE node.
 
+## `starrocks_fe_lake_publish_version_partition_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of shared-data publish attempts that left a partition unpublished and will be retried. Only the tablets that did not publish are resent. A steadily increasing value means publish is being throttled by the compute nodes (see `lake_publish_version_timeout_ms`).
+
+## `starrocks_fe_lake_publish_version_tablet_in_progress_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of tablets a compute node reported as still publishing (busy with an earlier request, or past the publish deadline) when the FE asked. These are waits, not failures; the FE retries them after `lake_publish_version_retry_interval_ms`.
+
+## `starrocks_fe_lake_publish_version_partitions_backing_off`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Number of partitions whose last shared-data publish attempt failed and that are waiting out `lake_publish_version_retry_interval_ms` before the next attempt.
+
 The following metrics are `summary`-type metrics that provide latency distributions for different phases of a transaction. These metrics are reported exclusively by the Leader FE node.
 
 Each metric includes the following outputs:

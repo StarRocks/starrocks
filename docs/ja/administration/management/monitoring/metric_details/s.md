@@ -451,6 +451,24 @@ description: "Alphabetical s"
 - タイプ: 累積
 - 説明: このFEノードでの `publish-version-daemon` ループ実行の総数。
 
+## `starrocks_fe_lake_publish_version_partition_retry_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 共有データクラスタで、publish 後もパーティションの一部が未完了のまま残り、再試行が必要になった回数。再試行では未完了の tablet のみが再送されます。この値が増え続ける場合、publish が CN ノード側で滞っています（`lake_publish_version_timeout_ms` を参照）。
+
+## `starrocks_fe_lake_publish_version_tablet_in_progress_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: FE が publish を要求した際に、CN ノードが「まだ処理中」（以前の publish 要求を実行中、または publish の期限超過）と応答した tablet の数。これは失敗ではなく待機であり、FE は `lake_publish_version_retry_interval_ms` 後に再試行します。
+
+## `starrocks_fe_lake_publish_version_partitions_backing_off`
+
+- 単位: カウント
+- タイプ: 瞬時
+- 説明: 共有データクラスタで、直前の publish が失敗し、次の試行まで `lake_publish_version_retry_interval_ms` を待っているパーティションの数。
+
 以下のメトリクスは、トランザクションの異なるフェーズにおけるレイテンシ分布を提供する `summary` タイプのメトリクスです。これらのメトリクスは、リーダーFEノードによってのみ報告されます。
 
 各メトリクスには以下の出力が含まれます。

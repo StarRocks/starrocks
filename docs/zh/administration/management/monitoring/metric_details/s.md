@@ -477,6 +477,24 @@ description: "Alphabetical s"
 - 类型：累积
 - 描述：此FE节点上`publish-version-daemon`循环的总运行次数。
 
+## `starrocks_fe_lake_publish_version_partition_retry_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中，publish 后仍有分区未完成、需要重试的次数。重试时只会重发未完成的 tablet。该值持续增长说明 publish 正被 CN 节点限流（参见 `lake_publish_version_timeout_ms`）。
+
+## `starrocks_fe_lake_publish_version_tablet_in_progress_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：FE 发起 publish 时，CN 节点回复"仍在处理中"（正在执行更早的 publish 请求，或超过 publish 超时时间）的 tablet 数量。这类情况属于等待而非失败，FE 会在 `lake_publish_version_retry_interval_ms` 之后重试。
+
+## `starrocks_fe_lake_publish_version_partitions_backing_off`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：存算分离集群中，上一次 publish 失败、正在等待 `lake_publish_version_retry_interval_ms` 后再次重试的分区数量。
+
 以下指标是`summary`类型的指标，提供事务不同阶段的延迟分布。这些指标仅由Leader FE节点报告。
 
 每个指标包括以下输出：

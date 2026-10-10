@@ -489,6 +489,19 @@ public final class MetricRepo {
 
     public static GaugeMetricImpl<Long> GAUGE_ENCRYPTION_KEY_NUM;
 
+    // Shared-data publish retry health. Created eagerly so the publish daemon can bump them before
+    // init() has run (unit tests), and registered in init() like everything else.
+    public static final LongCounterMetric COUNTER_LAKE_PUBLISH_PARTITION_RETRY = new LongCounterMetric(
+            "lake_publish_version_partition_retry_total", MetricUnit.OPERATIONS,
+            "shared-data publish attempts that left a partition unpublished and will be retried");
+    public static final LongCounterMetric COUNTER_LAKE_PUBLISH_TABLET_IN_PROGRESS = new LongCounterMetric(
+            "lake_publish_version_tablet_in_progress_total", MetricUnit.OPERATIONS,
+            "tablets a compute node reported as still publishing (busy or past the deadline) when FE asked");
+    public static final GaugeMetricImpl<Long> GAUGE_LAKE_PUBLISH_PARTITIONS_BACKING_OFF = new GaugeMetricImpl<>(
+            "lake_publish_version_partitions_backing_off", MetricUnit.NOUNIT,
+            "partitions whose last shared-data publish attempt failed and that are waiting out the retry interval",
+            0L);
+
     public static GaugeMetric<Long> GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES;
 
     public static List<LeaderAwareGaugeMetric<Long>> GAUGE_ROUTINE_LOAD_LAGS;
@@ -843,6 +856,10 @@ public final class MetricRepo {
                 "editlog_stacked_num", MetricUnit.OPERATIONS, "counter of edit log that are stacked");
         GAUGE_STACKED_JOURNAL_NUM.setValue(0L);
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_STACKED_JOURNAL_NUM);
+
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_PUBLISH_PARTITION_RETRY);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_PUBLISH_TABLET_IN_PROGRESS);
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_PUBLISH_PARTITIONS_BACKING_OFF);
 
         GAUGE_ENCRYPTION_KEY_NUM = new GaugeMetricImpl<>(
                 "encryption_key_num", MetricUnit.NOUNIT, "number of encryption keys in key manager");
