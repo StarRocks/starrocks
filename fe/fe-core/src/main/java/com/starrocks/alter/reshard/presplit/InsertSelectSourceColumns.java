@@ -16,19 +16,31 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
+import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.Subquery;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.Type;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -55,10 +67,13 @@ import java.util.Set;
  * names. A column the list omits simply never enters the map, which makes it a skip when it is a
  * sort-key or partition column and a no-op otherwise.
  *
- * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
- * (caller then silently skips pre-split).
+ * <p>{@link #resolveUngated} returns {@code null} whenever the projection cannot be cleanly and
+ * safely mapped. A projection that maps but leaves a sampled column unfed is attributed by
+ * {@link #firstUnsampleable}, so the caller records why it declines.
  */
 final class InsertSelectSourceColumns {
+
+    private static final Logger LOG = LogManager.getLogger(InsertSelectSourceColumns.class);
 
     private InsertSelectSourceColumns() {
     }
@@ -80,7 +95,7 @@ final class InsertSelectSourceColumns {
          * supply alone. Right for a {@code FILES(...)} source, where a file NARROWER than the
          * target is ordinary: the columns it omits are defaulted, which says nothing about the
          * columns that ARE paired, and an unpaired sort-key or partition column is still caught by
-         * this method's final presence gate.
+         * the presence gate the caller applies through {@link #firstUnsampleable}.
          *
          * <p>It is not a licence to admit anything the analyzer would reject. Under {@code BY NAME}
          * the query's output names BECOME the target column names, so an output the target does not
@@ -98,12 +113,19 @@ final class InsertSelectSourceColumns {
      * an admitted computed expression over source columns to the expression's SQL, with its
      * plan-time constants already folded. {@code unsupportedProjectionTargets} names outputs supplied
      * by any other expression (including NULL). Those outputs are distinct from target columns
-     * omitted from the SELECT entirely. The four key sets are disjoint.
+     * omitted from the SELECT entirely. The four key sets are disjoint. {@code targetToSourceType} holds
+     * the type of the source column behind each {@code targetToSource} entry, and
+     * {@code targetsReadingRetypedSource} the target columns
+     * {@link InsertSelectSourceColumns#targetsReadingRetypedSource} describes. A sampled generated column resolved by
+     * {@link #withGeneratedColumns} lands in the constant or expression map like a computed projection, or in
+     * {@code generatedColumnFailures} with the reason it cannot.
      */
     record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
-                    Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets) {
-    }
+                    Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets,
+                    Map<String, Type> targetToSourceType, Set<String> targetsReadingRetypedSource,
+                    Map<String, String> generatedColumnFailures) {
 
+<<<<<<< HEAD
     /**
      * The source relation and projection rules used to resolve one INSERT-SELECT. A non-null
      * {@code computedProjectionContext} admits safe computed expressions after folding their
@@ -132,23 +154,44 @@ final class InsertSelectSourceColumns {
         Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, resolutionContext);
         if (resolved == null) {
             return null;
+=======
+        /** A projection whose source types are not tracked and that no generated column has been resolved against. */
+        Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql,
+                 Map<String, String> targetToExpressionSql, Set<String> unsupportedProjectionTargets) {
+            this(targetToSource, targetToConstantSql, targetToExpressionSql, unsupportedProjectionTargets,
+                    Map.of(), Set.of(), Map.of());
+>>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
         }
-        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
-            return null;
-        }
-        return resolved;
+    }
+
+    /** How the load hands a generated column the values of the columns its definition reads. */
+    enum InputReading {
+        /** Converted to each column's own type first: Broker Load ({@code Load} casts every input). */
+        AS_COLUMN_TYPE,
+        /** As the SELECT outputs them, converted only where a function needs it: INSERT from a table. */
+        AS_SELECTED,
+        /**
+         * As the SELECT outputs them, after FILES column-type push-down
+         * ({@code InsertAnalyzer#rewriteFileTableColumnTypes}) may have read a directly projected FILES
+         * column at a target column's type: INSERT FROM FILES with no explicit FILES schema.
+         */
+        AS_SELECTED_AFTER_PUSH_DOWN
     }
 
     /**
-     * {@link #resolve} without its final presence gates: the projection mapping alone, or {@code null}
-     * for a projection SHAPE problem (duplicate output name, by-position arity mismatch, a
-     * foreign-qualified slot, ...).
+     * The projection mapping alone, or {@code null} for a projection SHAPE problem (duplicate output
+     * name, by-position arity mismatch, a foreign-qualified slot, ...). A sampled column the mapping
+     * leaves unfed is not a shape problem: the caller applies the presence gates itself and names the
+     * offending column via {@link #firstUnsampleable}.
      *
-     * <p>Split out so a caller that wants to ATTRIBUTE a presence failure can apply the gates itself
-     * and name the offending column via {@link #firstUnfedColumn}. Folding the two together, as
-     * {@link #resolve} does for callers that do not care, makes an unfed sampled column
-     * indistinguishable from the shape rejections.
-     *
+<<<<<<< HEAD
+=======
+     * @param computedProjectionContext the INSERT user's context, for a caller whose sampler can
+     *                                  evaluate a computed projection: such a projection is admitted
+     *                                  when {@link #foldedComputedProjection}, folding in this context,
+     *                                  and {@link SamplingPredicateGate#evaluatesAsTheLoad} accept it.
+     *                                  {@code null} admits none, so every computed output stays unsupported.
+>>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
      */
     static Resolved resolveUngated(
             InsertStmt insertStmt, SelectRelation selectRelation,
@@ -173,8 +216,10 @@ final class InsertSelectSourceColumns {
 
         // Existence is checked via this map, never OlapTable.getColumn (which falls back to VirtualColumnRegistry).
         Map<String, String> sourceColumnMap = new HashMap<>();
+        Map<String, Type> sourceColumnTypes = new HashMap<>();
         for (Column column : sourceCols) {
             sourceColumnMap.put(column.getName().toLowerCase(), column.getName());
+            sourceColumnTypes.put(column.getName().toLowerCase(), column.getType());
         }
 
         boolean isStar = items.size() == 1 && items.get(0).isStar();
@@ -182,6 +227,7 @@ final class InsertSelectSourceColumns {
         Map<String, String> targetToConstantSql = new HashMap<>();
         Map<String, String> targetToExpressionSql = new HashMap<>();
         Set<String> unsupportedProjectionTargets = new HashSet<>();
+        Map<String, Set<String>> computedTargetSources = new HashMap<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
             boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
@@ -234,6 +280,7 @@ final class InsertSelectSourceColumns {
             }
         } else {
             List<String[]> outputs = new ArrayList<>(items.size());
+            List<Set<String>> outputSourceColumns = new ArrayList<>(items.size());
             for (SelectListItem item : items) {
                 if (item.isStar()) {
                     return null;
@@ -263,9 +310,23 @@ final class InsertSelectSourceColumns {
                         return null;
                     }
                     constantSql = constantSqlOf(item.getExpr());
-                    if (constantSql == null && computedProjectionContext != null) {
+                    // A literal the sampler would read back as another type goes through the computed-projection branch
+                    // below instead, which casts it to its own type and declines it unless that restores type and value.
+                    if (constantSql != null && computedProjectionContext != null
+                            && SamplingPredicateGate.literalReadBackDifferently(item.getExpr(), computedProjectionContext)) {
+                        constantSql = null;
+                    }
+                    // A projection reading a complex column is not sampled: the safety rule keeps out casts to a complex
+                    // type, but before analysis an implicit coercion such as ifnull(s, t) is not yet in the expression.
+                    if (constantSql == null && computedProjectionContext != null
+                            && !readsComplexColumn(item.getExpr(), sourceColumnTypes)) {
                         Expr folded = foldedComputedProjection(item.getExpr(), computedProjectionContext,
                                 normalizedSourceName, sourceAlias);
+                        // Analyzed against the source's own column types, as the sampler analyzes it.
+                        if (folded != null && !SamplingPredicateGate.evaluatesAsTheLoad(
+                                folded, sourceCols, normalizedSourceName, sourceAlias, computedProjectionContext)) {
+                            folded = null;
+                        }
                         if (folded != null && folded.containsSubclass(SlotRef.class)) {
                             expressionSql = SamplingPredicateGate.toSql(folded);
                         } else if (folded != null) {
@@ -273,11 +334,21 @@ final class InsertSelectSourceColumns {
                         }
                     }
                 }
+                Set<String> readSourceColumns = new HashSet<>();
+                if (expressionSql != null) {
+                    List<SlotRef> slots = new ArrayList<>();
+                    item.getExpr().collect(SlotRef.class, slots);
+                    for (SlotRef slot : slots) {
+                        readSourceColumns.add(slot.getColName().toLowerCase());
+                    }
+                }
+                outputSourceColumns.add(readSourceColumns);
                 outputs.add(new String[] {outputName, sourceName, constantSql, expressionSql});
             }
             if (byName) {
                 Set<String> outputNames = new HashSet<>();
-                for (String[] output : outputs) {
+                for (int i = 0; i < outputs.size(); i++) {
+                    String[] output = outputs.get(i);
                     String targetName = output[0].toLowerCase();
                     if (!outputNames.add(targetName)) {
                         return null;   // duplicate output name
@@ -288,6 +359,7 @@ final class InsertSelectSourceColumns {
                         targetToConstantSql.put(targetName, output[2]);
                     } else if (output[3] != null) {
                         targetToExpressionSql.put(targetName, output[3]);
+                        computedTargetSources.put(targetName, outputSourceColumns.get(i));
                     } else {
                         unsupportedProjectionTargets.add(targetName);
                     }
@@ -316,6 +388,7 @@ final class InsertSelectSourceColumns {
                         targetToConstantSql.put(targetName, output[2]);
                     } else if (output[3] != null) {
                         targetToExpressionSql.put(targetName, output[3]);
+                        computedTargetSources.put(targetName, outputSourceColumns.get(i));
                     } else {
                         unsupportedProjectionTargets.add(targetName);
                     }
@@ -325,8 +398,52 @@ final class InsertSelectSourceColumns {
 
         // The executors derive every projection from these maps at sample time (see projections),
         // so only the presence gates matter here.
+        Map<String, Type> targetToSourceType = new HashMap<>();
+        for (Map.Entry<String, String> mapping : targetToSource.entrySet()) {
+            targetToSourceType.put(mapping.getKey(), sourceColumnTypes.get(mapping.getValue().toLowerCase()));
+        }
         return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql),
-                Map.copyOf(targetToExpressionSql), Set.copyOf(unsupportedProjectionTargets));
+                Map.copyOf(targetToExpressionSql), Set.copyOf(unsupportedProjectionTargets),
+                Map.copyOf(targetToSourceType),
+                targetsReadingRetypedSource(targetCols, targetToSource, computedTargetSources, sourceColumnTypes),
+                Map.of());
+    }
+
+    /**
+     * The target columns whose projection reads a source column that FILES column-type push-down reads at a
+     * type other than the one the sampler reads it at. Push-down reads a source column projected directly into
+     * a target column at that column's type -- the last one's when there are several -- so a direct
+     * projection is affected when its source column also feeds a column of another type, and a computed one
+     * when a source column it reads is projected directly at a type other than its own.
+     */
+    private static Set<String> targetsReadingRetypedSource(
+            List<Column> targetCols, Map<String, String> targetToSource,
+            Map<String, Set<String>> computedTargetSources, Map<String, Type> sourceColumnTypes) {
+        Map<String, Type> targetTypes = new HashMap<>();
+        for (Column column : targetCols) {
+            targetTypes.put(column.getName().toLowerCase(), column.getType());
+        }
+        Map<String, Set<Type>> directReadTypes = new HashMap<>();
+        for (Map.Entry<String, String> mapping : targetToSource.entrySet()) {
+            directReadTypes.computeIfAbsent(mapping.getValue().toLowerCase(), name -> new HashSet<>())
+                    .add(targetTypes.get(mapping.getKey()));
+        }
+        Set<String> affected = new HashSet<>();
+        for (Map.Entry<String, String> mapping : targetToSource.entrySet()) {
+            if (directReadTypes.get(mapping.getValue().toLowerCase()).size() > 1) {
+                affected.add(mapping.getKey());
+            }
+        }
+        for (Map.Entry<String, Set<String>> computed : computedTargetSources.entrySet()) {
+            for (String sourceName : computed.getValue()) {
+                Set<Type> readTypes = directReadTypes.get(sourceName);
+                if (readTypes != null && (readTypes.size() > 1
+                        || !readTypes.iterator().next().matchesType(sourceColumnTypes.get(sourceName)))) {
+                    affected.add(computed.getKey());
+                }
+            }
+        }
+        return Set.copyOf(affected);
     }
 
     /**
@@ -338,11 +455,9 @@ final class InsertSelectSourceColumns {
      * can separate them.
      */
     static boolean sortKeySampleable(List<Column> sortKey, Resolved resolved) {
-        if (firstUnfedColumn(sortKey, resolved) != null) {
-            return false;
-        }
-        // Every column is fed; the key is still degenerate if NONE of them varies.
-        return sortKey.isEmpty() || anySourceBacked(sortKey, resolved);
+        // Every column must be fed; the key is still degenerate if NONE of them varies.
+        return sortKey.stream().allMatch(column -> isFed(column, resolved))
+                && (sortKey.isEmpty() || anySourceBacked(sortKey, resolved));
     }
 
     private static boolean anySourceBacked(List<Column> columns, Resolved resolved) {
@@ -357,36 +472,340 @@ final class InsertSelectSourceColumns {
     }
 
     /**
-     * The first column the sampler cannot project -- neither a direct source column, a supported
-     * literal, nor an admitted computed expression -- or {@code null} when every one is sampleable.
-     * An unsupported expression may still feed that column in the INSERT; see
-     * {@link Resolved#unsupportedProjectionTargets()}.
-     * The single definition of "sampleable" in this class: {@link #sortKeySampleable}
-     * and {@link #partitionColumnsSampleable} are both expressed in terms of it, so a caller that
-     * needs to NAME the offending column for a skip reason cannot drift from the gates that decide.
-     *
-     * <p>A literal-fed column counts as sampleable. It is projected as {@code CAST(<literal> AS <type>)} and
-     * never read from the source, so "no source column behind it" is not a defect there -- declining
-     * such a statement as a missing column is exactly the misattribution this helper exists to avoid.
+     * Whether the sampler can project {@code column}: from a direct source column, a supported literal, or an
+     * admitted computed expression. The single definition of "fed" in this class, which {@link #sortKeySampleable}
+     * and {@link #firstUnsampleable} share, so the column named in a skip reason cannot drift from the gates that
+     * decide. A literal-fed column counts: it is projected as {@code CAST(<literal> AS <type>)} and never read from
+     * the source, so declining such a statement as a missing column would misattribute the skip.
      */
-    static Column firstUnfedColumn(List<Column> columns, Resolved resolved) {
+    private static boolean isFed(Column column, Resolved resolved) {
+        String targetName = column.getName().toLowerCase();
+        return resolved.targetToSource().containsKey(targetName)
+                || resolved.targetToConstantSql().containsKey(targetName)
+                || resolved.targetToExpressionSql().containsKey(targetName);
+    }
+
+    /**
+     * Every column a sample projects, in the order a skip is attributed: the base sort key, the
+     * partition columns, then each visible rollup's sort key.
+     */
+    static List<Column> sampledColumns(List<Column> sortKeyColumns, List<Column> partitionColumns,
+                                       List<SecondaryIndexSpec> secondaryIndexSpecs) {
+        List<Column> columns = new ArrayList<>(sortKeyColumns);
+        columns.addAll(partitionColumns);
+        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
+            columns.addAll(spec.sortKey());
+        }
+        return columns;
+    }
+
+    /** A sampled column the sampler cannot project, with the skip reason and what to tell the operator. */
+    record Unsampleable(Column column, SkipReason reason, String detail) {
+
+        /** Records the skip in the eligibility metric, the FE log, and the load's PreSplit profile. */
+        void record(String tableName) {
+            PreSplitMetrics.recordEligibilitySkip(reason);
+            LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" {}; skipping pre-split",
+                    tableName, column.getName(), detail);
+            PreSplitProfile.recordOutcome("SKIPPED: " + reason + " (" + column.getName() + ")");
+        }
+    }
+
+    /**
+     * The first of {@code columns} the sampler cannot project, with the reason, or {@code null} when every
+     * one is sampleable. Under {@link InputReading#AS_SELECTED_AFTER_PUSH_DOWN} a fed column whose projection
+     * reads a source column that push-down retypes is unsampleable too: the load reads that column at another
+     * column's type, the sampler at its own.
+     */
+    static Unsampleable firstUnsampleable(List<Column> columns, Resolved resolved, InputReading reading) {
         for (Column column : columns) {
             String targetName = column.getName().toLowerCase();
-            if (!resolved.targetToSource().containsKey(targetName)
-                    && !resolved.targetToConstantSql().containsKey(targetName)
-                    && !resolved.targetToExpressionSql().containsKey(targetName)) {
-                return column;
+            if (isFed(column, resolved)) {
+                if (reading == InputReading.AS_SELECTED_AFTER_PUSH_DOWN
+                        && resolved.targetsReadingRetypedSource().contains(targetName)) {
+                    return new Unsampleable(column, SkipReason.UNSUPPORTED_SAMPLED_PROJECTION,
+                            "reads a FILES column that column-type push-down reads at another column's type");
+                }
+                continue;
             }
+            String generatedFailure = resolved.generatedColumnFailures().get(targetName);
+            if (generatedFailure != null) {
+                return new Unsampleable(column, SkipReason.UNSUPPORTED_GENERATED_COLUMN, generatedFailure);
+            }
+            if (resolved.unsupportedProjectionTargets().contains(targetName)) {
+                return new Unsampleable(column, SkipReason.UNSUPPORTED_SAMPLED_PROJECTION,
+                        "has a projection the sampler cannot reproduce");
+            }
+            return new Unsampleable(column, SkipReason.SOURCE_MISSING_SAMPLED_COLUMN,
+                    "has no source column or literal projection");
         }
         return null;
     }
 
     /**
-     * Whether every partition column is backed by a source column or fed by a literal. A literal
-     * partition column sends every row to the one partition that literal names.
+     * {@code resolved} extended with the sampled generated columns ({@link #withGeneratedColumns}), or
+     * {@code null} when no sample can be planned. A sampled column the sampler cannot reproduce is recorded
+     * against {@code target} ({@link Unsampleable#record}); a sort key made only of literals
+     * ({@link #sortKeySampleable}) is declined without attribution, since no column is missing. Only a sort key
+     * can fail that way -- being fed is all a partition column needs.
+     *
+     * @param reading how the load hands a generated column's definition its inputs
+     * @param context the INSERT user's context, in which plan-time constants are folded
      */
-    static boolean partitionColumnsSampleable(List<Column> partitionColumns, Resolved resolved) {
-        return firstUnfedColumn(partitionColumns, resolved) == null;
+    static Resolved admitSampledColumns(Resolved resolved, OlapTable target, List<Column> sortKeyColumns,
+                                        List<Column> partitionColumns, List<SecondaryIndexSpec> secondaryIndexSpecs,
+                                        InputReading reading, ConnectContext context,
+                                        TableName sourceName, String sourceAlias) {
+        List<Column> sampledColumns = sampledColumns(sortKeyColumns, partitionColumns, secondaryIndexSpecs);
+        Resolved extended = withGeneratedColumns(resolved, target, sampledColumns, reading, context,
+                sourceName, sourceAlias);
+        Unsampleable unsampleable = firstUnsampleable(sampledColumns, extended, reading);
+        if (unsampleable != null) {
+            unsampleable.record(target.getName());
+            return null;
+        }
+        if (!sortKeySampleable(sortKeyColumns, extended)) {
+            return null;
+        }
+        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
+            if (!sortKeySampleable(spec.sortKey(), extended)) {
+                return null;
+            }
+        }
+        return extended;
+    }
+
+    /**
+     * Resolves each generated column among {@code sampledColumns} to what the sampler evaluates in
+     * its place: the column's definition with every column it reads replaced by that column's own
+     * projection cast to the column's type, held to the rule {@link #foldedComputedProjection} applies
+     * to a computed projection. The result lands in {@code targetToExpressionSql}, or in
+     * {@code targetToConstantSql} when every column it reads is fed by a constant; a column that cannot
+     * be resolved is recorded in {@code generatedColumnFailures} with the reason, for
+     * {@link #firstUnsampleable}. A generated column may not read another generated column (CREATE
+     * TABLE rejects it), so one level of replacement is the whole expansion. The sampler parses the SQL rendered
+     * here in the load's sql_mode, so a definition holding a literal it would read back as another type is declined
+     * ({@link SamplingPredicateGate#literalReadBackDifferently}).
+     *
+     * @param reading how the load hands the definition its inputs
+     * @param context the INSERT user's context, in which plan-time constants are folded and whose sql_mode the
+     *                sampler parses in
+     */
+    static Resolved withGeneratedColumns(Resolved resolved, OlapTable target, List<Column> sampledColumns,
+                                         InputReading reading, ConnectContext context,
+                                         TableName sourceName, String sourceAlias) {
+        Map<String, String> constants = new HashMap<>(resolved.targetToConstantSql());
+        Map<String, String> expressions = new HashMap<>(resolved.targetToExpressionSql());
+        Map<String, String> failures = new HashMap<>(resolved.generatedColumnFailures());
+        for (Column column : sampledColumns) {
+            String targetName = column.getName().toLowerCase();
+            if (!column.isGeneratedColumn() || constants.containsKey(targetName)
+                    || expressions.containsKey(targetName) || failures.containsKey(targetName)) {
+                continue;
+            }
+            Expr definition = column.getGeneratedColumnExpr(target.getIdToColumn());
+            ExprSubstitutionMap inputs = new ExprSubstitutionMap();
+            String failure = substituteInputs(definition, target, resolved, reading, context, inputs);
+            if (failure == null) {
+                Expr substituted = ExprSubstitutionVisitor.rewrite(definition, inputs);
+                Expr folded = foldedComputedProjection(substituted, context, sourceName, sourceAlias);
+                if (folded == null) {
+                    failure = substituted.containsSubclass(SlotRef.class)
+                            ? "uses an expression the sampler cannot evaluate safely"
+                            : "reads only constants and does not fold to a non-NULL constant";
+                } else if (SamplingPredicateGate.literalReadBackDifferently(folded, context)) {
+                    failure = "has a literal the sampler would parse as another type in the load's sql_mode: a "
+                            + "decimal literal as a DOUBLE (every one under DOUBLE_LITERAL, an integer wider than "
+                            + "LARGEINT in any mode), or a DOUBLE as a decimal";
+                } else if (folded.containsSubclass(SlotRef.class)) {
+                    expressions.put(targetName, SamplingPredicateGate.toSql(folded));
+                } else {
+                    constants.put(targetName, SamplingPredicateGate.toSql(folded));
+                }
+            }
+            if (failure != null) {
+                failures.put(targetName, "is generated as " + SamplingPredicateGate.toSql(definition) + " and " + failure);
+            }
+        }
+        return new Resolved(resolved.targetToSource(), Map.copyOf(constants), Map.copyOf(expressions),
+                resolved.unsupportedProjectionTargets(), resolved.targetToSourceType(),
+                resolved.targetsReadingRetypedSource(), Map.copyOf(failures));
+    }
+
+    /**
+     * Maps every column a generated column's {@code definition} reads to the value the load hands it --
+     * the column's projection converted to the column's type -- into {@code inputs}. Returns why the
+     * sampler cannot reproduce one of those values, or {@code null} once {@code inputs} is complete.
+     *
+     * <p>INSERT does not convert an input to its column type before the definition reads it: it binds
+     * the SELECT output as selected and converts it only to the parameter type of the function that
+     * reads it ({@code InsertPlanner#fillGeneratedColumns}, then {@code ImplicitCastRule}). Converting to
+     * the column type gives the same argument where the selected type already is the column type, up to
+     * string length or decimal precision or a widened integer, and where every function reading the
+     * input takes the column type itself; any other input is declined rather than sampled as a different
+     * value. An input of a complex type is declined outright, and so is a definition that calls anything but a
+     * built-in function ({@link #sessionDependentPart}).
+     */
+    private static String substituteInputs(Expr definition, OlapTable target, Resolved resolved,
+                                           InputReading reading, ConnectContext context,
+                                           ExprSubstitutionMap inputs) {
+        List<SlotRef> references = new ArrayList<>();
+        definition.collect(SlotRef.class, references);
+        Expr analyzedDefinition = null;
+        for (SlotRef reference : references) {
+            Column input = target.getIdToColumn().get(reference.getColumnId());
+            String inputName = input.getName().toLowerCase();
+            Expr projection = sourceProjectionOf(inputName, resolved, context.getSessionVariable().getSqlMode());
+            if (projection == null) {
+                return resolved.unsupportedProjectionTargets().contains(inputName)
+                        ? "reads column \"" + input.getName()
+                                + "\", which the load feeds with an expression the sampler cannot reproduce"
+                        : "reads column \"" + input.getName() + "\", which the load does not take from the source";
+            }
+            if (!input.getType().isScalarType()) {
+                // The safety rule would reject the cast to a complex type anyway; declining here names the input.
+                return "reads column \"" + input.getName() + "\", a " + input.getType().toSql()
+                        + "; complex-typed values are not sampled";
+            }
+            if (reading == InputReading.AS_SELECTED_AFTER_PUSH_DOWN
+                    && resolved.targetsReadingRetypedSource().contains(inputName)) {
+                return "reads column \"" + input.getName() + "\", whose source column FILES column-type push-down "
+                        + "reads at another column's type; the sampler reads it at its own";
+            }
+            Type selectedType = reading == InputReading.AS_COLUMN_TYPE && resolved.targetToSource().containsKey(inputName)
+                    ? input.getType() : selectedTypeOf(inputName, projection, resolved);
+            if (!convertsWithoutChange(selectedType, input.getType())) {
+                if (analyzedDefinition == null) {
+                    analyzedDefinition = analyzedAgainstColumnTypes(definition, target, context);
+                    if (analyzedDefinition == null) {
+                        return "reads column \"" + input.getName() + "\", whose conversion from "
+                                + (selectedType == null ? "a computed value" : selectedType.toSql())
+                                + " the sampler cannot check because the definition does not analyze on its own";
+                    }
+                }
+                if (!readOnlyAsColumnTypedParameter(analyzedDefinition, input)) {
+                    return "reads column \"" + input.getName() + "\", which the INSERT supplies as "
+                            + (selectedType == null ? "a computed value" : selectedType.toSql())
+                            + " and converts to " + input.getType().toSql()
+                            + " only where a function needs it; the sampler cannot reproduce that conversion";
+                }
+            }
+            inputs.put(reference, new CastExpr(new TypeDef(input.getType()), projection));
+        }
+        if (analyzedDefinition == null) {
+            analyzedDefinition = analyzedAgainstColumnTypes(definition, target, context);
+            if (analyzedDefinition == null) {
+                return "does not analyze on its own, so the sampler cannot check how the load evaluates it";
+            }
+        }
+        return sessionDependentPart(analyzedDefinition);
+    }
+
+    /**
+     * Why the analyzed definition may evaluate differently in the sampler than in the load, or {@code null}: a call,
+     * at any depth, bound to anything but a built-in function
+     * ({@link SamplingPredicateGate#firstCallNotBoundToABuiltin}). The safety rule allows a function by name, and a
+     * UDF or a SQL function can share a built-in's name with another signature. The session variables that decide
+     * how the rest converts -- {@code cbo_eq_base_type} for a string compared with a number, among others -- are the
+     * load's in the sample session as well ({@link SampleSessionSemantics}). The reason names the first such call.
+     */
+    static String sessionDependentPart(Expr analyzed) {
+        FunctionCallExpr call = SamplingPredicateGate.firstCallNotBoundToABuiltin(analyzed);
+        return call == null ? null : "calls " + call.getFunctionName()
+                + ", which does not bind to a built-in function, so the sample session may resolve it differently";
+    }
+
+    /**
+     * The expression a target column is fed by in the sampler -- its source column, or its constant or
+     * computed projection parsed in the load's {@code sqlMode} as the sampler parses it -- or {@code null}.
+     */
+    private static Expr sourceProjectionOf(String targetName, Resolved resolved, long sqlMode) {
+        String sourceName = resolved.targetToSource().get(targetName);
+        if (sourceName != null) {
+            return new SlotRef((TableName) null, sourceName);
+        }
+        String sql = resolved.targetToConstantSql().get(targetName);
+        if (sql == null) {
+            sql = resolved.targetToExpressionSql().get(targetName);
+        }
+        return sql == null ? null : SqlParser.parseSqlToExpr(sql, sqlMode);
+    }
+
+    /** The type INSERT hands a definition for {@code inputName} before any conversion, or {@code null} when unknown. */
+    private static Type selectedTypeOf(String inputName, Expr projection, Resolved resolved) {
+        if (resolved.targetToSource().containsKey(inputName)) {
+            return resolved.targetToSourceType().get(inputName);
+        }
+        if (projection instanceof CastExpr cast) {
+            return cast.getTargetTypeDef().getType();
+        }
+        return projection instanceof LiteralExpr ? projection.getType() : null;
+    }
+
+    /**
+     * Whether converting a value of {@code selected} to {@code column} cannot change what a function reads:
+     * the same type up to string length or decimal precision, or an integer widened to a larger integer.
+     */
+    private static boolean convertsWithoutChange(Type selected, Type column) {
+        if (selected == null) {
+            return false;
+        }
+        return selected.matchesType(column)
+                || (selected.isIntegerType() && column.isIntegerType() && column.getTypeSize() >= selected.getTypeSize());
+    }
+
+    /**
+     * The generated column's definition analyzed as INSERT analyzes it: against the target's own column
+     * types, which fixes every function overload and so every parameter type an input is converted to.
+     * {@code null} when it does not analyze here.
+     */
+    private static Expr analyzedAgainstColumnTypes(Expr definition, OlapTable target, ConnectContext context) {
+        // Analyzed against an unqualified scope, so every reference is made bare first, whatever qualifier
+        // (table, or schema and table) the definition was stored with.
+        List<SlotRef> references = new ArrayList<>();
+        definition.collect(SlotRef.class, references);
+        ExprSubstitutionMap bare = new ExprSubstitutionMap();
+        for (SlotRef reference : references) {
+            bare.put(reference, new SlotRef((TableName) null, reference.getColumnName()));
+        }
+        return SamplingPredicateGate.analyzedAgainst(ExprSubstitutionVisitor.rewrite(definition, bare),
+                target.getBaseSchema(), /*normalizedSourceName*/ null, /*sourceAlias*/ null, context);
+    }
+
+    /**
+     * Whether every read of {@code input} in the analyzed definition is a direct argument of a function
+     * whose parameter takes {@code input}'s own type, so INSERT converts the input to exactly the type the
+     * sampler converts it to. A definition that is the input itself reads it with no function at all.
+     */
+    private static boolean readOnlyAsColumnTypedParameter(Expr node, Column input) {
+        if (node instanceof SlotRef) {
+            return !((SlotRef) node).getColumnName().equalsIgnoreCase(input.getName());
+        }
+        for (int i = 0; i < node.getChildren().size(); i++) {
+            Expr child = node.getChild(i);
+            if (child instanceof SlotRef slot && slot.getColumnName().equalsIgnoreCase(input.getName())) {
+                Type parameter = parameterType(node, i);
+                if (parameter == null || !parameter.matchesType(input.getType())) {
+                    return false;
+                }
+            } else if (!readOnlyAsColumnTypedParameter(child, input)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The type a resolved function converts its {@code index}-th argument to, or {@code null} for any other node. */
+    private static Type parameterType(Expr node, int index) {
+        Function fn = node instanceof FunctionCallExpr call ? call.getFn()
+                : node instanceof ArithmeticExpr arithmetic ? ExpressionAnalyzer.getArithmeticFunction(arithmetic) : null;
+        if (fn == null) {
+            return null;
+        }
+        if (index < fn.getNumArgs()) {
+            return fn.getArgs()[index];
+        }
+        return fn.hasVarArgs() ? fn.getVarArgsType() : null;
     }
 
     /**
@@ -406,14 +825,15 @@ final class InsertSelectSourceColumns {
     /**
      * A computed projection the sampler can evaluate to the value the INSERT writes, with its
      * plan-time constants folded in the INSERT user's {@code context}, or {@code null} when it has
-     * none. The sampling sub-query runs as ROOT in its own session, so the projection is held to the
-     * rule {@link SamplingPredicateGate} applies to the WHERE clause: after folding, only source
-     * columns, literals, operators, CAST, and {@code SamplingPredicateGate}'s row-level functions
-     * remain. That rejects a UDF, a subquery, a variable, a clock, user or session-time-zone
-     * function over a column, and any per-row non-deterministic call. A column-free projection folds
-     * to a constant as a whole; one folding to NULL is rejected for the same reason
-     * {@link #constantSqlOf} rejects a NULL literal. The caller has already proved every slot names a
-     * source column.
+     * none. The sampling sub-query runs as ROOT in its own session, which carries the load's semantic
+     * session variables but not its user, current database or query start time, so the projection is
+     * held to the rule {@link SamplingPredicateGate} applies to the WHERE clause: after folding, only
+     * source columns, literals, operators, CAST to a scalar type, and {@code SamplingPredicateGate}'s
+     * row-level functions remain. That rejects a subquery, a variable, a clock, user or
+     * session-time-zone function over a column, and any per-row non-deterministic call. A
+     * column-free projection folds to a constant as a whole; one folding to NULL is rejected for the
+     * same reason {@link #constantSqlOf} rejects a NULL literal. The caller has already proved every
+     * slot names a source column.
      */
     private static Expr foldedComputedProjection(Expr expr, ConnectContext context,
                                               TableName normalizedSourceName, String sourceAlias) {
@@ -430,20 +850,10 @@ final class InsertSelectSourceColumns {
      * that literal cast to the TARGET column type. The cast makes the sampled value the one the load
      * writes: the load casts the literal to the column type before routing the row (a STRING
      * {@code '20260917'} becomes the DATE 2026-09-17), so the grouper pre-creates exactly that
-     * partition and a boundary carries the key value the rows really have. Returns {@code null} when
-     * any column is backed by neither.
-     */
-    static List<String> projections(
-            List<Column> columns, Map<String, String> targetToSource,
-            Map<String, String> targetToConstantSql) {
-        return projections(columns, targetToSource, targetToConstantSql, Map.of());
-    }
-
-    /**
-     * {@link #projections(List, Map, Map)} for a sampler that also evaluates computed projections. A
-     * computed column is projected as its expression cast to the TARGET column type, for the same
-     * reason a literal is: {@code date_trunc('day', ts)} is a DATETIME, and the load writes it into a
-     * DATE column as the DATE the cast yields.
+     * partition and a boundary carries the key value the rows really have. A computed column is
+     * projected as its expression cast to the TARGET column type, for the same reason:
+     * {@code date_trunc('day', ts)} is a DATETIME, and the load writes it into a DATE column as the
+     * DATE the cast yields. Returns {@code null} when any column is backed by none of these.
      */
     static List<String> projections(
             List<Column> columns, Map<String, String> targetToSource,
@@ -474,8 +884,8 @@ final class InsertSelectSourceColumns {
      * reordered list maps its outputs onto the columns it names instead of onto the schema.
      *
      * <p>Only resolves names, it does not validate the list: whether the list is admissible at all
-     * (no duplicate / unknown / generated name, every omitted column fillable, every visible
-     * index's sort key present) is {@link InsertPreSplitHook#targetColumnListIsPreSplitSafe}'s
+     * (no duplicate / unknown / generated name, every omitted column fillable, every non-generated
+     * sort-key column of every visible index present) is {@link InsertPreSplitHook#targetColumnListIsPreSplitSafe}'s
      * single job, and it has already run for every statement that reaches here. The {@code null}
      * return below is therefore unreachable in practice and exists so that a name this method
      * cannot resolve skips pre-split rather than NPEs.
@@ -524,6 +934,19 @@ final class InsertSelectSourceColumns {
         expr.collectAll((Predicate<Expr>) e -> isForeignReference(
                 e, sourceColumnMap, normalizedSourceName, sourceAlias), rejected);
         return rejected.isEmpty();
+    }
+
+    /** Whether {@code expr} reads a source column of a complex type (STRUCT, ARRAY, MAP). */
+    private static boolean readsComplexColumn(Expr expr, Map<String, Type> sourceColumnTypes) {
+        List<SlotRef> slots = new ArrayList<>();
+        expr.collect(SlotRef.class, slots);
+        for (SlotRef slot : slots) {
+            Type type = sourceColumnTypes.get(slot.getColName().toLowerCase());
+            if (type != null && type.isComplexType()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isForeignReference(

@@ -58,9 +58,10 @@ import java.util.Optional;
  * catalog serves (Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, Elasticsearch, ...); views are
  * excluded. {@link #prepare} resolves the source, re-checks the user's SELECT privilege and rejects
  * row-access / column-masking policies, gates the WHERE predicate, maps the projection onto the
- * target, and builds an {@link InsertFromTableScanContext}. The flow uses a data-tier sample for
- * every source kind; the source size estimate seeds the sampling rate and the observed predicate hit
- * ratio sizes the target tablet count.
+ * target, computing a generated sampled column from the source columns its definition reads and
+ * admitting a safe computed projection, and builds an {@link InsertFromTableScanContext}. The flow
+ * uses a data-tier sample for every source kind; the source size estimate seeds the sampling rate
+ * and the observed predicate hit ratio sizes the target tablet count.
  */
 final class TablePreSplitSource implements InsertPreSplitSource {
 
@@ -90,7 +91,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                                          OlapTable target, Database database, ConnectContext context)
             throws AccessDeniedException {
         // No column-list gate of its own: InsertPreSplitHook#targetColumnListIsPreSplitSafe has
-        // already vetted the list for every path, and InsertSelectSourceColumns#resolve pairs the
+        // already vetted the list for every path, and InsertSelectSourceColumns#resolveUngated pairs the
         // SELECT outputs against the columns the list names, so a partial or reordered list maps
         // as written.
         TableRelation sourceRelation = (TableRelation) selectRelation.getRelation();
@@ -111,32 +112,42 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 where, resolvedSource.normalizedName(), resolvedSource.sourceAlias())) {
             return null;
         }
+        // Analyzed against the source's visible columns, generated ones included: a WHERE clause may read them.
+        if (where != null && !SamplingPredicateGate.whereEvaluatesAsTheLoad(where,
+                resolvedSource.sourceTable().getBaseSchema().stream().filter(column -> !column.isHidden()).toList(),
+                resolvedSource.normalizedName(), resolvedSource.sourceAlias(), context, target.getName())) {
+            return null;
+        }
         String wherePredicateSql = where == null ? null : SamplingPredicateGate.toSql(where);
 
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
+<<<<<<< HEAD
         InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target,
                 new InsertSelectSourceColumns.ResolutionContext(resolvedSource.sourceTable(),
                         resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
                         InsertSelectSourceColumns.SchemaPairing.EXACT, /*computedProjectionContext*/ null),
                 sortKeyColumns, partitionColumns);
+=======
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
+                insertStmt, selectRelation, target, resolvedSource.sourceTable(),
+                resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
+                InsertSelectSourceColumns.SchemaPairing.EXACT, context);
+>>>>>>> 82baf68df58... [BugFix] Pre-split loads whose partition or sort-key column is a generated column (#64773)
+        if (resolved == null) {
+            return null;
+        }
+        // The executor's projections throw stays as the fail-safe for a metadata race between here and sampling.
+        List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
+        resolved = InsertSelectSourceColumns.admitSampledColumns(resolved, target, sortKeyColumns, partitionColumns,
+                secondaryIndexSpecs, InsertSelectSourceColumns.InputReading.AS_SELECTED, context,
+                resolvedSource.normalizedName(), resolvedSource.sourceAlias());
         if (resolved == null) {
             return null;
         }
         Map<String, String> targetToSource = resolved.targetToSource();
-        List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
-        for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            // A rollup sort-key column backed by neither a source column nor a literal (e.g. a range
-            // DUP rollup whose ORDER BY promotes a generated column), or a rollup key made only of
-            // literals, cannot be sampled -> skip pre-split for the whole load, using the same gate as
-            // the base sort key above. The executor's projections throw stays as the fail-safe for a
-            // metadata race between here and sampling.
-            if (!InsertSelectSourceColumns.sortKeySampleable(spec.sortKey(), resolved)) {
-                return null;
-            }
-        }
         // Sized last: for an external source this reads connector metadata, so only a load that
         // passed every other gate -- the SELECT re-check included -- pays for it.
         Estimates estimates = sourceEstimates(resolvedSource.sourceTable(), context);
@@ -158,7 +169,11 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource(),
                 estimates.totalBytes(), estimates.totalRows(),
-                resolved.targetToConstantSql(), context.getSessionVariable().getTimeZone());
+                resolved.targetToConstantSql(), resolved.targetToExpressionSql(),
+                context.getSessionVariable().getTimeZone(),
+                // The sampler evaluates the WHERE clause and the projections in a session of its own; these are the
+                // user's variables that decide how they evaluate.
+                SampleSessionSemantics.capture(context.getSessionVariable()));
         long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);
