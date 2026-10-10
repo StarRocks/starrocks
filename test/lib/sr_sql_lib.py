@@ -167,8 +167,9 @@ def skip_if_plugin_download_failed(sql, act):
     if not m or not str(act).startswith("E: "):
         return
     url, host = m.group(1), m.group(2)
-    # UnknownHostException carries only the host name as its message
-    if NETWORK_ERROR_RE.search(str(act)) or host in str(act):
+    # UnknownHostException carries only the host name as its message. A 404 carries the full URL
+    # instead; that is not matched, because a removed plugin file is not a transient network issue.
+    if NETWORK_ERROR_RE.search(str(act)) or str(act).endswith("'%s')" % host):
         log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
         raise SkipTest("plugin download failed (network): %s" % act)
 
