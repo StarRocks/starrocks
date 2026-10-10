@@ -294,12 +294,19 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     }
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file_with_bundling(opts, _segment_file_info));
-    const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
-    RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    {
+        const int64_t footer_start_ns = stats != nullptr ? MonotonicNanos() : 0;
+        DeferOp record_footer_reads([&] {
+            if (stats != nullptr) {
+                stats->io_ns += MonotonicNanos() - footer_start_ns;
+                add_read_file_io_stats(*read_file, stats);
+            }
+        });
+        RETURN_IF_ERROR(
+                Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+    }
     if (stats != nullptr) {
-        stats->io_ns += MonotonicNanos() - footer_start_ns;
         stats->segments_opened++;
-        add_read_file_io_stats(*read_file, stats);
     }
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -465,8 +472,8 @@ Status Segment::_load_index(const LakeIOOptions& lake_io_opts, OlapReaderStatist
 
     Slice body;
     PageFooterPB footer;
+    DeferOp record_index_reads([&] { add_read_file_io_stats(*read_file, opts.stats); });
     RETURN_IF_ERROR(PageIO::read_and_decompress_page(opts, &_sk_index_handle, &body, &footer));
-    add_read_file_io_stats(*read_file, opts.stats);
 
     DCHECK_EQ(footer.type(), SHORT_KEY_PAGE);
     DCHECK(footer.has_short_key_page_footer());

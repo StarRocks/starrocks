@@ -1179,10 +1179,14 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
     // The parallel tasks capture |this| pointer. Must wait for all tasks
     // to complete before returning, to prevent use-after-free if the
     // Rowset is destroyed while tasks are still running.
-    DeferOp wait_futures([&segment_futures]() {
+    DeferOp wait_futures([&segment_futures, open_stats]() {
         for (auto& f : segment_futures) {
             if (f.future.valid()) {
                 f.future.wait();
+            }
+            // Every submitted task may have read a footer, including tasks after the first error.
+            if (f.open_stats != nullptr) {
+                add_segment_open_stats(*f.open_stats, open_stats);
             }
         }
     });
@@ -1306,9 +1310,6 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
 
     for (auto& f : segment_futures) {
         auto result_pair = f.future.get();
-        if (f.open_stats != nullptr) {
-            add_segment_open_stats(*f.open_stats, open_stats);
-        }
         auto segment_or = result_pair.first;
         // In segment range mode, target_idx - base_idx gives the actual segment ID
         if (auto status = check_status_at_index(segment_or, result_pair.second, f.segment_id, f.target_idx,

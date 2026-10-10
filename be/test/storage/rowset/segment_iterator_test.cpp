@@ -2073,6 +2073,37 @@ TEST_F(SegmentIteratorTest, FooterAndIndexReadsReportStreamStatsOnce) {
     EXPECT_EQ(0, repeated_stats.compressed_bytes_read);
     EXPECT_EQ(0, repeated_stats.io_ns);
     EXPECT_EQ(0, repeated_stats.io_count_request);
+
+    // Corrupt real footer/index bytes after writing a valid segment. Reads before the parse error
+    // still reach the caller; an unsuccessful footer open must not count as an opened segment.
+    ASSIGN_OR_ABORT(auto original_file, fs->new_random_access_file(RandomAccessFileOptions{}, file_name));
+    ASSIGN_OR_ABORT(auto original_bytes, original_file->read_all());
+    SegmentFooterPB original_footer;
+    ASSERT_TRUE(Segment::parse_segment_footer(original_file.get(), &original_footer, nullptr, nullptr).ok());
+    auto write_corrupt_file = [&](const std::string& path, size_t offset) {
+        std::string bytes = original_bytes;
+        ASSERT_LT(offset, bytes.size());
+        bytes[offset] ^= 1;
+        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(path));
+        ASSERT_OK(file->append(Slice(bytes)));
+        ASSERT_OK(file->close());
+    };
+    const std::string bad_footer_path = "/bad_prepare_footer.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_footer_path, original_bytes.size() - 1));
+    auto bad_footer = std::make_shared<Segment>(fs, FileInfo{bad_footer_path}, 0, tablet_schema, nullptr);
+    OlapReaderStatistics failed_footer_stats;
+    EXPECT_TRUE(bad_footer->open(nullptr, nullptr, io_opts, &failed_footer_stats).is_corruption());
+    EXPECT_EQ(0, failed_footer_stats.segments_opened);
+    expect_stream_stats(failed_footer_stats);
+
+    const std::string bad_index_path = "/bad_prepare_index.dat";
+    ASSERT_NO_FATAL_FAILURE(write_corrupt_file(bad_index_path, original_footer.short_key_index_page().offset()));
+    auto bad_index = std::make_shared<Segment>(fs, FileInfo{bad_index_path}, 0, tablet_schema, nullptr);
+    ASSERT_OK(bad_index->open(nullptr, nullptr, io_opts));
+    OlapReaderStatistics failed_index_stats;
+    EXPECT_TRUE(bad_index->load_index(io_opts, &failed_index_stats).is_corruption());
+    EXPECT_EQ(1, failed_index_stats.io_count_request);
+    expect_stream_stats(failed_index_stats);
 }
 
 // load_index and segment_seek_ranges_to_rowid_ranges report their reads to the statistics they are given:

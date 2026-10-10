@@ -1965,6 +1965,98 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_reports_prepare_reads)
     }
 }
 
+TEST_F(LakeTabletReaderSpit, test_failed_tablet_preparation_preserves_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> ignore_lost(&config::experimental_lake_ignore_lost_segment, false);
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    for (bool parallel_load : {false, true}) {
+        ConfigResetGuard<bool> parallel(&config::enable_load_segment_parallel, parallel_load);
+        for (bool missing_segment : {true, false}) {
+            SCOPED_TRACE(::testing::Message() << "parallel=" << parallel_load << " missing=" << missing_segment);
+            _tablet_mgr->metacache()->prune();
+            auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+            auto params = generate_tablet_reader_params(&scan_range);
+            params.enable_prepared_physical_split_scan = true;
+            params.lake_io_opts.use_page_cache = false;
+            if (missing_segment) {
+                // Serial: read one footer before the error. Parallel: the first future fails,
+                // but the second task still reads a footer and must be accounted for when joined.
+                int missing_idx = parallel_load ? 0 : 1;
+                metadata->mutable_rowsets(0)->mutable_segment_metas(missing_idx)->set_filename("missing_segment.dat");
+            } else {
+                // All three footers are read before coarse-split preparation rejects the seek key.
+                params.start_key = {OlapTuple({"invalid_integer"})};
+                params.end_key = {OlapTuple({"100"})};
+            }
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            auto status = reader->open(params);
+            ASSERT_FALSE(status.ok());
+            if (missing_segment) {
+                EXPECT_TRUE(status.is_not_found()) << status;
+            }
+            const auto& stats = reader->stats();
+            EXPECT_EQ(missing_segment ? 1 : 3, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GT(stats.lake_prepared_tablet_io_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_prepare_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_segment_open_ns, 0);
+            reader->close();
+        }
+    }
+}
+
+TEST_F(LakeTabletReaderSpit, test_failed_seed_preparation_preserves_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.enable_prepared_physical_split_scan = true;
+    params.lake_io_opts.use_page_cache = false;
+    params.range = TabletReaderParams::RangeStartOperation::GE;
+    params.end_range = TabletReaderParams::RangeEndOperation::LE;
+    params.start_key = {OlapTuple({"1"})};
+    params.end_key = {OlapTuple({"100"})};
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_FALSE(split_tasks.empty());
+    auto* ctx = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+    params.rowid_range_option = ctx->rowid_range;
+    params.prepared_tablet_read_state = ctx->prepared_tablet_read_state;
+    params.prepared_segment_read_state = ctx->prepared_segment_read_state;
+    params.prepared_rowset_index = ctx->rowset_index;
+    params.prepared_segment_index = ctx->segment_index;
+    params.refine_initial_coarse_split_and_append_refined_tasks = true;
+    // Sampling validation fails after the seed has resolved the key range by reading key pages.
+    params.sample_options.__set_enable_sampling(true);
+    params.sample_options.__set_probability_percent(0);
+    auto seed = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                               /*need_split=*/false, /*could_split_physically=*/true);
+    ASSERT_OK(seed->prepare());
+    auto status = seed->open(params);
+    ASSERT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("probability_percent must > 0"));
+    EXPECT_GT(seed->stats().lake_prepared_seed_ns, 0);
+    EXPECT_GT(seed->stats().lake_prepared_seed_io_ns, 0);
+    // Preserve the coarse-allocation error handling as well as the statistics.
+    EXPECT_TRUE(ctx->prepared_segment_read_state->coarse_split_allocation_closed);
+    EXPECT_EQ(nullptr, ctx->prepared_segment_read_state->pruned_scan_range);
+    seed->close();
+    reader->close();
+}
+
 // parse_seek_range() is parsed once and cached in _cached_seek_ranges, then reused on every subsequent
 // init_rowset_read_options (a reader's per-split reopens re-run it). Prove the second call reuses the
 // cache instead of re-parsing: open() populates the cache, then we overwrite it with a size-1 sentinel;

@@ -388,19 +388,21 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             auto prepared_tablet_read_state = std::make_shared<PreparedTabletReadState>();
             OlapReaderStatistics prepare_stats;
             {
+                // Keep reads already performed even if a later preparation step fails.
+                DeferOp record_prepare_stats([&] {
+                    _stats.lake_prepared_tablet_segments_opened += prepare_stats.segments_opened;
+                    _stats.lake_prepared_tablet_io_ns += prepare_stats.io_ns;
+                    _stats.lake_prepared_tablet_io_count += prepare_stats.io_count;
+                    _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
+                    _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
+                    _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+                });
                 SCOPED_RAW_TIMER(&_stats.lake_prepared_tablet_prepare_ns);
                 RETURN_IF_ERROR(build_prepared_tablet_read_state(read_params, prepared_tablet_read_state.get(),
                                                                  &prepare_stats));
                 RETURN_IF_ERROR(
                         build_initial_coarse_split_tasks(read_params, prepared_tablet_read_state, &prepare_stats));
             }
-            // The footer and short key index reads, which otherwise reach no counter.
-            _stats.lake_prepared_tablet_segments_opened += prepare_stats.segments_opened;
-            _stats.lake_prepared_tablet_io_ns += prepare_stats.io_ns;
-            _stats.lake_prepared_tablet_io_count += prepare_stats.io_count;
-            _stats.lake_prepared_tablet_io_remote_ns += prepare_stats.io_ns_remote;
-            _stats.lake_prepared_tablet_io_count_remote += prepare_stats.io_count_remote;
-            _stats.lake_prepared_tablet_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
             if (_split_tasks.empty()) {
                 _need_split = false;
                 return init_collector(read_params);
@@ -852,6 +854,33 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     RETURN_IF_ERROR(init_rowset_read_options_for_split(prepare_params, &rowset_read_options, &lake_io_opts));
 
     OlapReaderStatistics prepare_stats;
+    DeferOp record_seed_stats([&] {
+        // Preserve the seed breakdown when pruning fails after performing reads.
+        _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
+        _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
+        _stats.lake_prepared_seed_io_remote_ns += prepare_stats.io_ns_remote;
+        _stats.lake_prepared_seed_io_count_remote += prepare_stats.io_count_remote;
+        _stats.lake_prepared_seed_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
+        _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
+        _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
+        _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
+                prepare_stats.get_row_ranges_by_vector_index_timer;
+        _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
+        _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
+        _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
+        _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
+        _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
+        _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
+        _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
+        _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
+        _stats.lake_prepared_seed_process_vector_distance_and_id_ns +=
+                prepare_stats.process_vector_distance_and_id_timer;
+        _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
+        _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
+        _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
+        _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
+        _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
+    });
     ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
     Status st;
     {
@@ -868,31 +897,6 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         segment_state->coarse_split_allocation_closed = true;
     }
     RETURN_IF_ERROR(st);
-
-    // Fold the seed prepare's otherwise-discarded sub-metrics into the reader stats so the SeedPrepareTime
-    // breakdown (IO / segment-init / zonemap / bloom) is visible in the profile. Accumulated across segments.
-    _stats.lake_prepared_seed_io_ns += prepare_stats.io_ns;
-    _stats.lake_prepared_seed_io_count += prepare_stats.io_count;
-    _stats.lake_prepared_seed_io_remote_ns += prepare_stats.io_ns_remote;
-    _stats.lake_prepared_seed_io_count_remote += prepare_stats.io_count_remote;
-    _stats.lake_prepared_seed_bytes_read_remote += prepare_stats.compressed_bytes_read_remote;
-    _stats.lake_prepared_seed_segment_init_ns += prepare_stats.segment_init_ns;
-    _stats.lake_prepared_seed_vector_index_load_ns += prepare_stats.vector_index_load_ns;
-    _stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns += prepare_stats.get_row_ranges_by_vector_index_timer;
-    _stats.lake_prepared_seed_vector_index_cache_lookup_ns += prepare_stats.vector_index_cache_lookup_ns;
-    _stats.lake_prepared_seed_vector_index_file_open_ns += prepare_stats.vector_index_file_open_ns;
-    _stats.lake_prepared_seed_vector_index_read_file_ns += prepare_stats.vector_index_read_file_ns;
-    _stats.lake_prepared_seed_vector_index_init_index_ns += prepare_stats.vector_index_init_index_ns;
-    _stats.lake_prepared_seed_vector_index_searcher_init_ns += prepare_stats.vector_index_searcher_init_ns;
-    _stats.lake_prepared_seed_vector_index_cache_hit_count += prepare_stats.vector_index_cache_hit_count;
-    _stats.lake_prepared_seed_vector_index_cache_miss_count += prepare_stats.vector_index_cache_miss_count;
-    _stats.lake_prepared_seed_vector_search_ns += prepare_stats.vector_search_timer;
-    _stats.lake_prepared_seed_process_vector_distance_and_id_ns += prepare_stats.process_vector_distance_and_id_timer;
-    _stats.lake_prepared_seed_rows_vector_index_filtered += prepare_stats.rows_vector_index_filtered;
-    _stats.lake_prepared_seed_zonemap_ns += prepare_stats.zone_map_filter_ns;
-    _stats.lake_prepared_seed_zonemap_filtered_rows += prepare_stats.rows_stats_filtered;
-    _stats.lake_prepared_seed_bf_ns += prepare_stats.bf_filter_ns;
-    _stats.lake_prepared_seed_bf_filtered_rows += prepare_stats.rows_bf_filtered;
 
     SparseRange<> pruned_scan_range;
     if (segment_state->pruned_scan_range != nullptr) {
