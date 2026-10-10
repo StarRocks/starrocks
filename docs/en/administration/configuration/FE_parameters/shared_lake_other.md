@@ -714,6 +714,87 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
+### `use_oidc_identity_for_background_tasks`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to use an OIDC bot/system identity, obtained via an OAuth2 client-credentials flow, to authenticate background tasks such as materialized view asynchronous refresh and Iceberg/Hive stats and metadata collection when no user session is available. When disabled, these background tasks run without an auth token, which fails against JWT-secured Iceberg REST catalogs.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_client_id`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 client ID used to fetch the OIDC bot JWT for background tasks when `use_oidc_identity_for_background_tasks` is enabled.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_client_password`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 client secret used to fetch the OIDC bot JWT for background tasks when `use_oidc_identity_for_background_tasks` is enabled.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_token_issuer_url`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 token endpoint base URL used to fetch the OIDC bot JWT for background tasks when `use_oidc_identity_for_background_tasks` is enabled.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_scope`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 scope requested when fetching the OIDC bot JWT for background tasks.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_audience`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 audience requested when fetching the OIDC bot JWT for background tasks.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_issuer`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth2 issuer requested when fetching the OIDC bot JWT for background tasks.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_http_connection_timeout_s`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: Connection timeout for the HTTP client used to fetch the OIDC bot JWT for background tasks.
+- Introduced in: v4.2.0
+
+### `background_task_oidc_http_read_timeout_s`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: No
+- Description: Read timeout for the HTTP client used to fetch the OIDC bot JWT for background tasks.
+- Introduced in: v4.2.0
+
 ### `files_enable_insert_push_down_column_type`
 
 - Default: true

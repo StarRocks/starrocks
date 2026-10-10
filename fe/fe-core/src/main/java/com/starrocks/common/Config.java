@@ -5465,6 +5465,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
     public static String ai_default_embedding_endpoint = "";
 
@@ -5521,4 +5522,31 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long lock_invariant_violation_log_interval_ms = 10000;
 
+    @ConfField(comment = "Use an OIDC bot/system identity (OAuth2 client-credentials flow) for background tasks " +
+            "such as MV async refresh and Iceberg stats collection, instead of running unauthenticated")
+    public static boolean use_oidc_identity_for_background_tasks = false;
+
+    @ConfField(comment = "OAuth2 client id used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_client_id = "";
+
+    @ConfField(comment = "OAuth2 client secret used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_client_password = "";
+
+    @ConfField(comment = "OAuth2 token endpoint base URL used to fetch the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_token_issuer_url = "";
+
+    @ConfField(comment = "OAuth2 scope requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_scope = "";
+
+    @ConfField(comment = "OAuth2 audience requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_audience = "";
+
+    @ConfField(comment = "OAuth2 issuer requested when fetching the OIDC bot JWT for background tasks")
+    public static String background_task_oidc_issuer = "";
+
+    @ConfField(comment = "Connection timeout, in seconds, for the HTTP client used to fetch the OIDC bot JWT")
+    public static int background_task_oidc_http_connection_timeout_s = 30;
+
+    @ConfField(comment = "Read timeout, in seconds, for the HTTP client used to fetch the OIDC bot JWT")
+    public static int background_task_oidc_http_read_timeout_s = 30;
 }
