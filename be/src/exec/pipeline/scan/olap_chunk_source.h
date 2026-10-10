@@ -49,6 +49,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    void update_runtime_filter_partition_pruning(RuntimeState* state) override;
     void update_chunk_exec_stats(RuntimeState* state) override;
 
 private:
@@ -112,6 +113,8 @@ private:
     SlotId _vector_slot_id;
 
     std::shared_ptr<starrocks::TableMetrics> _table_metrics;
+
+    bool _partition_pruned = false;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -218,6 +221,9 @@ private:
 
     // FlatJSON
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+    // RF partition prune
+    RuntimeProfile::Counter* _rf_partitions_pruned_counter = nullptr;
+    RuntimeProfile::Counter* _rf_pruned_scan_tasks_counter = nullptr;
 };
 } // namespace pipeline
 } // namespace starrocks

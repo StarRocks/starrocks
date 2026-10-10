@@ -624,6 +624,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
 
+            chunk_source->update_runtime_filter_partition_pruning(state);
+
             // kick start this chunk source
             auto start_status = chunk_source->start(state);
             if (!start_status.ok()) {

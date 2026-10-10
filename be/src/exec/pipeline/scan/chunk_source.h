@@ -56,6 +56,9 @@ public:
     // call it multiple times
     virtual Status start(RuntimeState* state) { return {}; }
 
+    // Consume newly arrived runtime filters and refresh whether this task's partition is pruned.
+    virtual void update_runtime_filter_partition_pruning(RuntimeState* state) {}
+
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred
     bool has_next_chunk() const { return _status.ok(); }

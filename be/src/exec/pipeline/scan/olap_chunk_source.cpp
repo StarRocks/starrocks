@@ -33,6 +33,7 @@
 #include "common/statusor.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/query/partition_scan_range_pruner.h"
 #include "compute_env/query/query_runtime_state.h"
 #include "compute_env/query/query_scan_metrics.h"
 #include "compute_env/runtime_range_pruner.hpp"
@@ -44,6 +45,7 @@
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/jsonpath.h"
@@ -126,12 +128,35 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
 
     _init_counter(state);
 
+    // Prune before opening the reader.
+    update_runtime_filter_partition_pruning(state);
+    if (_partition_pruned) {
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_init_olap_reader(_runtime_state));
 
     return Status::OK();
 }
 
+void OlapChunkSource::update_runtime_filter_partition_pruning(RuntimeState* state) {
+    auto* pruner = _scan_node->runtime_filter_partition_pruner();
+    if (_partition_pruned || pruner == nullptr) {
+        return;
+    }
+    auto* factory = _scan_op->get_factory();
+    pruner->prune_by_bloom_filters(*factory->get_runtime_bloom_filters(), state);
+    COUNTER_SET(_rf_partitions_pruned_counter, pruner->pruned_partition_count());
+    if (pruner->is_partition_pruned(_scan_range->partition_id)) {
+        COUNTER_UPDATE(_rf_pruned_scan_tasks_counter, 1);
+        _partition_pruned = true;
+    }
+}
+
 void OlapChunkSource::update_chunk_exec_stats(RuntimeState* state) {
+    if (_reader == nullptr) {
+        return;
+    }
     if (auto* query_runtime_state = state == nullptr ? nullptr : state->query_runtime_state();
         query_runtime_state != nullptr) {
         int32_t node_id = _scan_op->get_plan_node_id();
@@ -269,6 +294,16 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
+
+    // RF partition prune
+    if (auto* pruner = _scan_node->runtime_filter_partition_pruner(); pruner != nullptr) {
+        auto* profile = _scan_op->unique_metrics();
+        auto* partitions_total_counter = ADD_COUNTER_SKIP_MERGE(profile, "RuntimeFilterPartitionsTotal", TUnit::UNIT,
+                                                                TCounterMergeType::SKIP_ALL);
+        _rf_partitions_pruned_counter = add_rf_partitions_pruned_counter(profile);
+        _rf_pruned_scan_tasks_counter = ADD_COUNTER(profile, "RuntimeFilterPrunedScanTasks", TUnit::UNIT);
+        COUNTER_SET(partitions_total_counter, pruner->candidate_partition_count());
+    }
 
     // FlatJSON
 }
@@ -699,6 +734,11 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+    // EOF preserves normal task completion, including the final empty chunk.
+    if (_partition_pruned) {
+        return Status::EndOfFile("partition pruned by runtime filter");
+    }
+
     ASSIGN_OR_RETURN(auto chunk_ptr, RuntimeChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(),
                                                                                   _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);

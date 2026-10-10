@@ -1305,6 +1305,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
+    public static final String ENABLE_RUNTIME_FILTER_PARTITION_PRUNE = "enable_runtime_filter_partition_prune";
     public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
     public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
 
@@ -2652,6 +2653,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
     private boolean enableLabeledColumnStatisticOutput = false;
+
+    @VarAttr(name = ENABLE_RUNTIME_FILTER_PARTITION_PRUNE)
+    private boolean enableRuntimeFilterPartitionPrune = false;
+
+    public boolean isEnableRuntimeFilterPartitionPrune() {
+        return enableRuntimeFilterPartitionPrune;
+    }
 
     @VarAttr(name = DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT)
     private int dynamicPartitionPruneValuesLimit = 4096;

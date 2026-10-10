@@ -1,0 +1,338 @@
+-- name: test_rf_prune_range_date_broadcast
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_dt (dt DATE NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(dt) (
+    PARTITION p0105 VALUES [('2024-01-05'), ('2024-01-06')),
+    PARTITION p0106 VALUES [('2024-01-06'), ('2024-01-07')),
+    PARTITION p0107 VALUES [('2024-01-07'), ('2024-01-08')),
+    PARTITION p0108 VALUES [('2024-01-08'), ('2024-01-09')),
+    PARTITION p0109 VALUES [('2024-01-09'), ('2024-01-10'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_dt VALUES
+    ('2024-01-05', 1, 10), ('2024-01-05', 2, 11),
+    ('2024-01-06', 3, 20), ('2024-01-06', 4, 21),
+    ('2024-01-07', 5, 30), ('2024-01-07', 6, 31),
+    ('2024-01-08', 7, 40), ('2024-01-08', 8, 41),
+    ('2024-01-09', 9, 50), ('2024-01-09', 10, 51);
+CREATE TABLE dim_dt (dt DATE NOT NULL, name VARCHAR(16)) ENGINE=OLAP
+DUPLICATE KEY(dt) DISTRIBUTED BY HASH(dt) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- one build value: only p0107 survives, 4 partitions x 2 buckets pruned
+INSERT INTO dim_dt VALUES ('2024-01-07', 'hit');
+SELECT f.dt, f.id, f.v FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+-- build values on the partition lower bounds: p0105 and p0109 survive
+TRUNCATE TABLE dim_dt;
+INSERT INTO dim_dt VALUES ('2024-01-05', 'lower'), ('2024-01-09', 'lower');
+SELECT f.dt, f.id FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+-- no build value matches any partition: everything pruned, zero rows
+TRUNCATE TABLE dim_dt;
+INSERT INTO dim_dt VALUES ('2024-03-01', 'miss');
+SELECT count(*), ifnull(sum(f.v), 0) FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt;
+-- every partition has a build value: nothing pruned, all rows
+TRUNCATE TABLE dim_dt;
+INSERT INTO dim_dt VALUES ('2024-01-05', 'a'), ('2024-01-06', 'b'), ('2024-01-07', 'c'), ('2024-01-08', 'd'), ('2024-01-09', 'e');
+SELECT count(*), sum(f.v) FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt;
+-- switch off: the same rows come back
+set enable_runtime_filter_partition_prune = false;
+TRUNCATE TABLE dim_dt;
+INSERT INTO dim_dt VALUES ('2024-01-07', 'c');
+SELECT f.dt, f.id, f.v FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_range_int_boundaries
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_k (k INT NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(k, id)
+PARTITION BY RANGE(k) (
+    PARTITION pneg VALUES [('-100'), ('0')),
+    PARTITION p0 VALUES [('0'), ('100')),
+    PARTITION p1 VALUES [('100'), ('200'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_k VALUES (-100, 1, 1), (-1, 2, 2), (0, 3, 3), (99, 4, 4), (100, 5, 5), (199, 6, 6);
+CREATE TABLE dim_k (k INT NOT NULL) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- build values sit exactly on the partition edges: -100 (pneg lower), 0 (p0 lower), 99 (p0 last), 100 (p1 lower)
+INSERT INTO dim_k VALUES (-100), (0), (99), (100);
+SELECT f.k, f.id FROM fact_k f JOIN [broadcast] dim_k d ON f.k = d.k ORDER BY f.id;
+-- values just outside every partition: -101 and 200 match nothing
+TRUNCATE TABLE dim_k;
+INSERT INTO dim_k VALUES (-101), (200);
+SELECT count(*) FROM fact_k f JOIN [broadcast] dim_k d ON f.k = d.k;
+-- discrete build values spanning two partitions: only the middle one is pruned
+TRUNCATE TABLE dim_k;
+INSERT INTO dim_k VALUES (-1), (199);
+SELECT f.k, f.id FROM fact_k f JOIN [broadcast] dim_k d ON f.k = d.k ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_list_string
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+-- a low-cardinality dictionary would rewrite the probe slot to an integer, which the pruner skips
+set cbo_enable_low_cardinality_optimize = false;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_city (city VARCHAR(16), id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(city, id)
+PARTITION BY LIST(city) (
+    PARTITION pbj VALUES IN ('beijing'),
+    PARTITION psh VALUES IN ('shanghai', 'shenzhen', 'guangzhou'),
+    PARTITION pnull VALUES IN (NULL)
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_city VALUES ('beijing', 1, 1), ('shanghai', 2, 2), ('shenzhen', 3, 3), ('guangzhou', 4, 4), (NULL, 5, 5);
+CREATE TABLE dim_city (city VARCHAR(16)) ENGINE=OLAP DUPLICATE KEY(city) DISTRIBUTED BY HASH(city) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- plain equality: the planner already drops the NULL-only partition through the derived IS NOT NULL, so 2 candidates remain and 'shenzhen' keeps only psh
+INSERT INTO dim_city VALUES ('shenzhen');
+SELECT f.city, f.id FROM fact_city f JOIN [broadcast] dim_city d ON f.city = d.city ORDER BY f.id;
+-- null-safe equality with a NULL build key: all 3 partitions are candidates and the NULL row must survive, so pnull stays
+INSERT INTO dim_city VALUES (NULL);
+SELECT f.city, f.id FROM fact_city f JOIN [broadcast] dim_city d ON f.city <=> d.city ORDER BY f.id;
+-- plain equality with the same build side: back to 2 candidates, NULL cannot match
+SELECT f.city, f.id FROM fact_city f JOIN [broadcast] dim_city d ON f.city = d.city ORDER BY f.id;
+-- CHAR partition column: the join runtime IN filter is built on the CHAR probe slot
+CREATE TABLE fact_code (code CHAR(8) NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(code, id)
+PARTITION BY LIST(code) (
+    PARTITION pa VALUES IN ('AA'),
+    PARTITION pb VALUES IN ('BB'),
+    PARTITION pc VALUES IN ('CC')
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_code VALUES ('AA', 1, 1), ('BB', 2, 2), ('CC', 3, 3);
+CREATE TABLE dim_code (code CHAR(8) NOT NULL) ENGINE=OLAP DUPLICATE KEY(code) DISTRIBUTED BY HASH(code) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_code VALUES ('BB');
+SELECT f.code, f.id FROM fact_code f JOIN [broadcast] dim_code d ON f.code = d.code ORDER BY f.id;
+-- a partition holding NULL next to a real value stays a candidate under `=`: only its NULL rows can never match
+CREATE TABLE fact_mix (city VARCHAR(16), id INT NOT NULL) ENGINE=OLAP
+DUPLICATE KEY(city, id)
+PARTITION BY LIST(city) (
+    PARTITION pmix VALUES IN ('guangzhou', NULL),
+    PARTITION psh VALUES IN ('shanghai')
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_mix VALUES ('guangzhou', 1), (NULL, 2), ('shanghai', 3);
+TRUNCATE TABLE dim_city;
+INSERT INTO dim_city VALUES ('guangzhou');
+SELECT f.city, f.id FROM fact_mix f JOIN [broadcast] dim_city d ON f.city = d.city ORDER BY f.id;
+-- the same partition is pruned once no build value can live in it
+TRUNCATE TABLE dim_city;
+INSERT INTO dim_city VALUES ('shanghai');
+SELECT f.city, f.id FROM fact_mix f JOIN [broadcast] dim_city d ON f.city = d.city ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_bloom_only_shuffle
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+-- a low-cardinality dictionary would rewrite the probe slot to an integer, which the pruner skips
+set cbo_enable_low_cardinality_optimize = false;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_dt (dt DATE NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(dt) (
+    PARTITION p0105 VALUES [('2024-01-05'), ('2024-01-06')),
+    PARTITION p0106 VALUES [('2024-01-06'), ('2024-01-07')),
+    PARTITION p0107 VALUES [('2024-01-07'), ('2024-01-08'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_dt VALUES ('2024-01-05', 1, 10), ('2024-01-06', 2, 20), ('2024-01-07', 3, 30);
+CREATE TABLE dim_dt (dt DATE NOT NULL, name VARCHAR(16)) ENGINE=OLAP DUPLICATE KEY(dt) DISTRIBUTED BY HASH(dt) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_dt VALUES ('2024-01-06', 'hit');
+-- shuffle join puts an exchange on both sides: no local runtime IN filter, the global bloom/min-max filter does the pruning
+SELECT f.dt, f.id, f.v FROM fact_dt f JOIN [shuffle] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+CREATE TABLE fact_city (city VARCHAR(16) NOT NULL, id INT NOT NULL) ENGINE=OLAP
+DUPLICATE KEY(city, id)
+PARTITION BY LIST(city) (
+    PARTITION pbj VALUES IN ('beijing'),
+    PARTITION psh VALUES IN ('shanghai'),
+    PARTITION pgz VALUES IN ('guangzhou')
+)
+DISTRIBUTED BY HASH(id) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_city VALUES ('beijing', 1), ('shanghai', 2), ('guangzhou', 3);
+CREATE TABLE dim_city (city VARCHAR(16) NOT NULL) ENGINE=OLAP DUPLICATE KEY(city) DISTRIBUTED BY HASH(city) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_city VALUES ('guangzhou');
+SELECT f.city, f.id FROM fact_city f JOIN [shuffle] dim_city d ON f.city = d.city ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_multi_column_range
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_ab (a INT NOT NULL, b INT NOT NULL, id INT NOT NULL) ENGINE=OLAP
+DUPLICATE KEY(a, b, id)
+PARTITION BY RANGE(a, b) (
+    PARTITION p1 VALUES [('1', '100'), ('5', '50')),
+    PARTITION p2 VALUES [('5', '50'), ('9', '0'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- a = 5 straddles both partitions: (5, 10) is in p1, (5, 60) is in p2
+INSERT INTO fact_ab VALUES (2, 0, 1), (5, 10, 2), (5, 60, 3), (7, 0, 4);
+CREATE TABLE dim_a (a INT NOT NULL) ENGINE=OLAP DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- first-column projection of p1 is [1, 5] closed: a = 5 may live in either partition, nothing pruned
+INSERT INTO dim_a VALUES (5);
+SELECT f.a, f.b, f.id FROM fact_ab f JOIN [broadcast] dim_a d ON f.a = d.a ORDER BY f.id;
+-- a = 7 can only be in p2
+TRUNCATE TABLE dim_a;
+INSERT INTO dim_a VALUES (7);
+SELECT f.a, f.b, f.id FROM fact_ab f JOIN [broadcast] dim_a d ON f.a = d.a ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_pipeline_dop
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_dt (dt DATE NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(dt) (
+    PARTITION p0105 VALUES [('2024-01-05'), ('2024-01-06')),
+    PARTITION p0106 VALUES [('2024-01-06'), ('2024-01-07')),
+    PARTITION p0107 VALUES [('2024-01-07'), ('2024-01-08'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_dt VALUES ('2024-01-05', 1, 10), ('2024-01-05', 2, 11), ('2024-01-06', 3, 20), ('2024-01-06', 4, 21), ('2024-01-07', 5, 30), ('2024-01-07', 6, 31);
+CREATE TABLE dim_dt (dt DATE NOT NULL) ENGINE=OLAP DUPLICATE KEY(dt) DISTRIBUTED BY HASH(dt) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_dt VALUES ('2024-01-06');
+set pipeline_dop = 1;
+SELECT f.dt, f.id, f.v FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+set pipeline_dop = 4;
+SELECT f.dt, f.id, f.v FROM fact_dt f JOIN [broadcast] dim_dt d ON f.dt = d.dt ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_not_applicable
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set enable_runtime_filter_partition_prune = true;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_dt (dt DATE NOT NULL, id INT NOT NULL, v INT) ENGINE=OLAP
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(dt) (
+    PARTITION p0105 VALUES [('2024-01-05'), ('2024-01-06')),
+    PARTITION p0106 VALUES [('2024-01-06'), ('2024-01-07'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_dt VALUES ('2024-01-05', 1, 10), ('2024-01-06', 2, 20);
+CREATE TABLE dim_misc (id INT NOT NULL, ts DATETIME NOT NULL) ENGINE=OLAP DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_misc VALUES (2, '2024-01-06 00:00:00');
+-- the join key is not a partition column: no boundaries are shipped
+SELECT f.dt, f.id FROM fact_dt f JOIN [broadcast] dim_misc d ON f.id = d.id ORDER BY f.id;
+-- the probe side is an expression over the partition column, not the bare column: not eligible
+SELECT f.dt, f.id FROM fact_dt f JOIN [broadcast] dim_misc d ON cast(f.dt as datetime) = d.ts ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_list_compact_values
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact_num (k BIGINT, id INT NOT NULL) DUPLICATE KEY(k, id)
+PARTITION BY LIST(k) (PARTITION p0 VALUES IN ('-1', '1'),
+PARTITION p1 VALUES IN ('9223372036854775806', '9223372036854775807'), PARTITION pn VALUES IN (NULL))
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO fact_num VALUES ('-1',1), ('1',2), ('9223372036854775806',3), ('9223372036854775807',4), (NULL,5);
+CREATE TABLE dim_num (k BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+INSERT INTO dim_num VALUES ('1'), (NULL);
+set enable_runtime_filter_partition_prune = false;
+SELECT f.id FROM fact_num f JOIN [broadcast] dim_num d ON f.k = d.k ORDER BY f.id;
+SELECT f.id FROM fact_num f JOIN [broadcast] dim_num d ON f.k <=> d.k ORDER BY f.id;
+SELECT f.id FROM fact_num f JOIN [shuffle] dim_num d ON f.k <=> d.k ORDER BY f.id;
+set enable_runtime_filter_partition_prune = true;
+SELECT f.id FROM fact_num f JOIN [broadcast] dim_num d ON f.k = d.k ORDER BY f.id;
+SELECT f.id FROM fact_num f JOIN [broadcast] dim_num d ON f.k <=> d.k ORDER BY f.id;
+SELECT f.id FROM fact_num f JOIN [shuffle] dim_num d ON f.k <=> d.k ORDER BY f.id;
+TRUNCATE TABLE dim_num;
+INSERT INTO dim_num VALUES ('42');
+set enable_runtime_filter_partition_prune = false;
+SELECT count(*) FROM fact_num f JOIN [shuffle] dim_num d ON f.k = d.k;
+set enable_runtime_filter_partition_prune = true;
+SELECT count(*) FROM fact_num f JOIN [shuffle] dim_num d ON f.k = d.k;
+TRUNCATE TABLE dim_num;
+INSERT INTO dim_num VALUES ('-1'), ('1'), ('9223372036854775806'), ('9223372036854775807'), (NULL);
+set enable_runtime_filter_partition_prune = false;
+SELECT count(*), sum(f.id) FROM fact_num f JOIN [broadcast] dim_num d ON f.k <=> d.k;
+set enable_runtime_filter_partition_prune = true;
+SELECT count(*), sum(f.id) FROM fact_num f JOIN [broadcast] dim_num d ON f.k <=> d.k;
+CREATE TABLE fact_date (k DATE, id INT NOT NULL) DUPLICATE KEY(k, id)
+PARTITION BY LIST(k) (PARTITION p0 VALUES IN ('2024-02-28', '2024-02-29'),
+PARTITION p1 VALUES IN ('2024-03-01', '2024-03-02'), PARTITION pn VALUES IN (NULL))
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO fact_date VALUES ('2024-02-28',1), ('2024-02-29',2), ('2024-03-01',3), ('2024-03-02',4), (NULL,5);
+CREATE TABLE dim_date (k DATE) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+INSERT INTO dim_date VALUES ('2024-02-29'), (NULL);
+set enable_runtime_filter_partition_prune = false;
+SELECT f.id FROM fact_date f JOIN [broadcast] dim_date d ON f.k = d.k ORDER BY f.id;
+SELECT f.id FROM fact_date f JOIN [broadcast] dim_date d ON f.k <=> d.k ORDER BY f.id;
+SELECT f.id FROM fact_date f JOIN [shuffle] dim_date d ON f.k <=> d.k ORDER BY f.id;
+set enable_runtime_filter_partition_prune = true;
+SELECT f.id FROM fact_date f JOIN [broadcast] dim_date d ON f.k = d.k ORDER BY f.id;
+SELECT f.id FROM fact_date f JOIN [broadcast] dim_date d ON f.k <=> d.k ORDER BY f.id;
+SELECT f.id FROM fact_date f JOIN [shuffle] dim_date d ON f.k <=> d.k ORDER BY f.id;
+TRUNCATE TABLE dim_date;
+INSERT INTO dim_date VALUES ('2025-01-01');
+set enable_runtime_filter_partition_prune = false;
+SELECT count(*) FROM fact_date f JOIN [shuffle] dim_date d ON f.k = d.k;
+set enable_runtime_filter_partition_prune = true;
+SELECT count(*) FROM fact_date f JOIN [shuffle] dim_date d ON f.k = d.k;
+TRUNCATE TABLE dim_date;
+INSERT INTO dim_date VALUES ('2024-02-28'), ('2024-02-29'), ('2024-03-01'), ('2024-03-02'), (NULL);
+set enable_runtime_filter_partition_prune = false;
+SELECT count(*), sum(f.id) FROM fact_date f JOIN [broadcast] dim_date d ON f.k <=> d.k;
+set enable_runtime_filter_partition_prune = true;
+SELECT count(*), sum(f.id) FROM fact_date f JOIN [broadcast] dim_date d ON f.k <=> d.k;
+drop database test_rf_prune_${uuid0} force;
+
+
+-- name: test_rf_prune_multi_column_list
+create database test_rf_prune_${uuid0};
+use test_rf_prune_${uuid0};
+set cbo_enable_low_cardinality_optimize = false;
+set global_runtime_filter_wait_timeout = 10000;
+CREATE TABLE fact (tenant INT, city VARCHAR(16), id INT NOT NULL) DUPLICATE KEY(tenant, city, id)
+PARTITION BY LIST(tenant, city) (PARTITION p0 VALUES IN (('1','a'),('1','b'),('2','a'),(NULL,'a')),
+PARTITION p1 VALUES IN (('3','a'),('3','c'),('4','c')),
+PARTITION p2 VALUES IN (('5','b'),(NULL,'b')))
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO fact VALUES (1,'a',1),(1,'b',2),(2,'a',3),(NULL,'a',4),
+(3,'a',5),(3,'c',6),(4,'c',7),(5,'b',8),(NULL,'b',9);
+CREATE TABLE dim (tenant INT, city VARCHAR(16)) DUPLICATE KEY(tenant, city)
+DISTRIBUTED BY HASH(tenant) BUCKETS 1 PROPERTIES ("replication_num"="1");
+INSERT INTO dim VALUES (1,'a'),(3,'c'),(NULL,'a');
+set enable_runtime_filter_partition_prune = false;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant = d.tenant ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant <=> d.tenant ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.city = d.city ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant <=> d.tenant AND f.city = d.city ORDER BY f.id;
+set enable_runtime_filter_partition_prune = true;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant = d.tenant ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant <=> d.tenant ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.city = d.city ORDER BY f.id;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant <=> d.tenant AND f.city = d.city ORDER BY f.id;
+set dynamic_partition_prune_limit = 1;
+SELECT f.id FROM fact f JOIN [broadcast] dim d ON f.tenant <=> d.tenant AND f.city = d.city ORDER BY f.id;
+drop database test_rf_prune_${uuid0} force;

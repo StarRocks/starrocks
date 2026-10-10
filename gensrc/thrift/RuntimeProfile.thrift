@@ -29,6 +29,8 @@ enum TCounterAggregateType {
     SUM_AVG,
     // Use avg at be phase and sum at fe phase
     AVG_SUM,
+    // Use max for both be and fe phases
+    MAX,
 }
 
 enum TCounterMergeType {
