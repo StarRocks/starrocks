@@ -1,0 +1,115 @@
+-- name: test_colocate_range_per_tablet_range @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+set enable_tablet_pre_split = false;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_seed (k1 bigint not null, v bigint)
+    duplicate key(k1) order by (k1)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_snp_${uuid0}:k1');
+-- result:
+-- !result
+insert into t_seed select x, x from table(generate_series(1, 40000)) as g(x);
+-- result:
+-- !result
+function: set_first_tablet_id("t_seed")
+-- result:
+None
+-- !result
+alter table t_seed split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-4');
+-- result:
+-- !result
+function: wait_reshard_job_finish("t_seed", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+create table t (k1 bigint not null, v bigint)
+    duplicate key(k1) order by (k1)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_snp_${uuid0}:k1');
+-- result:
+-- !result
+insert into t select x, x from table(generate_series(1, 40000)) as g(x);
+-- result:
+-- !result
+shell: s=false; for i in $(seq 1 50); do s=$(${mysql_cmd} -Ne "show proc '/colocation_group'" 2>/dev/null | grep "grp_snp_${uuid0}" | awk '{print $NF}'); [ "$s" = "true" ] && break; sleep 2; done; echo "stable=$s"
+-- result:
+0
+stable=true
+-- !result
+[UC]tid=SELECT b.TABLET_ID FROM information_schema.be_tablets b, information_schema.tables_config c WHERE b.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = 'db_${uuid0}' AND c.TABLE_NAME = 't' ORDER BY b.TABLET_ID LIMIT 1 OFFSET 2;
+alter table t split tablet (${tid}) properties ('tablet_reshard_target_size' = '-4');
+-- result:
+-- !result
+function: wait_reshard_job_finish("t", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+select count(*) from t;
+-- result:
+40000
+-- !result
+select count(*) from t where k1 = 25000;
+-- result:
+1
+-- !result
+select count(*) from t a join t b on a.k1 = b.k1;
+-- result:
+40000
+-- !result
+create table pk_seed (k1 bigint not null, v bigint) primary key(k1) order by (k1)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_pk_${uuid0}:k1');
+-- result:
+-- !result
+insert into pk_seed select x, x from table(generate_series(1, 40000)) as g(x);
+-- result:
+-- !result
+function: set_first_tablet_id("pk_seed")
+-- result:
+None
+-- !result
+alter table pk_seed split tablet (${tablet_id}) properties ('tablet_reshard_target_size' = '-4');
+-- result:
+-- !result
+function: wait_reshard_job_finish("pk_seed", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+create table pk (k1 bigint not null, v bigint) primary key(k1) order by (k1)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_pk_${uuid0}:k1');
+-- result:
+-- !result
+insert into pk select x, x from table(generate_series(1, 40000)) as g(x);
+-- result:
+-- !result
+delete from pk where k1 in (5, 25000, 39000);
+-- result:
+-- !result
+select count(*) from pk;
+-- result:
+39997
+-- !result
+select k1 from pk where k1 in (5, 25000, 39000) order by k1;
+-- result:
+-- !result
+drop table pk;
+-- result:
+-- !result
+drop table pk_seed;
+-- result:
+-- !result
+drop table t;
+-- result:
+-- !result
+drop table t_seed;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

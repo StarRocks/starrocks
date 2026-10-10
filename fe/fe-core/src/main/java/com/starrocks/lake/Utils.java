@@ -415,9 +415,12 @@ public class Utils {
      * <li>Only version 1 is ever shared. DDL writes that object once at partition creation; every
      *     later version is written per tablet or into a bundle.</li>
      * <li>{@code file_bundling} is what makes DDL write it ({@code LocalMetastore#buildPartitions}),
-     *     and it is the only switch this predicate keys on. A partition that has the shared layout
+     *     and it is the only creation switch this predicate keys on. A partition that has the shared layout
      *     for any other reason reports false and keeps the BE's unhinted fallback, which resolves it
      *     correctly at the cost of one probe per tablet.</li>
+     * <li>DDL never writes it for a range-distribution table, whose tablets each carry their own
+     *     range. A range partition created with the shared object before that still finds it
+     *     through the unhinted fallback.</li>
      * <li>A non-zero {@code metadataSwitchVersion} means the partition predates the switch to
      *     bundling, so its version 1 is per-tablet even though the table is bundling now.</li>
      * <li>The object is named after tablet id 0 with no index discriminator, and all indexes of a
@@ -435,6 +438,7 @@ public class Utils {
                 && baseVersion == PhysicalPartition.PARTITION_INIT_VERSION
                 && table.isCloudNativeTableOrMaterializedView()
                 && Boolean.TRUE.equals(table.isFileBundling())
+                && !table.isRangeDistribution()
                 && partition.getMetadataSwitchVersion() == 0
                 && partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size() == 1;
     }
