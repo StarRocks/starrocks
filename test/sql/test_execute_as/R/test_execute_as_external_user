@@ -1,0 +1,65 @@
+-- name: test_execute_as_external_user @sequential
+CREATE GROUP PROVIDER IF NOT EXISTS `test_execute_as_ext_group_provider` PROPERTIES ("type" = "file", "group_file_url" = "group_mapping_external");
+-- result:
+-- !result
+admin set frontend config ("group_provider"="test_execute_as_ext_group_provider");
+-- result:
+-- !result
+drop role if exists ext_select_role;
+-- result:
+-- !result
+create role ext_select_role;
+-- result:
+-- !result
+grant ext_select_role to external group ext_group1;
+-- result:
+-- !result
+grant impersonate on user root to role ext_select_role;
+-- result:
+-- !result
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 int, c2 varchar(20)) distributed by hash(c1) buckets 1 properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 values (1, 'hello'), (2, 'world');
+-- result:
+-- !result
+grant select on table t1 to role ext_select_role;
+-- result:
+-- !result
+execute as external 'ext_user'@'%' with no revert;
+-- result:
+-- !result
+select current_group();
+-- result:
+ext_group1
+-- !result
+select current_role();
+-- result:
+ext_select_role
+-- !result
+select * from t1 order by c1;
+-- result:
+1	hello
+2	world
+-- !result
+execute as root with no revert;
+-- result:
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result
+drop role if exists ext_select_role;
+-- result:
+-- !result
+drop group provider IF EXISTS test_execute_as_ext_group_provider;
+-- result:
+-- !result
+admin set frontend config ("group_provider"="");
+-- result:
+-- !result
