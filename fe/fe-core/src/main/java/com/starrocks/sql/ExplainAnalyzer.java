@@ -1103,6 +1103,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "TabletCount");
         appendMetric(uniqueMetrics, nodeInfo, "SegmentsReadCount");
         appendMetric(uniqueMetrics, nodeInfo, "RowsetsReadCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PhySegmentsCount");
+        appendMetric(uniqueMetrics, nodeInfo, "PhyRowsetsCount");
         appendMetric(uniqueMetrics, nodeInfo, "TotalColumnsDataPageCount");
         appendMetric(uniqueMetrics, nodeInfo, "ColumnIteratorInit");
         appendMetric(uniqueMetrics, nodeInfo, "BitmapIndexIteratorInit");
@@ -1773,7 +1775,8 @@ public class ExplainAnalyzer {
                 "RawRowsRead", "RowsRead", "DictDecode", "DictDecodeCount", "ChunkCopy",
                 "IOTime", "BytesRead", "CompressedBytesRead", "UncompressedBytesRead", "ReadPagesNum",
                 "CachedPagesNum", "BlockFetch", "BlockFetchCount", "BlockSeek", "BlockSeekCount", "DecompressTime",
-                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "TotalColumnsDataPageCount",
+                "TabletCount", "SegmentsReadCount", "RowsetsReadCount", "PhySegmentsCount", "PhyRowsetsCount",
+                "TotalColumnsDataPageCount",
                 "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",

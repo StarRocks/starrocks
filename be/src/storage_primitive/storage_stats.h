@@ -124,8 +124,12 @@ struct OlapReaderStatistics {
     int64_t gin_ngram_dict_filtered = 0;
     int64_t gin_predicate_dict_filtered = 0;
 
+    // How many times a rowset / segment was opened. A tablet scanned in parallel opens the same one once per
+    // split, so these grow with the number of splits. The phy_* pair counts each rowset / segment once.
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
+    int64_t phy_rowsets_count = 0;
+    int64_t phy_segments_count = 0;
     int64_t total_columns_data_page_count = 0;
 
     int64_t runtime_stats_filtered = 0;

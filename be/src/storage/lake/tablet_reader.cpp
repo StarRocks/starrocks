@@ -332,7 +332,6 @@ Status TabletReader::prepare() {
         _rowsets = Rowset::get_rowsets(_tablet_mgr, _tablet_metadata);
         _rowsets_inited = true;
     }
-    _stats.rowsets_read_count += _rowsets.size();
     return Status::OK();
 }
 
@@ -343,6 +342,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         return Status::NotSupported("reader type not supported now");
     }
     RETURN_IF_ERROR(init_compaction_column_paths(read_params));
+    // Only a reader over the whole tablet (unsplit, or the one planning the splits) counts its rowsets;
+    // every split child carries a rowid or short-key range.
+    if (read_params.rowid_range_option == nullptr && read_params.short_key_ranges_option == nullptr &&
+        read_params.prepared_tablet_read_state == nullptr) {
+        _stats.phy_rowsets_count += _rowsets.size();
+    }
     if (_collect_iter != nullptr) {
         _collect_iter->close();
         _collect_iter.reset();
@@ -963,6 +968,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                  schema(), rs_opts, prepared_segments, segment_idx, params.prepared_segment_read_state,
                                  &_reusable_rowset_iterators[rowset_idx])));
         iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+        _stats.rowsets_read_count++;
         return Status::OK();
     }
     if (use_prepared_segments) {
@@ -985,6 +991,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
+        _stats.rowsets_read_count++;
 
         if (config::enable_load_segment_parallel) {
             auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {

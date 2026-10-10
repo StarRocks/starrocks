@@ -1414,6 +1414,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
     _rowsets_read_count = ADD_CHILD_COUNTER(_runtime_profile, "RowsetsReadCount", TUnit::UNIT, segment_read_name);
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, segment_read_name);
+    _phy_rowsets_count = ADD_CHILD_COUNTER(_runtime_profile, "PhyRowsetsCount", TUnit::UNIT, segment_read_name);
+    _phy_segments_count = ADD_CHILD_COUNTER(_runtime_profile, "PhySegmentsCount", TUnit::UNIT, segment_read_name);
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
 
@@ -1652,6 +1654,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
+    COUNTER_UPDATE(_phy_rowsets_count, _reader->stats().phy_rowsets_count);
+    COUNTER_UPDATE(_phy_segments_count, _reader->stats().phy_segments_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
