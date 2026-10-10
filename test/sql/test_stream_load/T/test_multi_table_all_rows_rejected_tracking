@@ -37,7 +37,4 @@ LOOP {
 
 select count(*) from information_schema.load_tracking_logs where job_id=${child_id};
 
-CLEANUP {
-    DROP DATABASE IF EXISTS db_${uuid0};
-} END CLEANUP
-
+DROP DATABASE IF EXISTS db_${uuid0};
