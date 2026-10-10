@@ -34,14 +34,19 @@
 
 #include "geo/geo_types.h"
 
+#include <s2/mutable_s2shape_index.h>
 #include <s2/s1chord_angle.h>
 #include <s2/s2cap.h>
 #include <s2/s2cell.h>
 #include <s2/s2earth.h>
 #include <s2/s2edge_distances.h>
+#include <s2/s2error.h>
 #include <s2/s2latlng.h>
+#include <s2/s2lax_loop_shape.h>
+#include <s2/s2pointutil.h>
 #include <s2/s2polygon.h>
 #include <s2/s2polyline.h>
+#include <s2/s2shapeutil_visit_crossing_edge_pairs.h>
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
 
@@ -105,7 +110,7 @@ static void remove_duplicate_points(std::vector<S2Point>* points) {
     points->resize(lhs + 1);
 }
 
-static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+static GeoParseStatus to_s2loop_points(const GeoCoordinateList& coords, std::vector<S2Point>* output) {
     // 1. covnert all coordinates to points
     std::vector<S2Point> points(coords.list.size());
     for (int i = 0; i < coords.list.size(); ++i) {
@@ -126,6 +131,14 @@ static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr
     if (points.size() < 3) {
         return GEO_PARSE_LOOP_LACK_VERTICES;
     }
+    *output = std::move(points);
+    return GEO_PARSE_OK;
+}
+
+static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr<S2Loop>* loop) {
+    std::vector<S2Point> points;
+    const auto status = to_s2loop_points(coords, &points);
+    if (status != GEO_PARSE_OK) return status;
     *loop = std::make_unique<S2Loop>(points);
     if (!(*loop)->IsValid()) {
         return GEO_PARSE_LOOP_INVALID;
@@ -368,6 +381,26 @@ bool GeoLine::decode(const void* data, size_t size) {
 
 GeoPolygon::GeoPolygon() = default;
 GeoPolygon::~GeoPolygon() = default;
+
+bool GeoPolygon::is_valid_ring(const GeoCoordinateList& coordinates) {
+    std::vector<S2Point> points;
+    if (to_s2loop_points(coordinates, &points) != GEO_PARSE_OK) return false;
+
+    // Match S2Loop::FindValidationErrorNoIndex before using its robust crossing
+    // validator. The original loop construction normalizes only after validity
+    // succeeds; this predicate does not construct or normalize a polygon.
+    for (const auto& point : points) {
+        if (!S2::IsUnitLength(point)) return false;
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        const auto& next = points[(i + 1) % points.size()];
+        if (points[i] == next || points[i] == -next) return false;
+    }
+    MutableS2ShapeIndex index;
+    index.Add(std::make_unique<S2LaxLoopShape>(points));
+    S2Error error;
+    return !s2shapeutil::FindSelfIntersection(index, &error);
+}
 
 GeoParseStatus GeoPolygon::from_coords(const GeoCoordinateListList& list) {
     return to_s2polygon(list, &_polygon);
