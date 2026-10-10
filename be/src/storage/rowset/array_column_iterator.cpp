@@ -119,7 +119,7 @@ Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
 }
 
 Status ArrayColumnIterator::next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets,
-                                                    UInt8Column* nulls, SparseRange<>* element_range,
+                                                    UInt8Column* nulls, OrdinalSparseRange* element_range,
                                                     size_t* element_rows) {
     // 1. Read null column
     if (_null_iterator != nullptr) {
@@ -161,7 +161,7 @@ Status ArrayColumnIterator::next_batch_null_offsets(const SparseRange<>& range, 
         num_to_read = end_offset - num_to_read;
         *element_rows += num_to_read;
 
-        element_range->add(Range<>(element_ordinal, element_ordinal + num_to_read));
+        element_range->add(OrdinalRange(element_ordinal, element_ordinal + num_to_read));
     }
 
     return Status::OK();
@@ -173,7 +173,7 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
     CHECK((_null_iterator == nullptr && null_column == nullptr) ||
           (_null_iterator != nullptr && null_column != nullptr));
 
-    SparseRange element_read_range;
+    OrdinalSparseRange element_read_range;
     size_t read_rows = 0;
     RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column_raw_ptr(), null_column,
                                             &element_read_range, &read_rows));
@@ -185,7 +185,8 @@ Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) 
     if (_access_values) {
         // if array column is nullable, element_read_range may be empty
         DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
-        RETURN_IF_ERROR(_element_iterator->next_batch(element_read_range, array_column->elements_column_raw_ptr()));
+        RETURN_IF_ERROR(
+                _element_iterator->next_batch_by_ordinal(element_read_range, array_column->elements_column_raw_ptr()));
     } else {
         if (!array_column->elements_column()->is_constant()) {
             array_column->elements_column_raw_ptr()->append_default(1);
@@ -296,7 +297,7 @@ Status ArrayColumnIterator::next_dict_codes(const SparseRange<>& range, Column* 
     CHECK((_null_iterator == nullptr && null_column == nullptr) ||
           (_null_iterator != nullptr && null_column != nullptr));
 
-    SparseRange element_read_range;
+    OrdinalSparseRange element_read_range;
     size_t read_rows = 0;
     RETURN_IF_ERROR(next_batch_null_offsets(range, array_column->offsets_column_raw_ptr(), null_column,
                                             &element_read_range, &read_rows));
@@ -307,7 +308,8 @@ Status ArrayColumnIterator::next_dict_codes(const SparseRange<>& range, Column* 
 
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _element_iterator->get_current_ordinal()));
-    RETURN_IF_ERROR(_element_iterator->next_dict_codes(element_read_range, array_column->elements_column_raw_ptr()));
+    RETURN_IF_ERROR(
+            _element_iterator->next_dict_codes_by_ordinal(element_read_range, array_column->elements_column_raw_ptr()));
 
     return Status::OK();
 }
@@ -351,20 +353,29 @@ Status ArrayColumnIterator::decode_dict_codes(const int32_t* codes, size_t size,
 
 StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_range_vec(const SparseRange<>& range,
                                                                                          Column* dst) {
+    OrdinalSparseRange ordinal_range;
+    for (size_t i = 0; i < range.size(); ++i) {
+        ordinal_range.add(OrdinalRange(range[i].begin(), range[i].end()));
+    }
+    return get_io_range_vec_by_ordinal(ordinal_range, dst);
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_range_vec_by_ordinal(
+        const OrdinalSparseRange& range, Column* dst) {
     auto [array_column, null_column] = unpack_array_column(dst);
     CHECK((_null_iterator == nullptr && null_column == nullptr) ||
           (_null_iterator != nullptr && null_column != nullptr));
 
-    SparseRange element_range;
+    OrdinalSparseRange element_range;
 
-    SparseRangeIterator<> iter = range.new_iterator();
+    auto iter = range.new_iterator();
     size_t to_read = range.span_size();
 
     UInt32Column* offsets = array_column->offsets_column_raw_ptr();
     // array column can be nested, range may be empty
     DCHECK(range.empty() || (range.begin() == _array_size_iterator->get_current_ordinal()));
     while (iter.has_more()) {
-        Range<> r = iter.next(to_read);
+        auto r = iter.next(to_read);
 
         RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _array_size_iterator->element_ordinal();
@@ -381,8 +392,8 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_r
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
-        SparseRange<> size_read_range(r);
-        RETURN_IF_ERROR(_array_size_iterator->next_batch(size_read_range, offsets));
+        OrdinalSparseRange size_read_range(r);
+        RETURN_IF_ERROR(_array_size_iterator->next_batch_by_ordinal(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
         size_t num_to_read = end_offset;
@@ -392,16 +403,16 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ArrayColumnIterator::get_io_r
         }
         num_to_read = end_offset - num_to_read;
 
-        element_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
+        element_range.add(OrdinalRange(element_ordinal, element_ordinal + num_to_read));
     }
 
     std::vector<std::pair<int64_t, int64_t>> res;
     if (_null_iterator != nullptr) {
-        ASSIGN_OR_RETURN(auto vec, _null_iterator->get_io_range_vec(range, dst));
+        ASSIGN_OR_RETURN(auto vec, _null_iterator->get_io_range_vec_by_ordinal(range, dst));
         res.insert(res.end(), vec.begin(), vec.end());
     }
     if (_access_values) {
-        ASSIGN_OR_RETURN(auto vec, _element_iterator->get_io_range_vec(element_range, dst));
+        ASSIGN_OR_RETURN(auto vec, _element_iterator->get_io_range_vec_by_ordinal(element_range, dst));
         res.insert(res.end(), vec.begin(), vec.end());
     }
     return res;

@@ -149,14 +149,18 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
         down_cast<NullableColumn*>(dst)->update_has_null();
     }
 
-    SparseRange element_read_range;
+    OrdinalSparseRange ordinal_range;
+    for (size_t i = 0; i < range.size(); ++i) {
+        ordinal_range.add(OrdinalRange(range[i].begin(), range[i].end()));
+    }
+    OrdinalSparseRange element_read_range;
     size_t read_rows = 0;
-    RETURN_IF_ERROR(get_element_range_vec(range, map_column, true /* seek */, element_read_range, read_rows));
+    RETURN_IF_ERROR(get_element_range_vec(ordinal_range, map_column, true /* seek */, element_read_range, read_rows));
 
     // if array column is nullable, element_read_range may be empty
     DCHECK(element_read_range.empty() || (element_read_range.begin() == _keys->get_current_ordinal()));
     if (_access_keys) {
-        RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column_raw_ptr()));
+        RETURN_IF_ERROR(_keys->next_batch_by_ordinal(element_read_range, map_column->keys_column_raw_ptr()));
     } else {
         if (!map_column->keys_column()->is_constant()) {
             map_column->keys_column_raw_ptr()->append_default(1);
@@ -167,7 +171,7 @@ Status MapColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
     }
 
     if (_access_values) {
-        RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column_raw_ptr()));
+        RETURN_IF_ERROR(_values->next_batch_by_ordinal(element_read_range, map_column->values_column_raw_ptr()));
     } else {
         if (!map_column->values_column()->is_constant()) {
             map_column->values_column_raw_ptr()->append_default(1);
@@ -270,9 +274,9 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     return Status::OK();
 }
 
-Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapColumn* map_column, bool seek,
-                                                SparseRange<>& element_read_range, size_t& read_rows) {
-    SparseRangeIterator<> iter = range.new_iterator();
+Status MapColumnIterator::get_element_range_vec(const OrdinalSparseRange& range, MapColumn* map_column, bool seek,
+                                                OrdinalSparseRange& element_read_range, size_t& read_rows) {
+    auto iter = range.new_iterator();
     size_t to_read = range.span_size();
 
     // array column can be nested, range may be empty
@@ -280,7 +284,7 @@ Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapC
     element_read_range.clear();
     read_rows = 0;
     while (iter.has_more()) {
-        Range<> r = iter.next(to_read);
+        auto r = iter.next(to_read);
 
         RETURN_IF_ERROR(_offsets->seek_to_ordinal_and_calc_element_ordinal(r.begin()));
         size_t element_ordinal = _offsets->element_ordinal();
@@ -299,8 +303,8 @@ Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapC
         size_t end_offset = data.back();
 
         size_t prev_array_size = offsets->size();
-        SparseRange<> size_read_range(r);
-        RETURN_IF_ERROR(_offsets->next_batch(size_read_range, offsets));
+        OrdinalSparseRange size_read_range(r);
+        RETURN_IF_ERROR(_offsets->next_batch_by_ordinal(size_read_range, offsets));
         size_t curr_array_size = offsets->size();
 
         size_t num_to_read = end_offset;
@@ -311,7 +315,7 @@ Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapC
         num_to_read = end_offset - num_to_read;
         read_rows += num_to_read;
 
-        element_read_range.add(Range<>(element_ordinal, element_ordinal + num_to_read));
+        element_read_range.add(OrdinalRange(element_ordinal, element_ordinal + num_to_read));
     }
 
     return Status::OK();
@@ -319,6 +323,15 @@ Status MapColumnIterator::get_element_range_vec(const SparseRange<>& range, MapC
 
 StatusOr<std::vector<std::pair<int64_t, int64_t>>> MapColumnIterator::get_io_range_vec(const SparseRange<>& range,
                                                                                        Column* dst) {
+    OrdinalSparseRange ordinal_range;
+    for (size_t i = 0; i < range.size(); ++i) {
+        ordinal_range.add(OrdinalRange(range[i].begin(), range[i].end()));
+    }
+    return get_io_range_vec_by_ordinal(ordinal_range, dst);
+}
+
+StatusOr<std::vector<std::pair<int64_t, int64_t>>> MapColumnIterator::get_io_range_vec_by_ordinal(
+        const OrdinalSparseRange& range, Column* dst) {
     MapColumn* map_column = nullptr;
     if (dst->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(dst);
@@ -329,19 +342,19 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> MapColumnIterator::get_io_ran
 
     std::vector<std::pair<int64_t, int64_t>> res;
     if (_nulls != nullptr) {
-        ASSIGN_OR_RETURN(auto vec, _nulls->get_io_range_vec(range, dst));
+        ASSIGN_OR_RETURN(auto vec, _nulls->get_io_range_vec_by_ordinal(range, dst));
         res.insert(res.end(), vec.begin(), vec.end());
     }
 
-    SparseRange element_read_range;
+    OrdinalSparseRange element_read_range;
     size_t read_rows = 0;
     RETURN_IF_ERROR(get_element_range_vec(range, map_column, false /* seek */, element_read_range, read_rows));
     if (_access_keys) {
-        ASSIGN_OR_RETURN(auto vec, _keys->get_io_range_vec(element_read_range, dst));
+        ASSIGN_OR_RETURN(auto vec, _keys->get_io_range_vec_by_ordinal(element_read_range, dst));
         res.insert(res.end(), vec.begin(), vec.end());
     }
     if (_access_values) {
-        ASSIGN_OR_RETURN(auto vec, _values->get_io_range_vec(element_read_range, dst));
+        ASSIGN_OR_RETURN(auto vec, _values->get_io_range_vec_by_ordinal(element_read_range, dst));
         res.insert(res.end(), vec.begin(), vec.end());
     }
     return res;
