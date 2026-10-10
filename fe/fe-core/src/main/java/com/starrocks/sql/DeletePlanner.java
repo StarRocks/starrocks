@@ -240,7 +240,8 @@ public class DeletePlanner {
 
         OlapTable table = (OlapTable) deleteStatement.getTable();
         for (Column column : table.getBaseSchema()) {
-            if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+            if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) ||
+                    column.isGeneratedColumn()) {
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
