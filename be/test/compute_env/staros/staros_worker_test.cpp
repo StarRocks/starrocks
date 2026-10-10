@@ -37,11 +37,8 @@
 #include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
-<<<<<<< HEAD
-=======
 #include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
->>>>>>> 776ecbe713d... [Enhancement] Hand shard info to the load coordinator for combined txn logs (#64383)
 #include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -477,7 +474,7 @@ TEST_F(StarOSWorkerTest, borrowed_shard_info_resolves_without_starmgr) {
     // The next load writes through the same filesystem instead of building another one.
     auto second = borrower.get_shard_filesystem(1001, {});
     ASSERT_TRUE(second.ok()) << second.status();
-    EXPECT_EQ(first->file_system.get(), second->file_system.get());
+    EXPECT_EQ(first->get(), second->get());
 
     EXPECT_EQ(borrowed_before + 3, metrics->lake_tablet_location_handoff_hits_total.value());
     EXPECT_EQ(fallback_before, metrics->staros_shard_info_fallback_total.value());
@@ -549,7 +546,7 @@ TEST_F(StarOSWorkerTest, borrowed_shard_info_rebuilds_the_filesystem_on_a_storag
     ASSERT_TRUE(borrower.borrow_shard_info(*new_exported).ok());
     auto after = borrower.get_shard_filesystem(6001, {});
     ASSERT_TRUE(after.ok()) << after.status();
-    EXPECT_NE(before->file_system.get(), after->file_system.get());
+    EXPECT_NE(before->get(), after->get());
 }
 
 // If no filesystem can be built from a handed-over shard info, the lookup falls back to starmgr, which

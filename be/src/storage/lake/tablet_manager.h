@@ -321,9 +321,6 @@ public:
     // Callers must ensure `candidates` is not empty.
     int64_t pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates);
 
-<<<<<<< HEAD
-    Status drop_local_cache(const std::string& path);
-=======
     // Shared-data only. The serialized shard info of |tablet_id| if this node owns the tablet,
     // empty otherwise. See StarOSWorker::export_shard_info.
     std::string export_shard_info(int64_t tablet_id);
@@ -333,8 +330,7 @@ public:
     // own the tablet. See StarOSWorker::borrow_shard_info.
     void borrow_shard_info(const std::string& serialized);
 
-    static Status drop_local_cache(const std::string& path);
->>>>>>> 776ecbe713d... [Enhancement] Hand shard info to the load coordinator for combined txn logs (#64383)
+    Status drop_local_cache(const std::string& path);
     void prune_metacache();
 
     // TODO: remove this method

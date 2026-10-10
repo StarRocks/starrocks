@@ -157,19 +157,13 @@ private:
     }
     std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
-<<<<<<< HEAD
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
-    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
-    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
-=======
-    absl::StatusOr<FileSystemHandle> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     std::optional<ShardInfo> get_borrowed_shard_info(ShardId id) const;
-    std::optional<FileSystemHandle> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
+    std::optional<std::shared_ptr<FileSystem>> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
     // Puts |value| into `_borrowed_cache` under |id|, replacing what is there. Requires `_borrowed_mtx`.
     void insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value);
-    absl::StatusOr<std::pair<std::shared_ptr<std::string>, FileSystemHandle>> build_filesystem_from_shard_info(
-            const ShardInfo& info, const Configuration& conf);
->>>>>>> 776ecbe713d... [Enhancement] Hand shard info to the load coordinator for combined txn logs (#64383)
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
+    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
             std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);

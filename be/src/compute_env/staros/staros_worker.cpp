@@ -257,7 +257,8 @@ std::optional<staros::starlet::ShardInfo> StarOSWorker::get_borrowed_shard_info(
     return value->shard_info;
 }
 
-std::optional<FileSystemHandle> StarOSWorker::get_borrowed_shard_filesystem(ShardId id, const Configuration& conf) {
+std::optional<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::get_borrowed_shard_filesystem(
+        ShardId id, const Configuration& conf) {
     // Turning the handoff off also stops using what was borrowed before, not only new borrowing.
     if (!config::lake_enable_tablet_location_handoff) {
         return std::nullopt;
@@ -275,7 +276,7 @@ std::optional<FileSystemHandle> StarOSWorker::get_borrowed_shard_filesystem(Shar
         }
         if (auto fs = lookup_fs_cache(value->fs_cache_key); fs != nullptr) {
             StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_hits_total.increment(1);
-            return FileSystemHandle{std::move(fs), value->shard_info.replicas};
+            return fs;
         }
         info = value->shard_info;
     }
