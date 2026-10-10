@@ -69,8 +69,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -782,44 +784,34 @@ public class SplitTabletJobTest {
     }
 
     /**
-     * Creates split tablet ranges by dividing the old tablet's range into
-     * contiguous sub-ranges.
-     * This simulates what BE does when splitting a tablet.
+     * Creates split tablet ranges the way the compute node does: contiguous children that exactly cover
+     * the old tablet's range, the first keeping its lower bound and the last its upper bound.
      */
     private Map<Long, TabletRangePB> createSplitTabletRanges(long oldTabletId, List<Long> newTabletIds) {
         Map<Long, TabletRangePB> result = new HashMap<>();
         TabletRangePB oldRange = createTabletRangePBFromOldTablet(oldTabletId);
-
-        // If old tablet has unbounded range (Range.all()), create arbitrary contiguous
-        // ranges
-        if (oldRange.lowerBound == null && oldRange.upperBound == null) {
-            int step = 100;
-            for (int i = 0; i < newTabletIds.size(); i++) {
-                int lowerValue = i * step;
-                int upperValue = (i + 1) * step;
-                result.put(newTabletIds.get(i), createTabletRangePB(lowerValue, upperValue));
+        int count = newTabletIds.size();
+        int step = 100;
+        boolean hasLower = oldRange.lowerBound != null && oldRange.lowerBound.values != null
+                && !oldRange.lowerBound.values.isEmpty();
+        boolean hasUpper = oldRange.upperBound != null && oldRange.upperBound.values != null
+                && !oldRange.upperBound.values.isEmpty();
+        int upperIfBounded = hasUpper ? Integer.parseInt(oldRange.upperBound.values.get(0).value) : 0;
+        int lowerValue = hasLower ? Integer.parseInt(oldRange.lowerBound.values.get(0).value)
+                : (hasUpper ? upperIfBounded - step * count : 0);
+        int upperValue = hasUpper ? upperIfBounded : lowerValue + step * count;
+        int width = Math.max(1, (upperValue - lowerValue) / count);
+        for (int i = 0; i < count; i++) {
+            TabletRangePB child = createTabletRangePB(lowerValue + i * width, lowerValue + (i + 1) * width);
+            if (i == 0) {
+                child.lowerBound = oldRange.lowerBound;
+                child.lowerBoundIncluded = oldRange.lowerBoundIncluded;
             }
-        } else {
-            // For bounded ranges, split evenly (simplified for test)
-            // This is a simplified version - in reality, BE would split based on data
-            // distribution
-            int lowerValue = 0;
-            int upperValue = 0;
-            if (oldRange.lowerBound != null && oldRange.lowerBound.values != null
-                    && !oldRange.lowerBound.values.isEmpty()) {
-                lowerValue = Integer.parseInt(oldRange.lowerBound.values.get(0).value);
+            if (i == count - 1) {
+                child.upperBound = oldRange.upperBound;
+                child.upperBoundIncluded = oldRange.upperBoundIncluded;
             }
-            if (oldRange.upperBound != null && oldRange.upperBound.values != null
-                    && !oldRange.upperBound.values.isEmpty()) {
-                upperValue = Integer.parseInt(oldRange.upperBound.values.get(0).value);
-            }
-            int rangeSize = upperValue - lowerValue;
-            int step = rangeSize / newTabletIds.size();
-            for (int i = 0; i < newTabletIds.size(); i++) {
-                int subLower = lowerValue + i * step;
-                int subUpper = (i == newTabletIds.size() - 1) ? upperValue : lowerValue + (i + 1) * step;
-                result.put(newTabletIds.get(i), createTabletRangePB(subLower, subUpper));
-            }
+            result.put(newTabletIds.get(i), child);
         }
         return result;
     }
@@ -1159,5 +1151,212 @@ public class SplitTabletJobTest {
         Assertions.assertNull(droppedPartition.getPublishFailureReason());
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, tabletReshardJob.getJobState());
         Assertions.assertEquals("", splitJob.getInfo().getError_message());
+    }
+
+    // ---- checkSplitTabletRanges -------------------------------------------------------------------
+
+    private static TabletRange allRange() {
+        return new TabletRange();
+    }
+
+    private static void assertRejected(List<SplitTabletJob.ExpectedSplit> expected, Map<Long, TabletRange> ranges,
+                                       String expectedFragment) {
+        TabletReshardException e = Assertions.assertThrows(TabletReshardException.class,
+                () -> SplitTabletJob.checkSplitTabletRanges(expected, ranges));
+        Assertions.assertTrue(e.getMessage().contains(expectedFragment), e.getMessage());
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesAcceptsChildrenCoveringTheParent() {
+        List<SplitTabletJob.ExpectedSplit> expected = List.of(
+                new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L, 13L), allRange()),
+                new SplitTabletJob.ExpectedSplit(2L, List.of(21L, 22L), tabletRange(100, 300)));
+        SplitTabletJob.checkSplitTabletRanges(expected, Map.of(
+                11L, tabletRangeUpperOnly(100), 12L, tabletRange(100, 200), 13L, tabletRangeLowerOnly(200),
+                21L, tabletRange(100, 150), 22L, tabletRange(150, 300)));
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesAcceptsIdenticalFallbackWithTheParentRange() {
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), tabletRange(100, 200))),
+                Map.of(11L, tabletRange(100, 200)));
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesComparesBoundValuesNotTypes() {
+        Tuple largeInt100 = new Tuple(List.of(Variant.of(IntegerType.LARGEINT, "100")));
+        Tuple largeInt200 = new Tuple(List.of(Variant.of(IntegerType.LARGEINT, "200")));
+        // The bounds hold the same values in different types, so Tuple.equals tells them apart.
+        Assertions.assertNotEquals(largeInt100, createTuple(100));
+        TabletRange parent = new TabletRange(Range.gelt(largeInt100, largeInt200));
+        // Identical fallback.
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), parent)),
+                Map.of(11L, tabletRange(100, 200)));
+        // Normal split.
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), parent)),
+                Map.of(11L, tabletRange(100, 150), 12L, tabletRange(150, 200)));
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesRejectsIdenticalFallbackWithAnotherRange() {
+        // The compute node's metadata of tablet 1 carries (-inf, 100) while FE has [100, 200).
+        assertRejected(List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), tabletRange(100, 200))),
+                Map.of(11L, tabletRangeUpperOnly(100)), "identical");
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesRejectsChildrenNotCoveringTheParent() {
+        List<SplitTabletJob.ExpectedSplit> expected =
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), tabletRange(100, 300)));
+        // gap between the children
+        assertRejected(expected, Map.of(11L, tabletRange(100, 150), 12L, tabletRange(160, 300)), "cover");
+        // overlapping children
+        assertRejected(expected, Map.of(11L, tabletRange(100, 200), 12L, tabletRange(150, 300)), "cover");
+        // first child starts below the parent
+        assertRejected(expected, Map.of(11L, tabletRangeUpperOnly(150), 12L, tabletRange(150, 300)), "cover");
+        // last child ends above the parent
+        assertRejected(expected, Map.of(11L, tabletRange(100, 150), 12L, tabletRangeLowerOnly(150)), "cover");
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesRejectsReversedOrEmptyChildren() {
+        // Ends and adjacent edges all match, but the middle child is reversed.
+        assertRejected(List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L, 13L), tabletRange(100, 300))),
+                Map.of(11L, tabletRange(100, 250), 12L, tabletRange(250, 150), 13L, tabletRange(150, 300)), "cover");
+        // A zero-width child.
+        assertRejected(List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L), tabletRange(100, 300))),
+                Map.of(11L, tabletRange(100, 100), 12L, tabletRange(100, 300)), "cover");
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesAcceptsASingleKeyChild() {
+        // [200, 200] holds one key, so it is not empty.
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L),
+                        new TabletRange(Range.gele(createTuple(100), createTuple(200))))),
+                Map.of(11L, tabletRange(100, 200),
+                        12L, new TabletRange(Range.gele(createTuple(200), createTuple(200)))));
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesAcceptsNullPaddedBoundsDecodedFromTheComputeNode() {
+        // Colocate boundaries are (k, NULL); the children come back through TabletRangePB.
+        Tuple lower = new Tuple(List.of(Variant.of(IntegerType.INT, "100"), Variant.nullVariant(IntegerType.INT)));
+        Tuple middle = new Tuple(List.of(Variant.of(IntegerType.INT, "150"), Variant.nullVariant(IntegerType.INT)));
+        Tuple upper = new Tuple(List.of(Variant.of(IntegerType.INT, "200"), Variant.nullVariant(IntegerType.INT)));
+        TabletRange first = TabletRange.fromProto(new TabletRange(Range.gelt(lower, middle)).toProto());
+        TabletRange second = TabletRange.fromProto(new TabletRange(Range.gelt(middle, upper)).toProto());
+        SplitTabletJob.checkSplitTabletRanges(
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L),
+                        new TabletRange(Range.gelt(lower, upper)))),
+                Map.of(11L, first, 12L, second));
+    }
+
+    @Test
+    public void testCheckSplitTabletRangesRejectsAMissingFirstChild() {
+        List<SplitTabletJob.ExpectedSplit> expected =
+                List.of(new SplitTabletJob.ExpectedSplit(1L, List.of(11L, 12L, 13L), tabletRange(100, 300)));
+        assertRejected(expected, Map.of(12L, tabletRange(100, 300)), "returned");
+        assertRejected(expected, Map.of(11L, tabletRange(100, 200), 12L, tabletRange(200, 300)), "returned");
+    }
+
+    /**
+     * When the compute node's split result disagrees with FE's range of the old tablet, nothing is
+     * installed: the job keeps the old index, stays RUNNING and retries the publish with backoff, and the
+     * reason is reported in ERROR_MESSAGE.
+     */
+    @Test
+    public void testSplitResultThatDisagreesWithFeIsNotInstalled() throws Exception {
+        starRocksAssert.withTable("create table split_range_mismatch (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "split_range_mismatch");
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+        Tablet oldTablet = oldIndex.getTablets().get(0);
+        TabletRange oldRange = oldTablet.getRange();
+        long oldVersion = physicalPartition.getVisibleVersion();
+
+        // Identical fallback carrying a range the old tablet does not have on FE: (-inf, 100).
+        AtomicInteger publishAttempts = new AtomicInteger();
+        installLakeServiceMock((info, out) -> {
+            if (info.splittingTabletInfo != null) {
+                publishAttempts.incrementAndGet();
+                out.put(info.splittingTabletInfo.newTabletIds.get(0), tabletRangeUpperOnly(100).toProto());
+            }
+        });
+        // The class-wide fake executor rethrows a task's exception from submit(). A real ThreadPoolExecutor
+        // hands it back through the Future, which is the path a rejected result has to take; mirror that,
+        // but still rethrow Errors so a failed assertion inside the task stays visible.
+        // The task runs on its own thread, as on the real pool: the caller holds the table lock, and the
+        // publish path refuses blocking calls under it.
+        new MockUp<ThreadPoolExecutor>() {
+            @Mock
+            public <T> Future<T> submit(Callable<T> task) throws InterruptedException {
+                AtomicReference<T> result = new AtomicReference<>();
+                AtomicReference<Throwable> failure = new AtomicReference<>();
+                Thread thread = new Thread(() -> {
+                    try {
+                        result.set(task.call());
+                    } catch (Throwable t) {
+                        failure.set(t);
+                    }
+                });
+                thread.start();
+                thread.join();
+                Throwable failed = failure.get();
+                if (failed instanceof Error) {
+                    throw (Error) failed;
+                }
+                return failed != null ? CompletableFuture.failedFuture(failed)
+                        : CompletableFuture.completedFuture(result.get());
+            }
+        };
+
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(oldTablet.getId())),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        SplitTabletJob splitJob = (SplitTabletJob) new SplitTabletJobFactory(db, freshTable, clause)
+                .createTabletReshardJob();
+        try {
+            splitJob.init();
+            splitJob.run();
+            splitJob.run();
+            splitJob.run();
+
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
+            Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, freshTable.getState());
+            Assertions.assertEquals(oldVersion, physicalPartition.getVisibleVersion());
+            Assertions.assertSame(oldIndex, physicalPartition.getLatestBaseIndex());
+            // Nothing was applied: the splitting tablet still has its 2 new tablets, and they still carry the
+            // old tablet's range that the factory gave them.
+            SplittingTablet splittingTablet = findSplittingTablet(splitJob, oldTablet.getId());
+            Assertions.assertEquals(2, splittingTablet.getNewTabletIds().size());
+            MaterializedIndex newIndex = splitJob.getReshardingPhysicalPartitions().get(physicalPartition.getId())
+                    .getReshardingIndexes().values().iterator().next().getMaterializedIndex();
+            for (long newTabletId : splittingTablet.getNewTabletIds()) {
+                Assertions.assertEquals(oldRange, newIndex.getTablet(newTabletId).getRange());
+            }
+            String error = splitJob.getInfo().getError_message();
+            Assertions.assertTrue(error.contains("Split result rejected") && error.contains("identical"), error);
+            // The rejected attempt is not resubmitted on every tick: the retry waits for its backoff.
+            Assertions.assertEquals(1, publishAttempts.get());
+            // Once the backoff has elapsed the publish is retried, and the same result is rejected again.
+            ReshardingPhysicalPartition reshardingPartition =
+                    splitJob.getReshardingPhysicalPartitions().get(physicalPartition.getId());
+            reshardingPartition.nextPublishRetryTimeMs = 0;
+            splitJob.run();
+            splitJob.run();
+            Assertions.assertEquals(2, publishAttempts.get());
+            Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
+            Assertions.assertSame(oldIndex, physicalPartition.getLatestBaseIndex());
+        } finally {
+            splitJob.replayAbortedJob();
+            physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
+        }
     }
 }
