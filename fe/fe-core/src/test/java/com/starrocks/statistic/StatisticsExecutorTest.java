@@ -25,8 +25,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,6 +51,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -174,6 +177,39 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "t1");
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.queryStatisticSync(context, tableUUID, table, ImmutableList.of("c1", "c2"));
+    }
+
+    @Test
+    public void testStatisticsStatementResetsContextStartTime() throws Exception {
+        boolean savedEnableUnitStatistics = FeConstants.enableUnitStatistics;
+        FeConstants.enableUnitStatistics = true;
+        try {
+            ConnectContext context = StatisticUtils.buildConnectContext();
+            // The query queue derives each slot's pending deadline from the context start time, so an
+            // anchor older than the pending timeout expires the slot before it is ever requested.
+            Instant staleAnchor = Instant.now()
+                    .minusSeconds(GlobalVariable.getQueryQueuePendingTimeoutSecond() + 1L);
+
+            // DQL, through the frame reported in #59706.
+            ExternalAnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(1, "test_catalog", "test_db",
+                    "test_table", "test123", Lists.newArrayList("col1"), StatsConstants.AnalyzeType.FULL,
+                    StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+            ExternalFullStatisticsCollectJob collectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                    new Database(1, "test_db"), HiveTable.builder().setTableName("test_table").build(),
+                    List.of(), Lists.newArrayList("col1"), Lists.newArrayList(IntegerType.INT),
+                    StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+
+            context.setStartTime(staleAnchor);
+            collectJob.collectStatisticSync("select 1", context, analyzeStatus);
+            Assertions.assertTrue(context.getStartTimeInstant().isAfter(staleAnchor));
+
+            // DML, which StatisticsCollectionTrigger#executeOverWrite runs once per partition.
+            context.setStartTime(staleAnchor);
+            new StatisticExecutor().dropPartitionStatistics(context, Lists.newArrayList(1L));
+            Assertions.assertTrue(context.getStartTimeInstant().isAfter(staleAnchor));
+        } finally {
+            FeConstants.enableUnitStatistics = savedEnableUnitStatistics;
+        }
     }
 
     public static StatementBase parseSql(String originStmt) {
