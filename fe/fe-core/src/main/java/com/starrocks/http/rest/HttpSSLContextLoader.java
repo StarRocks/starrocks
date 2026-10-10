@@ -16,13 +16,12 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.SSLUtil;
 import com.starrocks.http.SslUtil;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
 
-import java.io.FileInputStream;
-import java.io.InputStream;
 import java.security.KeyStore;
 import java.util.Arrays;
 import javax.net.ssl.KeyManagerFactory;
@@ -43,22 +42,26 @@ public class HttpSSLContextLoader {
     }
 
     private static SslContext createSSLContext() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        try (InputStream keyStoreIS = new FileInputStream(Config.ssl_keystore_location)) {
-            if (Strings.isNullOrEmpty(Config.ssl_keystore_password)) {
-                throw new IllegalArgumentException("The SSL keystore password cannot be null or empty.");
-            }
-            keyStore.load(keyStoreIS, Config.ssl_keystore_password.toCharArray());
+        SSLUtil.registerSecurityProviderIfNeeded(HttpSSLContextLoader.class);
+
+        if (Strings.isNullOrEmpty(Config.ssl_keystore_password)) {
+            throw new IllegalArgumentException("The SSL keystore password cannot be null or empty.");
         }
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         if (Config.ssl_key_password == null) {
             throw new IllegalArgumentException("SSL key password (Config.ssl_key_password) cannot be null.");
         }
+
+        KeyStore keyStore = SSLUtil.loadKeyStore(Config.ssl_keystore_location, Config.ssl_keystore_password,
+                Config.ssl_keystore_type, Config.ssl_keystore_provider, "keystore");
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         kmf.init(keyStore, Config.ssl_key_password.toCharArray());
 
         String[] supportedCiphers = ((SSLServerSocketFactory) SSLServerSocketFactory.getDefault())
                 .getSupportedCipherSuites();
         String[] filteredCiphers = SslUtil.filterCipherSuites(supportedCiphers);
-        return SslContextBuilder.forServer(kmf).sslProvider(SslProvider.JDK).ciphers(Arrays.asList(filteredCiphers)).build();
+        return SslContextBuilder.forServer(kmf)
+                .sslProvider(SslProvider.JDK)
+                .ciphers(Arrays.asList(filteredCiphers))
+                .build();
     }
 }
