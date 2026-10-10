@@ -138,7 +138,7 @@ public class LeaderOpExecutor {
         }
         try {
             forward();
-            if (!GracefulExitFlag.isGracefulExit() && !GlobalStateMgr.getCurrentState().isLeader()) {
+            if (GracefulExitFlag.shouldAcceptNewHttpRequest() && !GlobalStateMgr.getCurrentState().isLeader()) {
                 long deadline = System.currentTimeMillis() + waitTimeoutMs;
                 LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
                 ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);

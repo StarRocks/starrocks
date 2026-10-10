@@ -90,6 +90,7 @@ public class StreamLoadMetaAction extends RestBaseAction {
             StreamLoadMetaResult responseResult = new StreamLoadMetaResult(
                     TStatusCode.INVALID_ARGUMENT.name(), ActionStatus.FAILED, "No database selected");
             sendResult(request, response, responseResult);
+            return;
         }
 
         String tableName = request.getSingleParameter(TABLE_KEY);
@@ -97,6 +98,7 @@ public class StreamLoadMetaAction extends RestBaseAction {
             StreamLoadMetaResult responseResult = new StreamLoadMetaResult(
                     TStatusCode.INVALID_ARGUMENT.name(), ActionStatus.FAILED, "No table selected");
             sendResult(request, response, responseResult);
+            return;
         }
 
         Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);

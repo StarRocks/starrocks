@@ -147,12 +147,17 @@ public abstract class BaseAction implements IAction {
         // - The client requests to keep-alive and,
         // - The action doesn't close the connection forcibly.
         boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest()) && !response.isForceCloseConnection();
+        ChannelFuture future;
         if (!keepAlive) {
             responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.CLOSE.toString());
-            request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
+            future = request.getContext().writeAndFlush(responseObj);
+            future.addListener(ChannelFutureListener.CLOSE);
         } else {
             responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(), HttpHeaderValues.KEEP_ALIVE.toString());
-            request.getContext().write(responseObj);
+            future = request.getContext().writeAndFlush(responseObj);
+        }
+        if (request.getConnectContext() != null) {
+            request.getConnectContext().setLastHttpWrite(future);
         }
     }
 
