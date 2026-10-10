@@ -17,6 +17,8 @@ package com.starrocks.connector;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -27,6 +29,8 @@ import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TStatisticData;
@@ -43,6 +47,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ConnectorColumnStatsCacheLoaderTest {
     public static ConnectContext connectContext;
@@ -233,8 +239,6 @@ public class ConnectorColumnStatsCacheLoaderTest {
                 "hive0.partitioned_db.t1_par.1234", "par_date")).get().getMcvString());
     }
 
-<<<<<<< HEAD
-=======
     private static TStatisticData regionKeyStats() {
         TStatisticData data = new TStatisticData();
         data.setColumnName("r_regionkey");
@@ -413,7 +417,6 @@ public class ConnectorColumnStatsCacheLoaderTest {
         Assertions.assertEquals(2, queries.get());
     }
 
->>>>>>> 4c9dc7d ([UT] Fix the flaky before-ready stats cache loader tests (#80238))
     @Test
     public void testConvert2ColumnStatistics() {
         new MockUp<StatisticsUtils>() {
