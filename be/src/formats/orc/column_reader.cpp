@@ -669,13 +669,8 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
     size_t write_pos = vb.size();
 
     // vb is using RawVectorPad16, resize will not initialize vector
-<<<<<<< HEAD
-    vb.resize(vb.size() + len);
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
-=======
     TRY_CATCH_BAD_ALLOC(vb.resize(vb.size() + len));
-    vo.resize_uninitialized(vo.size() + size, vb.size());
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
+    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
 
     if (cvb->hasNulls) {
         for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {

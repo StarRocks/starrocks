@@ -16,12 +16,8 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 
-#include "base/testutil/parallel_test.h"
->>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
