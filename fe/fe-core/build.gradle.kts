@@ -109,8 +109,9 @@ dependencies {
     implementation("com.opencsv:opencsv")
     implementation("com.oracle.database.jdbc:ojdbc10")
     implementation("com.oracle.database.nls:orai18n")
+    // transitively supplies cos_api-bundle, chdfs_hadoop_plugin_network,
+    // cos-sts-java and ofs-sdk-definition; do not redeclare them
     implementation("com.qcloud.cos:hadoop-cos")
-    implementation("com.qcloud:chdfs_hadoop_plugin_network")
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okio:okio")
     implementation("com.starrocks:spark-dpp")
