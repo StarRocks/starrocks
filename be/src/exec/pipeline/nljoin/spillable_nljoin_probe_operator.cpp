@@ -18,6 +18,9 @@
 
 #include <memory>
 
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "compute_env/spill/common.h"
 #include "compute_env/spill/options.h"
@@ -27,6 +30,46 @@
 #include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
+namespace {
+
+// Total bytes a binary column occupies. For a const column the payload is stored once but
+// logically repeats for every row, so scale it by the row count.
+size_t nljoin_binary_payload_bytes(const Column* column) {
+    const Column* data = ColumnHelper::get_data_column(column);
+    if (!data->is_binary()) {
+        return 0;
+    }
+    const size_t payload = down_cast<const BinaryColumn*>(data)->get_immutable_bytes().size();
+    if (column->is_constant()) {
+        return payload * column->size();
+    }
+    return payload;
+}
+
+// Bytes of a single row's value in a binary column.
+size_t nljoin_binary_row_bytes(const Column* column, size_t idx) {
+    const Column* data = ColumnHelper::get_data_column(column);
+    if (!data->is_binary()) {
+        return 0;
+    }
+    const auto& binary = down_cast<const BinaryColumn&>(*data);
+    const auto& offsets = binary.get_offset();
+    if (offsets.size() < 2) {
+        return 0;
+    }
+    if (column->is_constant() || idx + 1 >= offsets.size()) {
+        return static_cast<size_t>(offsets[1] - offsets[0]);
+    }
+    return static_cast<size_t>(offsets[idx + 1] - offsets[idx]);
+}
+
+// BinaryColumn addresses its bytes with uint32 offsets, so a column may hold at most
+// Column::MAX_CAPACITY_LIMIT bytes before the offsets wrap.
+bool nljoin_binary_add_exceeds(uint64_t dest_bytes, uint64_t add_bytes) {
+    return dest_bytes + add_bytes >= Column::MAX_CAPACITY_LIMIT;
+}
+
+} // namespace
 
 NLJoinProber::NLJoinProber(TJoinOp::type join_op, const std::vector<ExprContext*>& join_conjuncts,
                            const std::vector<ExprContext*>& conjunct_ctxs,
@@ -56,7 +99,8 @@ StatusOr<ChunkPtr> NLJoinProber::probe_chunk(RuntimeState* state, const ChunkPtr
     // probe chunk
     auto output_chunk = _init_output_chunk(state, build_chunk);
     //
-    _permute_chunk(state, build_chunk, output_chunk);
+    RETURN_IF_ERROR(_permute_chunk(state, build_chunk, output_chunk));
+    RETURN_IF_ERROR(output_chunk->upgrade_if_overflow());
     //
     return output_chunk;
 }
@@ -89,14 +133,46 @@ ChunkPtr NLJoinProber::_init_output_chunk(RuntimeState* state, const ChunkPtr& b
     return chunk;
 }
 
-void NLJoinProber::_permute_chunk(RuntimeState* state, const ChunkPtr& build_chunk, const ChunkPtr& output) {
+Status NLJoinProber::_permute_chunk(RuntimeState* state, const ChunkPtr& build_chunk, const ChunkPtr& output) {
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         if (output->num_rows() + build_chunk->num_rows() > state->chunk_size()) {
             DCHECK_LE(output->num_rows(), state->chunk_size());
-            return;
+            return Status::OK();
+        }
+        // BinaryColumn offsets are uint32. Repeating a large VARCHAR/JSON value across a big build
+        // chunk can exceed 4GB in a single permute, wrapping the offsets. Stop before that happens.
+        if (_permute_probe_row_exceeds_binary_limit(output.get(), build_chunk)) {
+            if (output->num_rows() == 0) {
+                return Status::CapacityLimitExceed(
+                        "NestLoop join output VARCHAR/binary column would exceed 4GB in a single permute. "
+                        "Extract compact fields before the cross join or reduce input row size.");
+            }
+            return Status::OK();
         }
         _permute_probe_row(output.get(), build_chunk);
     }
+    return Status::OK();
+}
+
+bool NLJoinProber::_permute_probe_row_exceeds_binary_limit(const Chunk* dst, const ChunkPtr& build_chunk) const {
+    const size_t build_rows = build_chunk->num_rows();
+    for (size_t i = 0; i < _col_types.size(); i++) {
+        const SlotId slot_id = _col_types[i]->id();
+        const Column* dest = dst->get_column_by_slot_id(slot_id).get();
+        const uint64_t dest_bytes = nljoin_binary_payload_bytes(dest);
+        uint64_t add_bytes = 0;
+        if (i < _probe_column_count) {
+            const Column* src = _probe_chunk->get_column_by_slot_id(slot_id).get();
+            add_bytes = static_cast<uint64_t>(nljoin_binary_row_bytes(src, _probe_row_current)) * build_rows;
+        } else {
+            const Column* src = build_chunk->get_column_by_slot_id(slot_id).get();
+            add_bytes = nljoin_binary_payload_bytes(src);
+        }
+        if (nljoin_binary_add_exceeds(dest_bytes, add_bytes)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void NLJoinProber::_permute_probe_row(Chunk* dst, const ChunkPtr& build_chunk) {
