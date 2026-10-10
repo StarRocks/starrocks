@@ -643,6 +643,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
 
+### enable_iceberg_v3_deletion_vector
+
+* **説明**: Iceberg v3 のマージオンリード（merge-on-read）削除ベクトルの読み取りを有効にするかどうか。`false` に設定すると、削除ベクトルを検出したクエリはエラーで失敗します。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **スコープ**: Session、Global
+
 ### enable_incremental_mv
 
 * **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。

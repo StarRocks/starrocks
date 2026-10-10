@@ -72,14 +72,19 @@ public:
 
     Status build_parquet(const TIcebergDeleteFile& delete_file) const;
 
+    Status build_deletion_vector(const TIcebergDeleteFile& delete_file) const;
+
+    // Exposed for testing.
+    static Status parse_deletion_vector_blob(const uint8_t* blob, int64_t content_size, DeletionBitmap* bitmap);
+
     DeletionBitmapPtr deletion_bitmap() const { return _deletion_bitmap; }
 
 private:
     Status build(const TIcebergDeleteFile& delete_file, const std::string& format) const;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
-            const TIcebergDeleteFile& delete_file, FormatScannerStats& fs_stats, FormatScannerStats& app_stats,
-            std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
+            const TIcebergDeleteFile& delete_file, int64_t offset, int64_t size, FormatScannerStats& fs_stats,
+            FormatScannerStats& app_stats, std::shared_ptr<SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<CacheInputStream>& cache_input_stream) const;
 
     static void update_delete_file_io_counter(
