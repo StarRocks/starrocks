@@ -55,11 +55,7 @@ import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.types.Conversions;
-import org.apache.iceberg.types.EdgeAlgorithm;
->>>>>>> 9b7beb6 ([BugFix] Encode Iceberg decimal manifest bounds using minimum-length two's-complement (#78456))
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.StructProjection;
