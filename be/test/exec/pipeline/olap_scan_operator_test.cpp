@@ -20,14 +20,20 @@
 #include "exec/exec_env.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "exprs/in_const_predicate.hpp"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/query/olap_fixed_morsel_queue.h"
 #include "storage/tablet_schema_helper.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -237,6 +243,89 @@ TEST_F(OlapScanOperatorTest, sample_counters_report_their_own_statistic) {
     expect_sample_counter(profile, "SamplePopulationSize", TUnit::UNIT, 444);
     expect_sample_counter(profile, "SampleBuildHistogramCount", TUnit::UNIT, 555);
 
+    scan_node.close(&_runtime_state);
+}
+
+// There is deliberately no join downstream: losing a deferred filter must change this test's result.
+TEST_F(OlapScanOperatorTest, heavy_runtime_in_filter_is_applied_after_materialization) {
+    OlapScanNode scan_node(&_object_pool, _tnode, *_tbl);
+    scan_node.set_heavy_expr_slot_ids({2});
+    scan_node._io_tasks_per_scan_operator = 0;
+    auto scan_ctx_factory =
+            std::make_shared<OlapScanContextFactory>(&scan_node, 1, false, false, std::move(_chunk_buffer_limiter));
+    OlapScanOperatorFactory factory(1, &scan_node, scan_ctx_factory);
+    RuntimeFilterHub hub;
+    factory._runtime_filter_hub = &hub;
+    SharedMorselQueueFactory morsels(std::make_unique<OlapFixedMorselQueue>(Morsels{}), 1);
+    factory.set_morsel_queue_factory(&morsels);
+
+    auto make_filter = [&](SlotId slot) {
+        auto* ref = _object_pool.add(new ColumnRef(TYPE_INT_DESC, slot));
+        VectorizedInConstPredicateBuilder builder(&_runtime_state, &_object_pool, ref);
+        builder.use_as_join_runtime_filter();
+        EXPECT_TRUE(builder.create().ok());
+        builder.add_values(ColumnTestHelper::build_column(std::vector<int32_t>{2}), 0);
+        return builder.get_in_const_predicate();
+    };
+    auto* physical_filter = make_filter(1);
+    auto* heavy_filter = make_filter(2);
+    ASSERT_TRUE(physical_filter->prepare(&_runtime_state).ok());
+    ASSERT_TRUE(physical_filter->open(&_runtime_state).ok());
+    ASSERT_TRUE(heavy_filter->prepare(&_runtime_state).ok());
+    ASSERT_TRUE(heavy_filter->open(&_runtime_state).ok());
+    factory.get_runtime_in_filters() = {physical_filter, heavy_filter};
+
+    auto op = std::make_shared<OlapScanOperator>(&factory, 1, 0, 1, &scan_node, scan_ctx_factory->get_or_create(0));
+    op->add_morsel_queue(morsels.create(0));
+    // No storage I/O is needed: emulate a ChunkSource that has already materialized synthetic slot 2.
+    op->_peak_buffer_size_counter = op->_unique_metrics->AddHighWaterMarkCounter(
+            "TestBufferSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    op->_peak_buffer_memory_usage = op->_unique_metrics->AddHighWaterMarkCounter(
+            "TestBufferBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    auto query_ctx = std::make_shared<QueryContext>();
+    op->_query_ctx = query_ctx;
+    op->set_precondition_ready(&_runtime_state);
+    ASSERT_EQ(op->runtime_in_filters(), (std::vector<ExprContext*>{physical_filter}));
+    ASSERT_EQ(op->_post_scan_runtime_in_filters, (std::vector<ExprContext*>{heavy_filter}));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnTestHelper::build_column(std::vector<int32_t>{10, 20, 30}), 1);
+    chunk->append_column(ColumnTestHelper::build_column(std::vector<int32_t>{1, 2, 3}), 2);
+    chunk->owner_info().set_owner_id(42, true);
+    op->get_chunk_buffer().put(0, chunk, nullptr);
+    auto result = op->pull_chunk(&_runtime_state);
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(result.value(), nullptr);
+    ASSERT_EQ(result.value()->num_rows(), 1);
+    EXPECT_EQ(result.value()->get_column_by_slot_id(1)->get(0).get_int32(), 20);
+    EXPECT_EQ(result.value()->get_column_by_slot_id(2)->get(0).get_int32(), 2);
+    EXPECT_EQ(result.value()->owner_info().owner_id(), 42);
+    EXPECT_TRUE(result.value()->owner_info().is_last_chunk());
+    ASSERT_NE(op->_common_metrics->get_counter("ConjunctsInputRows"), nullptr);
+    ASSERT_NE(op->_common_metrics->get_counter("ConjunctsOutputRows"), nullptr);
+    EXPECT_EQ(op->_common_metrics->get_counter("ConjunctsInputRows")->value(), 3);
+    EXPECT_EQ(op->_common_metrics->get_counter("ConjunctsOutputRows")->value(), 1);
+    EXPECT_NE(op->_common_metrics->get_counter("ConjunctsTime"), nullptr);
+
+    // Empty results must retain EOS ownership, otherwise a downstream query cache may wait forever.
+    auto rejected = std::make_shared<Chunk>();
+    rejected->append_column(ColumnTestHelper::build_column(std::vector<int32_t>{7}), 2);
+    rejected->owner_info().set_owner_id(43, true);
+    op->get_chunk_buffer().put(0, rejected, nullptr);
+    auto empty = op->pull_chunk(&_runtime_state);
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    ASSERT_NE(empty.value(), nullptr);
+    EXPECT_TRUE(empty.value()->is_empty());
+    EXPECT_EQ(empty.value()->owner_info().owner_id(), 43);
+    EXPECT_TRUE(empty.value()->owner_info().is_last_chunk());
+    EXPECT_EQ(op->_common_metrics->get_counter("ConjunctsInputRows")->value(), 4);
+    EXPECT_EQ(op->_common_metrics->get_counter("ConjunctsOutputRows")->value(), 1);
+
+    op->close(&_runtime_state);
+    ASSERT_NE(op->_common_metrics->get_counter("RuntimeInFilterNum"), nullptr);
+    EXPECT_EQ(op->_common_metrics->get_counter("RuntimeInFilterNum")->value(), 2);
+    physical_filter->close(&_runtime_state);
+    heavy_filter->close(&_runtime_state);
     scan_node.close(&_runtime_state);
 }
 

@@ -1,0 +1,82 @@
+-- name: test_push_down_heavy_exprs_join
+create table buyers (buyerId int not null, lastName varchar(256))
+distributed by hash(buyerId) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+create table t_clients (hash varchar(256), status int)
+distributed by hash(hash) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into buyers values (1, 'A B'), (2, 'C D'), (3, null), (4, '');
+-- result:
+-- !result
+insert into t_clients values (sha2('AB', 256), 1), (sha2('AB', 256), 2), (sha2('', 256), 3);
+-- result:
+-- !result
+set push_down_heavy_exprs = true;
+-- result:
+-- !result
+with b as (
+    select sha2(concat(regexp_replace(ifnull(lastName, ''), '[[:space:]]+', '')), 256) hash
+    from buyers
+)
+select * from b inner join [broadcast] t_clients using (hash) order by hash, status;
+-- result:
+38164fbd17603d73f696b8b4d72664d735bb6a7c88577687fd2ae33fd6964153	1
+38164fbd17603d73f696b8b4d72664d735bb6a7c88577687fd2ae33fd6964153	2
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	3
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	3
+-- !result
+with b as (
+    select buyerId, sha2(concat(regexp_replace(ifnull(lastName, ''), '[[:space:]]+', '')), 256) hash
+    from buyers
+)
+select b.buyerId, t_clients.status from b inner join [broadcast] t_clients
+on b.hash = t_clients.hash and b.buyerId = t_clients.status order by b.buyerId;
+-- result:
+1	1
+3	3
+-- !result
+insert into t_clients values (null, 8), (sha2('missing', 256), 9);
+-- result:
+-- !result
+with b as (
+    select buyerId, sha2(regexp_replace(lastName, '[[:space:]]+', ''), 256) hash
+    from buyers
+)
+select b.buyerId, t_clients.status from b inner join [broadcast] t_clients
+on b.hash <=> t_clients.hash order by b.buyerId, t_clients.status;
+-- result:
+1	1
+1	2
+3	8
+4	3
+-- !result
+with b as (
+    select sha2(regexp_replace(lastName, '[[:space:]]+', ''), 256) hash
+    from buyers
+)
+select count(*) from b inner join [broadcast] t_clients using (hash) where status = 9;
+-- result:
+0
+-- !result
+set push_down_heavy_exprs = false;
+-- result:
+-- !result
+with b as (
+    select sha2(concat(regexp_replace(ifnull(lastName, ''), '[[:space:]]+', '')), 256) hash
+    from buyers
+)
+select * from b inner join [broadcast] t_clients using (hash) order by hash, status;
+-- result:
+38164fbd17603d73f696b8b4d72664d735bb6a7c88577687fd2ae33fd6964153	1
+38164fbd17603d73f696b8b4d72664d735bb6a7c88577687fd2ae33fd6964153	2
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	3
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	3
+-- !result
+drop table buyers;
+-- result:
+-- !result
+drop table t_clients;
+-- result:
+-- !result

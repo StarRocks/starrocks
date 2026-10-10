@@ -34,11 +34,15 @@
 
 #include "exec/scan_node.h"
 
+#include <algorithm>
+
 #include "common/config_scan_io_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 #include "exec_primitive/pipeline/scan/morsel_queue_builder.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/expr_factory.h"
 #include "runtime/runtime_state.h"
 #include "storage/query/olap_dynamic_morsel_queue.h"
@@ -59,6 +63,18 @@ const string ScanNode::_s_num_scanner_threads_started = "NumScannerThreadsStarte
 
 ScanNode::ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs), _io_tasks_per_scan_operator(config::io_tasks_per_scan_operator) {}
+
+bool ScanNode::uses_heavy_expr_slot(ExprContext* context) const {
+    if (_heavy_expr_slot_ids.empty()) {
+        return false;
+    }
+    bool found = false;
+    context->root()->for_each_slot_id([&](SlotId slot_id) {
+        found |= std::find(_heavy_expr_slot_ids.begin(), _heavy_expr_slot_ids.end(), slot_id) !=
+                 _heavy_expr_slot_ids.end();
+    });
+    return found;
+}
 
 Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
