@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #ifdef WITH_H3
@@ -23,6 +24,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <thread>
 #include <unordered_set>
 
@@ -36,9 +38,12 @@
 #include "exprs/function_call_expr.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "geo/geo_measurements.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
 #include "runtime/runtime_state.h"
+
+DECLARE_bool(s2debug);
 
 namespace starrocks {
 
@@ -2603,6 +2608,107 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimit
     EXPECT_TRUE(limited.status().is_mem_limit_exceeded());
 }
 
+TEST_F(geographyFunctionsTest, h3PolygonFillRetainsOrderedCellsAndVaryingRowOffsets) {
+    constexpr double radians_per_degree = 0.017453292519943295769236907684886;
+    constexpr int resolution = 9;
+    std::vector<WkbGeometry> shapes(8);
+    std::vector<std::vector<int64_t>> expected(8);
+    for (size_t scenario = 0; scenario < 5; ++scenario) {
+        const size_t vertices = scenario == 1 ? 256 : 32;
+        const double radius = scenario == 2 ? 1e-7 : (scenario == 3 ? 0.015 : 0.12);
+        const double longitude = scenario == 4 ? 36 : 35;
+        auto& shape = shapes[scenario];
+        shape.type = WkbGeometryType::POLYGON;
+        auto& ring = shape.rings.emplace_back();
+        std::vector<LatLng> library_vertices;
+        for (size_t i = 0; i < vertices; ++i) {
+            const double angle = i * 2 * M_PI / vertices;
+            ring.push_back({longitude + radius * std::cos(angle), 55 + radius * std::sin(angle)});
+            library_vertices.push_back({ring.back().y * radians_per_degree, ring.back().x * radians_per_degree});
+        }
+        ring.push_back(ring.front());
+        ::GeoPolygon polygon{{static_cast<int>(vertices), library_vertices.data()}, 0, nullptr};
+        int64_t slots = 0;
+        ASSERT_EQ(E_SUCCESS, maxPolygonToCellsSize(&polygon, resolution, 0, &slots));
+        std::vector<H3Index> cells(slots, H3_NULL);
+        // These fixed fixtures exercise the two pinned H3 center-fill APIs.
+        if (scenario == 1) {
+            ASSERT_EQ(E_SUCCESS,
+                      polygonToCellsExperimental(&polygon, resolution, CONTAINMENT_CENTER, slots, cells.data()));
+        } else {
+            ASSERT_EQ(E_SUCCESS, polygonToCells(&polygon, resolution, 0, cells.data()));
+        }
+        for (H3Index cell : cells) {
+            if (cell == H3_NULL) continue;
+            ASSERT_TRUE(isValidCell(cell));
+            expected[scenario].push_back(static_cast<int64_t>(cell));
+        }
+    }
+    for (size_t scenario : {0, 1}) {
+        ASSERT_GT(expected[scenario].size(), 1024);
+        ASSERT_NE(0, expected[scenario].size() % 1024);
+    }
+    ASSERT_TRUE(expected[2].empty());
+    ASSERT_GT(expected[3].size(), 0);
+    ASSERT_LT(expected[3].size(), 1024);
+    WkbGeometry empty;
+    empty.type = WkbGeometryType::POLYGON;
+    empty.empty = true;
+    shapes[5].type = WkbGeometryType::MULTIPOLYGON;
+    shapes[5].children = {empty, shapes[0], empty};
+    expected[5] = expected[0];
+    shapes[6].type = WkbGeometryType::MULTIPOLYGON;
+    shapes[6].children = {shapes[0], shapes[4]};
+    std::unordered_set<int64_t> seen;
+    for (size_t component : {0, 4}) {
+        for (int64_t cell : expected[component]) {
+            if (seen.insert(cell).second) expected[6].push_back(cell);
+        }
+    }
+    shapes[7] = empty;
+
+    const std::array<size_t, 9> row_shapes{0, 1, 7, 3, 5, 6, 0, 1, 2};
+    auto data = GeoColumn::create(GeoColumnDescriptor{
+            geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+    auto nulls = NullColumn::create();
+    auto resolutions = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    for (size_t row = 0; row < row_shapes.size(); ++row) {
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(shapes[row_shapes[row]], &wkb).ok());
+        data->append_wkb(Slice(wkb));
+        nulls->append(row == 1);
+        if (row == 6)
+            resolutions->append_nulls(1);
+        else
+            resolutions->append_datum(Datum(static_cast<int32_t>(resolution)));
+    }
+    auto result = GeoFunctions::h3_polygon_to_cells(nullptr, {NullableColumn::create(data, nulls), resolutions});
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_EQ(row_shapes.size(), (*result)->size());
+    EXPECT_FALSE((*result)->is_constant());
+    for (size_t row = 0; row < row_shapes.size(); ++row) {
+        SCOPED_TRACE(row);
+        const auto datum = (*result)->get(row);
+        if (row == 1 || row == 6) {
+            EXPECT_TRUE(datum.is_null());
+            continue;
+        }
+        ASSERT_FALSE(datum.is_null());
+        const auto& actual = datum.get_array();
+        const auto& reference = expected[row_shapes[row]];
+        ASSERT_EQ(reference.size(), actual.size());
+        seen.clear();
+        for (size_t i = 0; i < actual.size(); ++i) {
+            SCOPED_TRACE(i);
+            const int64_t cell = actual[i].get_int64();
+            EXPECT_EQ(reference[i], cell);
+            EXPECT_GT(cell, 0);
+            EXPECT_TRUE(isValidCell(static_cast<H3Index>(cell)));
+            EXPECT_TRUE(seen.insert(cell).second);
+        }
+    }
+}
+
 TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
     std::unique_ptr<FunctionContext> context(
@@ -2635,6 +2741,150 @@ TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     EXPECT_TRUE(valid.load());
     ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+TEST_F(geographyFunctionsTest, h3SingleRingValidityMatchesSphericalPredicate) {
+    // Match production S2 initialization so malformed loops return a verdict
+    // instead of aborting in the constructor before explicit validation.
+    gflags::FlagSaver restore_flags;
+    FLAGS_s2debug = false;
+    std::vector<WkbGeometry> cases;
+    const auto add = [&](std::vector<WkbCoordinate> ring) {
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        polygon.rings.emplace_back(std::move(ring));
+        cases.emplace_back(std::move(polygon));
+    };
+    add({{0, 0}, {2, 0}, {1, 2}, {0, 0}});
+    add({{0, 0}, {0, 0}, {2, 0}, {2, 0}, {1, 2}, {0, 0}, {0, 0}});
+    add({{0, 0}, {2, 2}, {0, 2}, {2, 0}, {0, 0}});         // bowtie
+    add({{0, 0}, {2, 0}, {1, 1}, {2, 0}, {0, 2}, {0, 0}}); // non-adjacent duplicate
+    add({{0, 0}, {0, 0}, {0, 0}, {0, 0}});
+    add({{0, 0}, {2, 0}, {2, 0}, {0, 0}});     // only two mapped vertices
+    add({{0, 0}, {1, 0}, {2, 0}, {0, 0}});     // collinear
+    add({{0, 0}, {180, 0}, {90, 30}, {0, 0}}); // antipodal angular endpoints
+    add({{0, 90}, {180, -90}, {45, 0}, {0, 90}});
+    add({{179, -1}, {-179, -1}, {-179, 1}, {179, 1}, {179, -1}});       // seam
+    add({{180, 0}, {179, 2}, {-179, 2}, {-180, 0}});                    // mapped closure aliases
+    add({{-135, 80}, {-45, 80}, {45, 80}, {135, 80}, {-135, 80}});      // north pole
+    add({{-135, -80}, {135, -80}, {45, -80}, {-45, -80}, {-135, -80}}); // south pole
+    add({{-135, -10}, {-45, -10}, {45, -10}, {135, -10}, {-135, -10}}); // large loop
+    add({{-170, -70}, {-10, -70}, {150, -70}, {170, 50}, {0, 80}, {-170, -70}});
+    add({{-0.0, -0.0}, {1, 0}, {0, 1}, {+0.0, +0.0}});
+    add({{0, 0}, {2, 0}, {1, 2}, {0, 1}});     // unclosed
+    add({{181, 0}, {2, 0}, {1, 2}, {181, 0}}); // bounds
+    add({{0, 91}, {2, 0}, {1, 2}, {0, 91}});
+    add({{std::numeric_limits<double>::quiet_NaN(), 0}, {2, 0}, {1, 2}, {std::numeric_limits<double>::quiet_NaN(), 0}});
+
+    add({});
+    add({{0, 0}});
+    add({{0, 0}, {0, 0}});
+
+    std::mt19937_64 random(0x80396);
+    std::uniform_real_distribution<double> unit(0, 1);
+    constexpr size_t vertex_counts[] = {3, 4, 8, 32, 127, 128, 256, 512};
+    for (size_t scenario = 0; scenario < 128; ++scenario) {
+        const size_t vertices = vertex_counts[scenario % std::size(vertex_counts)];
+        const double longitude = -160 + 320 * unit(random);
+        const double latitude = -60 + 120 * unit(random);
+        const double radius = 0.001 + 0.2 * unit(random);
+        std::vector<WkbCoordinate> ring;
+        for (size_t i = 0; i < vertices; ++i) {
+            const double angle = 2 * M_PI * i / vertices;
+            const double length = radius * (0.65 + 0.35 * unit(random));
+            ring.push_back({longitude + length * std::cos(angle), latitude + length * std::sin(angle)});
+        }
+        ring.push_back(ring.front());
+        add(ring);
+        std::reverse(ring.begin(), ring.end());
+        add(ring);
+        const size_t duplicate = 1 + random() % (vertices - 1);
+        const auto duplicate_point = ring[duplicate];
+        ring.insert(ring.begin() + duplicate, duplicate_point);
+        add(ring);
+        if (vertices > 3) {
+            ring[1 + random() % (vertices - 2)] = ring.front();
+            add(ring);
+        }
+        ring.pop_back();
+        std::shuffle(ring.begin(), ring.end(), random);
+        ring.push_back(ring.front());
+        add(ring);
+    }
+
+    size_t accepted = 0, rejected = 0;
+    for (size_t scenario = 0; scenario < cases.size(); ++scenario) {
+        SCOPED_TRACE(scenario);
+        auto expected = spherical_is_valid(cases[scenario]);
+        GeoCoordinateList coordinates;
+        for (const auto& point : cases[scenario].rings.front()) coordinates.add({point.x, point.y});
+        const bool actual = starrocks::GeoPolygon::is_valid_ring(coordinates);
+        GeoCoordinateListList rings;
+        rings.add(new GeoCoordinateList(coordinates));
+        starrocks::GeoPolygon original;
+        const bool original_valid = original.from_coords(rings) == GEO_PARSE_OK;
+        ASSERT_TRUE(expected.ok()) << expected.status();
+        EXPECT_EQ(expected.value(), original_valid);
+        EXPECT_EQ(expected.value(), actual);
+        accepted += expected.value();
+        rejected += !expected.value();
+    }
+    EXPECT_GT(accepted, 0);
+    EXPECT_GT(rejected, 0);
+}
+
+TEST_F(geographyFunctionsTest, h3SingleRingValidityRetainsOrderedFillAndTopologyErrors) {
+    constexpr double radians_per_degree = 0.017453292519943295769236907684886;
+    for (size_t vertices : {32, 256}) {
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        auto& ring = polygon.rings.emplace_back();
+        for (size_t i = 0; i < vertices; ++i) {
+            const double angle = 2 * M_PI * i / vertices;
+            ring.push_back({35 + 0.12 * std::cos(angle), 55 + 0.12 * std::sin(angle)});
+        }
+        ring.push_back(ring.front());
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
+        auto data = GeoColumn::create(
+                GeoColumnDescriptor{geography_type().geo_type.value(),
+                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_UNVALIDATED}});
+        data->append_wkb(Slice(wkb));
+
+        std::vector<LatLng> coordinates;
+        for (size_t i = 0; i < vertices; ++i)
+            coordinates.push_back({ring[i].y * radians_per_degree, ring[i].x * radians_per_degree});
+        ::GeoPolygon library{{static_cast<int>(coordinates.size()), coordinates.data()}, 0, nullptr};
+        int64_t slots = 0;
+        ASSERT_EQ(E_SUCCESS, maxPolygonToCellsSize(&library, 9, 0, &slots));
+        std::vector<H3Index> slab(slots, H3_NULL);
+        const H3Error fill_error =
+                vertices >= 128 ? polygonToCellsExperimental(&library, 9, CONTAINMENT_CENTER, slots, slab.data())
+                                : polygonToCells(&library, 9, 0, slab.data());
+        ASSERT_EQ(E_SUCCESS, fill_error);
+        std::vector<int64_t> expected;
+        std::unordered_set<H3Index> seen;
+        for (H3Index cell : slab)
+            if (cell != H3_NULL && seen.insert(cell).second) expected.push_back(static_cast<int64_t>(cell));
+        ASSERT_GT(expected.size(), 1024);
+        auto actual =
+                GeoFunctions::h3_polygon_to_cells(nullptr, {data, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        std::vector<int64_t> returned;
+        const auto datum = (*actual)->get(0);
+        for (const auto& cell : datum.get_array()) returned.push_back(cell.get_int64());
+        EXPECT_EQ(expected, returned);
+    }
+
+    // Ordinary invalid topology fails before H3 admission/fill: no assertion
+    // equates globally valid spherical polygons with H3 library success.
+    for (const char* wkt : {"POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))", "POLYGON ((0 0, 2 0, 1 1, 2 0, 0 2, 0 0))"}) {
+        auto actual = GeoFunctions::h3_polygon_to_cells(
+                nullptr, {geography({wkt}), ColumnHelper::create_const_column<TYPE_INT>(1, 1)});
+        ASSERT_FALSE(actual.ok());
+        EXPECT_TRUE(actual.status().is_invalid_argument());
+        EXPECT_NE(std::string::npos, actual.status().to_string().find("valid spherical GEOGRAPHY topology"));
+    }
 }
 
 #endif // WITH_H3
