@@ -21,6 +21,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -30,6 +31,7 @@ import com.starrocks.qe.ShowResultMetaFactory;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.ColumnSeparator;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
@@ -45,6 +47,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ShowCreateRoutineLoadStmtTest {
     private static ConnectContext ctx;
@@ -151,7 +154,7 @@ public class ShowCreateRoutineLoadStmtTest {
                 Lists.newArrayList(new ImportColumnDesc("col1"), new ImportColumnDesc("col2")));
         String columnsDdl = buildDDL(columnsOnly);
         Assertions.assertFalse(columnsDdl.contains("testTbl,"), columnsDdl);
-        Assertions.assertTrue(columnsDdl.contains("on testTbl\nCOLUMNS (col1, col2)"), columnsDdl);
+        Assertions.assertTrue(columnsDdl.contains("on testTbl\nCOLUMNS (`col1`, `col2`)"), columnsDdl);
 
         // COLUMNS TERMINATED BY precedes COLUMNS(...): the comma separator is required.
         KafkaRoutineLoadJob columnsAfterSeparator = baseJob();
@@ -159,7 +162,7 @@ public class ShowCreateRoutineLoadStmtTest {
         Deencapsulation.setField(columnsAfterSeparator, "columnDescs",
                 Lists.newArrayList(new ImportColumnDesc("col1")));
         String separatorDdl = buildDDL(columnsAfterSeparator);
-        Assertions.assertTrue(separatorDdl.contains(",\nCOLUMNS (col1)"), separatorDdl);
+        Assertions.assertTrue(separatorDdl.contains(",\nCOLUMNS (`col1`)"), separatorDdl);
 
         // PARTITION is the first clause: no comma after the table name.
         KafkaRoutineLoadJob partitionOnly = baseJob();
@@ -175,5 +178,30 @@ public class ShowCreateRoutineLoadStmtTest {
         String whereDdl = buildDDL(whereOnly);
         Assertions.assertFalse(whereDdl.contains("testTbl,"), whereDdl);
         Assertions.assertTrue(whereDdl.contains("on testTbl\nWHERE "), whereDdl);
+    }
+
+    // ===== COLUMNS / WHERE expressions keep their parentheses and column names are backquoted, so the
+    // DDL re-creates the same job even when a column is named with a reserved word. =====
+    @Test
+    public void testShowCreateRoutineLoadKeepsExpressionParentheses() throws Exception {
+        KafkaRoutineLoadJob job = baseJob();
+        Expr columnExpr = SqlParser.parseSqlToExpr("floor((ts + 32400) / 86400)", 0);
+        Expr whereExpr = SqlParser.parseSqlToExpr("(a + b) * 2 > 10", 0);
+        // plain columns first, then the mapping: the parser groups COLUMNS that way, so this order is stable
+        Deencapsulation.setField(job, "columnDescs", Lists.newArrayList(new ImportColumnDesc("k"),
+                new ImportColumnDesc("ts"), new ImportColumnDesc("from"), new ImportColumnDesc("r", columnExpr)));
+        Deencapsulation.setField(job, "whereExpr", whereExpr);
+
+        String ddl = buildDDL(job);
+        Assertions.assertTrue(ddl.contains("COLUMNS (`k`, `ts`, `from`, `r`=floor((`ts` + 32400) / 86400))"), ddl);
+        Assertions.assertTrue(ddl.contains("WHERE ((`a` + `b`) * 2) > 10"), ddl);
+
+        // The DDL parses back to the same load definition.
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) SqlParser.parse(ddl, ctx.getSessionVariable()).get(0);
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.buildLoadDesc(stmt.getLoadPropertyList());
+        Assertions.assertEquals(Lists.newArrayList("k", "ts", "from", "r"), reparsed.getColumnsInfo().getColumns()
+                .stream().map(ImportColumnDesc::getColumnName).collect(Collectors.toList()));
+        Assertions.assertEquals(columnExpr, reparsed.getColumnsInfo().getColumns().get(3).getExpr());
+        Assertions.assertEquals(whereExpr, reparsed.getWherePredicate().getExpr());
     }
 }

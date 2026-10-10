@@ -48,6 +48,8 @@ FROM data_source
 
    詳細なパラメータの説明については、[CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#load_properties) を参照してください。
 
+   ALTER で `COLUMNS` または `WHERE` を変更すると、その文は現在のセッションの `sql_mode` ではなく、ジョブ作成時に保存された `sql_mode` で再解析されます。フォロワー FE や FE の再起動時にはそのモードで読み直されるためです。そのモードで式の意味が変わる場合（例えば `a || b` は既定では `OR`、`PIPES_AS_CONCAT` では文字列連結）、ALTER は拒否されます。セッションの `sql_mode` をジョブと同じ値にするか、曖昧さのない式（`concat(a, b)`）を使用してください。また、ジョブの `COLUMNS` や `WHERE` の定義を永続化される文に書き戻したときに同じ式として解析できない場合も ALTER は拒否され、エラーメッセージにその式が示されます。ジョブプロパティやデータソースプロパティのみを変更する ALTER は、既存のロード定義を変更しません。
+
 - **`job_properties`**
 
   ロードジョブのプロパティ。構文は以下の通りです:
