@@ -73,6 +73,12 @@ public:
 
     int64_t mem_usage() const;
 
+    // Extra transient memory that append_chunk(|chunk|) may need on top of the appended data
+    // itself, i.e. the cost of the container reallocations it triggers. Returns 0 when every
+    // destination container already has room. See the comment on the implementation for why
+    // this is not simply mem_usage().
+    size_t estimated_expand_bytes(const ChunkPtr& chunk) const;
+
 private:
     void _init_probe_column(const HashTableParam& param);
     void _init_build_column(const HashTableParam& param);

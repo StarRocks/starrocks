@@ -74,7 +74,11 @@ void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
 
 size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
     if (chunk && !chunk->is_empty()) {
-        return chunk->memory_usage() + _join_builder->hash_join_builder()->ht_mem_usage();
+        // Reserve what this push actually needs: the appended data, plus the transient cost of any
+        // container reallocation it triggers. Reporting the whole hash table on every push instead
+        // held roughly one extra copy of the build side on the query's memory tracker for the whole
+        // build phase, which could by itself carry the query past the spill watermark.
+        return chunk->memory_usage() + _join_builder->hash_join_builder()->estimated_expand_bytes(chunk);
     }
     return 0;
 }

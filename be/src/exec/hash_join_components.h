@@ -106,6 +106,14 @@ public:
 
     virtual int64_t ht_mem_usage() const = 0;
 
+    // Extra transient memory appending |chunk| may need beyond the appended data itself, i.e. the
+    // container reallocations it triggers. Returns 0 when nothing has to grow.
+    size_t estimated_expand_bytes(const ChunkPtr& chunk) {
+        size_t expand_bytes = 0;
+        visitHt([&](JoinHashTable* ht) { expand_bytes += ht->estimated_expand_bytes(chunk); });
+        return expand_bytes;
+    }
+
     // used for check NULL_AWARE_LEFT_ANTI_JOIN build side has null
     virtual bool anti_join_key_column_has_null() const = 0;
 
