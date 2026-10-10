@@ -1,0 +1,81 @@
+-- name: test_multi_table_all_rows_rejected_tracking
+-- A rejected table must abort the shared transaction, identify the table, and expose its
+-- rejected row through the sub-task ID in TRACKING_SQL. A label scan would hide an ID lookup bug.
+
+create database db_${uuid0};
+-- result:
+-- !result
+
+use db_${uuid0};
+-- result:
+-- !result
+
+CREATE TABLE good_rows (id INT NOT NULL) PRIMARY KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+
+CREATE TABLE rejected_rows (id INT NOT NULL, marker VARCHAR(64)) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num"="1");
+-- result:
+-- !result
+
+shell: curl -s --location-trusted -u root: -H "label:rejected_${uuid0}" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/begin | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+
+shell: curl -s --location-trusted -u root: -H "label:rejected_${uuid0}" -H "db:db_${uuid0}" -H "table:good_rows" -H "transaction_type:multi" -d '1' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+
+shell: curl -s --location-trusted -u root: -H "label:rejected_${uuid0}" -H "db:db_${uuid0}" -H "table:rejected_rows" -H "transaction_type:multi" -H "column_separator:," -H "strict_mode:true" -H "max_filter_ratio:1" -d 'not_an_int,pr80351_rejected_${uuid0}' -XPUT ${url}/api/transaction/load | jq -r '.Status'
+-- result:
+0
+OK
+-- !result
+
+shell: curl -s --location-trusted -u root: -H "label:rejected_${uuid0}" -H "db:db_${uuid0}" -H "transaction_type:multi" -XPOST ${url}/api/transaction/commit | jq -r '.Status, (.Message | contains("Failed to load table rejected_rows")), (.Message | contains("tracking_url:"))'
+-- result:
+0
+FAILED
+true
+true
+-- !result
+
+select count(*) from good_rows;
+-- result:
+0
+-- !result
+
+select count(*) from rejected_rows;
+-- result:
+0
+-- !result
+
+select STATE, SINK_ROWS, FILTERED_ROWS from information_schema.loads where DB_NAME='db_${uuid0}' and LABEL='rejected_${uuid0}' and TABLE_NAME='rejected_rows';
+-- result:
+CANCELLED	0	1
+-- !result
+
+[UC]child_id=select ID from information_schema.loads where DB_NAME='db_${uuid0}' and LABEL='rejected_${uuid0}' and TABLE_NAME='rejected_rows';
+
+[UC]tracking_sql=select TRACKING_SQL from information_schema.loads where ID=${child_id};
+
+-- Execute the advertised SQL, including its literal child job_id predicate, through the runner.
+LOOP {
+    PROPERTY: {"timeout": 20, "interval": 1, "desc": "read rejected row through child tracking SQL"}
+    tracking_rows=${tracking_sql};
+    CHECK: "pr80351_rejected_${uuid0}" in ${tracking_rows}
+} END LOOP
+
+select count(*) from information_schema.load_tracking_logs where job_id=${child_id};
+-- result:
+1
+-- !result
+
+CLEANUP {
+    DROP DATABASE IF EXISTS db_${uuid0};
+} END CLEANUP
+
