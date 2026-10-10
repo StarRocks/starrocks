@@ -69,4 +69,9 @@ inline uint32_t Unmask(uint32_t masked_crc) {
     return ((rot >> 17) | (rot << 15));
 }
 
+#if defined(__aarch64__)
+// Exposed only for hermetic unit testing
+void ResetArmCrc32cCacheForTesting();
+#endif
+
 } // namespace starrocks::crc32c
