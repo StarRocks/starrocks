@@ -16,7 +16,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
+#include <vector>
 
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
@@ -736,6 +738,42 @@ TEST_F(AggregateTest, test_min) {
     func = get_aggregate_function("min", TYPE_DATE, TYPE_DATE, false);
     test_agg_function<DateValue, DateValue>(ctx, func, DateValue::create(2000, 1, 1), DateValue::create(1000, 1, 1),
                                             DateValue::create(1000, 1, 1));
+}
+
+TEST_F(AggregateTest, test_maxmin_double_infinity) {
+    auto test_aggregate = [this](const char* function_name, const std::vector<double>& values, double expected) {
+        const AggregateFunction* func = get_aggregate_function(function_name, TYPE_DOUBLE, TYPE_DOUBLE, false);
+        auto input = DoubleColumn::create();
+        for (double value : values) {
+            input->append(value);
+        }
+        const Column* columns[] = {input.get()};
+
+        auto partial_state = ManagedAggrState::create(ctx, func);
+        func->update_batch_single_state(ctx, input->size(), columns, partial_state->state());
+        auto direct_result = DoubleColumn::create();
+        func->finalize_to_column(ctx, partial_state->state(), direct_result.get());
+        ASSERT_EQ(expected, direct_result->get_data()[0]);
+
+        auto serialized = DoubleColumn::create();
+        func->serialize_to_column(ctx, partial_state->state(), serialized.get());
+        auto merge_state = ManagedAggrState::create(ctx, func);
+        func->merge(ctx, serialized.get(), merge_state->state(), 0);
+        auto merged_result = DoubleColumn::create();
+        func->finalize_to_column(ctx, merge_state->state(), merged_result.get());
+        ASSERT_EQ(expected, merged_result->get_data()[0]);
+    };
+
+    const double positive_infinity = std::numeric_limits<double>::infinity();
+    const double negative_infinity = -positive_infinity;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    test_aggregate("max", {negative_infinity}, negative_infinity);
+    test_aggregate("max", {std::numeric_limits<double>::lowest(), negative_infinity},
+                   std::numeric_limits<double>::lowest());
+    test_aggregate("max", {nan, negative_infinity}, std::numeric_limits<double>::lowest());
+    test_aggregate("min", {positive_infinity}, positive_infinity);
+    test_aggregate("min", {std::numeric_limits<double>::max(), positive_infinity}, std::numeric_limits<double>::max());
+    test_aggregate("min", {nan, positive_infinity}, std::numeric_limits<double>::max());
 }
 
 //TEST_F(AggregateTest, test_bitmap_count) {
