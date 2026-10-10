@@ -28,6 +28,14 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
         return null;
     }
 
+    @Override
+    public R visitPrepareStatement(PrepareStmt statement, C context) {
+        if (statement.getInnerStmt() != null) {
+            visit(statement.getInnerStmt(), context);
+        }
+        return null;
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     @Override
@@ -198,6 +206,14 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     @Override
     public R visitView(ViewRelation node, C context) {
         return visit(node.getQueryStatement(), context);
+    }
+
+    @Override
+    public R visitPivotRelation(PivotRelation node, C context) {
+        if (node.getQuery() != null) {
+            visit(node.getQuery(), context);
+        }
+        return null;
     }
 
     // ------------------------------------------- Expression --------------------------------==------------------------
