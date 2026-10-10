@@ -222,6 +222,33 @@ StatusOr<const WkbGeometry*> h3_geometry(const H3GeoInput& input, size_t row, bo
     return varying;
 }
 
+// Small arrays share a checkpoint budget; large calls still poll before and after H3.
+struct H3ArrayCheckpoint {
+    int64_t cells_since_checkpoint = 0;
+
+    Status before_row(FunctionContext* context, size_t row) {
+        if ((row & 1023) == 0) {
+            cells_since_checkpoint = 0;
+            RETURN_IF_ERROR(h3_checkpoint(context));
+        }
+        return Status::OK();
+    }
+
+    Status before_cells(FunctionContext* context, int64_t count) {
+        if (count >= 1024 || cells_since_checkpoint + count >= 1024) {
+            cells_since_checkpoint = 0;
+            RETURN_IF_ERROR(h3_checkpoint(context));
+        }
+        if (count < 1024) cells_since_checkpoint += count;
+        return Status::OK();
+    }
+
+    Status after_cells(FunctionContext* context, int64_t count) {
+        if (count >= 1024) RETURN_IF_ERROR(h3_checkpoint(context));
+        return Status::OK();
+    }
+};
+
 struct H3ArrayBuilder {
     decltype(Int64Column::create()) values = Int64Column::create();
     decltype(UInt32Column::create()) offsets = UInt32Column::create();
@@ -234,12 +261,12 @@ struct H3ArrayBuilder {
         offsets->append(static_cast<uint32_t>(values->size()));
     }
 
-    Status append(const std::vector<H3Index>& cells, FunctionContext* context = nullptr) {
+    Status append(const std::vector<H3Index>& cells, FunctionContext* context = nullptr, bool check_first_cell = true) {
         if (cells.size() > std::numeric_limits<uint32_t>::max() - values->size()) {
             return Status::InvalidArgument("H3 array offset limit exceeded");
         }
         for (size_t i = 0; i < cells.size(); ++i) {
-            if ((i & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
+            if ((i & 1023) == 0 && (i != 0 || check_first_cell)) RETURN_IF_ERROR(h3_checkpoint(context));
             values->append(static_cast<int64_t>(cells[i]));
         }
         nulls->append(0);
@@ -464,8 +491,9 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext* context, const C
     ColumnViewer<TYPE_INT> ks(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    H3ArrayCheckpoint checkpoint;
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        RETURN_IF_ERROR(checkpoint.before_row(context, row));
         if (input.is_null(row) || ks.is_null(row)) {
             result.append_null();
             continue;
@@ -478,6 +506,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext* context, const C
         if (size_error != E_SUCCESS) return h3_error("H3_GridDisk", size_error);
         RETURN_IF_ERROR(h3_cells_limit(limits, count, context));
         RETURN_IF_ERROR(h3_working_limit(limits, static_cast<uint64_t>(count) * sizeof(H3Index) * 3));
+        RETURN_IF_ERROR(checkpoint.before_cells(context, count));
         std::vector<H3Index> cells(static_cast<size_t>(count), 0);
         H3Budget budget{static_cast<size_t>(limits.working_bytes) - cells.size() * sizeof(H3Index)};
         H3Error error;
@@ -486,15 +515,19 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext* context, const C
             error = gridDisk(cell, k, cells.data());
         }
         if (budget.exceeded) return Status::InvalidArgument("h3_max_working_bytes exceeded");
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        RETURN_IF_ERROR(checkpoint.after_cells(context, count));
         if (error != E_SUCCESS) return h3_error("H3_GridDisk", error);
         cells.erase(std::remove(cells.begin(), cells.end(), H3_NULL), cells.end());
-        for (H3Index value : cells) {
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (i != 0 && (i & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
+            const H3Index value = cells[i];
             if (!isValidCell(value)) return Status::InternalError("H3_GridDisk returned invalid cell");
         }
-        RETURN_IF_ERROR(result.append(cells, context));
+        RETURN_IF_ERROR(result.append(cells, context, false));
     }
-    return result.build(size, constant);
+    ColumnPtr output = result.build(size, constant);
+    RETURN_IF_ERROR(h3_checkpoint(context));
+    return output;
 }
 
 StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext* context, const Columns& columns) {
@@ -505,8 +538,9 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext* context, const
     ColumnViewer<TYPE_INT> resolutions(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
     H3ArrayBuilder result;
+    H3ArrayCheckpoint checkpoint;
     for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        RETURN_IF_ERROR(checkpoint.before_row(context, row));
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
             continue;
@@ -521,16 +555,21 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext* context, const
         if (size_error != E_SUCCESS) return h3_error("H3_ToChildren", size_error);
         RETURN_IF_ERROR(h3_cells_limit(limits, count, context));
         RETURN_IF_ERROR(h3_working_limit(limits, static_cast<uint64_t>(count) * sizeof(H3Index) * 2));
+        RETURN_IF_ERROR(checkpoint.before_cells(context, count));
         std::vector<H3Index> cells(static_cast<size_t>(count), 0);
         const H3Error error = cellToChildren(cell, resolution, cells.data());
-        RETURN_IF_ERROR(h3_checkpoint(context));
+        RETURN_IF_ERROR(checkpoint.after_cells(context, count));
         if (error != E_SUCCESS) return h3_error("H3_ToChildren", error);
-        for (H3Index value : cells) {
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (i != 0 && (i & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
+            const H3Index value = cells[i];
             if (!isValidCell(value)) return Status::InternalError("H3_ToChildren returned invalid cell");
         }
-        RETURN_IF_ERROR(result.append(cells, context));
+        RETURN_IF_ERROR(result.append(cells, context, false));
     }
-    return result.build(size, constant);
+    ColumnPtr output = result.build(size, constant);
+    RETURN_IF_ERROR(h3_checkpoint(context));
+    return output;
 }
 
 StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const Columns& columns) {
