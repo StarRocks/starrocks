@@ -15,6 +15,7 @@
 #include "storage/lake/tablet_reader.h"
 
 #include <algorithm>
+#include <chrono>
 #include <future>
 #include <limits>
 #include <utility>
@@ -222,6 +223,9 @@ static void init_coarse_split_allocation_state(const PreparedSegmentReadStatePtr
     segment_state->coarse_scan_range_iter = segment_state->coarse_scan_range.new_iterator();
     segment_state->allocated_coarse_ranges.clear();
     segment_state->coarse_split_allocation_closed = false;
+    segment_state->coarse_refinement_ready = false;
+    segment_state->coarse_refinement_status = Status::OK();
+    segment_state->first_surviving_coarse_rowid.reset();
     segment_state->clear_pruned_scan_range();
     segment_state->clear_rowid_bounds_cache();
 }
@@ -529,6 +533,48 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         if (effective_params.refine_initial_coarse_split_and_append_refined_tasks) {
             RETURN_IF_ERROR(refine_initial_coarse_split_and_append_refined_tasks(effective_params,
                                                                                  &effective_params.rowid_range_option));
+        } else if (const auto& segment_state = effective_params.prepared_segment_read_state; segment_state != nullptr) {
+            const auto& tablet_state = effective_params.prepared_tablet_read_state;
+            const auto rowset_idx = effective_params.prepared_rowset_index;
+            const auto segment_idx = effective_params.prepared_segment_index;
+            if (tablet_state == nullptr || effective_params.rowid_range_option == nullptr ||
+                rowset_idx >= tablet_state->rowsets.size() || rowset_idx >= tablet_state->rowset_segments.size() ||
+                segment_idx >= tablet_state->rowset_segments[rowset_idx].size() ||
+                tablet_state->rowsets[rowset_idx] == nullptr ||
+                tablet_state->rowset_segments[rowset_idx][segment_idx] == nullptr) {
+                return Status::InvalidArgument("invalid prepared split context");
+            }
+            // A pre-refinement coarse sibling can start before the seed finishes pruning. Wait
+            // for the final range and ownership choice before opening its segment iterator.
+            std::optional<rowid_t> first_coarse_rowid;
+            {
+                std::unique_lock<std::mutex> guard(segment_state->coarse_range_lock);
+                while (!segment_state->coarse_refinement_ready) {
+                    segment_state->coarse_refinement_cv.wait_for(guard, std::chrono::milliseconds(100));
+                    if (effective_params.runtime_state != nullptr && effective_params.runtime_state->is_cancelled()) {
+                        return Status::Cancelled("prepared split refinement cancelled");
+                    }
+                }
+                RETURN_IF_ERROR(segment_state->coarse_refinement_status);
+                first_coarse_rowid = segment_state->first_surviving_coarse_rowid;
+            }
+            const auto& rowset = tablet_state->rowsets[rowset_idx];
+            const auto& segment = tablet_state->rowset_segments[rowset_idx][segment_idx];
+            auto split = effective_params.rowid_range_option->get_segment_rowid_range(rowset.get(), segment.get());
+            auto range = split.row_id_range != nullptr ? *split.row_id_range : SparseRange<>();
+            if (segment_state->has_pruned_scan_range()) {
+                range &= *segment_state->pruned_scan_range;
+            }
+            auto owned_range = std::make_shared<RowidRangeOption>();
+            if (range.span_size() > 0) {
+                const bool owns_segment =
+                        split.is_first_split_of_segment ||
+                        (first_coarse_rowid.has_value() &&
+                         (range & SparseRange<>(*first_coarse_rowid, *first_coarse_rowid + 1)).span_size() > 0);
+                owned_range->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(std::move(range)),
+                                 owns_segment);
+            }
+            effective_params.rowid_range_option = std::move(owned_range);
         }
         return init_collector(effective_params);
     }
@@ -899,8 +945,19 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 
     const auto& rowset = prepared_tablet_read_state->rowsets[rowset_idx];
     const auto& segment = prepared_tablet_read_state->rowset_segments[rowset_idx][segment_idx];
+    Status refinement_status = Status::InternalError("initial coarse split refinement did not complete");
+    DeferOp finish_refinement([&] {
+        {
+            std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
+            segment_state->coarse_split_allocation_closed = true;
+            segment_state->coarse_refinement_status = refinement_status;
+            segment_state->coarse_refinement_ready = true;
+        }
+        segment_state->coarse_refinement_cv.notify_all();
+    });
     if (rowset == nullptr || segment == nullptr || segment->num_rows() == 0) {
         *local_rowid_range = std::make_shared<RowidRangeOption>();
+        refinement_status = Status::OK();
         return Status::OK();
     }
 
@@ -911,10 +968,18 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
 
     RowsetReadOptions rowset_read_options;
     LakeIOOptions lake_io_opts;
-    RETURN_IF_ERROR(init_rowset_read_options_for_split(prepare_params, &rowset_read_options, &lake_io_opts));
+    refinement_status = init_rowset_read_options_for_split(prepare_params, &rowset_read_options, &lake_io_opts);
+    if (!refinement_status.ok()) {
+        return refinement_status;
+    }
 
     OlapReaderStatistics prepare_stats;
-    ASSIGN_OR_RETURN(auto shared_segment_range, rowset->get_seek_range());
+    auto shared_segment_range_or = rowset->get_seek_range();
+    if (!shared_segment_range_or.ok()) {
+        refinement_status = shared_segment_range_or.status();
+        return refinement_status;
+    }
+    auto shared_segment_range = std::move(shared_segment_range_or).value();
     Status st;
     {
         // Time the seed-only prepared-scan-range preparation (zonemap/bloom page-filter folding + seek-range
@@ -929,7 +994,10 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
         segment_state->coarse_split_allocation_closed = true;
     }
-    RETURN_IF_ERROR(st);
+    if (!st.ok()) {
+        refinement_status = st;
+        return st;
+    }
 
     // Fold the seed prepare's otherwise-discarded sub-metrics into the reader stats so the SeedPrepareTime
     // breakdown (IO / segment-init / zonemap / bloom) is visible in the profile. Accumulated across segments.
@@ -961,8 +1029,20 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
     } else {
         pruned_scan_range.add(Range<>(0, segment->num_rows()));
     }
+    SparseRange<> allocated_coarse_ranges;
+    std::optional<rowid_t> first_coarse_rowid;
+    {
+        std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
+        allocated_coarse_ranges = segment_state->allocated_coarse_ranges;
+        auto surviving_coarse_ranges = allocated_coarse_ranges & pruned_scan_range;
+        if (surviving_coarse_ranges.span_size() > 0) {
+            first_coarse_rowid = surviving_coarse_ranges.begin();
+        }
+        segment_state->first_surviving_coarse_rowid = first_coarse_rowid;
+    }
     if (pruned_scan_range.span_size() == 0) {
         *local_rowid_range = std::make_shared<RowidRangeOption>();
+        refinement_status = Status::OK();
         return Status::OK();
     }
 
@@ -972,26 +1052,21 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
             SparseRange<> seed_scan_range = *seed_split.row_id_range;
             seed_scan_range &= pruned_scan_range;
             if (seed_scan_range.span_size() > 0) {
+                const bool owns_segment =
+                        first_coarse_rowid.has_value() &&
+                        (seed_scan_range & SparseRange<>(*first_coarse_rowid, *first_coarse_rowid + 1)).span_size() > 0;
                 auto rowid_range = std::make_shared<RowidRangeOption>();
                 rowid_range->add(rowset.get(), segment.get(),
-                                 std::make_shared<SparseRange<>>(std::move(seed_scan_range)),
-                                 seed_split.is_first_split_of_segment);
+                                 std::make_shared<SparseRange<>>(std::move(seed_scan_range)), owns_segment);
                 *local_rowid_range = std::move(rowid_range);
             }
         }
     }
 
-    SparseRange<> allocated_coarse_ranges;
-    {
-        std::lock_guard<std::mutex> guard(segment_state->coarse_range_lock);
-        allocated_coarse_ranges = segment_state->allocated_coarse_ranges;
-    }
     SparseRange<> remaining_scan_range = subtract_sparse_ranges(pruned_scan_range, allocated_coarse_ranges);
-    // Emit is_first_split_of_segment=true from the refined tasks only when no coarse split was allocated
-    // for this segment. If a coarse split was allocated, the coarse/seed child already carries the flag
-    // (allocate_initial_coarse_split / the seed child above), so letting the first refined split also carry
-    // it would double-count segment-level stats. This keeps exactly one split per segment flagged.
-    const bool refined_carries_first_split = allocated_coarse_ranges.span_size() == 0;
+    // An allocated coarse range may have been entirely pruned. Only a surviving coarse
+    // child can own the segment; otherwise the first refined child takes ownership.
+    const bool refined_carries_first_split = !first_coarse_rowid.has_value();
     append_refined_segment_split_tasks(rowset, segment, prepared_tablet_read_state, segment_state, rowset_idx,
                                        segment_idx, remaining_scan_range, rows_per_split(params),
                                        refined_carries_first_split, &_split_tasks);
@@ -1001,6 +1076,7 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         // Keep this seed child as an empty read if its coarse range was fully pruned.
         *local_rowid_range = std::make_shared<RowidRangeOption>();
     }
+    refinement_status = Status::OK();
     return Status::OK();
 }
 
