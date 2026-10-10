@@ -16,9 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <iomanip>
 #include <set>
+#include <thread>
 #include <utility>
 
 #include "base/testutil/assert.h"
@@ -34,8 +37,10 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/rowset.h"
@@ -1385,6 +1390,11 @@ TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures
     auto st = reader->open(params);
     ASSERT_FALSE(st.ok());
     ASSERT_GE(total_hits.load(), 2);
+    // The injected error precedes rowset->read(), so only the other task reads a segment.
+    // Its successful read must still be included after the error path waits for it.
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(1, reader->stats().segments_read_count);
+    EXPECT_EQ(1, reader->stats().phy_segments_count);
 }
 
 // Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
@@ -2054,6 +2064,128 @@ TEST_F(LakeTabletReaderSpit, test_failed_seed_preparation_preserves_reads) {
     EXPECT_TRUE(ctx->prepared_segment_read_state->coarse_split_allocation_closed);
     EXPECT_EQ(nullptr, ctx->prepared_segment_read_state->pruned_scan_range);
     seed->close();
+    reader->close();
+}
+
+TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, true);
+
+    auto* rowset_pool = RuntimeEnv::GetInstance()->load_rowset_thread_pool();
+    const int old_max_threads = rowset_pool->max_threads();
+    ASSERT_OK(rowset_pool->update_max_threads(std::max(2, old_max_threads)));
+    DeferOp restore_pool([&]() { CHECK_OK(rowset_pool->update_max_threads(old_max_threads)); });
+
+    std::atomic<int> entered{0};
+    std::atomic<int> active{0};
+    std::atomic<bool> overlapped{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+    sync_point->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void*) {
+        if (active.fetch_add(1) + 1 == 2) {
+            overlapped.store(true);
+        }
+        entered.fetch_add(1);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (entered.load() < 2 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+        active.fetch_sub(1);
+    });
+    sync_point->SetCallBack("Rowset::read::seg_options", [](void* arg) {
+        auto* stats = static_cast<SegmentReadOptions*>(arg)->stats;
+        stats->sample_build_histogram_count++;
+        stats->flat_json_hits["parallel-test"]++;
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    ASSERT_TRUE(overlapped.load());
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(3, reader->stats().segments_read_count);
+    EXPECT_EQ(2, reader->stats().phy_rowsets_count);
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+    EXPECT_EQ(2, reader->stats().flat_json_hits.at("parallel-test"));
+
+    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    int64_t total_rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        total_rows += chunk->num_rows();
+    }
+    EXPECT_EQ(66, total_rows);
+    EXPECT_EQ(66, reader->stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().raw_rows_read, reader->realtime_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().raw_rows_read, reader->compaction_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().compressed_bytes_read, reader->compaction_stats().compressed_bytes_read);
+    EXPECT_TRUE(reader->compaction_stats().flat_json_hits.empty());
+
+    // Profile reporting for a reused reader resets every private accumulator while its old
+    // iterators are still alive. The next open must not report the first scan twice.
+    reader->reset_stats();
+    EXPECT_EQ(0, reader->stats().phy_segments_count);
+    EXPECT_EQ(0, reader->stats().raw_rows_read);
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+    EXPECT_EQ(2, reader->stats().flat_json_hits.at("parallel-test"));
+    reader->close();
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+}
+
+TEST_F(LakeTabletReaderSpit, test_parallel_rowset_submit_failure_keeps_stats) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, true);
+
+    std::atomic<int> submits{0};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+    sync_point->SetCallBack("TabletReader::get_segment_iterators::submit", [&](void* arg) {
+        if (submits.fetch_add(1) == 1) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected rowset submission failure");
+        }
+    });
+    sync_point->SetCallBack("Rowset::read::seg_options", [](void* arg) {
+        static_cast<SegmentReadOptions*>(arg)->stats->sample_build_histogram_count++;
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    EXPECT_EQ(2, submits.load());
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(3, reader->stats().segments_read_count);
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+
+    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    int64_t total_rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        total_rows += chunk->num_rows();
+    }
+    EXPECT_EQ(66, total_rows);
+    EXPECT_EQ(66, reader->stats().raw_rows_read);
     reader->close();
 }
 

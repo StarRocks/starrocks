@@ -302,7 +302,7 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
         return;
     }
     update_counter(state);
-    *_reader->mutable_stats() = OlapReaderStatistics{};
+    _reader->reset_stats();
     _num_rows_read = 0;
     _raw_rows_read = 0;
     _bytes_read = 0;
@@ -1546,153 +1546,153 @@ void LakeDataSource::init_counter(RuntimeState* state) {
 
 void LakeDataSource::update_realtime_counter(Chunk* chunk) {
     _num_rows_read += chunk->num_rows();
-    auto& stats = _reader->stats();
+    const auto stats = _reader->realtime_stats();
     _raw_rows_read = stats.raw_rows_read;
     _bytes_read = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
 }
 
 void LakeDataSource::update_counter(RuntimeState* state) {
-    COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
+    const auto& reader_stats = _reader->stats();
+    COUNTER_UPDATE(_create_seg_iter_timer, reader_stats.create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
-    COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
-    COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
-    COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
-    COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
+    COUNTER_UPDATE(_io_timer, reader_stats.io_ns);
+    COUNTER_UPDATE(_read_compressed_counter, reader_stats.compressed_bytes_read);
+    COUNTER_UPDATE(_decompress_timer, reader_stats.decompress_ns);
+    COUNTER_UPDATE(_read_uncompressed_counter, reader_stats.uncompressed_bytes_read);
+    COUNTER_UPDATE(_bytes_read_counter, reader_stats.bytes_read);
 
-    COUNTER_UPDATE(_block_load_timer, _reader->stats().block_load_ns);
-    COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
-    COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
-    COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
+    COUNTER_UPDATE(_block_load_timer, reader_stats.block_load_ns);
+    COUNTER_UPDATE(_block_load_counter, reader_stats.blocks_load);
+    COUNTER_UPDATE(_block_fetch_timer, reader_stats.block_fetch_ns);
+    COUNTER_UPDATE(_block_seek_timer, reader_stats.block_seek_ns);
 
-    COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
-    COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
-    COUNTER_UPDATE(_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
-    COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
-    COUNTER_UPDATE(_column_iterator_init_timer, _reader->stats().column_iterator_init_ns);
-    COUNTER_UPDATE(_bitmap_index_iterator_init_timer, _reader->stats().bitmap_index_iterator_init_ns);
-    COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
-    COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
-    COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);
-    COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
+    COUNTER_UPDATE(_chunk_copy_timer, reader_stats.vec_cond_chunk_copy_ns);
+    COUNTER_UPDATE(_get_delvec_timer, reader_stats.get_delvec_ns);
+    COUNTER_UPDATE(_get_delta_column_group_timer, reader_stats.get_delta_column_group_ns);
+    COUNTER_UPDATE(_seg_init_timer, reader_stats.segment_init_ns);
+    COUNTER_UPDATE(_column_iterator_init_timer, reader_stats.column_iterator_init_ns);
+    COUNTER_UPDATE(_bitmap_index_iterator_init_timer, reader_stats.bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_zone_map_filter_timer, reader_stats.zone_map_filter_ns);
+    COUNTER_UPDATE(_rows_key_range_filter_timer, reader_stats.rows_key_range_filter_ns);
+    COUNTER_UPDATE(_bf_filter_timer, reader_stats.bf_filter_ns);
+    COUNTER_UPDATE(_read_pk_index_timer, reader_stats.read_pk_index_ns);
 
-    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
+    COUNTER_UPDATE(_raw_rows_counter, reader_stats.raw_rows_read);
 
     int64_t cond_evaluate_ns = 0;
-    cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
-    cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
-    cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+    cond_evaluate_ns += reader_stats.vec_cond_evaluate_ns;
+    cond_evaluate_ns += reader_stats.branchless_cond_evaluate_ns;
+    cond_evaluate_ns += reader_stats.expr_cond_evaluate_ns;
 
     // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
     // When we support metric classification, we can disassemble it again.
-    COUNTER_UPDATE(_rf_pred_filter_timer, _reader->stats().rf_cond_evaluate_ns);
-    COUNTER_UPDATE(_rf_pred_input_rows, _reader->stats().rf_cond_input_rows);
-    COUNTER_UPDATE(_rf_pred_output_rows, _reader->stats().rf_cond_output_rows);
+    COUNTER_UPDATE(_rf_pred_filter_timer, reader_stats.rf_cond_evaluate_ns);
+    COUNTER_UPDATE(_rf_pred_input_rows, reader_stats.rf_cond_input_rows);
+    COUNTER_UPDATE(_rf_pred_output_rows, reader_stats.rf_cond_output_rows);
 
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
-    COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
-    COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
+    COUNTER_UPDATE(_pred_filter_counter, reader_stats.rows_vec_cond_filtered);
+    COUNTER_UPDATE(_del_vec_filter_counter, reader_stats.rows_del_vec_filtered);
 
-    COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
-    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
-    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
-    COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
-    COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
-    COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
-    COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
-    COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
-    COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
+    COUNTER_UPDATE(_seg_zm_filtered_counter, reader_stats.segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, reader_stats.segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, reader_stats.segments_metadata_filtered);
+    COUNTER_UPDATE(_seg_rt_filtered_counter, reader_stats.runtime_stats_filtered);
+    COUNTER_UPDATE(_zm_filtered_counter, reader_stats.rows_stats_filtered);
+    COUNTER_UPDATE(_bf_filtered_counter, reader_stats.rows_bf_filtered);
+    COUNTER_UPDATE(_sk_filtered_counter, reader_stats.rows_key_range_filtered);
+    COUNTER_UPDATE(_rows_after_sk_filtered_counter, reader_stats.rows_after_key_range);
+    COUNTER_UPDATE(_rows_key_range_counter, reader_stats.rows_key_range_num);
 
-    COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
-    COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_bi_filtered_counter, reader_stats.rows_bitmap_index_filtered);
+    COUNTER_UPDATE(_bi_filter_timer, reader_stats.bitmap_index_filter_timer);
     COUNTER_UPDATE(_vector_index_timer,
-                   _reader->stats().vector_index_load_ns + _reader->stats().get_row_ranges_by_vector_index_timer);
-    COUNTER_UPDATE(_vector_index_load_timer, _reader->stats().vector_index_load_ns);
-    COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, _reader->stats().get_row_ranges_by_vector_index_timer);
-    COUNTER_UPDATE(_vector_index_cache_lookup_timer, _reader->stats().vector_index_cache_lookup_ns);
-    COUNTER_UPDATE(_vector_index_file_open_timer, _reader->stats().vector_index_file_open_ns);
-    COUNTER_UPDATE(_vector_index_read_file_timer, _reader->stats().vector_index_read_file_ns);
-    COUNTER_UPDATE(_vector_index_init_index_timer, _reader->stats().vector_index_init_index_ns);
-    COUNTER_UPDATE(_vector_index_searcher_init_timer, _reader->stats().vector_index_searcher_init_ns);
-    COUNTER_UPDATE(_vector_index_cache_hit_counter, _reader->stats().vector_index_cache_hit_count);
-    COUNTER_UPDATE(_vector_index_cache_miss_counter, _reader->stats().vector_index_cache_miss_count);
-    COUNTER_UPDATE(_vector_search_timer, _reader->stats().vector_search_timer);
-    COUNTER_UPDATE(_process_vector_distance_and_id_timer, _reader->stats().process_vector_distance_and_id_timer);
-    COUNTER_UPDATE(_vector_index_filtered_counter, _reader->stats().rows_vector_index_filtered);
-    COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
-    COUNTER_UPDATE(_lake_prepared_rowsets_counter, _reader->stats().lake_prepared_rowsets);
-    COUNTER_UPDATE(_lake_prepared_segments_counter, _reader->stats().lake_prepared_segments);
-    COUNTER_UPDATE(_lake_prepared_scan_rows_counter, _reader->stats().lake_prepared_scan_rows);
-    COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, _reader->stats().lake_prepared_scan_ranges);
+                   reader_stats.vector_index_load_ns + reader_stats.get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_load_timer, reader_stats.vector_index_load_ns);
+    COUNTER_UPDATE(_get_row_ranges_by_vector_index_timer, reader_stats.get_row_ranges_by_vector_index_timer);
+    COUNTER_UPDATE(_vector_index_cache_lookup_timer, reader_stats.vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_vector_index_file_open_timer, reader_stats.vector_index_file_open_ns);
+    COUNTER_UPDATE(_vector_index_read_file_timer, reader_stats.vector_index_read_file_ns);
+    COUNTER_UPDATE(_vector_index_init_index_timer, reader_stats.vector_index_init_index_ns);
+    COUNTER_UPDATE(_vector_index_searcher_init_timer, reader_stats.vector_index_searcher_init_ns);
+    COUNTER_UPDATE(_vector_index_cache_hit_counter, reader_stats.vector_index_cache_hit_count);
+    COUNTER_UPDATE(_vector_index_cache_miss_counter, reader_stats.vector_index_cache_miss_count);
+    COUNTER_UPDATE(_vector_search_timer, reader_stats.vector_search_timer);
+    COUNTER_UPDATE(_process_vector_distance_and_id_timer, reader_stats.process_vector_distance_and_id_timer);
+    COUNTER_UPDATE(_vector_index_filtered_counter, reader_stats.rows_vector_index_filtered);
+    COUNTER_UPDATE(_block_seek_counter, reader_stats.block_seek_num);
+    COUNTER_UPDATE(_lake_prepared_rowsets_counter, reader_stats.lake_prepared_rowsets);
+    COUNTER_UPDATE(_lake_prepared_segments_counter, reader_stats.lake_prepared_segments);
+    COUNTER_UPDATE(_lake_prepared_scan_rows_counter, reader_stats.lake_prepared_scan_rows);
+    COUNTER_UPDATE(_lake_prepared_scan_ranges_counter, reader_stats.lake_prepared_scan_ranges);
     COUNTER_UPDATE(_lake_prerefinement_coarse_counter, _lake_prerefinement_coarse_splits);
     COUNTER_UPDATE(_lake_initial_coarse_counter, _lake_initial_coarse_splits);
     COUNTER_UPDATE(_lake_refined_counter, _lake_refined_splits);
-    COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, _reader->stats().lake_reusable_segment_iter_created);
-    COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, _reader->stats().lake_reusable_segment_iter_reused);
-    COUNTER_UPDATE(_lake_prepared_seed_timer, _reader->stats().lake_prepared_seed_ns);
-    COUNTER_UPDATE(_lake_prepared_tablet_timer, _reader->stats().lake_prepared_tablet_prepare_ns);
-    COUNTER_UPDATE(_lake_tablet_prepare_segment_open_timer, _reader->stats().lake_prepared_tablet_segment_open_ns);
-    COUNTER_UPDATE(_lake_tablet_prepare_segments_counter, _reader->stats().lake_prepared_tablet_segments);
-    COUNTER_UPDATE(_lake_tablet_prepare_segments_opened_counter, _reader->stats().lake_prepared_tablet_segments_opened);
-    COUNTER_UPDATE(_lake_tablet_prepare_io_timer, _reader->stats().lake_prepared_tablet_io_ns);
-    COUNTER_UPDATE(_lake_tablet_prepare_io_count_counter, _reader->stats().lake_prepared_tablet_io_count);
-    COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, _reader->stats().lake_prepared_tablet_io_remote_ns);
-    COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, _reader->stats().lake_prepared_tablet_io_count_remote);
+    COUNTER_UPDATE(_lake_reusable_segment_iter_created_counter, reader_stats.lake_reusable_segment_iter_created);
+    COUNTER_UPDATE(_lake_reusable_segment_iter_reused_counter, reader_stats.lake_reusable_segment_iter_reused);
+    COUNTER_UPDATE(_lake_prepared_seed_timer, reader_stats.lake_prepared_seed_ns);
+    COUNTER_UPDATE(_lake_prepared_tablet_timer, reader_stats.lake_prepared_tablet_prepare_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_segment_open_timer, reader_stats.lake_prepared_tablet_segment_open_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_segments_counter, reader_stats.lake_prepared_tablet_segments);
+    COUNTER_UPDATE(_lake_tablet_prepare_segments_opened_counter, reader_stats.lake_prepared_tablet_segments_opened);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_timer, reader_stats.lake_prepared_tablet_io_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_count_counter, reader_stats.lake_prepared_tablet_io_count);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_remote_timer, reader_stats.lake_prepared_tablet_io_remote_ns);
+    COUNTER_UPDATE(_lake_tablet_prepare_io_count_remote_counter, reader_stats.lake_prepared_tablet_io_count_remote);
     COUNTER_UPDATE(_lake_tablet_prepare_bytes_read_remote_counter,
-                   _reader->stats().lake_prepared_tablet_bytes_read_remote);
-    COUNTER_UPDATE(_lake_seed_io_timer, _reader->stats().lake_prepared_seed_io_ns);
-    COUNTER_UPDATE(_lake_seed_io_count_counter, _reader->stats().lake_prepared_seed_io_count);
-    COUNTER_UPDATE(_lake_seed_io_remote_timer, _reader->stats().lake_prepared_seed_io_remote_ns);
-    COUNTER_UPDATE(_lake_seed_io_count_remote_counter, _reader->stats().lake_prepared_seed_io_count_remote);
-    COUNTER_UPDATE(_lake_seed_bytes_read_remote_counter, _reader->stats().lake_prepared_seed_bytes_read_remote);
-    COUNTER_UPDATE(_lake_seed_segment_init_timer, _reader->stats().lake_prepared_seed_segment_init_ns);
+                   reader_stats.lake_prepared_tablet_bytes_read_remote);
+    COUNTER_UPDATE(_lake_seed_io_timer, reader_stats.lake_prepared_seed_io_ns);
+    COUNTER_UPDATE(_lake_seed_io_count_counter, reader_stats.lake_prepared_seed_io_count);
+    COUNTER_UPDATE(_lake_seed_io_remote_timer, reader_stats.lake_prepared_seed_io_remote_ns);
+    COUNTER_UPDATE(_lake_seed_io_count_remote_counter, reader_stats.lake_prepared_seed_io_count_remote);
+    COUNTER_UPDATE(_lake_seed_bytes_read_remote_counter, reader_stats.lake_prepared_seed_bytes_read_remote);
+    COUNTER_UPDATE(_lake_seed_segment_init_timer, reader_stats.lake_prepared_seed_segment_init_ns);
+
     COUNTER_UPDATE(_lake_seed_vector_index_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_load_ns +
-                           _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
-    COUNTER_UPDATE(_lake_seed_vector_index_load_timer, _reader->stats().lake_prepared_seed_vector_index_load_ns);
+                   reader_stats.lake_prepared_seed_vector_index_load_ns +
+                           reader_stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_load_timer, reader_stats.lake_prepared_seed_vector_index_load_ns);
     COUNTER_UPDATE(_lake_seed_get_row_ranges_by_vector_index_timer,
-                   _reader->stats().lake_prepared_seed_get_row_ranges_by_vector_index_ns);
+                   reader_stats.lake_prepared_seed_get_row_ranges_by_vector_index_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_cache_lookup_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_cache_lookup_ns);
-    COUNTER_UPDATE(_lake_seed_vector_index_file_open_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_file_open_ns);
-    COUNTER_UPDATE(_lake_seed_vector_index_read_file_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_read_file_ns);
+                   reader_stats.lake_prepared_seed_vector_index_cache_lookup_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_file_open_timer, reader_stats.lake_prepared_seed_vector_index_file_open_ns);
+    COUNTER_UPDATE(_lake_seed_vector_index_read_file_timer, reader_stats.lake_prepared_seed_vector_index_read_file_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_init_index_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_init_index_ns);
+                   reader_stats.lake_prepared_seed_vector_index_init_index_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_searcher_init_timer,
-                   _reader->stats().lake_prepared_seed_vector_index_searcher_init_ns);
+                   reader_stats.lake_prepared_seed_vector_index_searcher_init_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_cache_hit_counter,
-                   _reader->stats().lake_prepared_seed_vector_index_cache_hit_count);
+                   reader_stats.lake_prepared_seed_vector_index_cache_hit_count);
     COUNTER_UPDATE(_lake_seed_vector_index_cache_miss_counter,
-                   _reader->stats().lake_prepared_seed_vector_index_cache_miss_count);
-    COUNTER_UPDATE(_lake_seed_vector_search_timer, _reader->stats().lake_prepared_seed_vector_search_ns);
+                   reader_stats.lake_prepared_seed_vector_index_cache_miss_count);
+    COUNTER_UPDATE(_lake_seed_vector_search_timer, reader_stats.lake_prepared_seed_vector_search_ns);
     COUNTER_UPDATE(_lake_seed_process_vector_distance_and_id_timer,
-                   _reader->stats().lake_prepared_seed_process_vector_distance_and_id_ns);
+                   reader_stats.lake_prepared_seed_process_vector_distance_and_id_ns);
     COUNTER_UPDATE(_lake_seed_vector_index_filtered_counter,
-                   _reader->stats().lake_prepared_seed_rows_vector_index_filtered);
-    COUNTER_UPDATE(_lake_seed_zonemap_timer, _reader->stats().lake_prepared_seed_zonemap_ns);
-    COUNTER_UPDATE(_lake_seed_zonemap_filtered_counter, _reader->stats().lake_prepared_seed_zonemap_filtered_rows);
-    COUNTER_UPDATE(_lake_seed_bf_timer, _reader->stats().lake_prepared_seed_bf_ns);
-    COUNTER_UPDATE(_lake_seed_bf_filtered_counter, _reader->stats().lake_prepared_seed_bf_filtered_rows);
+                   reader_stats.lake_prepared_seed_rows_vector_index_filtered);
+    COUNTER_UPDATE(_lake_seed_zonemap_timer, reader_stats.lake_prepared_seed_zonemap_ns);
+    COUNTER_UPDATE(_lake_seed_zonemap_filtered_counter, reader_stats.lake_prepared_seed_zonemap_filtered_rows);
+    COUNTER_UPDATE(_lake_seed_bf_timer, reader_stats.lake_prepared_seed_bf_ns);
+    COUNTER_UPDATE(_lake_seed_bf_filtered_counter, reader_stats.lake_prepared_seed_bf_filtered_rows);
 
-    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
-    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
-    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
-    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
-    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
-    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
-    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
-    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
-    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
+    COUNTER_UPDATE(_gin_filtered_timer, reader_stats.gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, reader_stats.rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, reader_stats.gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, reader_stats.gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, reader_stats.gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, reader_stats.gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, reader_stats.gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, reader_stats.gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, reader_stats.gin_predicate_dict_filtered);
 
-    COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
-    COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
-    COUNTER_UPDATE(_phy_rowsets_count, _reader->stats().phy_rowsets_count);
-    COUNTER_UPDATE(_phy_segments_count, _reader->stats().phy_segments_count);
-    COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
+    COUNTER_UPDATE(_rowsets_read_count, reader_stats.rowsets_read_count);
+    COUNTER_UPDATE(_segments_read_count, reader_stats.segments_read_count);
+    COUNTER_UPDATE(_phy_rowsets_count, reader_stats.phy_rowsets_count);
+    COUNTER_UPDATE(_phy_segments_count, reader_stats.phy_segments_count);
+    COUNTER_UPDATE(_total_columns_data_page_count, reader_stats.total_columns_data_page_count);
 
     COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
@@ -1704,69 +1704,69 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     QueryScanMetrics::instance()->query_scan_bytes.increment(_bytes_read);
     QueryScanMetrics::instance()->query_scan_rows.increment(_raw_rows_read);
 
-    if (_reader->stats().decode_dict_ns > 0) {
+    if (reader_stats.decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "DictDecode");
-        COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
+        COUNTER_UPDATE(c, reader_stats.decode_dict_ns);
         RuntimeProfile::Counter* count = ADD_COUNTER(_runtime_profile, "DictDecodeCount", TUnit::UNIT);
-        COUNTER_UPDATE(count, _reader->stats().decode_dict_count);
+        COUNTER_UPDATE(count, reader_stats.decode_dict_count);
     }
-    if (_reader->stats().late_materialize_ns > 0) {
+    if (reader_stats.late_materialize_ns > 0) {
         RuntimeProfile::Counter* c = ADD_TIMER(_runtime_profile, "LateMaterialize");
-        COUNTER_UPDATE(c, _reader->stats().late_materialize_ns);
+        COUNTER_UPDATE(c, reader_stats.late_materialize_ns);
         RuntimeProfile::Counter* rows = ADD_COUNTER(_runtime_profile, "LateMaterializeRows", TUnit::UNIT);
-        COUNTER_UPDATE(rows, _reader->stats().late_materialize_rows);
+        COUNTER_UPDATE(rows, reader_stats.late_materialize_rows);
     }
-    if (_reader->stats().del_filter_ns > 0) {
+    if (reader_stats.del_filter_ns > 0) {
         RuntimeProfile::Counter* c1 = ADD_TIMER(_runtime_profile, "DeleteFilter");
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_runtime_profile, "DeleteFilterRows", TUnit::UNIT);
         RuntimeProfile::Counter* c3 = ADD_COUNTER(_runtime_profile, "DeleteZoneMapPrunedRows", TUnit::UNIT);
-        COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
-        COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
-        COUNTER_UPDATE(c3, _reader->stats().rows_del_predicate_zone_map_pruned);
+        COUNTER_UPDATE(c1, reader_stats.del_filter_ns);
+        COUNTER_UPDATE(c2, reader_stats.rows_del_filtered);
+        COUNTER_UPDATE(c3, reader_stats.rows_del_predicate_zone_map_pruned);
     }
 
-    int64_t pages_total = _reader->stats().total_pages_num;
-    int64_t pages_from_memory = _reader->stats().cached_pages_num;
-    int64_t pages_from_local_disk = _reader->stats().pages_from_local_disk;
+    int64_t pages_total = reader_stats.total_pages_num;
+    int64_t pages_from_memory = reader_stats.cached_pages_num;
+    int64_t pages_from_local_disk = reader_stats.pages_from_local_disk;
     COUNTER_UPDATE(_pages_count_memory_counter, pages_from_memory);
     COUNTER_UPDATE(_pages_count_local_disk_counter, pages_from_local_disk);
     COUNTER_UPDATE(_pages_count_remote_counter, pages_total - pages_from_memory - pages_from_local_disk);
     COUNTER_UPDATE(_pages_count_total_counter, pages_total);
 
-    COUNTER_UPDATE(_compressed_bytes_read_local_disk_counter, _reader->stats().compressed_bytes_read_local_disk);
-    COUNTER_UPDATE(_compressed_bytes_read_remote_counter, _reader->stats().compressed_bytes_read_remote);
-    COUNTER_UPDATE(_compressed_bytes_read_total_counter, _reader->stats().compressed_bytes_read);
-    COUNTER_UPDATE(_compressed_bytes_read_request_counter, _reader->stats().compressed_bytes_read_request);
+    COUNTER_UPDATE(_compressed_bytes_read_local_disk_counter, reader_stats.compressed_bytes_read_local_disk);
+    COUNTER_UPDATE(_compressed_bytes_read_remote_counter, reader_stats.compressed_bytes_read_remote);
+    COUNTER_UPDATE(_compressed_bytes_read_total_counter, reader_stats.compressed_bytes_read);
+    COUNTER_UPDATE(_compressed_bytes_read_request_counter, reader_stats.compressed_bytes_read_request);
 
-    COUNTER_UPDATE(_io_count_local_disk_counter, _reader->stats().io_count_local_disk);
-    COUNTER_UPDATE(_io_count_remote_counter, _reader->stats().io_count_remote);
-    COUNTER_UPDATE(_io_count_total_counter, _reader->stats().io_count);
-    COUNTER_UPDATE(_io_count_request_counter, _reader->stats().io_count_request);
+    COUNTER_UPDATE(_io_count_local_disk_counter, reader_stats.io_count_local_disk);
+    COUNTER_UPDATE(_io_count_remote_counter, reader_stats.io_count_remote);
+    COUNTER_UPDATE(_io_count_total_counter, reader_stats.io_count);
+    COUNTER_UPDATE(_io_count_request_counter, reader_stats.io_count_request);
 
-    COUNTER_UPDATE(_io_ns_local_disk_timer, _reader->stats().io_ns_read_local_disk);
-    COUNTER_UPDATE(_io_ns_remote_timer, _reader->stats().io_ns_remote);
-    COUNTER_UPDATE(_io_ns_total_timer, _reader->stats().io_ns);
+    COUNTER_UPDATE(_io_ns_local_disk_timer, reader_stats.io_ns_read_local_disk);
+    COUNTER_UPDATE(_io_ns_remote_timer, reader_stats.io_ns_remote);
+    COUNTER_UPDATE(_io_ns_total_timer, reader_stats.io_ns);
 
-    COUNTER_UPDATE(_prefetch_hit_counter, _reader->stats().prefetch_hit_count);
-    COUNTER_UPDATE(_prefetch_wait_finish_timer, _reader->stats().prefetch_wait_finish_ns);
-    COUNTER_UPDATE(_prefetch_pending_timer, _reader->stats().prefetch_pending_ns);
+    COUNTER_UPDATE(_prefetch_hit_counter, reader_stats.prefetch_hit_count);
+    COUNTER_UPDATE(_prefetch_wait_finish_timer, reader_stats.prefetch_wait_finish_ns);
+    COUNTER_UPDATE(_prefetch_pending_timer, reader_stats.prefetch_pending_ns);
 
     // update cache related info for CACHE SELECT
     if (_runtime_state->query_options().__isset.query_type &&
         _runtime_state->query_options().query_type == TQueryType::LOAD) {
-        _runtime_state->update_num_datacache_read_bytes(_reader->stats().compressed_bytes_read_local_disk);
-        _runtime_state->update_num_datacache_read_time_ns(_reader->stats().io_ns_read_local_disk);
-        _runtime_state->update_num_datacache_write_bytes(_reader->stats().compressed_bytes_write_local_disk);
-        _runtime_state->update_num_datacache_write_time_ns(_reader->stats().io_ns_write_local_disk);
+        _runtime_state->update_num_datacache_read_bytes(reader_stats.compressed_bytes_read_local_disk);
+        _runtime_state->update_num_datacache_read_time_ns(reader_stats.io_ns_read_local_disk);
+        _runtime_state->update_num_datacache_write_bytes(reader_stats.compressed_bytes_write_local_disk);
+        _runtime_state->update_num_datacache_write_time_ns(reader_stats.io_ns_write_local_disk);
         _runtime_state->update_num_datacache_count(1);
     }
 
-    if (_reader->stats().flat_json_hits.size() > 0 || _reader->stats().merge_json_hits.size() > 0) {
+    if (reader_stats.flat_json_hits.size() > 0 || reader_stats.merge_json_hits.size() > 0) {
         RuntimeProfile::Counter* _access_path_hits_counter =
                 ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
         std::string access_path_hits = "AccessPathHits";
         int64_t total = 0;
-        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+        for (auto& [k, v] : reader_stats.flat_json_hits) {
             std::string path = fmt::format("[Hit]{}", k);
             auto* path_counter = _runtime_profile->get_counter(path);
             if (path_counter == nullptr) {
@@ -1775,7 +1775,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
             total += v;
             COUNTER_UPDATE(path_counter, v);
         }
-        for (auto& [k, v] : _reader->stats().merge_json_hits) {
+        for (auto& [k, v] : reader_stats.merge_json_hits) {
             std::string merge_path = fmt::format("[HitMerge]{}", k);
             auto* path_counter = _runtime_profile->get_counter(merge_path);
             if (path_counter == nullptr) {
@@ -1787,12 +1787,12 @@ void LakeDataSource::update_counter(RuntimeState* state) {
         COUNTER_UPDATE(_access_path_hits_counter, total);
         FlatJsonMetrics::instance()->flat_json_access_hit_total.increment(total);
     }
-    if (_reader->stats().dynamic_json_hits.size() > 0) {
+    if (reader_stats.dynamic_json_hits.size() > 0) {
         RuntimeProfile::Counter* _access_path_unhits_counter =
                 ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
         std::string access_path_unhits = "AccessPathUnhits";
         int64_t total = 0;
-        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+        for (auto& [k, v] : reader_stats.dynamic_json_hits) {
             std::string path = fmt::format("[Unhit]{}", k);
             auto* path_counter = _runtime_profile->get_counter(path);
             if (path_counter == nullptr) {
@@ -1804,11 +1804,11 @@ void LakeDataSource::update_counter(RuntimeState* state) {
         COUNTER_UPDATE(_access_path_unhits_counter, total);
         FlatJsonMetrics::instance()->flat_json_access_miss_total.increment(total);
     }
-    if (_reader->stats().extract_json_hits.size() > 0) {
+    if (reader_stats.extract_json_hits.size() > 0) {
         const std::string counter_name = "AccessPathExtract";
         RuntimeProfile::Counter* counter = ADD_COUNTER(_runtime_profile, counter_name, TUnit::UNIT);
         int64_t total = 0;
-        for (auto& [k, v] : _reader->stats().extract_json_hits) {
+        for (auto& [k, v] : reader_stats.extract_json_hits) {
             std::string path = fmt::format("[Extract]{}", k);
             auto* path_counter = _runtime_profile->get_counter(path);
             if (path_counter == nullptr) {
@@ -1821,28 +1821,27 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     }
 
     std::string parent_name = "SegmentRead";
-    if (_reader->stats().json_init_ns > 0) {
+    if (reader_stats.json_init_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonInit", parent_name);
-        COUNTER_UPDATE(c, _reader->stats().json_init_ns);
+        COUNTER_UPDATE(c, reader_stats.json_init_ns);
     }
-    if (_reader->stats().json_cast_ns > 0) {
+    if (reader_stats.json_cast_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
-        COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
-        FlatJsonMetrics::instance()->flat_json_cast_duration_ns_total.increment(_reader->stats().json_cast_ns);
+        COUNTER_UPDATE(c, reader_stats.json_cast_ns);
+        FlatJsonMetrics::instance()->flat_json_cast_duration_ns_total.increment(reader_stats.json_cast_ns);
     }
-    if (_reader->stats().json_merge_ns > 0) {
+    if (reader_stats.json_merge_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
-        COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
-        FlatJsonMetrics::instance()->flat_json_merge_duration_ns_total.increment(_reader->stats().json_merge_ns);
+        COUNTER_UPDATE(c, reader_stats.json_merge_ns);
+        FlatJsonMetrics::instance()->flat_json_merge_duration_ns_total.increment(reader_stats.json_merge_ns);
     }
-    if (_reader->stats().json_flatten_ns > 0) {
+    if (reader_stats.json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
-        COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
-        FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
+        COUNTER_UPDATE(c, reader_stats.json_flatten_ns);
+        FlatJsonMetrics::instance()->flat_json_flatten_duration_ns_total.increment(reader_stats.json_flatten_ns);
     }
     if (state != nullptr && state->query_runtime_state() != nullptr) {
-        state->query_runtime_state()->incr_read_stats(_reader->stats().io_count_local_disk,
-                                                      _reader->stats().io_count_remote);
+        state->query_runtime_state()->incr_read_stats(reader_stats.io_count_local_disk, reader_stats.io_count_remote);
     }
 }
 

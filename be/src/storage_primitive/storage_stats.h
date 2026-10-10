@@ -232,6 +232,162 @@ struct OlapReaderStatistics {
     int64_t sample_population_size = 0;       // Records the total number of samples. Granularity can be BLOCK/PAGE
     int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
     int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
+
+    // Merge task-local reader statistics after parallel rowset reads. Include every counter so
+    // the existing query and load profiles retain their complete totals.
+    void merge_from(const OlapReaderStatistics& other) {
+        create_segment_iter_ns += other.create_segment_iter_ns;
+        io_ns += other.io_ns;
+        compressed_bytes_read += other.compressed_bytes_read;
+        decompress_ns += other.decompress_ns;
+        uncompressed_bytes_read += other.uncompressed_bytes_read;
+        bytes_read += other.bytes_read;
+        block_load_ns += other.block_load_ns;
+        blocks_load += other.blocks_load;
+        block_fetch_ns += other.block_fetch_ns;
+        block_seek_num += other.block_seek_num;
+        block_seek_ns += other.block_seek_ns;
+        decode_dict_ns += other.decode_dict_ns;
+        decode_dict_count += other.decode_dict_count;
+        late_materialize_ns += other.late_materialize_ns;
+        late_materialize_rows += other.late_materialize_rows;
+        raw_rows_read += other.raw_rows_read;
+        rows_vec_cond_filtered += other.rows_vec_cond_filtered;
+        vec_cond_ns += other.vec_cond_ns;
+        vec_cond_evaluate_ns += other.vec_cond_evaluate_ns;
+        rf_cond_input_rows += other.rf_cond_input_rows;
+        rf_cond_output_rows += other.rf_cond_output_rows;
+        rf_cond_evaluate_ns += other.rf_cond_evaluate_ns;
+        vec_cond_chunk_copy_ns += other.vec_cond_chunk_copy_ns;
+        branchless_cond_evaluate_ns += other.branchless_cond_evaluate_ns;
+        expr_cond_evaluate_ns += other.expr_cond_evaluate_ns;
+        get_rowsets_ns += other.get_rowsets_ns;
+        get_delvec_ns += other.get_delvec_ns;
+        get_delta_column_group_ns += other.get_delta_column_group_ns;
+        segment_init_ns += other.segment_init_ns;
+        column_iterator_init_ns += other.column_iterator_init_ns;
+        bitmap_index_iterator_init_ns += other.bitmap_index_iterator_init_ns;
+        zone_map_filter_ns += other.zone_map_filter_ns;
+        rows_key_range_filter_ns += other.rows_key_range_filter_ns;
+        bf_filter_ns += other.bf_filter_ns;
+        segment_stats_filtered += other.segment_stats_filtered;
+        rows_key_range_filtered += other.rows_key_range_filtered;
+        rows_after_key_range += other.rows_after_key_range;
+        rows_key_range_num += other.rows_key_range_num;
+        rows_stats_filtered += other.rows_stats_filtered;
+        rows_vector_index_filtered += other.rows_vector_index_filtered;
+        rows_bf_filtered += other.rows_bf_filtered;
+        rows_del_filtered += other.rows_del_filtered;
+        del_filter_ns += other.del_filter_ns;
+        rows_del_predicate_zone_map_pruned += other.rows_del_predicate_zone_map_pruned;
+        total_pages_num += other.total_pages_num;
+        cached_pages_num += other.cached_pages_num;
+        rows_bitmap_index_filtered += other.rows_bitmap_index_filtered;
+        bitmap_index_filter_timer += other.bitmap_index_filter_timer;
+        vector_index_load_ns += other.vector_index_load_ns;
+        get_row_ranges_by_vector_index_timer += other.get_row_ranges_by_vector_index_timer;
+        vector_index_cache_lookup_ns += other.vector_index_cache_lookup_ns;
+        vector_index_file_open_ns += other.vector_index_file_open_ns;
+        vector_index_read_file_ns += other.vector_index_read_file_ns;
+        vector_index_init_index_ns += other.vector_index_init_index_ns;
+        vector_index_searcher_init_ns += other.vector_index_searcher_init_ns;
+        vector_index_cache_hit_count += other.vector_index_cache_hit_count;
+        vector_index_cache_miss_count += other.vector_index_cache_miss_count;
+        vector_search_timer += other.vector_search_timer;
+        process_vector_distance_and_id_timer += other.process_vector_distance_and_id_timer;
+        rows_del_vec_filtered += other.rows_del_vec_filtered;
+        gin_index_filter_ns += other.gin_index_filter_ns;
+        rows_gin_filtered += other.rows_gin_filtered;
+        gin_prefix_filter_ns += other.gin_prefix_filter_ns;
+        gin_ngram_filter_dict_ns += other.gin_ngram_filter_dict_ns;
+        gin_predicate_filter_dict_ns += other.gin_predicate_filter_dict_ns;
+        gin_dict_count += other.gin_dict_count;
+        gin_ngram_dict_count += other.gin_ngram_dict_count;
+        gin_ngram_dict_filtered += other.gin_ngram_dict_filtered;
+        gin_predicate_dict_filtered += other.gin_predicate_dict_filtered;
+        rowsets_read_count += other.rowsets_read_count;
+        segments_read_count += other.segments_read_count;
+        phy_rowsets_count += other.phy_rowsets_count;
+        phy_segments_count += other.phy_segments_count;
+        total_columns_data_page_count += other.total_columns_data_page_count;
+        runtime_stats_filtered += other.runtime_stats_filtered;
+        read_pk_index_ns += other.read_pk_index_ns;
+        segment_metadata_filtered += other.segment_metadata_filtered;
+        segments_metadata_filtered += other.segments_metadata_filtered;
+        pages_from_local_disk += other.pages_from_local_disk;
+        compressed_bytes_read_local_disk += other.compressed_bytes_read_local_disk;
+        compressed_bytes_write_local_disk += other.compressed_bytes_write_local_disk;
+        compressed_bytes_read_remote += other.compressed_bytes_read_remote;
+        compressed_bytes_read_request += other.compressed_bytes_read_request;
+        io_count += other.io_count;
+        io_count_local_disk += other.io_count_local_disk;
+        io_count_remote += other.io_count_remote;
+        io_count_request += other.io_count_request;
+        io_ns_read_local_disk += other.io_ns_read_local_disk;
+        io_ns_write_local_disk += other.io_ns_write_local_disk;
+        io_ns_remote += other.io_ns_remote;
+        prefetch_hit_count += other.prefetch_hit_count;
+        prefetch_wait_finish_ns += other.prefetch_wait_finish_ns;
+        prefetch_pending_ns += other.prefetch_pending_ns;
+        lake_prepared_rowsets += other.lake_prepared_rowsets;
+        lake_prepared_segments += other.lake_prepared_segments;
+        lake_prepared_scan_rows += other.lake_prepared_scan_rows;
+        lake_prepared_scan_ranges += other.lake_prepared_scan_ranges;
+        lake_reusable_segment_iter_created += other.lake_reusable_segment_iter_created;
+        lake_reusable_segment_iter_reused += other.lake_reusable_segment_iter_reused;
+        lake_prepared_seed_ns += other.lake_prepared_seed_ns;
+        lake_prepared_seed_io_ns += other.lake_prepared_seed_io_ns;
+        lake_prepared_seed_io_count += other.lake_prepared_seed_io_count;
+        lake_prepared_seed_io_remote_ns += other.lake_prepared_seed_io_remote_ns;
+        lake_prepared_seed_io_count_remote += other.lake_prepared_seed_io_count_remote;
+        lake_prepared_seed_bytes_read_remote += other.lake_prepared_seed_bytes_read_remote;
+        lake_prepared_tablet_prepare_ns += other.lake_prepared_tablet_prepare_ns;
+        lake_prepared_tablet_segment_open_ns += other.lake_prepared_tablet_segment_open_ns;
+        lake_prepared_tablet_segments += other.lake_prepared_tablet_segments;
+        lake_prepared_tablet_segments_opened += other.lake_prepared_tablet_segments_opened;
+        lake_prepared_tablet_io_ns += other.lake_prepared_tablet_io_ns;
+        lake_prepared_tablet_io_count += other.lake_prepared_tablet_io_count;
+        lake_prepared_tablet_io_remote_ns += other.lake_prepared_tablet_io_remote_ns;
+        lake_prepared_tablet_io_count_remote += other.lake_prepared_tablet_io_count_remote;
+        lake_prepared_tablet_bytes_read_remote += other.lake_prepared_tablet_bytes_read_remote;
+        lake_prepared_seed_segment_init_ns += other.lake_prepared_seed_segment_init_ns;
+        lake_prepared_seed_vector_index_load_ns += other.lake_prepared_seed_vector_index_load_ns;
+        lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
+                other.lake_prepared_seed_get_row_ranges_by_vector_index_ns;
+        lake_prepared_seed_vector_index_cache_lookup_ns += other.lake_prepared_seed_vector_index_cache_lookup_ns;
+        lake_prepared_seed_vector_index_file_open_ns += other.lake_prepared_seed_vector_index_file_open_ns;
+        lake_prepared_seed_vector_index_read_file_ns += other.lake_prepared_seed_vector_index_read_file_ns;
+        lake_prepared_seed_vector_index_init_index_ns += other.lake_prepared_seed_vector_index_init_index_ns;
+        lake_prepared_seed_vector_index_searcher_init_ns += other.lake_prepared_seed_vector_index_searcher_init_ns;
+        lake_prepared_seed_vector_index_cache_hit_count += other.lake_prepared_seed_vector_index_cache_hit_count;
+        lake_prepared_seed_vector_index_cache_miss_count += other.lake_prepared_seed_vector_index_cache_miss_count;
+        lake_prepared_seed_vector_search_ns += other.lake_prepared_seed_vector_search_ns;
+        lake_prepared_seed_process_vector_distance_and_id_ns +=
+                other.lake_prepared_seed_process_vector_distance_and_id_ns;
+        lake_prepared_seed_rows_vector_index_filtered += other.lake_prepared_seed_rows_vector_index_filtered;
+        lake_prepared_seed_zonemap_ns += other.lake_prepared_seed_zonemap_ns;
+        lake_prepared_seed_zonemap_filtered_rows += other.lake_prepared_seed_zonemap_filtered_rows;
+        lake_prepared_seed_bf_ns += other.lake_prepared_seed_bf_ns;
+        lake_prepared_seed_bf_filtered_rows += other.lake_prepared_seed_bf_filtered_rows;
+        json_flatten_ns += other.json_flatten_ns;
+        json_cast_ns += other.json_cast_ns;
+        json_merge_ns += other.json_merge_ns;
+        json_init_ns += other.json_init_ns;
+        sample_time_ns += other.sample_time_ns;
+        sample_size += other.sample_size;
+        sample_population_size += other.sample_population_size;
+        sample_build_histogram_count += other.sample_build_histogram_count;
+        sample_build_histogram_time_ns += other.sample_build_histogram_time_ns;
+        auto merge_hits = [](auto* dst, const auto& src) {
+            for (const auto& [key, count] : src) {
+                (*dst)[key] += count;
+            }
+        };
+        merge_hits(&flat_json_hits, other.flat_json_hits);
+        merge_hits(&merge_json_hits, other.merge_json_hits);
+        merge_hits(&dynamic_json_hits, other.dynamic_json_hits);
+        merge_hits(&extract_json_hits, other.extract_json_hits);
+    }
 };
 
 // OlapWriterStatistics used to collect statistics when write data to storage
