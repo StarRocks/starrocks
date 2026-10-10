@@ -45,6 +45,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+import java.util.stream.Collectors;
 
 /**
  * SlotTracker is used to track the status of slots.
@@ -281,6 +282,25 @@ public abstract class BaseSlotTracker {
      */
     public Collection<LogicalSlot> peakSlotsToAllocate() {
         return slotSelectionStrategy.peakSlotsToAllocate(this);
+    }
+
+    /**
+     * Peak the slots which are allocated by the previous leader FE.
+     *
+     * <p> A slot is released by its requester with a release-slot RPC sent to the <b>current</b> leader FE, so once the
+     * leader FE is changed, the slots which are already allocated can never be released by their requesters any more.
+     * If they are left in the tracker, they keep occupying the query queue and are shown as RUNNING in
+     * {@code SHOW RUNNING QUERIES} without any alive coordinator (the ghost RUNNING queries) until they expire.
+     *
+     * <p> Note that this method does not remove the returned slots from the tracker,
+     * and {@link #releaseSlot} should be called to release these slots after peaking.
+     *
+     * @return All the allocated slots, which should be released when a new leader FE takes over.
+     */
+    public List<LogicalSlot> peakSlotsOfPreviousLeader() {
+        return slots.values().stream()
+                .filter(slot -> slot.getState() == LogicalSlot.State.ALLOCATED)
+                .collect(Collectors.toList());
     }
 
     /**
