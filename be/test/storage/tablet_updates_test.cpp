@@ -4029,6 +4029,105 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     ASSERT_EQ(3, rowsets.size());
 }
 
+TEST_F(TabletUpdatesTest, test_size_tiered_empty_rowset_batches) {
+    const int64_t old_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
+    const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
+    config::update_compaction_per_tablet_min_interval_seconds = 86400;
+    DeferOp restore([&]() {
+        config::max_update_compaction_num_level_minus_one_rowsets = old_batch_size;
+        config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
+    });
+
+    for (int64_t batch_size : {int64_t{1}, int64_t{4}}) {
+        config::max_update_compaction_num_level_minus_one_rowsets = batch_size;
+        const size_t effective_batch_size = std::max<int64_t>(2, batch_size);
+        _tablet = create_tablet(rand(), rand());
+        _tablet->updates()->stop_compaction(true);
+        const std::vector<int64_t> first_keys = {1, 2, 3};
+        const std::vector<int64_t> second_keys = {4, 5, 6};
+        ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, first_keys)).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, second_keys)).ok());
+        for (int64_t version = 4; version <= 12; ++version) {
+            auto rowset = create_rowset(_tablet, first_keys, nullptr, true);
+            ASSERT_EQ(0, rowset->num_segments());
+            ASSERT_TRUE(_tablet->rowset_commit(version, rowset).ok());
+        }
+        ASSERT_EQ(6, read_tablet(_tablet, 12));
+        std::vector<RowsetSharedPtr> rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(12, &rowsets).ok());
+        size_t previous_empty_count = 0;
+        for (const auto& rowset : rowsets) {
+            previous_empty_count += rowset->num_rows() == 0;
+        }
+        ASSERT_EQ(9, previous_empty_count);
+        for (int batch = 0; batch < 10 && previous_empty_count >= effective_batch_size; ++batch) {
+            const size_t previous_count = rowsets.size();
+            _tablet->updates()->stop_compaction(false);
+            auto st = _tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get());
+            ASSERT_TRUE(st.ok()) << st;
+            rowsets.clear();
+            ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(12, &rowsets).ok());
+            ASSERT_GT(previous_count, rowsets.size());
+            ASSERT_LE(previous_count - rowsets.size(), effective_batch_size + std::max<int64_t>(1, batch_size) - 1);
+            size_t empty_count = 0;
+            for (const auto& rowset : rowsets) {
+                empty_count += rowset->num_rows() == 0;
+            }
+            ASSERT_LT(empty_count, previous_empty_count);
+            ASSERT_LE(previous_empty_count - empty_count, effective_batch_size);
+            previous_empty_count = empty_count;
+            ASSERT_EQ(6, read_tablet(_tablet, 12));
+            ASSERT_EQ(12, _tablet->updates()->max_version());
+        }
+        ASSERT_LT(previous_empty_count, effective_batch_size);
+    }
+}
+
+TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
+    const int64_t old_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp restore([&]() {
+        config::vertical_compaction_max_columns_per_group = old_columns_per_group;
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:input_rowset_count");
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:algorithm");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    for (size_t count : {size_t{32767}, size_t{32768}, size_t{34173}, size_t{65536}}) {
+        _tablet = create_tablet(rand(), rand());
+        _tablet->updates()->stop_compaction(true);
+        const std::vector<int64_t> keys = {1, 2, 3};
+        auto empty = create_rowset(_tablet, keys, nullptr, true);
+        ASSERT_EQ(0, empty->num_segments());
+        ASSERT_TRUE(_tablet->rowset_commit(2, empty).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        std::vector<RowsetSharedPtr> rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(4, &rowsets).ok());
+        std::vector<uint32_t> inputs;
+        for (const auto& rowset : rowsets) {
+            inputs.emplace_back(rowset->rowset_meta()->get_rowset_seg_id());
+        }
+        bool algorithm_checked = false;
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:input_rowset_count",
+                                              [&](void* arg) { *static_cast<size_t*>(arg) = count; });
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:algorithm", [&](void* arg) {
+            EXPECT_EQ(count <= 32767 ? VERTICAL_COMPACTION : HORIZONTAL_COMPACTION,
+                      *static_cast<CompactionAlgorithm*>(arg));
+            algorithm_checked = true;
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        _tablet->updates()->stop_compaction(false);
+        auto st = _tablet->updates()->compaction(_compaction_mem_tracker.get(), inputs);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_TRUE(algorithm_checked);
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        ASSERT_EQ(4, _tablet->updates()->max_version());
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
+}
+
 TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
