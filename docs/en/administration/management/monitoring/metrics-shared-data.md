@@ -81,6 +81,14 @@ Shared-data Dashboard includes the following categories of monitoring metrics:
 
 - Description: Number of failed Vacuum Deletes operations.
 
+#### Vacuum Tasks Succeeded
+
+- Description: Number of Vacuum requests that completed successfully on each CN (`lake_vacuum_succeeded_tasks`).
+
+#### Vacuum Tasks Failed
+
+- Description: Number of Vacuum requests that failed on each CN (`lake_vacuum_failed_tasks`).
+
 ### Loading
 
 #### Queue Size

@@ -14,6 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <bvar/bvar.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -70,6 +71,15 @@ static std::optional<int64_t> allocated_bytes() {
 
 // Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
 int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
+
+namespace {
+
+// Read the current value of a bvar counter by its exposed name.
+int64_t read_bvar(const std::string& name) {
+    return std::stoll(bvar::Variable::describe_exposed(name));
+}
+
+} // namespace
 
 struct VacuumTestArg {
     int64_t min_batch_size;
@@ -190,9 +200,13 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
         request.set_min_retain_version(2);
         request.set_grace_timestamp(::time(nullptr) + 10);
         request.set_min_active_txn_id(12345);
+        auto succeeded_before = read_bvar("lake_vacuum_succeeded_tasks");
+        auto failed_before = read_bvar("lake_vacuum_failed_tasks");
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(succeeded_before + 1, read_bvar("lake_vacuum_succeeded_tasks"));
+        EXPECT_EQ(failed_before, read_bvar("lake_vacuum_failed_tasks"));
         EXPECT_EQ(3, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
 
@@ -939,8 +953,12 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         request.set_min_retain_version(5);
         request.set_grace_timestamp(::time(nullptr) + 60);
         request.set_min_active_txn_id(12345);
+        auto succeeded_before = read_bvar("lake_vacuum_succeeded_tasks");
+        auto failed_before = read_bvar("lake_vacuum_failed_tasks");
         vacuum(nullptr, request, &response);
         ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(succeeded_before, read_bvar("lake_vacuum_succeeded_tasks"));
+        EXPECT_EQ(failed_before + 1, read_bvar("lake_vacuum_failed_tasks"));
         EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "*tablet_mgr is null*"))
                 << response.status().error_msgs(0);
         ASSERT_NE(0, response.status().status_code());

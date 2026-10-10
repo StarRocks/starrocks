@@ -281,6 +281,18 @@ description: "Alphabetical t - z"
 - Unit: カウント
 - Description: Primary Keyテーブルでの行セットCOMMITリクエストの合計数。
 
+## `vacuum_failed`
+
+- 単位: 件数
+- タイプ: Counter
+- 説明: 共有データクラスタのみ。Leader FE 上のインクリメンタル（自動）Vacuum ラウンドのうち、パーティションのいずれかの Vacuum リクエストが送信できなかった、またはエラーを返した回数。
+
+## `vacuum_success`
+
+- 単位: 件数
+- タイプ: Counter
+- 説明: 共有データクラスタのみ。Leader FE 上のインクリメンタル（自動）Vacuum ラウンドのうち、パーティションに対して CN へ送信したすべての Vacuum リクエストが成功した回数。リクエストを送信しなかったラウンドは数えない。
+
 ## `vector_index_cache_async_load_failure`
 
 - タイプ: 累積

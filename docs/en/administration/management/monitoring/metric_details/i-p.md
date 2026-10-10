@@ -315,6 +315,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Gauge
 - Description: Number of Vacuum delete retries triggered in the last 60s on shared-data clusters. Surfaces transient object-storage throttling (SlowDown / try-again).
 
+## `lake_vacuum_failed_tasks`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of Vacuum requests handled by this CN that finished with an error. Each request vacuums the tablets of one partition on this CN.
+
+## `lake_vacuum_succeeded_tasks`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of Vacuum requests handled by this CN that completed successfully. Each request vacuums the tablets of one partition on this CN.
+
 ## `load_bytes`
 
 - Unit: Bytes

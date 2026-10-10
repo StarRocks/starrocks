@@ -361,6 +361,9 @@ public final class MetricRepo {
     // count file number and total size vacuumed for cloud native
     public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
     public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
+    // count partition vacuum rounds that succeeded or failed for cloud native
+    public static LongCounterMetric COUNTER_VACUUM_SUCCESS;
+    public static LongCounterMetric COUNTER_VACUUM_FAILED;
 
     // tablet reshard metrics
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL;
@@ -1143,6 +1146,12 @@ public final class MetricRepo {
         COUNTER_VACUUM_FILES_BYTES = new LongCounterMetric("vacuum_files_bytes", MetricUnit.BYTES,
                 "total file bytes have been vacuumed");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
+        COUNTER_VACUUM_SUCCESS = new LongCounterMetric("vacuum_success", MetricUnit.REQUESTS,
+                "total partition vacuum rounds that succeeded");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_SUCCESS);
+        COUNTER_VACUUM_FAILED = new LongCounterMetric("vacuum_failed", MetricUnit.REQUESTS,
+                "total partition vacuum rounds that failed");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FAILED);
 
         COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL = new LongCounterMetric("tablet_reshard_job_total",
                 MetricUnit.REQUESTS, "total tablet reshard split jobs created");

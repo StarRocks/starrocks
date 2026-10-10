@@ -81,6 +81,14 @@ Shared-data Dashboard 包括以下监控指标类别：
 
 - 描述 Vacuum Deletes 操作失败的次数。
 
+#### Vacuum Tasks Succeeded
+
+- 描述各 CN 上成功完成的 Vacuum 请求数（`lake_vacuum_succeeded_tasks`）。
+
+#### Vacuum Tasks Failed
+
+- 描述各 CN 上失败的 Vacuum 请求数（`lake_vacuum_failed_tasks`）。
+
 ### Loading
 
 #### Queue Size

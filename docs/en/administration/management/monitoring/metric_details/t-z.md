@@ -281,6 +281,18 @@ description: "Alphabetical t - z"
 - Unit: Count
 - Description: Total number of rowset COMMIT requests in Primary Key tables.
 
+## `vacuum_failed`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of incremental (auto) vacuum rounds on the leader FE in which a Vacuum request for a partition could not be sent or returned an error.
+
+## `vacuum_success`
+
+- Unit: Count
+- Type: Counter
+- Description: Shared-data only. Number of incremental (auto) vacuum rounds on the leader FE in which every Vacuum request sent to the CNs for a partition returned success. Rounds that send no request are not counted.
+
 ## `vector_index_cache_async_load_failure`
 
 - Type: Counter

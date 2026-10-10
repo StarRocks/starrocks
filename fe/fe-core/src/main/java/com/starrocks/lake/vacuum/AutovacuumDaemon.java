@@ -611,6 +611,7 @@ public class AutovacuumDaemon extends LeaderDaemon {
         }
 
         partition.setLastVacuumTime(startTime);
+<<<<<<< HEAD
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
             try {
@@ -619,6 +620,115 @@ public class AutovacuumDaemon extends LeaderDaemon {
                 // means that all the garbage files before the vacuumVersion have been deleted.
                 partition.setLastSuccVacuumVersion(vacuumedVersion);
                 if (partition.getMetadataSwitchVersion() != 0 && vacuumedVersion >= partition.getMetadataSwitchVersion()) {
+=======
+        // The proposal to log below is the band actually PERSISTED for the next round, not the raw BE response:
+        // on a completed pass updateVacuumState() resets the state and intentionally discards the BE's
+        // final-round re-proposal, so logging that raw band -- which the next round neither commits nor resumes
+        // from -- would read like a spurious re-propose. It stays zero on an error round (nothing persisted, the
+        // state is left untouched and the next round re-tries) -- the raw response may be partially non-zero
+        // across nodes and must not be mistaken for progress; hasError=true is what to read.
+        long logToDeleteLow = 0;
+        long logToDeleteHigh = 0;
+        long logNextProposeStart = 0;
+        // Persist the pass state only on a good round: no send error and at least one request actually
+        // went out. Otherwise leave it untouched so the next round re-commits + re-proposes.
+        // Skip the state update on a grace-blocked round: a tablet is still within grace, so the pass must
+        // WAIT -- not commit a wider range (it would delete that tablet's not-yet-eligible garbage) and not
+        // complete (completing would advance the floor past garbage that is merely waiting on grace). The
+        // BE already re-committed the previously-sent band this round (idempotent), and the next round
+        // re-commits + re-proposes once grace passes, so leaving the state untouched is a safe retry that
+        // never discards an in-flight band. (Absent grace blocking, an all-drained round still completes.)
+        if (!hasError && !responseFutures.isEmpty() && !anyGraceBlocked) {
+            updateVacuumState(db, table, partition, locker, freshRound, committingFinalBand, tablets,
+                    respToDeleteLow, respToDeleteHigh, respNextProposeStart, respPassStartVersion, currentIndexIds,
+                    extraFileSize, preExtraFileSize);
+            // Read the just-persisted proposal back for the log line below.
+            VacuumState persisted = partition.getVacuumState();
+            logToDeleteLow = persisted.getToDeleteLow();
+            logToDeleteHigh = persisted.getToDeleteHigh();
+            logNextProposeStart = persisted.getNextProposeStartVersion();
+        }
+
+        // One round is counted once: failed when any request could not be sent or came back with an error,
+        // succeeded when at least one request went out and all of them returned OK. A round that sent nothing
+        // (no node picked) is neither.
+        if (hasError) {
+            MetricRepo.COUNTER_VACUUM_FAILED.increase(1L);
+        } else if (!responseFutures.isEmpty()) {
+            MetricRepo.COUNTER_VACUUM_SUCCESS.increase(1L);
+        }
+        MetricRepo.COUNTER_VACUUM_FILES_NUMBER.increase(vacuumedFiles);
+        MetricRepo.COUNTER_VACUUM_FILES_BYTES.increase(vacuumedFileSize);
+        // One line per round (always logged, so error rounds are visible too). committed=[..) is the range
+        // this round told the BE to delete (proposed by the previous round); proposed=[..) is the band
+        // persisted for the next round to commit -- empty on a completed pass, whose BE re-proposal that round
+        // is discarded and re-derived fresh next round. resume_from is the cursor this round sent;
+        // next_propose_start is the persisted resume cursor (0 == chain bottom reached / pass complete).
+        // vacuumVersion is the persisted success watermark (lastSuccVacuumVersion) AFTER this round, which
+        // advances to the pass retain floor when a pass completes. On an error round the values come back 0,
+        // so hasError=true is what to read.
+        LOG.info("incremental vacuum {}.{}.{} hasError={} visibleVersion={} minRetainVersion={} minActiveTxnId={} " +
+                        "txnLogSweepWatermark={} pass_start_version={} committed=[{},{}) resume_from={} " +
+                        "proposed=[{},{}) next_propose_start={} vacuumVersion={} vacuumedFiles={} " +
+                        "vacuumedFileSize={} cost={}ms",
+                db.getFullName(), table.getName(), partition.getId(), hasError,
+                visibleVersion, minRetainVersion, minActiveTxnId, txnLogSweepWatermark,
+                passStartVersion, toDeleteLow, toDeleteHigh, nextProposeStart,
+                logToDeleteLow, logToDeleteHigh, logNextProposeStart,
+                partition.getLastSuccVacuumVersion(), vacuumedFiles, vacuumedFileSize,
+                System.currentTimeMillis() - startTime);
+    }
+
+    // Persist the result of one incremental vacuum round into the partition's in-memory pass state.
+    // On a confirmed round the BE has already committed the range we sent (toDeleteLow/High) and returned
+    // the next proposed range plus resume cursor; here we either advance into that range or, when the pass
+    // has reached the chain bottom, finish it: advance the success watermark to the pass retain floor and
+    // clear the state so the next round starts fresh. The caller invokes this only on a good round (no
+    // send error, at least one request sent); leaving the state untouched otherwise makes the next round
+    // re-commit + re-propose (both idempotent on the BE).
+    private void updateVacuumState(Database db, OlapTable table, PhysicalPartition partition,
+            Locker locker, boolean freshRound, boolean committingFinalBand, List<Tablet> tablets,
+            long respToDeleteLow, long respToDeleteHigh, long respNextProposeStart, long respPassStartVersion,
+            Set<Long> currentIndexIds, long extraFileSize, long preExtraFileSize) {
+        // The pass completes when either (a) this round just committed the pass's final band -- the band the
+        // BE previously proposed with resume cursor 0, i.e. the chain bottom was reached -- or (b) the BE now
+        // proposes nothing more to delete. Case (a) is the common one: when the whole remaining band fits in
+        // one round the BE returns a NON-empty final band together with cursor 0 and never a subsequent
+        // empty proposal, so detecting completion only from an empty proposal (b) would loop forever
+        // (re-committing that band every round) and the success watermark would never advance.
+        boolean passComplete = committingFinalBand || (respToDeleteLow >= respToDeleteHigh);
+        VacuumState state = partition.getVacuumState();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+        try {
+            // Per-round storage-accounting bookkeeping, independent of the incremental pass state: refresh the
+            // partition's extra-file size from the BE's report plus whatever compaction added concurrently
+            // during this round. Kept under the table WRITE lock so this read-modify-write cannot lose a
+            // concurrent CompactionScheduler.commitCompaction() -> incExtraFileSize() (which takes the same
+            // lock), and only reached on a good round (the caller gates on !hasError && !responseFutures
+            // .isEmpty()), so a partial-failure round never overwrites the previous accurate total.
+            long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
+            partition.setExtraFileSize(extraFileSize + incrementExtraFileSize);
+            if (passComplete) {
+                // The pass deleted everything below its retain floor band by band; advance the success
+                // watermark to that floor (mirrors the legacy path advancing to the retain boundary). The
+                // floor is the value captured on this pass's fresh round and held constant since; a pass
+                // that proposed nothing from the very first fresh round has floor 0 and so does not move
+                // the watermark. On a final-band round the BE also returned a fresh re-proposal this round;
+                // we intentionally discard it via reset() -- the pass has reached the bottom, so the next
+                // pass re-derives from a fresh walk.
+                // On a fresh round the pass floor is what the BE just reported (respPassStartVersion): a
+                // non-fresh round completes via committingFinalBand and reads the floor captured on the
+                // pass's fresh round (state), but a fresh round that completes immediately -- an empty
+                // proposal because everything at/below the retain floor is already vacuumed (drained) -- only
+                // has it in the current response, where the BE reports the retain floor. Reading the stale
+                // state (0) there would strand a pinned metadataSwitchVersion and freeze the watermark.
+                long passFloor = freshRound ? respPassStartVersion : state.getPassStartVersion();
+                if (passFloor > partition.getLastSuccVacuumVersion()) {
+                    partition.setLastSuccVacuumVersion(passFloor);
+                }
+                if (partition.getMetadataSwitchVersion() != 0
+                        && passFloor >= partition.getMetadataSwitchVersion()) {
+>>>>>>> 42f5d018ea3... [BugFix] Add success and failure counters for lake vacuum on FE and BE (#64168)
                     partition.setMetadataSwitchVersion(0);
                 }
                 long incrementExtraFileSize = partition.getExtraFileSize() - preExtraFileSize;
