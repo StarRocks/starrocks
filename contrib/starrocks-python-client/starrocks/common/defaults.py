@@ -41,6 +41,9 @@ class ReflectionTableDefaults(ReflectionDefaults):
         'fast_schema_evolution': 'true',
         'replicated_storage': 'true',
         'storage_format': 'DEFAULT',
+        # FE default_automatic_bucket_size: 4294967296 before 4.0, 1073741824 from 4.0 (#63168).
+        # Version- and config-dependent, and a table keeps its value across upgrades, so it is
+        # also in _SKIP_IMPLICIT_RESET_PROPERTIES.
         'bucket_size': '4294967296',
         'storage_medium': 'HDD',
 
@@ -63,10 +66,12 @@ class ReflectionTableDefaults(ReflectionDefaults):
     }, **_DEFAULT_PROPERTIES}
 
     # Properties never implicitly reset when absent from metadata. Needed for properties
-    # whose DB representation is asymmetric (e.g. only stored when false), so a missing
-    # metadata entry should leave the DB value alone rather than reset it to the default.
+    # whose DB representation is asymmetric (e.g. only stored when false), or whose default
+    # depends on the StarRocks version or FE config, so a missing metadata entry should leave
+    # the DB value alone rather than reset it to the default.
     _SKIP_IMPLICIT_RESET_PROPERTIES: frozenset = frozenset({
         'enable_statistic_collect_on_first_load',
+        'bucket_size',
     })
 
     # Default table options

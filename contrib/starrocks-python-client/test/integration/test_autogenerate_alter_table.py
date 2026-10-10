@@ -690,6 +690,61 @@ class TestAlterTableIntegration:
                 conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
                 conn.commit()
 
+    def test_random_bucket_size_not_reset_when_unmanaged(self) -> None:
+        """
+        Test: an unmanaged bucket_size on a RANDOM table is left alone.
+
+        The default bucket_size is the FE config default_automatic_bucket_size, which is
+        4294967296 before StarRocks 4.0 and 1073741824 from 4.0 (#63168). A model that
+        omits bucket_size must not get an ALTER resetting it to a hardcoded default.
+        - Expected: 0 operations generated, on any version
+        """
+        table_name = "test_random_bucket_size"
+
+        with self.engine.connect() as conn:
+            conn.exec_driver_sql(f"""
+                CREATE TABLE {self.test_schema}.{table_name} (
+                    id INT,
+                    name VARCHAR(50)
+                )
+                DUPLICATE KEY(id)
+                DISTRIBUTED BY RANDOM
+                PROPERTIES ("replication_num" = "1")
+            """)
+            conn.commit()
+
+            try:
+                reflected_table = Table(
+                    table_name, MetaData(),
+                    autoload_with=self.engine,
+                    schema=self.test_schema
+                )
+                reflected_bucket_size = reflected_table.dialect_options["starrocks"]["properties"].get("bucket_size")
+                logger.info("reflected bucket_size: %s", reflected_bucket_size)
+
+                target_table = Table(
+                    table_name, MetaData(),
+                    Column('id', Integer),
+                    Column('name', String(50)),
+                    **{
+                        "starrocks_duplicate_key": "id",
+                        "starrocks_distributed_by": "RANDOM",
+                        "starrocks_properties": {"replication_num": "1"}
+                    },
+                    schema=self.test_schema
+                )
+
+                autogen_context = self._setup_autogen_context()
+                upgrade_ops = UpgradeOps()
+                compare_starrocks_table(
+                    autogen_context, upgrade_ops, self.test_schema, table_name, reflected_table, target_table
+                )
+                assert upgrade_ops.ops == [], f"Expected no changes, but got: {upgrade_ops.ops}"
+
+            finally:
+                conn.exec_driver_sql(f"DROP TABLE IF EXISTS {self.test_schema}.{table_name}")
+                conn.commit()
+
     def test_multiple_changes_detection(self) -> None:
         """
         Test: Multiple changes detection with real reflection.
