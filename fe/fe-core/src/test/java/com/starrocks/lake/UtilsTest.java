@@ -21,6 +21,11 @@ import com.starrocks.alter.reshard.PublishTabletsInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PublishProperty;
+import com.starrocks.catalog.RangeDistributionInfo;
+>>>>>>> cd3e51fb927... [BugFix] Create range-distribution tablets with their own initial metadata (#64928)
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
@@ -254,6 +259,15 @@ public class UtilsTest {
         Assertions.assertFalse(Utils.preferSharedInitialMetadata(lakeTable(false), singleIndexPartition(),
                 PhysicalPartition.PARTITION_INIT_VERSION),
                 "only file_bundling makes DDL write the shared version-1 object");
+    }
+
+    @Test
+    public void testSharedInitialMetadataExcludesRangeDistribution() {
+        OlapTable table = lakeTable(true);
+        table.setDefaultDistributionInfo(new RangeDistributionInfo());
+        Assertions.assertFalse(Utils.preferSharedInitialMetadata(table, singleIndexPartition(),
+                PhysicalPartition.PARTITION_INIT_VERSION),
+                "DDL gives the tablets of a range-distribution table per-tablet version-1 metadata");
     }
 
     @Test

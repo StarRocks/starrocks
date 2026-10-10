@@ -15,6 +15,10 @@
 package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
+import com.staros.proto.PlacementPolicy;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeMgr;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -28,10 +32,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.Tuple;
+import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Range;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -58,14 +65,18 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
+import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -87,6 +98,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -1636,5 +1648,84 @@ public class LakeTableSchemaChangeJobTest {
             Thread.sleep(100);
         }
         return job;
+    }
+
+    /**
+     * Shadow tablets copy their origin tablets' ranges. With lake_enable_tablet_creation_optimization the
+     * job created them from one partition-shared version-1 object, which carries a single range, so every
+     * shadow tablet after the first got the first one's range.
+     */
+    @Test
+    public void testRangeTableShadowTabletsGetTheirOwnRanges() throws Exception {
+        boolean oldOptimization = Config.lake_enable_tablet_creation_optimization;
+        boolean oldRangeDistribution = Config.enable_range_distribution;
+        boolean oldFastSchemaEvolution = Config.enable_fast_schema_evolution_in_share_data_mode;
+        Config.lake_enable_tablet_creation_optimization = true;
+        Config.enable_range_distribution = true;
+        // Fast schema evolution would turn the type change into a metadata-only job.
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        try {
+            LakeTable anchor = createTable(connectContext, "CREATE TABLE r_anchor (k1 INT, k2 INT, v INT) "
+                    + "DUPLICATE KEY(k1, k2) ORDER BY (k1, k2) "
+                    + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'false', "
+                    + "'colocate_with' = 'g_shadow_range:k1')");
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+            long grpId = colocateTableIndex.getGroup(anchor.getId()).grpId;
+            ColocateRangeMgr rangeMgr = colocateTableIndex.getColocateRangeMgr();
+            long firstShardGroupId = rangeMgr.getColocateRanges(grpId).get(0).getShardGroupId();
+            long secondShardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(
+                    db.getId(), anchor.getId(), 0L, 0L, PlacementPolicy.PACK);
+            Tuple b100 = new Tuple(Arrays.asList(Variant.of(IntegerType.INT, "100")));
+            rangeMgr.setColocateRanges(grpId, Arrays.asList(
+                    new ColocateRange(Range.lt(b100), firstShardGroupId),
+                    new ColocateRange(Range.ge(b100), secondShardGroupId)));
+
+            LakeTable rangeTable = createTable(connectContext, "CREATE TABLE r1 (k1 INT, k2 INT, v INT) "
+                    + "DUPLICATE KEY(k1, k2) ORDER BY (k1, k2) "
+                    + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'false', "
+                    + "'colocate_with' = 'g_shadow_range:k1')");
+            Assertions.assertTrue(rangeTable.isRangeDistribution());
+            Assertions.assertEquals(2, rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                    .getLatestBaseIndex().getTablets().size());
+
+            List<CreateReplicaTask> built = new ArrayList<>();
+            new MockUp<CreateReplicaTask.Builder>() {
+                @Mock
+                public CreateReplicaTask build(Invocation inv) {
+                    CreateReplicaTask task = inv.proceed();
+                    built.add(task);
+                    return task;
+                }
+            };
+
+            // A value-column type change rewrites data, so it runs as a LakeTableSchemaChangeJob.
+            alterTable(connectContext, "ALTER TABLE r1 MODIFY COLUMN v BIGINT");
+            LakeTableSchemaChangeJob job = getAlterJob(rangeTable);
+            drivePendingJob(job);
+
+            List<CreateReplicaTask> shadowTasks = built.stream()
+                    .filter(task -> task.getTableId() == rangeTable.getId())
+                    .collect(Collectors.toList());
+            List<Tablet> shadowTablets = rangeTable.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                    .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).stream()
+                    .filter(index -> index.getState() == MaterializedIndex.IndexState.SHADOW)
+                    .flatMap(index -> index.getTablets().stream())
+                    .collect(Collectors.toList());
+            Assertions.assertEquals(2, shadowTablets.size());
+            Assertions.assertEquals(2, shadowTasks.size(), "every shadow tablet must get its own create task");
+            for (Tablet shadowTablet : shadowTablets) {
+                TCreateTabletReq request = shadowTasks.stream()
+                        .filter(t -> t.getTabletId() == shadowTablet.getId())
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("no create task for " + shadowTablet.getId()))
+                        .toThrift();
+                Assertions.assertEquals(shadowTablet.getRange().toThrift(), request.getRange());
+                Assertions.assertFalse(request.isEnable_tablet_creation_optimization());
+            }
+        } finally {
+            Config.lake_enable_tablet_creation_optimization = oldOptimization;
+            Config.enable_range_distribution = oldRangeDistribution;
+            Config.enable_fast_schema_evolution_in_share_data_mode = oldFastSchemaEvolution;
+        }
     }
 }
