@@ -27,7 +27,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.thrift.THdfsProperties;
-import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -38,11 +37,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-<<<<<<< HEAD
-=======
-import java.util.Map;
-import java.util.UUID;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 
 public class ExportHandleTest {
     private static ConnectContext connectContext;
@@ -116,38 +110,4 @@ public class ExportHandleTest {
         List<String> row = exportResultSet.getResultRows().get(0);
         Assertions.assertEquals("PENDING", row.get(2));
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Without a broker the export sink needs the file system's THdfsProperties, and for a path whose file system
-     * is not cached yet getTProperties builds it -- a round trip to the storage. setJob plans the fragments under
-     * the table's READ lock, so the properties have to be resolved before it, once, and shared by every fragment,
-     * including one rebuilt by resetCoord. The dynamic sql-test run reported it from ExportJob.genPlanFragment.
-     */
-    @Test
-    public void testABrokerlessExportResolvesItsFileSystemOutsideTheTableLock() throws Exception {
-        LockProbe probe = LockProbe.onAnyThread();
-        new MockUp<HdfsUtil>() {
-            @Mock
-            public void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) {
-                probe.record("getTProperties");
-            }
-        };
-        String sql = "EXPORT TABLE export_tbl TO \"hdfs://hdfs_host:port/lock/\" "
-                + "WITH BROKER (\"username\"=\"test\", \"password\"=\"test\");";
-        ExportStmt exportStmt = (ExportStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        UUID queryId = UUIDUtil.genUUID();
-        GlobalStateMgr.getCurrentState().getExportMgr().addExportJob(queryId, exportStmt);
-        ExportJob job = GlobalStateMgr.getCurrentState().getExportMgr().getExportJob("test", queryId);
-
-        // Otherwise the sink was never built and the lock-held path this pins was not exercised at all.
-        Assertions.assertFalse(job.getCoordList().isEmpty(), "the export planned no fragment");
-        job.resetCoord(0, UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
-
-        Assertions.assertFalse(probe.everUnderLock("getTProperties"), "getTProperties ran with the table lock held");
-        Assertions.assertEquals(1, probe.calls("getTProperties"),
-                "the file system properties should be resolved exactly once");
-    }
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 }

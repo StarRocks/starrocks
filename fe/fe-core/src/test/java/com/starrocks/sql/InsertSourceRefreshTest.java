@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * refresh ran in InsertPlanner, before the refresh moved into the unlocked pre-pass.
  */
 public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
-    // Deeper than the pre-pass expands views (QueryAnalyzer.MAX_PRE_RESOLVED_VIEW_DEPTH = 16).
+    // A chain of views. The pre-pass does not expand views, so a source behind one is refreshed after analysis.
     private static final int DEEP_VIEW_LEVELS = 20;
 
     private static class RecordingHiveMetadata extends MockedHiveMetadata {

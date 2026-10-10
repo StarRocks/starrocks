@@ -69,7 +69,7 @@ public class InsertHiveMetadataCacheTest extends ConnectorPlanTestBase {
 
     @Test
     public void testExplicitChoiceIsKept() throws Exception {
-        // MV refresh decides for itself (MVRefreshProcessor sets Optional.of(true)).
+        // MV refresh decides for itself (PartitionBasedMvRefreshProcessor sets Optional.of(true)).
         connectContext.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false);
         connectContext.setUseConnectorMetadataCache(Optional.of(true));
         UtFrameUtils.parseStmtWithNewParser(INSERT_FROM_HIVE, connectContext);

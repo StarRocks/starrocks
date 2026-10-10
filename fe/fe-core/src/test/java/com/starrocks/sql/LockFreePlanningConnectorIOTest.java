@@ -15,40 +15,39 @@
 package com.starrocks.sql;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
-=======
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.TableVersionRange;
-=======
-import com.starrocks.catalog.TableName;
-import com.starrocks.common.util.UUIDUtil;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -57,6 +56,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -80,14 +80,21 @@ public class LockFreePlanningConnectorIOTest extends ConnectorPlanTestBase {
 
     private static final String HIVE_CATALOG = "hive0";
 
-    private LockProbe probe;
+    private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
+    private volatile Thread testThread;
+
+    private void record(String key) {
+        if (Thread.currentThread() != testThread) {
+            return;
+        }
+        underLock.merge(key, LockHoldDepth.isUnderLock(), Boolean::logicalOr);
+    }
 
     /**
      * Mounted on MetadataMgr: it is the one door all of these go through, which keeps the probe independent
      * of which connector the statement happens to use.
      */
     private void probeConnectorCalls() {
-<<<<<<< HEAD
         testThread = Thread.currentThread();
         new MockUp<MetadataMgr>() {
             @Mock
@@ -123,11 +130,6 @@ public class LockFreePlanningConnectorIOTest extends ConnectorPlanTestBase {
                 return invocation.proceed(table, params);
             }
         };
-=======
-        probe = LockProbe.onCurrentThread();
-        probe.probeExternalGetTable();
-        probe.probeScanMetadata();
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
     }
 
     /**
@@ -146,7 +148,12 @@ public class LockFreePlanningConnectorIOTest extends ConnectorPlanTestBase {
     }
 
     private void assertNothingWentRemoteUnderTheLock(String sql) {
-        probe.assertNothingUnderTheLock("planning contacted the external catalog, for: " + sql);
+        // Without this the check below passes on an empty map, i.e. whenever the probe never fired.
+        Assertions.assertFalse(underLock.isEmpty(),
+                "planning never reached the external catalog, the probe proves nothing, for: " + sql);
+        underLock.forEach((site, held) -> Assertions.assertFalse(held,
+                "an FE metadata lock was held while planning contacted the external catalog, at " + site
+                        + ", for: " + sql + "; full samples: " + underLock));
     }
 
     private ExecPlan plan(String sql) throws Exception {
@@ -246,7 +253,7 @@ public class LockFreePlanningConnectorIOTest extends ConnectorPlanTestBase {
                         + "FROM hive0.partitioned_db.lineitem_par) SELECT * FROM c",
                 "INSERT INTO test.t0 SELECT l_orderkey, count(*), count(*) "
                         + "FROM hive0.partitioned_db.lineitem_par GROUP BY l_orderkey")) {
-            probe.reset();
+            underLock.clear();
             plan(sql);
             assertNothingWentRemoteUnderTheLock(sql);
         }
@@ -392,8 +399,8 @@ public class LockFreePlanningConnectorIOTest extends ConnectorPlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(false);
         }
-        Assertions.assertFalse(probe.isEmpty(), "planning never reached the external catalog");
-        Assertions.assertTrue(probe.anyUnderLock(),
-                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + probe);
+        Assertions.assertFalse(underLock.isEmpty(), "planning never reached the external catalog");
+        Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
+                "cbo_use_lock_db no longer forces the whole planning phase under the lock: " + underLock);
     }
 }

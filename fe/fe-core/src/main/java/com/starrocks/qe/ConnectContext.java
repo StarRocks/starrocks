@@ -73,10 +73,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.analyzer.PreResolvedState;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -299,20 +296,10 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
-<<<<<<< HEAD
-=======
-    private StatisticsLoadBudget statisticsLoadBudget;
 
     // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
     // Scoped to one statement: StatementPlanner clears it.
     private final PreResolvedState preResolvedState = new PreResolvedState();
-
-    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
-    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
-    // uses a job-owned collector because its asynchronous work must not depend on this context's
-    // statement-level reset or on a reused client context.
-    private volatile PreSplitProfile preSplitProfile;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -1318,21 +1305,10 @@ public class ConnectContext {
         this.queryMVContext = queryMVContext;
     }
 
-<<<<<<< HEAD
-=======
     public PreResolvedState getPreResolvedState() {
         return preResolvedState;
     }
 
-    public StatisticsLoadBudget getStatisticsLoadBudget() {
-        return statisticsLoadBudget;
-    }
-
-    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
-        this.statisticsLoadBudget = statisticsLoadBudget;
-    }
-
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
     public QuerySource getQuerySource() {
         return querySource;
     }

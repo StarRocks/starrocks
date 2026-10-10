@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstTraverser;
@@ -32,11 +32,12 @@ import java.util.List;
  * for this statement before it is planned, the plan reads the table as reloaded after that refresh, and a refresh that
  * fails fails the statement.
  *
- * <p>Most tables are refreshed by the unlocked pre-pass ({@code QueryAnalyzer#analyzeExternalTablesOnly}), which
- * binds the reloaded table and records it here. What it does not reach is handled by {@link #refreshRemaining} once
- * analysis has expanded every view and subquery: a relation already bound before planning started (the INSERT a
- * CTAS carries, a retried or replanned statement), a scalar subquery, a view nested deeper than the pre-pass expands
- * or one it could not pre-resolve. A refresh drops what is cached about the table
+ * <p>Tables the statement names directly are refreshed by the unlocked pre-pass
+ * ({@code QueryAnalyzer#analyzeExternalTablesOnly}), which binds the reloaded table and records it here. What it does
+ * not reach is handled by {@link #refreshRemaining} once analysis has expanded every view and subquery: a relation
+ * already bound before planning started (the INSERT a CTAS carries, a retried or replanned statement), a scalar
+ * subquery, or a table read through a view, which the pre-pass does not expand. A refresh drops what is cached about
+ * the table
  * ({@code ConnectorMetadata#invalidateTableForRead}); the table is then reloaded once and every relation of it is
  * rebound to the reloaded object, because a table object can carry the data it reads (an Iceberg snapshot, say), so
  * dropping the cache alone would not change what this plan reads.
@@ -109,17 +110,16 @@ public final class InsertSourceRefresher {
             return;
         }
         Table bound = relation.getTable();
-        Table forPlanning = reloaded.forQueryPlanning();
-        if (bound == reloaded || bound == forPlanning) {
+        if (bound == reloaded) {
             return;
         }
         // The analyzed statement -- its scope, the relation's column map -- was built from the columns of the bound
         // table; a table whose columns differ in anything planning reads would not fit it.
-        if (!sameSchema(bound, forPlanning)) {
+        if (!sameSchema(bound, reloaded)) {
             throw new SemanticException("The schema of table %s changed while the statement was being planned, " +
                     "please retry", keyOf(bound).toString());
         }
-        relation.setTable(forPlanning);
+        relation.setTable(reloaded);
     }
 
     private static boolean sameSchema(Table a, Table b) {

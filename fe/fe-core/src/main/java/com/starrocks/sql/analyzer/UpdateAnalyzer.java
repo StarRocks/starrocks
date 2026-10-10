@@ -23,16 +23,13 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
 import com.starrocks.catalog.Database;
-=======
-import com.starrocks.catalog.IcebergTable;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -45,15 +42,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
-<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
-=======
-import com.starrocks.sql.ast.expression.DefaultValueExpr;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.NullLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 import com.starrocks.sql.common.TypeManager;
 
 import java.util.HashMap;
@@ -83,7 +72,6 @@ public class UpdateAnalyzer {
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         analyzeProperties(updateStmt, session);
 
-<<<<<<< HEAD
         TableName tableName = updateStmt.getTableName();
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(session, tableName.getCatalog(), tableName.getDb());
@@ -91,12 +79,6 @@ public class UpdateAnalyzer {
             throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
         }
         Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
-=======
-        TableRef tableRef = AnalyzerUtils.normalizedTableRef(updateStmt.getTableRef(), session);
-        updateStmt.setTableRef(tableRef);
-        TableName tableName = TableName.fromTableRef(tableRef);
-        Table table = AnalyzerUtils.resolveWriteTarget(session, tableName);
->>>>>>> 8d9691e ([BugFix] Refresh every INSERT ... SELECT source strictly, by invalidation (#80389))
 
         if (table instanceof MaterializedView) {
             throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"
