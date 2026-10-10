@@ -283,7 +283,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
         AtomicBoolean ready = mockReady(false);
 
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> cache =
-                Caffeine.newBuilder().buildAsync(new ConnectorColumnStatsCacheLoader());
+                // Load on the calling thread: with an async executor, Caffeine removes an entry whose load
+                // completed empty in a callback that can still be pending when get() returns.
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader());
         ConnectorTableColumnKey regionKey = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_regionkey");
         ConnectorTableColumnKey name = new ConnectorTableColumnKey("hive0.tpch.region.1234", "r_name");
 
@@ -332,7 +334,9 @@ public class ConnectorColumnStatsCacheLoaderTest {
         AtomicBoolean ready = mockReady(false);
 
         AsyncLoadingCache<ConnectorTableColumnKey, Optional<Histogram>> cache =
-                Caffeine.newBuilder().buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
+                // Load on the calling thread: with an async executor, Caffeine removes an entry whose load
+                // completed empty in a callback that can still be pending when get() returns.
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorHistogramColumnStatsCacheLoader());
         ConnectorTableColumnKey key = new ConnectorTableColumnKey("hive0.partitioned_db.t1_par.1234", "c1");
 
         Assertions.assertTrue(cache.getAll(ImmutableList.of(key)).get().isEmpty());
