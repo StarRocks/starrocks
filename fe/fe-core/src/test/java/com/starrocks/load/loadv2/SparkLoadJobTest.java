@@ -628,7 +628,7 @@ public class SparkLoadJobTest {
         Locker locker = new Locker();
         locker.lock(dbId, LockType.WRITE);
         try {
-            job.afterVisible(new TransactionState());
+            job.afterVisible(new TransactionState(), true);
         } finally {
             locker.release(dbId, LockType.WRITE);
         }

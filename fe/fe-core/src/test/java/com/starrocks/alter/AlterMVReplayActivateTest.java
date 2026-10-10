@@ -43,7 +43,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -175,7 +174,7 @@ public class AlterMVReplayActivateTest extends MVTestBase {
                 starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + mvName + " ACTIVE");
                 ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
                         ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
-                verify(spyEditLog).logAlterMvStatus(captor.capture(), any());
+                verify(spyEditLog).logAlterMvStatus(captor.capture());
                 Assertions.assertEquals(mv.getBaseTableInfos(), captor.getValue().getBaseTableInfos());
             } finally {
                 GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);

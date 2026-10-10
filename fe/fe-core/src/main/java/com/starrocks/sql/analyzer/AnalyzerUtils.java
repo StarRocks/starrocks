@@ -1223,15 +1223,6 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
-            judgeWriteTarget(node.getTable(), TableName.fromTableRef(node.getTableRef()));
-            if (node.getQueryStatement() != null) {
-                visit(node.getQueryStatement(), context);
-            }
-            return null;
-        }
-
-        @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
             // system table is immutable

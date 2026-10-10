@@ -123,8 +123,8 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         // Collect the base tables' partitions before taking the lock: for a base table in an external catalog
         // this goes through the connector, and the lock below is on the mv alone, so it never protected the
         // base tables anyway. The range partitioner and MVTimelinessArbiter already collect them unlocked.
-        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = differ.syncBaseTablePartitionInfos();
-        if (refBaseTablePartitionMap == null) {
+        Map<Table, PCellSortedSet> basePartitionMapBeforeLock = differ.syncBaseTablePartitionInfos();
+        if (basePartitionMapBeforeLock == null) {
             // both signals the locked path used to emit: the differ's prepare log and the caller's warning
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
             logger.warn("compute list partition diff failed, result is null");
@@ -142,7 +142,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         PartitionDiffResult result;
         try {
-            result = differ.computePartitionDiff(null, refBaseTablePartitionMap);
+            result = differ.computePartitionDiff(null, basePartitionMapBeforeLock);
             if (result == null) {
                 logger.warn("compute list partition diff failed, result is null");
                 return false;

@@ -62,10 +62,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.MergeIntoStmt;
-import com.starrocks.sql.ast.MergeWhenClause;
-import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
-import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
@@ -1998,28 +1994,6 @@ public class QueryAnalyzer {
                 visitAll(node.getUsingRelations());
                 visitIfPresent(node.getWherePredicate());
             });
-            return null;
-        }
-
-        @Override
-        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
-            preResolveExternalWriteTarget(node.getTableRef());
-            if (node.getQueryStatement() != null) {
-                return super.visitMergeIntoStatement(node, context);
-            }
-            visitIfPresent(node.getSourceRelation());
-            visitIfPresent(node.getMergeCondition());
-            if (node.getWhenClauses() != null) {
-                for (MergeWhenClause whenClause : node.getWhenClauses()) {
-                    visitIfPresent(whenClause.getOptionalCondition());
-                    if (whenClause instanceof MergeWhenMatchedUpdateClause updateClause) {
-                        updateClause.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
-                    } else if (whenClause instanceof MergeWhenNotMatchedInsertClause insertClause
-                            && insertClause.getValues() != null) {
-                        insertClause.getValues().forEach(this::visitIfPresent);
-                    }
-                }
-            }
             return null;
         }
 

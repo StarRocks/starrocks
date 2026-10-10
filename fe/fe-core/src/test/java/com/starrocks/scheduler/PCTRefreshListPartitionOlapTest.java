@@ -23,12 +23,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.common.ListPartitionDiffer;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -280,7 +280,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         LockProbe probe = LockProbe.onAnyThread();
         new MockUp<ListPartitionDiffer>() {
             @Mock
-            public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
+            public Map<Table, PCellSortedSet> syncBaseTablePartitionInfos(Invocation invocation) {
                 probe.record("syncBaseTablePartitionInfos");
                 return invocation.proceed();
             }

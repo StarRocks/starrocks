@@ -20,8 +20,6 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
-import com.starrocks.proto.BuildVectorIndexRequest;
-import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -367,19 +365,6 @@ public class LakeServiceWithMetricsTest {
         };
 
         Future<VacuumFullResponse> result = lakeServiceWithMetrics.vacuumFull(new VacuumFullRequest());
-        assertNotNull(result);
-    }
-
-    @Test
-    public void testBuildVectorIndex() throws Exception {
-        new Expectations() {
-            {
-                lakeService.buildVectorIndex((BuildVectorIndexRequest) any);
-                result = CompletableFuture.completedFuture(new BuildVectorIndexResponse());
-            }
-        };
-
-        Future<BuildVectorIndexResponse> result = lakeServiceWithMetrics.buildVectorIndex(new BuildVectorIndexRequest());
         assertNotNull(result);
     }
 
