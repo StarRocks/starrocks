@@ -236,6 +236,11 @@ public class MVVersionManagerTest {
     public void updateMVVersionInfoPrunesExternalPartitionsWithoutCallingTheConnector() {
         AtomicInteger resolveCount = new AtomicInteger();
         mockGetPartitionNames(resolveCount);
+        new MockUp<MVVersionManager>() {
+            @Mock
+            public void updateEditLogAfterVersionMetaChanged(MaterializedView mv, long maxChangedTableRefreshTime) {
+            }
+        };
 
         MaterializedView mv = buildMv(1000L);
         Table externalBaseTable = mock(Table.class);

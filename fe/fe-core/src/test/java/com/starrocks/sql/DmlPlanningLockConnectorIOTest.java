@@ -166,7 +166,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
     @Test
     public void testAnInsertIntoAConnectorTargetPlansWithoutTheLock() throws Exception {
         probeConnectorCalls();
-        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
+        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0 "
                 + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
         plan(sql);
         assertNothingWentRemoteUnderTheLock(sql);
@@ -181,15 +181,19 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
     @Test
     public void testWithoutThePrePassTheTargetGoesBackUnderTheLock() throws Exception {
         boolean saved = Config.enable_experimental_external_table_preparse;
+        boolean savedAutoRefresh = connectContext.getSessionVariable().isEnableInsertSelectExternalAutoRefresh();
         Config.enable_experimental_external_table_preparse = false;
+        // An INSERT also runs the pre-pass for its source auto refresh, so that has to be off too.
+        connectContext.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(false);
         try {
             probeConnectorCalls();
-            String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
+            String sql = "INSERT INTO iceberg0.unpartitioned_db.t0 "
                     + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
             plan(sql);
-            assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0_v2");
+            assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0");
         } finally {
             Config.enable_experimental_external_table_preparse = saved;
+            connectContext.getSessionVariable().setEnableInsertSelectExternalAutoRefresh(savedAutoRefresh);
         }
     }
 
@@ -227,7 +231,7 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
      */
     @Test
     public void testThePreResolvedTargetIsConsumedByTheAnalyzer() throws Exception {
-        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
+        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0 "
                 + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
         plan(sql);
         Assertions.assertTrue(connectContext.getPreResolvedState().isEmpty(),
