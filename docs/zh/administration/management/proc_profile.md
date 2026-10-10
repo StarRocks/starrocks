@@ -77,9 +77,15 @@ FE 分析由内部守护进程管理，并使用 **AsyncProfiler** 采集数据�
 | `proc_profile_cpu_enable` | `true` | 是否启用 FE 的自动 CPU 分析。 |
 | `proc_profile_mem_enable` | `true` | 是否启用 FE 的自动内存分配分析。 |
 | `proc_profile_collect_time_s` | `120` | 每次分析收集的持续时间（秒）。 |
+| `proc_profile_cleanup_interval_s` | `300` | 分析文件清理运行之间的间隔（秒）。 |
 | `proc_profile_jstack_depth` | `128` | 收集的最大 Java 栈深度。 |
 | `proc_profile_file_retained_days` | `1` | 分析文件的保留天数。 |
 | `proc_profile_file_retained_size_bytes` | `2147483648` (2GB) | 保留分析文件的最大总大小。 |
+
+CPU 分析和内存分析相互独立地收集，因此其中一个失败不会导致另一个停止。当一次收集尝试失败时，FE 会按指数退避重试，
+初始为 2 分钟，上限为 15 分钟，而不是每秒重试一次；失败只在进入退避时记录一次日志，恢复时再记录一次。如果某次收尾失败导致
+分析器仍在运行，下一次尝试会先停止该会话，因此无需重启 FE 即可恢复分析。保留策略由独立的 `proc-profile-cleaner` 守护进程
+执行，因此在收集失败期间分析文件仍会被清理。
 
 ### 后端 (BE) 配置
 
