@@ -34,6 +34,7 @@ import java.util.Objects;
  * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
  * query globals use). The meta-tier readers use it to reproduce the BE's
  * offset for a UTC-adjusted timestamp; a non-fixed / null zone -> data tier.
+ * The data-tier query uses the same zone through a {@code SET_VAR} hint.
  *
  * <p>{@code targetToSourceColumnNames} maps each directly projected target column to the FILES
  * column that backs it, so a statement that names, reorders, or renames its columns is sampled
