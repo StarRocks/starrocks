@@ -244,9 +244,7 @@ uint64_t ArrayColumnWriter::estimate_buffer_size() {
     if (is_nullable()) {
         estimate_size += _null_writer->estimate_buffer_size();
     }
-    if (_vector_index_writer.get()) {
-        estimate_size += _vector_index_writer->estimate_buffer_size();
-    }
+    // The vector index is written to its own .vi file, so its buffered input does not add to the segment size.
     return estimate_size;
 }
 

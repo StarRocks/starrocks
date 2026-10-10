@@ -14,12 +14,15 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "base/testutil/assert.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_vector_index_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_factory.h"
@@ -406,6 +409,52 @@ TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_vi_via_location_prov
     EXPECT_TRUE(fs::path_exist(vi_path));
 
     writer->close();
+}
+
+// The vector index goes to its own .vi file, so its buffered input must not count toward the segment size:
+// the same rows split into as many segments with or without the index, each close to max_segment_file_size.
+TEST_F(SharedDataTabletWriterVITest, test_horizontal_writer_segment_size_excludes_vector_index_buffer) {
+    constexpr int64_t kMaxSegmentFileSize = 1L << 20;
+    ConfigResetGuard<int64_t> segment_size_guard(&config::max_segment_file_size, kMaxSegmentFileSize);
+    // Building the index does not change the estimate; skip it to keep the test fast.
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, INT32_MAX);
+
+    auto write_segments = [&](const TabletSchemaPB& schema_pb, int64_t txn_id) {
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        auto writer = std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr.get(), kTabletId, tablet_schema,
+                                                                      txn_id, /*is_compaction=*/true);
+        CHECK_OK(writer->open());
+        // Random floats do not compress, so the file size tracks the estimate closely.
+        std::mt19937 rng(42);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        auto schema = ChunkHelper::convert_schema(tablet_schema);
+        int32_t key = 0;
+        for (int c = 0; c < 300; ++c) {
+            auto chunk = ChunkFactory::new_chunk(schema, 1024);
+            for (int i = 0; i < 1024; ++i) {
+                chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(key++));
+                DatumArray arr{Datum(dist(rng)), Datum(dist(rng)), Datum(dist(rng))};
+                chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(arr));
+            }
+            CHECK_OK(writer->write(*chunk));
+        }
+        CHECK_OK(writer->finish());
+        std::vector<SegmentFileInfo> segments = writer->segments();
+        writer->close();
+        return segments;
+    };
+
+    auto plain_schema_pb = create_vi_schema_pb();
+    plain_schema_pb.clear_table_indices();
+    auto plain_segments = write_segments(plain_schema_pb, 3001);
+    auto vi_segments = write_segments(create_vi_schema_pb(), 3002);
+
+    ASSERT_GE(plain_segments.size(), 3);
+    EXPECT_LE(vi_segments.size(), plain_segments.size() + 1);
+    for (size_t i = 0; i + 1 < vi_segments.size(); ++i) {
+        ASSERT_TRUE(vi_segments[i].size.has_value());
+        EXPECT_GE(*vi_segments[i].size, kMaxSegmentFileSize * 8 / 10) << "segment " << i;
+    }
 }
 
 // A bundle-file segment must now build its vector index (previously bundle segments skipped it
