@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
@@ -101,6 +102,15 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        analyzeWithDeferredLock(insertStmt, session, takeLock, () -> {
+        });
+    }
+
+    /**
+     * @param afterQueryAnalyzed runs once the SELECT is analyzed, before the lock is taken
+     */
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock,
+                                               Runnable afterQueryAnalyzed) {
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
@@ -109,11 +119,19 @@ public class InsertAnalyzer {
             pushDownTargetTableSchemaToFiles(insertStmt, session);
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+            afterQueryAnalyzed.run();
 
-            List<Table> tables = new ArrayList<>();
-            AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
-            if (tables.stream().anyMatch(Table::isHiveTable) && session.getUseConnectorMetadataCache().isEmpty()) {
-                session.setUseConnectorMetadataCache(Optional.of(false));
+            // With the auto refresh, every source is refreshed for this statement (InsertSourceRefresher), so the
+            // connector cache is current and is used. Without it, nothing refreshed the Hive sources: read them
+            // past the cache, unless the session says the cache is fine.
+            if (session.getUseConnectorMetadataCache().isEmpty()
+                    && !InsertSourceRefresher.isEnabled(session)
+                    && !session.getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+                List<Table> tables = new ArrayList<>();
+                AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+                if (!tables.isEmpty()) {
+                    session.setUseConnectorMetadataCache(Optional.of(false));
+                }
             }
         } finally {
             takeLock.run();
@@ -129,6 +147,18 @@ public class InsertAnalyzer {
             table = insertStmt.getTargetTable();
         } else {
             table = getTargetTable(insertStmt, session);
+            // An INSERT into an external OLAP table is always handed a synced copy above, except inside an
+            // explicit transaction, which skips the sync -- and cannot work: the published table has no
+            // partitions, tablets or backends, and its transaction lives on the other cluster.
+            if (table instanceof ExternalOlapTable && session.getTxnId() != 0) {
+                throw unsupportedException("An external OLAP table cannot be written in an explicit transaction");
+            }
+        }
+        // Checked here, where a target synced before the lock and a target resolved just now both pass. The
+        // overwrite job swaps partitions of a local table; an external OLAP table's partitions are on the other
+        // cluster, and its published object has none, so the job would never sync it.
+        if (insertStmt.isOverwrite() && table.isOlapExternalTable()) {
+            throw unsupportedException("INSERT OVERWRITE is not supported on an external OLAP table");
         }
 
         if (table instanceof OlapTable) {
@@ -837,12 +867,15 @@ public class InsertAnalyzer {
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
-        if (database == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        // An external target was resolved before the lock was taken; see PreResolvedState#WRITE_TARGET.
+        Table table = session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableNameObj, () -> {
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
+            if (database == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            return MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        });
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

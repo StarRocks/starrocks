@@ -29,13 +29,17 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -66,6 +70,13 @@ public class PlannerMetaLocker implements AutoCloseable {
     private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
 
     private UUID queryId;
+
+    /**
+     * Bound on every later acquisition through {@link #lockForPlanning()}, or negative for none. A caller that
+     * takes the lock with {@link #tryLock} sets it, so that a planner which releases the lock mid-way and takes
+     * it back -- the optimistic INSERT path -- waits no longer on the way back than the caller did going in.
+     */
+    private long acquireTimeoutMs = -1;
 
     /**
      * Map database id -> table id set, Use db id as sort key to avoid deadlock,
@@ -141,6 +152,28 @@ public class PlannerMetaLocker implements AutoCloseable {
 
     public boolean isEmpty() {
         return tables.isEmpty();
+    }
+
+    public void setAcquireTimeoutMs(long acquireTimeoutMs) {
+        this.acquireTimeoutMs = acquireTimeoutMs;
+    }
+
+    /**
+     * {@link #lock()}, unless {@link #setAcquireTimeoutMs} bounded the wait: then {@link #tryLock} with that bound,
+     * throwing {@link AcquireTimeoutException} when it runs out. Nothing is held after the throw.
+     */
+    public void lockForPlanning() {
+        if (acquireTimeoutMs < 0) {
+            lock();
+        } else if (!tryLock(acquireTimeoutMs, TimeUnit.MILLISECONDS)) {
+            throw new AcquireTimeoutException(acquireTimeoutMs);
+        }
+    }
+
+    public static class AcquireTimeoutException extends RuntimeException {
+        public AcquireTimeoutException(long timeoutMs) {
+            super("failed to re-acquire the planner meta lock within " + timeoutMs + " ms");
+        }
     }
 
     public void lock() {
@@ -250,6 +283,11 @@ public class PlannerMetaLocker implements AutoCloseable {
             return null;
         }
 
+        // Judged on the catalog *name*, because that is what the database is about to be resolved through:
+        // any other catalog, resource-mapping included, routes getDb to the connector and yields a
+        // connector-minted id that must never be locked. Returning early also keeps lock collection off the
+        // network. The check below re-asks the same question of the resolved table object, where the answer
+        // for resource-mapping is the opposite one -- see Table#isMetaLockTarget.
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             return null;
         }
@@ -265,6 +303,15 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         Table table = metadataMgr.getTable(session, catalogName, dbName, tbName);
         if (table == null) {
+            return null;
+        }
+
+        // Only lock what the lock can protect. Same predicate AnalyzerUtils.CopyUnsafeTablesCollector uses to
+        // decide who may extend the lock's lifetime, so who gets locked and who decides for how long cannot
+        // drift apart. This is what leaves out the internal-database tables whose data lives elsewhere and
+        // whose definition is never written in place (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC,
+        // ELASTICSEARCH, ExternalOlapTable), and it is the anchor for asserting the invariant inside Locker later.
+        if (!table.isMetaLockTarget()) {
             return null;
         }
 
@@ -298,6 +345,14 @@ public class PlannerMetaLocker implements AutoCloseable {
             TableName tableName = TableName.fromTableRef(tableRef);
             Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
+            // This runs before Analyzer.analyze, so
+            // getQueryStatement() is null and super's traversal reaches nothing. Until the analyzer folds
+            // them into one query, the tables an UPDATE reads live in the raw FROM clause, the CTEs, the
+            // where predicate's subqueries and the assignment expressions.
+            visitRawDmlClauses(node.getCommonTableExpressions(), node.getFromRelations(), node.getWherePredicate());
+            if (node.getAssignments() != null) {
+                node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+            }
             return super.visitUpdateStatement(node, context);
         }
 
@@ -307,7 +362,33 @@ public class PlannerMetaLocker implements AutoCloseable {
             TableName tableName = TableName.fromTableRef(tableRef);
             Pair<Database, Table> dbAndTable = resolveTable(session, tableName);
             put(dbAndTable);
+            // See the UPDATE override: the raw USING clause, the CTEs and the where predicate's subqueries
+            // are where a DELETE's other tables are before the analyzer builds its query statement.
+            visitRawDmlClauses(node.getCommonTableExpressions(), node.getUsingRelations(),
+                    node.getWherePredicate());
             return super.visitDeleteStatement(node, context);
+        }
+
+        /**
+         * Lock what planning will read, and therefore what it may snapshot: {@code StatementPlanner} copies
+         * every OlapTable of the analyzed statement while this lock is held, and a table that never made it
+         * into the lock set would be copied without one.
+         */
+        private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
+                                        Expr wherePredicate) {
+            if (cteRelations != null) {
+                cteRelations.forEach(this::visitIfPresent);
+            }
+            if (relations != null) {
+                relations.forEach(this::visitIfPresent);
+            }
+            visitIfPresent(wherePredicate);
+        }
+
+        private void visitIfPresent(ParseNode node) {
+            if (node != null) {
+                visit(node);
+            }
         }
 
         @Override

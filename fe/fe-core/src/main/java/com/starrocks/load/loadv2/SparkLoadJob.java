@@ -62,6 +62,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -132,6 +133,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
@@ -144,6 +147,32 @@ import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
  */
 public class SparkLoadJob extends BulkLoadJob {
     private static final Logger LOG = LogManager.getLogger(SparkLoadJob.class);
+
+    /**
+     * Deletes the ETL output (the job's temporary directory on the remote storage) of finished jobs.
+     *
+     * <p>Why: afterVisible() runs inside DatabaseTransactionMgr.finishTransaction's critical section (table
+     * locks + txn state lock). It used to delete the output synchronously there, so one broker / HDFS round
+     * trip -- up to broker_client_timeout_ms (120s by default) when the remote side hangs -- stalled every
+     * publish and every reader waiting on those tables. The deletion was already best-effort: a failure was
+     * only logged and never retried.
+     *
+     * <p>Why one thread and an unbounded queue: one small task is queued per finished job, and each delete is
+     * bounded by the broker / HDFS client timeout, so the queue only backs up while the remote storage is
+     * unreachable. A bounded queue would have to either drop deletions (leaking the directories for good) or
+     * block the submitter -- back inside the lock, which is what this executor exists to avoid.
+     *
+     * <p>Why this is no worse than before: the same deletions run, in the same order, with the same
+     * log-and-forget failure handling; only the thread changes. Worst case: while the remote storage is down
+     * the pending deletions pile up on the heap (a few strings each; a warn is logged past
+     * {@link #ETL_OUTPUT_CLEANER_BACKLOG_WARN_THRESHOLD}) and each fails after its timeout; the ones still
+     * queued when the FE restarts or loses leadership are not run, which leaves those ETL directories behind.
+     * The synchronous code never persisted or retried the clean-up either, so a failed or interrupted delete
+     * left the directory behind before as well.
+     */
+    private static final ThreadPoolExecutor ETL_OUTPUT_CLEANER =
+            ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(1, "spark-load-etl-output-cleaner", false);
+    private static final int ETL_OUTPUT_CLEANER_BACKLOG_WARN_THRESHOLD = 1000;
 
     // --- members below need persist ---
     // create from resourceDesc when job created
@@ -785,6 +814,14 @@ public class SparkLoadJob extends BulkLoadJob {
      * 2. clear push tasks and infos that not persist
      */
     private void clearJob() {
+        clearJob(false);
+    }
+
+    /**
+     * @param deleteEtlOutputAsync delete the etl output on {@link #ETL_OUTPUT_CLEANER} instead of the caller's
+     *                             thread, for callers inside a metadata critical section
+     */
+    private void clearJob(boolean deleteEtlOutputAsync) {
         Preconditions.checkState(state == JobState.FINISHED || state == JobState.CANCELLED);
 
         LOG.debug("kill etl job and delete etl files. id: {}, state: {}", id, state);
@@ -799,13 +836,33 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         }
         if (!Strings.isNullOrEmpty(etlOutputPath)) {
-            try {
-                // delete label dir, remove the last taskId dir
-                String outputPath = etlOutputPath.substring(0, etlOutputPath.lastIndexOf("/"));
-                handler.deleteEtlOutputPath(outputPath,
-                        new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties()));
-            } catch (Exception e) {
-                LOG.warn("delete etl files failed. id: {}, state: {}", id, state, e);
+            // capture on the caller's thread, the async task must not read the job's fields
+            String jobEtlOutputPath = etlOutputPath;
+            BrokerPropertiesPersistInfo jobBrokerPersistInfo = brokerPersistInfo;
+            JobState jobState = state;
+            Runnable deleteEtlOutput = () -> {
+                try {
+                    // delete label dir, remove the last taskId dir
+                    String outputPath = jobEtlOutputPath.substring(0, jobEtlOutputPath.lastIndexOf("/"));
+                    handler.deleteEtlOutputPath(outputPath,
+                            new BrokerDesc(jobBrokerPersistInfo.getName(), jobBrokerPersistInfo.getProperties()));
+                } catch (Exception e) {
+                    LOG.warn("delete etl files failed. id: {}, state: {}", id, jobState, e);
+                }
+            };
+            if (deleteEtlOutputAsync) {
+                try {
+                    ETL_OUTPUT_CLEANER.execute(deleteEtlOutput);
+                    int backlog = ETL_OUTPUT_CLEANER.getQueue().size();
+                    if (backlog >= ETL_OUTPUT_CLEANER_BACKLOG_WARN_THRESHOLD) {
+                        LOG.warn("spark load etl output clean-up is backlogged, {} deletions pending, "
+                                + "the broker / HDFS may be unreachable. id: {}", backlog, id);
+                    }
+                } catch (RejectedExecutionException e) {
+                    LOG.warn("delete etl files failed to submit. id: {}, state: {}", id, jobState, e);
+                }
+            } else {
+                deleteEtlOutput.run();
             }
         }
 
@@ -856,7 +913,8 @@ public class SparkLoadJob extends BulkLoadJob {
                         .increase(kv.getValue().get(TableMetricsEntity.TABLE_LOAD_FINISHED));
             }
         });
-        clearJob();
+        // Called by DatabaseTransactionMgr.finishTransaction inside the publish lock
+        clearJob(true);
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "SparkLoad: id[" + id + "] label[" + label + "]");
     }
 

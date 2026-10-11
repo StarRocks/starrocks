@@ -83,6 +83,9 @@ public class HiveTableEditLogTest {
         // Verify initial state
         Assertions.assertEquals(2, hiveTable.getFullSchema().size());
         Assertions.assertEquals(2, hiveTable.getDataColumnNames().size());
+        // What a query planning without the meta lock would be holding on to.
+        List<Column> schemaSeenByARunningQuery = hiveTable.getFullSchema();
+        List<String> dataColumnsSeenByARunningQuery = hiveTable.getDataColumnNames();
         
         // 2. Create updated HiveTable with new schema
         List<Column> newColumns = new ArrayList<>();
@@ -111,6 +114,9 @@ public class HiveTableEditLogTest {
         Assertions.assertEquals(3, modifiedTable.getDataColumnNames().size());
         Assertions.assertTrue(modifiedTable.getDataColumnNames().contains("col3"));
         Assertions.assertNotNull(modifiedTable.getColumn("col3"));
+        // The new schema was swapped in; the one a running query holds is left whole.
+        Assertions.assertEquals(2, schemaSeenByARunningQuery.size());
+        Assertions.assertEquals(List.of("col1", "col2"), dataColumnsSeenByARunningQuery);
         
         // 5. Test follower replay
         ModifyTableColumnOperationLog replayInfo = (ModifyTableColumnOperationLog) UtFrameUtils
@@ -137,9 +143,9 @@ public class HiveTableEditLogTest {
         HiveTable replayed = (HiveTable) followerDb.getTable(TABLE_ID);
         Assertions.assertNotNull(replayed);
         Assertions.assertEquals(3, replayed.getFullSchema().size());
-        // Note: replayModifyHiveTableColumn only sets fullSchema via setNewFullSchema,
-        // it doesn't update dataColumnNames. So we verify fullSchema is correct.
         Assertions.assertNotNull(replayed.getColumn("col3"));
+        // Replay derives the data columns from the logged schema, so the follower matches the leader.
+        Assertions.assertEquals(modifiedTable.getDataColumnNames(), replayed.getDataColumnNames());
         
         // Verify all columns match
         for (int i = 0; i < modifiedTable.getFullSchema().size(); i++) {

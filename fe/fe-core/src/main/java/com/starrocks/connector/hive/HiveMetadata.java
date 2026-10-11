@@ -79,6 +79,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -468,6 +469,22 @@ public class HiveMetadata implements ConnectorMetadata {
         } else {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
+    }
+
+    /**
+     * Drops this table from both cache levels instead of reloading it: the table, its partition names, partitions,
+     * statistics and file lists. What planning then reads -- the partition names, the partitions left after
+     * pruning, the files of the partitions it scans -- is loaded from the source on demand, which is as fresh as a
+     * full refresh but costs only what the query reads.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        if (!table.isHMSTable()) {
+            refreshTable(srDbName, table, new ArrayList<>(), false);
+            return;
+        }
+        hmsOps.invalidateTable(table.getCatalogDBName(), table.getCatalogTableName());
+        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTableForRead(table));
     }
 
     @Override

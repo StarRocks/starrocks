@@ -39,6 +39,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -282,8 +283,15 @@ public class LakeRollupJobTest {
         }
     }
 
+    /**
+     * Whether {@link LakeRollupJob#lakePublishVersion} was holding a metadata lock when it published,
+     * sampled inside the faked transport. Static because the faked transport is a static method.
+     */
+    private static LockProbe publishProbe;
+
     @Test
     public void testCreateSyncMvWithEnableFileBundling() throws Exception {
+        publishProbe = LockProbe.onAnyThread();
         new MockUp<LakeRollupJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -300,7 +308,11 @@ public class LakeRollupJobTest {
                     Map<Long, Double> compactionScores,
                     Map<Long, com.starrocks.proto.TabletStatPB> tabletStats)
                     throws NoAliveBackendException, RpcException {
-                // Do nothing, just return successfully
+                // Publishing is a BE RPC. Sample the lock depth where the real transport would be
+                // contacted: the job reads the partition's tablets under the table's READ lock, but the
+                // publish itself has to happen after that lock is dropped, or every waiter on the table
+                // -- transaction publish included -- pays the round trip.
+                publishProbe.record("publish");
             }
         };
 
@@ -324,6 +336,9 @@ public class LakeRollupJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob4.getJobState());
+
+        publishProbe.assertReachedOutsideTheLock("publish",
+                "lakePublishVersion published while holding an FE metadata lock");
 
         for (Partition partition : table.getPartitions()) {
             long partitionId = partition.getId();
