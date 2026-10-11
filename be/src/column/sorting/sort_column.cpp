@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <array>
 #include <utility>
 
 #include "base/orlp/pdqsort.h"
@@ -35,6 +36,78 @@
 #include "column/struct_column.h"
 
 namespace starrocks {
+
+// Large integral sorts avoid repeated comparisons. The sign-bit transform maps
+// signed BIGINT order onto unsigned bytes; descending order complements the key.
+// Constant bytes need no distribution pass (common for clustered integer keys).
+static Status radix_sort_bigint(const std::atomic<bool>& cancel, InlinePermutation<int64_t>& permutation, bool asc) {
+    const auto key = [asc](const auto& item) {
+        uint64_t value = static_cast<uint64_t>(item.inline_value) ^ (uint64_t{1} << 63);
+        return asc ? value : ~value;
+    };
+    const size_t size = permutation.size();
+    uint64_t previous = key(permutation[0]);
+    const uint64_t first = previous;
+    uint64_t minimum = first;
+    uint64_t maximum = first;
+    bool ordered = true;
+    bool reverse_ordered = true;
+    for (size_t i = 0; i < size; ++i) {
+        if ((i & 1023) == 0 && cancel.load(std::memory_order_acquire)) {
+            return Status::Cancelled("Sort cancelled");
+        }
+        const uint64_t current = key(permutation[i]);
+        minimum = std::min(minimum, current);
+        maximum = std::max(maximum, current);
+        ordered &= previous <= current;
+        reverse_ordered &= previous >= current;
+        previous = current;
+    }
+    if (ordered) return Status::OK();
+    if (reverse_ordered) {
+        for (size_t i = 0; i < size / 2; ++i) {
+            if ((i & 1023) == 0 && cancel.load(std::memory_order_acquire)) return Status::Cancelled("Sort cancelled");
+            std::swap(permutation[i], permutation[size - 1 - i]);
+        }
+        return Status::OK();
+    }
+    const uint64_t span = maximum - minimum;
+    // Subtract the minimum transformed key before counting bytes: a narrow
+    // signed range crossing zero otherwise appears to vary in every byte.
+    // Byte frequencies are invariant under permutation, so count them once.
+    std::array<unsigned, 8> shifts{};
+    unsigned passes = 0;
+    for (unsigned shift = 0; shift < 64; shift += 8) {
+        if ((span >> shift) != 0) shifts[passes++] = shift;
+    }
+    std::array<std::array<size_t, 256>, 8> histograms{};
+    for (size_t i = 0; i < size; ++i) {
+        if ((i & 1023) == 0 && cancel.load(std::memory_order_acquire)) return Status::Cancelled("Sort cancelled");
+        const uint64_t value = key(permutation[i]) - minimum;
+        for (unsigned pass = 0; pass < passes; ++pass) ++histograms[pass][(value >> shifts[pass]) & 255];
+    }
+    InlinePermutation<int64_t> scratch(size);
+    for (unsigned pass = 0; pass < passes; ++pass) {
+        const unsigned shift = shifts[pass];
+        auto offsets = histograms[pass];
+        if (std::any_of(offsets.begin(), offsets.end(), [size](size_t count) { return count == size; })) continue;
+        size_t total = 0;
+        for (auto& offset : offsets) {
+            const size_t next = total + offset;
+            offset = total;
+            total = next;
+        }
+        for (size_t i = 0; i < size; ++i) {
+            if ((i & 1023) == 0 && cancel.load(std::memory_order_acquire)) {
+                return Status::Cancelled("Sort cancelled");
+            }
+            const auto& item = permutation[i];
+            scratch[offsets[((key(item) - minimum) >> shift) & 255]++] = item;
+        }
+        permutation.swap(scratch);
+    }
+    return Status::OK();
+}
 
 class Ranges {
 public:
@@ -225,6 +298,27 @@ public:
         };
 
         auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.immutable_data());
+        if constexpr (std::is_same_v<T, int64_t> && !IS_RANGES) {
+            // Do not reorder existing tie groups, nullable partitions or subranges.
+            // These continue through the comparison-sort path below.
+            constexpr size_t kMinRadixRows = 65536;
+            if (inlined.size() >= kMinRadixRows && _range_or_ranges.first == 0 &&
+                _range_or_ranges.second == inlined.size() && _tie.size() == inlined.size() &&
+                std::all_of(_tie.begin() + 1, _tie.end(), [](uint8_t value) { return value == 1; })) {
+                RETURN_IF_ERROR(radix_sort_bigint(_cancel, inlined, _sort_desc.asc_order()));
+                if (_build_tie) {
+                    _tie[0] = 0;
+                    for (size_t i = 1; i < inlined.size(); ++i) {
+                        if ((i & 1023) == 0 && _cancel.load(std::memory_order_acquire)) {
+                            return Status::Cancelled("Sort cancelled");
+                        }
+                        _tie[i] = inlined[i - 1].inline_value == inlined[i].inline_value;
+                    }
+                }
+                restore_inline_permutation(inlined, _permutation);
+                return Status::OK();
+            }
+        }
         RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                             _range_or_ranges, _build_tie));
         restore_inline_permutation(inlined, _permutation);

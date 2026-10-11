@@ -36,6 +36,7 @@
 
 #include <column/column_helper.h>
 
+#include <algorithm>
 #include <optional>
 
 #include "column/chunk.h"
@@ -110,6 +111,22 @@ inline void serialize_row(MysqlRowBuffer* buf, const std::vector<ColumnSerialize
             }
             ctx.fallback_column->put_mysql_row_buffer(buf, row_idx, is_binary_format);
         }
+    }
+}
+
+// Copy small rows into their final string so the scratch buffer remains reusable.
+// Swapping transfers its excess capacity into every result row and forces another
+// allocation before serializing the next row. Large rows retain the move path.
+void store_serialized_row(MysqlRowBuffer* buffer, std::string* row, size_t* max_row_len) {
+    constexpr size_t kReusableRowSize = 128;
+    const size_t len = buffer->length();
+    if (len <= kReusableRowSize) {
+        row->assign(buffer->data());
+        buffer->reset();
+    } else {
+        buffer->move_content(row);
+        *max_row_len = std::max(*max_row_len, len);
+        buffer->reserve(*max_row_len + *max_row_len / 10);
     }
 }
 
@@ -234,16 +251,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
             }
             serialize_row(_row_buffer, column_ctxs, i, _is_binary_format);
             size_t len = _row_buffer->length();
-            _row_buffer->move_content(&result_rows[i]);
-            if (len > max_row_len) {
-                max_row_len = len;
-            }
-            // move_content swaps the buffer's storage into result_rows[i], leaving the
-            // buffer at zero capacity. Reserve every row so subsequent pushes don't
-            // reallocate inside the row; +10% headroom to absorb size variance.
-            if (max_row_len > 0) {
-                _row_buffer->reserve(max_row_len + max_row_len / 10);
-            }
+            store_serialized_row(_row_buffer, &result_rows[i], &max_row_len);
         }
     }
     return result;
@@ -292,17 +300,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 current_bytes = 0;
                 current_rows = 0;
             }
-            _row_buffer->move_content(&(*result_rows)[current_rows]);
-            if (len > max_row_len) {
-                max_row_len = len;
-            }
-            // move_content swaps the buffer's storage into result_rows[current_rows],
-            // leaving the buffer at zero capacity. Reserve every row so subsequent
-            // pushes don't reallocate inside the row; +10% headroom to absorb size
-            // variance.
-            if (max_row_len > 0) {
-                _row_buffer->reserve(max_row_len + max_row_len / 10);
-            }
+            store_serialized_row(_row_buffer, &(*result_rows)[current_rows], &max_row_len);
 
             current_bytes += len;
             current_rows += 1;
