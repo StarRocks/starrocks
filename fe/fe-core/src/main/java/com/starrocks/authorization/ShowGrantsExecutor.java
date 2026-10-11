@@ -186,7 +186,10 @@ public class ShowGrantsExecutor {
                 return null;
             }
             return getCatalogNameById(dbPEntryObject.getCatalogId());
-        } else if (objectType.equals(ObjectType.TABLE)) {
+        } else if (objectType.equals(ObjectType.TABLE)
+                || objectType.equals(ObjectType.VIEW)
+                || objectType.equals(ObjectType.MATERIALIZED_VIEW)) {
+            // VIEW and MATERIALIZED_VIEW extend TablePEntryObject and store the same catalog id.
             TablePEntryObject tablePEntryObject = (TablePEntryObject) privilegeEntry.getObject();
             if (tablePEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
                 return null;
