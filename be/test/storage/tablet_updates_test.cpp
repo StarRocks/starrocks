@@ -1370,6 +1370,105 @@ TEST_F(TabletUpdatesTest, compaction_score_enough_normal) {
     test_compaction_score_enough_normal(false);
 }
 
+TEST_F(TabletUpdatesTest, compaction_score_size_tiered_eligibility) {
+    const auto min_level_size = config::size_tiered_min_level_size;
+    const auto level_multiple = config::size_tiered_level_multiple;
+    const auto level_num = config::size_tiered_level_num;
+    DeferOp restore_config([&] {
+        config::size_tiered_min_level_size = min_level_size;
+        config::size_tiered_level_multiple = level_multiple;
+        config::size_tiered_level_num = level_num;
+    });
+    config::size_tiered_min_level_size = 1024;
+    config::size_tiered_level_multiple = 4;
+    config::size_tiered_level_num = 4;
+
+    _tablet = create_tablet(89101, 12345);
+    ASSERT_NE(_tablet, nullptr);
+    // Use an independent instance so synthetic stats cannot be accessed by background apply tasks.
+    TabletUpdates updates(*_tablet);
+    auto version = std::make_unique<EditVersionInfo>();
+    version->version = EditVersion(1, 0);
+    version->creation_time = 0;
+    updates._edit_version_infos.emplace_back(std::move(version));
+
+    const int64_t score_unit = std::max<int64_t>(1, config::update_compaction_size_threshold / 10);
+    auto make_stats = [score_unit](size_t segments, size_t deletes, size_t bytes, int64_t score) {
+        TabletUpdates::RowsetStats stats;
+        stats.num_segments = segments;
+        stats.num_rows = bytes == 0 ? 0 : 100;
+        stats.num_dels = deletes;
+        stats.byte_size = bytes;
+        stats.compaction_score = score * score_unit;
+        return stats;
+    };
+    struct TestCase {
+        const char* name;
+        std::vector<TabletUpdates::RowsetStats> stats;
+        int64_t tiered_score;
+        int64_t non_tiered_score;
+    };
+    const std::vector<TestCase> cases = {
+            {"no rowsets", {}, -1, 0},
+            {"single input without deletes", {make_stats(1, 0, 1024, 10)}, -1, -1},
+            {"separate tiers", {make_stats(1, 0, 1024, 10), make_stats(1, 0, 8192, 20)}, -1, 30},
+            {"same tier", {make_stats(1, 0, 1024, 10), make_stats(1, 0, 1024, 20)}, 30, 30},
+            {"qualifying tier found later",
+             {make_stats(1, 0, 1024, 10), make_stats(1, 0, 8192, 20), make_stats(1, 0, 8192, 30)},
+             60,
+             60},
+            {"scores after qualifying tier",
+             {make_stats(1, 0, 1024, 10), make_stats(1, 0, 1024, 20), make_stats(1, 0, 8192, 100)},
+             130,
+             130},
+            {"multiple segments qualify immediately", {make_stats(2, 0, 1024, 10), make_stats(1, 0, 8192, 20)}, 30, 30},
+            {"single input with deletes", {make_stats(1, 1, 1024, 10)}, 10, 10},
+            {"deletes qualify a later tier", {make_stats(1, 0, 1024, 10), make_stats(1, 1, 8192, 20)}, 30, 30},
+            {"empty rowsets share a tier", {make_stats(0, 0, 0, 10), make_stats(0, 0, 0, 20)}, 30, 30},
+            {"empty and data rowsets have separate tiers",
+             {make_stats(0, 0, 0, 10), make_stats(1, 0, 1024, 20)},
+             -1,
+             30},
+            {"nonpositive scores do not qualify a tier",
+             {make_stats(1, 0, 1024, 10), make_stats(2, 0, 1024, 0), make_stats(2, 1, 1024, -10),
+              make_stats(1, 0, 8192, 20)},
+             -1,
+             30},
+    };
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        updates._rowset_stats.clear();
+        auto& rowsets = updates._edit_version_infos.front()->rowsets;
+        rowsets.clear();
+        for (uint32_t i = 0; i < test_case.stats.size(); ++i) {
+            rowsets.emplace_back(i);
+            updates._rowset_stats.emplace(i, std::make_unique<TabletUpdates::RowsetStats>(test_case.stats[i]));
+        }
+        config::enable_pk_size_tiered_compaction_strategy = true;
+        EXPECT_EQ(test_case.tiered_score, updates.get_compaction_score());
+        config::enable_pk_size_tiered_compaction_strategy = false;
+        EXPECT_EQ(test_case.non_tiered_score, updates.get_compaction_score());
+    }
+}
+
+TEST_F(TabletUpdatesTest, compaction_score_missing_stats_after_qualifying_tier) {
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    _tablet = create_tablet(89102, 12345);
+    ASSERT_NE(_tablet, nullptr);
+    TabletUpdates updates(*_tablet);
+    auto version = std::make_unique<EditVersionInfo>();
+    version->version = EditVersion(1, 0);
+    version->creation_time = 0;
+    version->rowsets = {0, 1};
+    updates._edit_version_infos.emplace_back(std::move(version));
+    auto stats = std::make_unique<TabletUpdates::RowsetStats>();
+    stats->num_segments = 2;
+    stats->compaction_score = config::update_compaction_size_threshold;
+    updates._rowset_stats.emplace(0, std::move(stats));
+
+    EXPECT_DEBUG_DEATH({ EXPECT_EQ(-1, updates.get_compaction_score()); }, "rowset not found in rowset stats");
+}
+
 // NOLINTNEXTLINE
 void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index, bool show_status,
                                                    bool random_compaction) {

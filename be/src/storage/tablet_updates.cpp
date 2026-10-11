@@ -2902,6 +2902,8 @@ int64_t TabletUpdates::get_compaction_score() {
     size_t total_inputs = 0;
     size_t total_deletes = 0;
     bool has_error = false;
+    const bool enable_size_tiered_compaction = config::enable_pk_size_tiered_compaction_strategy;
+    bool has_compactable_tier = false;
     std::map<int32_t, std::pair<size_t, size_t>> candidates_by_level;
     {
         std::lock_guard lg(_rowset_stats_lock);
@@ -2919,16 +2921,13 @@ int64_t TabletUpdates::get_compaction_score() {
                 total_score += itr->second->compaction_score;
                 total_inputs += std::max(1UL, itr->second->num_segments);
                 total_deletes += itr->second->num_dels;
-                if (config::enable_pk_size_tiered_compaction_strategy) {
+                if (enable_size_tiered_compaction && !has_compactable_tier) {
                     int32_t level = _calc_compaction_level(itr->second.get());
-                    auto candidate_itr = candidates_by_level.find(level);
-                    if (candidate_itr == candidates_by_level.end()) {
-                        candidates_by_level[level] =
-                                std::make_pair(std::max(1UL, itr->second->num_segments), itr->second->num_dels);
-                    } else {
-                        candidate_itr->second.first += std::max(1UL, itr->second->num_segments);
-                        candidate_itr->second.second += itr->second->num_dels;
-                    }
+                    auto& candidate = candidates_by_level[level];
+                    candidate.first += std::max(1UL, itr->second->num_segments);
+                    candidate.second += itr->second->num_dels;
+                    // Tier eligibility only increases. Keep validating and scoring the remaining rowsets.
+                    has_compactable_tier = candidate.first > 1 || (candidate.first == 1 && candidate.second > 0);
                 }
             }
         }
@@ -2942,17 +2941,8 @@ int64_t TabletUpdates::get_compaction_score() {
         // only 1 input and no delete, no need to do compaction
         return -1;
     }
-    if (config::enable_pk_size_tiered_compaction_strategy) {
-        bool flag = false;
-        for (auto [_, candidate] : candidates_by_level) {
-            if (candidate.first > 1 || (candidate.first == 1 && candidate.second > 0)) {
-                flag = true;
-                break;
-            }
-        }
-        if (!flag) {
-            return -1;
-        }
+    if (enable_size_tiered_compaction && !has_compactable_tier) {
+        return -1;
     }
     // scale score to a reasonable range relative to the number of files * 10
     return total_score / std::max<int64_t>(1, config::update_compaction_size_threshold / 10);
