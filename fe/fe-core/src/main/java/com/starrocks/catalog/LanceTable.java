@@ -14,6 +14,11 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.thrift.TLanceTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
+
 import java.util.List;
 
 public class LanceTable extends Table {
@@ -22,19 +27,36 @@ public class LanceTable extends Table {
 
     private final String catalogName;
 
+    private final String dbName;
+
     public LanceTable(long id, String name, List<Column> schema, String uri) {
         this(id, null, name, schema, uri);
     }
 
     public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
+        this(id, catalogName, "", name, schema, uri);
+    }
+
+    public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
         this.catalogName = catalogName;
+        this.dbName = dbName;
     }
 
     @Override
     public String getCatalogName() {
         return catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return dbName == null ? "" : dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return getName();
     }
 
     public String getUri() {
@@ -43,11 +65,22 @@ public class LanceTable extends Table {
 
     @Override
     public String getTableLocation() {
-        return uri;
+        return getUri();
     }
 
     @Override
     public boolean isSupported() {
         return false;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
+        TLanceTable tLanceTable = new TLanceTable();
+        tLanceTable.setLance_dataset_uri(getUri());
+
+        TTableDescriptor tTableDescriptor =
+                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, getCatalogTableName(), getCatalogDBName());
+        tTableDescriptor.setLanceTable(tLanceTable);
+        return tTableDescriptor;
     }
 }

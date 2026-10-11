@@ -361,3 +361,7 @@ if (WITH_CONNECTOR_JDBC)
             libxml2
     )
 endif()
+
+if (WITH_CONNECTOR_LANCE)
+    add_subdirectory(lance)
+endif()
