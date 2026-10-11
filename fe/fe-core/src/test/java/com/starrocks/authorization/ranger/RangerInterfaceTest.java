@@ -921,12 +921,14 @@ public class RangerInterfaceTest {
      * Cover the {@code isConnectorView()} branch of checkViewPrivilege without
      * requiring a real Hive/Iceberg/Paimon catalog. We mock View#isConnectorView to
      * return true and verify that:
-     *   1) the call routes through the TABLE path (Authorizer.checkTableAction),
-     *      consistent with the Hive Ranger service type which models views as TABLE;
-     *   2) on deny, the error is reported as ObjectType.TABLE, not VIEW.
+     *   1) the call routes through the VIEW path (Authorizer.checkViewAction), so a
+     *      VIEW grant is what SELECT actually checks;
+     *   2) on deny, the error is reported as ObjectType.VIEW, not TABLE.
+     * Hive Ranger still matches table policies because its checkViewAction delegates
+     * back to the table path.
      */
     @Test
-    public void testCheckViewPrivilegeConnectorViewGoesThroughTablePath() {
+    public void testCheckViewPrivilegeConnectorViewGoesThroughViewPath() {
         // Ranger denies every request so we can observe how the failure is reported
         new MockUp<RangerBasePlugin>() {
             @Mock
@@ -973,15 +975,14 @@ public class RangerInterfaceTest {
             ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, () ->
                     ColumnPrivilege.checkViewPrivilege(ctx, tableName, view));
 
-            // Connector view must surface as TABLE (Hive Ranger service type consistency),
-            // not as VIEW.
+            // Connector view must surface as VIEW. A TABLE-only grant is not enough.
             String msg = ex.getMessage();
-            Assertions.assertTrue(msg.contains("on TABLE"),
-                    "connector view failure must be reported with ObjectType.TABLE, got: " + msg);
+            Assertions.assertTrue(msg.contains("on VIEW"),
+                    "connector view failure must be reported with ObjectType.VIEW, got: " + msg);
             Assertions.assertTrue(msg.contains("test_view"),
                     "connector view failure must mention the view name 'test_view', got: " + msg);
-            Assertions.assertFalse(msg.contains("on VIEW"),
-                    "connector view must NOT be reported as ObjectType.VIEW, got: " + msg);
+            Assertions.assertFalse(msg.contains("on TABLE"),
+                    "connector view must NOT be reported as ObjectType.TABLE, got: " + msg);
         } finally {
             provider.setAccessControl(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new NativeAccessController());
         }

@@ -196,10 +196,9 @@ public class ColumnPrivilege {
      * Note on Ranger service type consistency:
      *   - With the StarRocks Ranger service type, views are a first-class object and
      *     are checked via {@code checkViewAction} (object-level on VIEW).
-     *   - With the Hive Ranger service type, Hive views are modeled as TABLE objects,
-     *     so a connector view is treated as a table for privilege checking
-     *     (see the {@code isConnectorView()} branch below).
-     * This keeps the privilege model aligned with the underlying Ranger object type.
+     *   - With the Hive Ranger service type, Hive views are modeled as TABLE objects.
+     *     Connector views still go through {@code checkViewAction}; the Hive controller
+     *     delegates that call back to the table path, so a Hive table policy still matches.
      *
      * Note on column-level granularity for security views:
      *   For a security view we re-check the view's underlying query statement so that
@@ -210,16 +209,17 @@ public class ColumnPrivilege {
      *   through a security view, effectively bypassing column-level policies.
      */
     public static void checkViewPrivilege(ConnectContext context, TableName tableName, View view) {
-        // For privilege checking, treat connector view as table to stay consistent with
-        // the Hive Ranger service type, where Hive views are modeled as TABLE objects.
+        // SELECT on a connector view must honor the VIEW grant (GRANT ON VIEW / ALL VIEWS).
+        // Hive Ranger still matches table policies because RangerHiveAccessController.checkViewAction
+        // delegates to checkTableAction.
         if (view.isConnectorView()) {
             try {
-                Authorizer.checkTableAction(context, tableName, PrivilegeType.SELECT);
+                Authorizer.checkViewAction(context, tableName, PrivilegeType.SELECT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         tableName.getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                        PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
             }
             return;
         }
