@@ -45,6 +45,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -69,6 +70,7 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
@@ -92,6 +94,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
@@ -618,6 +621,13 @@ public class QueryAnalyzer {
                 String catalogName = resolveTableName.getCatalog();
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                }
+                // A resource-mapping Iceberg table is one object shared by every query, and it is planned without
+                // the meta lock (IcebergTable.isMetaLockTarget). Planning writes to the table it works on, so it
+                // works on a private copy.
+                if (table instanceof IcebergTable icebergTable
+                        && CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(icebergTable.getCatalogName())) {
+                    table = icebergTable.copyForQuery();
                 }
                 Relation r;
                 if (table instanceof View) {
@@ -1772,6 +1782,78 @@ public class QueryAnalyzer {
                 }
             }
             return super.visitSetOp(node, context);
+        }
+
+        /**
+         * A DML's query statement is built by its own analyzer, so at this point -- before the lock is taken
+         * -- there is nothing for the inherited traversal to walk: {@link AstTraverser} reaches an UPDATE /
+         * DELETE / MERGE INTO's tables only through {@code getQueryStatement()}. Walk the raw clauses
+         * instead, so an external table one of them reads is pre-resolved exactly like one a SELECT reads.
+         * Without this the locked analyzer resolves it, and that connector round trip happens with the meta
+         * lock held -- the tail of the same problem
+         * {@code StatementPlanner#planDmlOffSnapshots} takes the optimizer off that lock for.
+         *
+         * <p>The write target is deliberately not visited: the locked analyzer resolves it, which is where an
+         * internal target belongs, since that is the object the lock protects.
+         */
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            if (node.getQueryStatement() != null) {
+                return super.visitUpdateStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getFromRelations());
+                visitIfPresent(node.getWherePredicate());
+                if (node.getAssignments() != null) {
+                    node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            if (node.getQueryStatement() != null) {
+                return super.visitDeleteStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getUsingRelations());
+                visitIfPresent(node.getWherePredicate());
+            });
+            return null;
+        }
+
+        /**
+         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
+         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         */
+        private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            if (scoped) {
+                cteNameStack.push(collectCteNames(cteRelations));
+            }
+            try {
+                if (scoped) {
+                    cteRelations.forEach(this::visit);
+                }
+                body.run();
+            } finally {
+                if (scoped) {
+                    cteNameStack.pop();
+                }
+            }
+        }
+
+        private void visitAll(List<Relation> relations) {
+            if (relations != null) {
+                relations.forEach(this::visitIfPresent);
+            }
+        }
+
+        private void visitIfPresent(ParseNode node) {
+            if (node != null) {
+                visit(node);
+            }
         }
 
         @Override
