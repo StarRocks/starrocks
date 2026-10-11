@@ -140,6 +140,20 @@ public class AuthorizationMgrTest {
         ctx.setCurrentRoleIds(userIdentity);
     }
 
+    private static void assertShowGrantsCatalog(ConnectContext ctx, String user, String objectText,
+                                                String expectedCatalog) throws Exception {
+        ShowResultSet grants = ShowExecutor.execute(
+                (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser("SHOW GRANTS FOR " + user, ctx), ctx);
+        boolean found = false;
+        for (List<String> row : grants.getResultRows()) {
+            if (row.size() > 2 && row.get(2).contains(objectText)) {
+                Assertions.assertEquals(expectedCatalog, row.get(1), row.toString());
+                found = true;
+            }
+        }
+        Assertions.assertTrue(found, grants.getResultRows().toString());
+    }
+
     @Test
     public void testTable() throws Exception {
         setCurrentUserAndRoles(ctx, testUser);
@@ -1768,6 +1782,7 @@ public class AuthorizationMgrTest {
         String grantSql = "grant SELECT on all views in database " + DB_NAME + " to ext_view_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         manager.grant(grantStmt);
+        assertShowGrantsCatalog(ctx, "ext_view_user", "ALL VIEWS", "test_catalog");
 
         // verify access now works
         setCurrentUserAndRoles(ctx, user);
@@ -1859,6 +1874,7 @@ public class AuthorizationMgrTest {
         String grantSql = "grant SELECT on all materialized views in database " + DB_NAME + " to ext_mv_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, ctx);
         manager.grant(grantStmt);
+        assertShowGrantsCatalog(ctx, "ext_mv_user", "MATERIALIZED VIEWS", "test_catalog");
 
         // verify access now works
         setCurrentUserAndRoles(ctx, user);
