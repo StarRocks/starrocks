@@ -1920,6 +1920,9 @@ public class QueryAnalyzer {
                                                      TableName tableName, Table resolvedTable) {
             metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
             Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            if (refreshedTable != null) {
+                InsertSourceRefresher.recordRefreshed(session, resolvedTable, refreshedTable);
+            }
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 

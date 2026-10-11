@@ -93,6 +93,12 @@ public class InsertAnalyzer {
      * So we can analyze the SELECT without lock, only take the lock when analyzing INSERT TARGET
      */
     public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock) {
+        analyzeWithDeferredLock(insertStmt, session, takeLock, () -> {
+        });
+    }
+
+    public static void analyzeWithDeferredLock(InsertStmt insertStmt, ConnectContext session, Runnable takeLock,
+                                               Runnable afterQueryAnalyzed) {
         try {
             // insert properties
             analyzeProperties(insertStmt, session);
@@ -101,6 +107,7 @@ public class InsertAnalyzer {
             pushDownTargetTableSchemaToFiles(insertStmt, session);
 
             new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+            afterQueryAnalyzed.run();
 
             List<Table> tables = new ArrayList<>();
             AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
