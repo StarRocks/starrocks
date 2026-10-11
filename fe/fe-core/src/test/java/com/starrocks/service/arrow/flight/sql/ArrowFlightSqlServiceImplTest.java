@@ -1234,6 +1234,41 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
+    public void testProxyForwarding_unreachableRemoteFEDropsCachedClient() throws Exception {
+        try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                     mockStatic(ArrowFlightSqlSessionManager.class)) {
+            TestableArrowFlightSqlServiceImpl testService =
+                    new TestableArrowFlightSqlServiceImpl(sessionManager,
+                            Location.forGrpcInsecure("localhost", 1234));
+            testService.setProxyEnabled(true);
+
+            String remoteToken = "remote-fe|some-uuid-token";
+            FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
+            when(callContext.peerIdentity()).thenReturn(remoteToken);
+            when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.extractFeHost(remoteToken))
+                    .thenReturn("remote-fe");
+
+            FlightClient mockFeClient = mock(FlightClient.class);
+            Config.arrow_flight_port = 9408;
+            testService.addToCacheForTesting("remote-fe:9408", mockFeClient);
+
+            when(mockFeClient.doAction(any(org.apache.arrow.flight.Action.class), any()))
+                    .thenThrow(CallStatus.UNAVAILABLE.withDescription("io exception").toRuntimeException());
+
+            FlightSql.ActionCreatePreparedStatementRequest createReq =
+                    FlightSql.ActionCreatePreparedStatementRequest.newBuilder()
+                            .setQuery("SELECT 1").build();
+            FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+            testService.createPreparedStatement(createReq, callContext, listener);
+            Thread.sleep(500);
+            verify(listener).onError(any(FlightRuntimeException.class));
+            assertNull(testService.getClientFromCacheForTesting("remote-fe:9408"));
+            verify(mockFeClient).close();
+        }
+    }
+
+    @Test
     public void testProxyForwarding_metadataRequests_forwardToRemoteFE() throws Exception {
         try (MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
                      mockStatic(ArrowFlightSqlSessionManager.class)) {
