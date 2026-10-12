@@ -513,7 +513,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Double
 - 单位: -
 - 是否可变: Yes
-- 描述: 触发存算分离集群中 Compaction 操作的 Compaction Score 阈值。当分区的 Compaction Score 大于或等于此值时，系统会对该分区执行 Compaction。
+- 描述: 存算分离集群中自动 Compaction 的 Compaction Score 阈值。自动 Compaction 要求分区的分数大于 `0` 且大于或等于此阈值。即使此参数设置为 `0`，分数为 `0` 的分区也会被跳过。手动 Compaction 等优先级请求不受这些分数条件限制。
 - 引入版本: v3.1.0
 
 ### `lake_compaction_score_upper_bound`

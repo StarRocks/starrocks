@@ -512,7 +512,7 @@ This topic introduces the following types of FE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Compaction operations in a shared-data cluster. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- Description: The Compaction Score threshold for automatic Compaction in a shared-data cluster. Automatic Compaction requires a partition score greater than `0` and greater than or equal to this threshold. Partitions with a score of `0` are skipped even when this parameter is set to `0`. Manual Compaction and other priority requests bypass these score checks.
 - Introduced in: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
