@@ -23,9 +23,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -37,6 +34,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -332,30 +330,36 @@ public class ConfigTest {
 
     @Test
     public void testSetSensitiveConfigKeepsValueOutOfPersistedComments(@TempDir Path tempDir) throws Exception {
-        // Persisting is turned off in a container; pretend not to be in one, so that this also runs in CI.
-        new MockUp<Util>() {
-            @Mock
-            public boolean isRunningInContainer() {
-                return false;
-            }
-        };
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
         assert resource != null;
         Path confFile = tempDir.resolve("fe.conf");
         Files.copy(Paths.get(resource.toURI()), confFile);
-        config.init(confFile.toString());
-        Assertions.assertTrue(ConfigBase.isIsPersisted());
+
+        // Persist into the temp copy, also where persisting is off (in a container, as in CI), and restore both
+        // statics afterwards: init() never turns isPersisted off again.
+        Field configPathField = ConfigBase.class.getDeclaredField("configPath");
+        Field isPersistedField = ConfigBase.class.getDeclaredField("isPersisted");
+        configPathField.setAccessible(true);
+        isPersistedField.setAccessible(true);
+        String oldConfigPath = (String) configPathField.get(null);
+        boolean oldIsPersisted = isPersistedField.getBoolean(null);
+        int threshold = Config.adaptive_choose_instances_threshold;
 
         String key = "authentication_ldap_simple_bind_root_pwd";
         List<String> messages;
         try {
+            configPathField.set(null, confFile.toString());
+            isPersistedField.setBoolean(null, true);
             messages = captureConfigBaseLogs(() -> {
                 Config.setMutableConfig(key, "FakeLdapPwd1", true, "root");
                 Config.setMutableConfig(key, "FakeLdapPwd2", true, "root");
                 Config.setMutableConfig("adaptive_choose_instances_threshold", "97", true, "root");
             });
         } finally {
+            configPathField.set(null, oldConfigPath);
+            isPersistedField.setBoolean(null, oldIsPersisted);
             Config.authentication_ldap_simple_bind_root_pwd = "";
+            Config.adaptive_choose_instances_threshold = threshold;
         }
         Assertions.assertTrue(messages.stream().noneMatch(m -> m.contains("FakeLdapPwd")), messages.toString());
 
