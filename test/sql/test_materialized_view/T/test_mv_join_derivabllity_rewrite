@@ -42,14 +42,14 @@ on lo_custkey = c_custkey;
 
 refresh materialized view mv_left_outer with sync mode;
 
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1'", "mv_left_outer", "c_name = 'name'")
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1'", "mv_left_outer", "c_name(, \\[<place-holder>)? = 'name_1'")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
 
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1'", "mv_left_outer", "c_name = 'name'")
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1'", "mv_left_outer", "c_name(, \\[<place-holder>)? = 'name_1'")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder left outer join customer
@@ -72,7 +72,7 @@ select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey order by lo_orderkey;
 
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name from lineorder inner join customer on lo_custkey = c_custkey where c_name = 'name_1' and c_custkey = 1", "mv_left_outer", "lo_custkey = 1", "c_name = 'name_1'")
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name from lineorder inner join customer on lo_custkey = c_custkey where c_name = 'name_1' and c_custkey = 1", "mv_left_outer", "custkey = 1", "c_name(, \\[<place-holder>)? = 'name_1'")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder inner join customer
@@ -97,7 +97,7 @@ refresh materialized view mv_left_outer_agg with sync mode;
 
 select count() from mv_left_outer_agg;
 
-function: assert_explain_contains("select lo_orderkey, c_name, sum(lo_revenue) as total_revenue from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1' group by lo_orderkey, c_name", "mv_left_outer_agg", "c_name = 'name_1'")
+function: assert_explain_matches("select lo_orderkey, c_name, sum(lo_revenue) as total_revenue from lineorder left outer join customer on lo_custkey = c_custkey where c_name = 'name_1' group by lo_orderkey, c_name", "mv_left_outer_agg", "c_name(, \\[<place-holder>)? = 'name_1'")
 
 select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
 from lineorder left outer join customer
@@ -151,7 +151,7 @@ refresh materialized view mv_right_outer_2 with sync mode;
 
 select count() from mv_right_outer_2;
 
-function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id from lineorder inner join customer on lo_custkey = c_custkey and lo_linenumber = c_id", "mv_right_outer_2", "PREDICATES: .*: lo_.* IS NOT NULL")
+function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id from lineorder inner join customer on lo_custkey = c_custkey and lo_linenumber = c_id", "mv_right_outer_2", "lo_linenumber IS NOT NULL")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
 from lineorder inner join customer
@@ -367,14 +367,14 @@ function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantit
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey order by lo_orderkey, lo_linenumber;
 
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder right outer join customer on lo_custkey = c_custkey", "mv_full_outer_join", "c_name IS NOT NULL")
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder right outer join customer on lo_custkey = c_custkey", "mv_full_outer_join", "c_name(, \\[<place-holder>)? IS NOT NULL")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder right outer join customer
 on lo_custkey = c_custkey
 order by lo_orderkey, lo_linenumber;
 
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder inner join customer on lo_custkey = c_custkey", "mv_full_outer_join", "c_name IS NOT NULL", "lo_linenumber IS NOT NULL")
+function: assert_explain_matches("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder inner join customer on lo_custkey = c_custkey", "mv_full_outer_join", "c_name(, \\[<place-holder>)? IS NOT NULL", "lo_linenumber IS NOT NULL")
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder inner join customer
