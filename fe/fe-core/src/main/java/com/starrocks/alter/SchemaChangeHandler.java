@@ -3173,6 +3173,9 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
 
+        // After finalAnalyze, so a statement it already rejects keeps its own message.
+        checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
+
         if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
@@ -3233,6 +3236,64 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Refuses a column operation that would break the table's row TTL expiration expression.
+     *
+     * <p>Checked here rather than while the statement is analyzed, because analysis holds no lock:
+     * row TTL could be configured on the column in between, and the column would then be dropped
+     * out from under an expression that names it. Every DROP and MODIFY COLUMN reaches this method
+     * under the table's write lock.
+     */
+    private void checkColumnNotUsedByRowTtl(OlapTable olapTable, AlterClause alterClause) {
+        if (alterClause instanceof DropColumnClause) {
+            RowTtlPropertyAnalyzer.checkColumnNotUsedByRowTtl(
+                    olapTable, ((DropColumnClause) alterClause).getColName(), "dropped");
+        } else if (alterClause instanceof ModifyColumnClause) {
+            // MODIFY COLUMN restates the whole column, so it can change the type, the nullability
+            // and a generated column's expression alike. MODIFY COLUMN ... COMMENT is a clause of
+            // its own and does not come through here.
+            RowTtlPropertyAnalyzer.checkColumnNotUsedByRowTtl(
+                    olapTable, ((ModifyColumnClause) alterClause).getColumnDef().getName(), "modified");
+        }
+    }
+
+    // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
+    // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
+    // against the final types, so an index added or dropped in the same statement is accounted for. Every
+    // materialized index is checked, not just the base one: an index may cover a column that only a rollup
+    // (synchronous MV) carries. Only columns that are new to a staged schema or whose type changes there are
+    // checked: a keyness change alone keeps the type, and an untouched column keeps whatever index it already has.
+    private static void checkBitmapIndexesForTypeChange(OlapTable table, List<Index> indexes,
+                                                        Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+            throws DdlException {
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (Index index : indexes) {
+                if (index.getIndexType() != IndexType.BITMAP) {
+                    continue;
+                }
+                for (ColumnId columnId : index.getColumns()) {
+                    Column oldColumn = oldColumns.get(columnId);
+                    Column newColumn = newColumns.get(columnId);
+                    if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                        continue;
+                    }
+                    String columnName = oldColumn != null ? oldColumn.getName()
+                            : Column.removeNamePrefix(newColumn.getName());
+                    try {
+                        IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
+                    } catch (SemanticException e) {
+                        throw new DdlException(e.getDetailMsg());
+                    }
+                }
+            }
+        }
+    }
+
+>>>>>>> 968ef4436dd... [BugFix] Reject BITMAP index on column types the BE cannot encode (#64975)
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws StarRocksException {
