@@ -1,11 +1,24 @@
 -- name: test_paimon_reader_modes
-function: paimon_stage("${oss_bucket}", "${uuid0}", "paimon_test.scalar_types")
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_reader_modes/${uuid0}/paimon_test.db >/dev/null || echo "exit 0" >/dev/null
 -- result:
-None
+0
+
 -- !result
-function: create_paimon_catalog("paimon_readers_${uuid0}", "filesystem", "${uuid0}")
+shell: ossutil64 cp -r ./data/catalog/paimon/warehouse/paimon_test.db/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_reader_modes/${uuid0}/paimon_test.db/scalar_types/ >/dev/null
 -- result:
-None
+0
+
+-- !result
+create external catalog paimon_readers_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/test_catalog/test_paimon_reader_modes/${uuid0}/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
 -- !result
 set paimon_reader_mode = 'native';
 -- result:
@@ -53,10 +66,14 @@ function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers
 -- result:
 None
 -- !result
-function: paimon_cleanup()
+set catalog default_catalog;
 -- result:
-None
 -- !result
-CLEANUP {
-function: paimon_cleanup()
-} END CLEANUP
+drop catalog paimon_readers_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_reader_modes/${uuid0}/ >/dev/null
+-- result:
+0
+
+-- !result
