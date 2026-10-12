@@ -169,7 +169,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
 
     max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
     if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores() / 2;
+        max_thread_count = CpuInfo::num_cores();
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_pkidx_exec")
                             .set_min_threads(1)
