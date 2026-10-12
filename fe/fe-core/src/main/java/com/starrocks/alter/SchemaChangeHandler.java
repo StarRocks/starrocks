@@ -3236,29 +3236,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Refuses a column operation that would break the table's row TTL expiration expression.
-     *
-     * <p>Checked here rather than while the statement is analyzed, because analysis holds no lock:
-     * row TTL could be configured on the column in between, and the column would then be dropped
-     * out from under an expression that names it. Every DROP and MODIFY COLUMN reaches this method
-     * under the table's write lock.
-     */
-    private void checkColumnNotUsedByRowTtl(OlapTable olapTable, AlterClause alterClause) {
-        if (alterClause instanceof DropColumnClause) {
-            RowTtlPropertyAnalyzer.checkColumnNotUsedByRowTtl(
-                    olapTable, ((DropColumnClause) alterClause).getColName(), "dropped");
-        } else if (alterClause instanceof ModifyColumnClause) {
-            // MODIFY COLUMN restates the whole column, so it can change the type, the nullability
-            // and a generated column's expression alike. MODIFY COLUMN ... COMMENT is a clause of
-            // its own and does not come through here.
-            RowTtlPropertyAnalyzer.checkColumnNotUsedByRowTtl(
-                    olapTable, ((ModifyColumnClause) alterClause).getColumnDef().getName(), "modified");
-        }
-    }
-
     // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
     // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
     // against the final types, so an index added or dropped in the same statement is accounted for. Every
@@ -3293,7 +3270,6 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
->>>>>>> 968ef4436dd... [BugFix] Reject BITMAP index on column types the BE cannot encode (#64975)
     @Override
     public ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
             throws StarRocksException {
