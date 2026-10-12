@@ -18,11 +18,11 @@
 
 #include <filesystem>
 
-#include "base/bthreads/util.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "testutil/sync_point.h"
 #include "udf/java/utils.h"
+#include "util/bthreads/util.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
