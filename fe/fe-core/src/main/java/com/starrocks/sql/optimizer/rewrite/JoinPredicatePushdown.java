@@ -694,8 +694,11 @@ public class JoinPredicatePushdown {
         return joinOpt;
     }
 
+    // A recorded `expr IS NOT NULL` rejects the NULL-extended rows only when expr is NULL for them: an equality on
+    // `if(c is null, 1, c)` records `if(c is null, 1, c) IS NOT NULL`, which a NULL c satisfies.
     private boolean hasPushdownNotNull(Set<ColumnRefOperator> outputColumnOps, List<IsNullPredicateOperator> pushdownNotNulls) {
-        return pushdownNotNulls.stream().anyMatch(p -> outputColumnOps.containsAll(p.getColumnRefs()));
+        return pushdownNotNulls.stream().anyMatch(p -> outputColumnOps.containsAll(p.getColumnRefs())
+                && Utils.canEliminateNull(outputColumnOps, p));
     }
 
     private ScalarOperator canonizePredicate(ScalarOperator predicate) {
