@@ -31,6 +31,7 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
+  compression/zstd_dict.cpp
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
