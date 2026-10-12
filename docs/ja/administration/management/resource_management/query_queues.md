@@ -74,7 +74,7 @@ SET GLOBAL enable_group_level_query_queue = true;
 
 :::note
 
-- Query Queue v2 を有効にすると、`query_queue_mem_used_pct_limit` および `query_queue_cpu_used_permille_limit` によるキューイングのトリガーはサポートされません。
+- Query Queue v2 を有効にすると、`query_queue_cpu_used_permille_limit` によるキューイングのトリガーはサポートされず、`query_queue_mem_used_pct_limit` はウェアハウスごとに適用されます。[メモリアドミッション](#メモリアドミッション) を参照してください。
 - デフォルトでは、BE は 1 秒間隔でリソース使用状況を FE に報告します。この間隔は、BE の設定項目 `report_resource_usage_interval_ms` を設定することで変更できます。
 
 :::
@@ -143,11 +143,12 @@ Query Queue v2 は FE 設定項目で有効化および調整します。`enable
 | `query_queue_v2_schedule_strategy` | `SWRR` | Query Queue V2 が待機中のクエリを実行順に並べる際のスケジューリングポリシーを指定します。指定可能な値（大文字・小文字は区別されません）は、`SWRR`（Smooth Weighted Round Robin、デフォルト）と `SJF`（Short Job First + Aging）です。`SWRR` は、重み付けを考慮した公平なスケジューリングを行うため、混在したワークロードに適しています。`SJF` は、短時間で終了するクエリを優先しつつ、エージングによってスターベーションを防止します。認識できない値を指定した場合はエラーがログに記録され、デフォルトのスケジューリングポリシーが使用されます。この設定は Query Queue V2 が有効な場合にのみ有効であり、`query_queue_v2_concurrency_level` などの V2 の容量設定と組み合わせて動作します。 |
 | `query_queue_v2_mem_bytes_per_slot` | `0` | メモリベース推定方式（MBE）で使用する、1 スロットあたりのメモリ目標値です。`query_queue_slots_estimator_strategy` が `MBE` の場合、総スロット数はウェアハウス全体のメモリ予算から算出され、各クエリのスロット数はクエリ全体のメモリコストをこの値で割って推定されます。その後、`number_of_workers * max(1, pipeline_dop / 2)` を上限として制限されます。この値が 0 以下の場合、Query Queue V2 はワーカーあたりの平均コアメモリ容量を使用します。 |
 | `query_queue_v2_cpu_costs_per_slot` | `1000000000` | CPU ベース推定方式（CBE）で使用する、1 スロットあたりの CPU コストしきい値です。スケジューラは `ceil(plan_cpu_costs / query_queue_v2_cpu_costs_per_slot)` によって必要スロット数を算出し、その結果を `[1, min(totalSlots, number_of_workers * max(1, pipeline_dop / 2))]` の範囲に制限します。この値が 0 以下の場合は `1` として扱われます。この値を大きくすると、各クエリに割り当てられるスロット数が減少し、同時実行性が高くなります。逆に値を小さくすると、各クエリがより多くのスロットを使用するため、同時実行性は低くなります。 |
+| `query_queue_mem_used_pct_limit` | `0` | グローバルセッション変数です。ノードのメモリ使用率の上限で、ノードのメモリ上限に対する比率で表します。ウェアハウス内のいずれかの稼働中のノードのプロセスメモリ使用率がこの値に達している間、そのウェアハウスの新しいクエリはキューで待機します。範囲: [0, 1]。`0` はメモリアドミッションを行わないことを意味します。[メモリアドミッション](#メモリアドミッション) を参照してください。 |
 | `query_queue_concurrency_limit` | `0` | BE ごとの同時実行クエリ数の上限を指定します。この設定は `0` より大きい値を指定した場合のみ有効です。`0` を指定すると、同時実行数に制限はありません。 |
 
 :::note
 
-`query_queue_mem_used_pct_limit` および `query_queue_cpu_used_permille_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 を有効にすると、これらのパラメータは有効になりません。
+`query_queue_cpu_used_permille_limit` は Query Queue v1 にのみ適用されます。Query Queue v2 では、`query_queue_mem_used_pct_limit` はクラスター全体ではなくウェアハウスごとに適用されます。[メモリアドミッション](#メモリアドミッション) を参照してください。
 
 :::
 
@@ -162,7 +163,7 @@ Query Queue v2 は BE リソースを論理 Slot として表現します。
 
 ある Query が必要とする Slot 数が現在の残り Slot 数を超える場合、その Query はキューで待機します。Query Queue v2 は、必要な Slot 数が少ない Query を優先的に満たすことで、小さいクエリが先にリソースを取得できるようにし、大きいクエリがキューの先頭に長時間とどまって後続の小さいクエリをブロックするヘッドオブラインブロッキング (Head-of-line blocking) を避けます。
 
-キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の Slot 総数の設定、Query が必要とする Slot 数の見積もり、およびどの Query の Slot 要求を優先的に満たすかの決定が含まれます。Query Queue v2 は、BE の実際のリソース使用状況に基づいてスケジューリングを行いません。
+キューイングロジック全体は FE 上で完了します。これには、クラスタ全体の Slot 総数の設定、Query が必要とする Slot 数の見積もり、およびどの Query の Slot 要求を優先的に満たすかの決定が含まれます。Slot のスケジューリングは、BE の実際のリソース使用状況に依存しません。実際の使用量を入力とするのはオプションのメモリ使用率の上限 `query_queue_mem_used_pct_limit` だけで、ウェアハウスのノードのメモリ使用量が多すぎる間、新しいクエリを待機させます。詳細は [メモリアドミッション](#メモリアドミッション) を参照してください。
 
 ### 推定方式を選択する
 
@@ -268,6 +269,182 @@ ALTER WAREHOUSE default_warehouse SET ("query_queue_concurrency_limit" = "8");
 
 まず `query_queue_v2_concurrency_level` を使用してリソース容量を調整してください。`query_queue_concurrency_limit` は、同時に実行できるクエリ数を明示的に制限する必要がある場合にのみ使用してください。
 
+<<<<<<< HEAD
+=======
+### メモリアドミッション
+
+スロットは、クエリが実際に使用するメモリを測るものではありません。メモリアドミッション（メモリに基づく受け入れ制御）は、次の 2 つの設定でメモリを制御します。
+
+- `query_queue_mem_used_pct_limit`: ノードのメモリ使用率の上限です。ウェアハウス内のいずれかの稼働中のノードのプロセスメモリ使用量が、そのノードのメモリ上限に対してこの比率に達している間、そのウェアハウスの新しいクエリはキューで待機します。Query Queue v1 が使用するものと同じグローバルセッション変数で、v2 ではウェアハウスごとに適用されます。
+- `query_mem_limit`: 既存のセッション変数で、各 BE ノードでのクエリのメモリ制限を設定します。
+
+`query_queue_mem_used_pct_limit` のデフォルト値は `0` で、メモリを理由に待機するクエリはありません。`SET GLOBAL` で設定してください。共有データクラスターでは、ウェアハウスプロパティでもあり、単一のウェアハウスについてグローバルの値を上書きします。[クエリキューに関するウェアハウスプロパティ](#クエリキューに関するウェアハウスプロパティ) を参照してください。
+
+#### メモリ使用率の上限
+
+`query_queue_mem_used_pct_limit` は [0, 1] の範囲の小数で、たとえば `0.8` は 80% を表します。この値は各ノードのメモリ使用率、つまりノードが使用しているプロセスメモリをノードのメモリ上限で割った値と比較されます。プロセスメモリには、クエリだけでなく、ロード、Compaction、メタデータ、インメモリのデータキャッシュも含まれます。クエリは、クエリプールと BE プロセスのどちらのメモリが尽きても失敗するため、プロセスメモリで比較すると両方の上限に対して余裕を確保でき、ノードのメモリが尽きる前に新しいクエリを待機させます。
+
+メモリ使用率の上限は、次のように動作します。
+
+- 各 BE および CN ノードは、BE 設定項目 `report_resource_usage_interval_ms` で設定された間隔（1 秒）ごとにメモリ使用状況を報告します。これらの報告を受け取るのは Leader FE のみで、受け入れの判断も Leader FE が行います。
+- ウェアハウス内のいずれかの稼働中のノードのメモリ使用率が上限以上である間、そのウェアハウスの新しいクエリはキューで待機します。実行中のクエリは影響を受けません。すべてのノードが上限を下回ると、キュー内のクエリが再び受け入れられます。判断は二値で、2 つの状態の間に段階的な制限はありません。
+- メモリ使用率の上限は、スロットプールおよび `query_queue_concurrency_limit` と合わせてチェックされます。クエリは 3 つすべてが許可した場合にのみ受け入れられます。
+- ウェアハウスにキューによって受け入れられた実行中のクエリがない場合は、上限を超えているノードがあっても、1 つのクエリが受け入れられます。そのメモリはロード、キャッシュ、またはキューを経由しないクエリが保持している可能性があり、キュー内のクエリを待機させ続けても解放されないためです。
+- 最新の報告がグローバル変数 `query_queue_fresh_resource_usage_interval_ms`（デフォルトは `5000` ミリ秒）より古いノードは判断に参加しません。報告を停止したノードが新しいクエリを待機させ続けることを防ぐためです。稼働していないノードも判断に参加しません。
+- メモリ使用率の上限は、リソースグループを参照せず、リソースグループにも依存しません。
+
+メモリアドミッションは Query Queue v2 の受け入れ判断の一部であるため、クエリキューを経由するクエリにのみ適用されます。共有なしクラスターでは、ウェアハウスは `default_warehouse` で、クラスター内のすべての BE および CN ノードを含みます。
+
+#### 上限の選び方
+
+プロセスメモリの大部分は、通常インメモリのデータキャッシュです。このキャッシュには、クエリがセグメントファイルから読み取り、解凍したページが保持されます。サイズは BE 設定項目 `datacache_mem_size`（デフォルトはプロセスメモリ上限の `20%`）で制限され、クエリがデータを読み取るにつれて大きくなります。プロセスメモリが多いとき、BE はこのメモリを解放します。BE 設定項目 `memory_high_level`（デフォルトはプロセスメモリ上限の `75`%）を超えるとキャッシュを段階的に追い出し、`memory_urgent_level`（デフォルトは `85`）を超えるとキャッシュを直ちに縮小します。
+
+上限は `0.75` から `0.85` の間に設定することをお勧めします。
+
+- この範囲では、クエリがより多くのメモリを必要とすると、プロセスメモリ使用率が 75% を超えた時点でキャッシュがメモリを解放し、新しいクエリはキャッシュが縮小するまでの間だけ待機します。
+- `0.75` 未満では BE がキャッシュを解放しないため、キャッシュの多いノードが新しいクエリを待機させ続けることがあります。その場合、ウェアハウスは実行中のクエリがないときに 1 つずつクエリを受け入れます。
+- 上限が低いほど、実行中のクエリが増加できる余地が大きくなります。クエリ以外にほとんどメモリを使用しないノードでは、クエリプールの上限（デフォルトはプロセスメモリ上限の 90% で、BE 設定項目 `query_max_memory_limit_percent` で設定）までの余地は 0.9 から上限を引いた分です。
+
+#### 各ノードでのクエリごとのメモリ制限
+
+セッション変数 `query_mem_limit` は、各 BE ノードでのクエリのメモリ制限をバイト単位で設定します。デフォルト値 `0` は、制限がないことを意味します。現在のセッションに設定するには `SET query_mem_limit = <bytes>;` を、すべての将来のセッションに設定するには `SET GLOBAL query_mem_limit = <bytes>;` を実行します。詳細は [query_mem_limit](../../../sql-reference/System_variable.md#query_mem_limit) を参照してください。
+
+各ノードで、BE は `query_mem_limit`、リソースグループのプロパティ `big_query_mem_limit`、および親メモリトラッカーの制限のうち最小のものを適用します。クエリが `query_mem_limit` を超えた場合、エラーメッセージには `Mem usage has exceed the limit of single query, You can change the limit by set session variable query_mem_limit.` が含まれます。
+
+#### メモリアドミッションを設定する
+
+次の例では、すべてのウェアハウス（共有なしクラスターではクラスター全体）にメモリ使用率の上限を設定します。
+
+```SQL
+SET GLOBAL query_queue_mem_used_pct_limit = 0.8;
+```
+
+次の例では、共有データクラスターの単一のウェアハウスに上限を設定します。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("query_queue_mem_used_pct_limit" = "0.85");
+```
+
+グローバルの値が設定されている状態で単一のウェアハウスのメモリアドミッションを無効にするには、プロパティを `0` に設定します。ウェアハウスを再びグローバルの値に従わせるには、プロパティに空文字列（`""`）を設定します。
+
+次の例では、以降のすべての新しいセッションで、各 BE ノードでの各クエリのメモリを 8 GB に制限します。
+
+```SQL
+SET GLOBAL query_mem_limit = 8589934592;
+```
+
+`query_queue_mem_used_pct_limit` を設定する場合は、必ず `query_mem_limit` も設定してください。理由については [制限事項](#制限事項) を参照してください。
+
+#### メモリアドミッションを監視する
+
+`warehouse_query_queue` メトリクスには、メモリアドミッション用のフィールド `max_node_mem_used_pct` があります。ウェアハウスのノードのうち最も高いメモリ使用率で、上限と比較される値です。Leader FE で計算されるため、Leader FE から読み取ってください。[ウェアハウスのモニタリングメトリクス](../monitoring/metrics-warehouse_queue.md) を参照してください。
+
+#### 制限事項
+
+- 受け入れ時にメモリは予約されません。新しく受け入れられたクエリは、メモリを割り当て、次の報告が届いてはじめて使用量に反映されるため、1 回のバッチで受け入れられたクエリが合わせて上限を超えることがあります。スロットプールと `query_queue_concurrency_limit` は 1 回のバッチで受け入れるクエリの数を制限しますが、各クエリが 1 つのノードで使用できるメモリを制限できるのは `query_mem_limit` だけです。そのため、メモリ使用率の上限が設定されていて `query_mem_limit` のグローバルデフォルトが `0` の場合は、FE ログにウェアハウスと上限値ごとに 1 回警告が記録されます。
+- 上限以上のノードが 1 つでもあると、他のノードに空きメモリがあっても、ウェアハウス全体の新しいクエリが待機します。ウェアハウスのクエリは通常そのすべてのノードで実行されるためです。
+
+## 共有データクラスターにおける Query Queue v2
+
+共有データクラスターでは、コンピュートリソースはウェアハウスとして構成され、各ウェアハウスが独自のクエリキューを持ちます。そのため、Query Queue v2 は FE 設定項目ではなく、ウェアハウスごとに有効化および調整します。
+
+:::warning
+
+ウェアハウスのクエリキューは、その `enable_query_queue` プロパティが `true` に設定されるまで無効のままです。このプロパティが `false`（デフォルト）である間、そのウェアハウスのクエリはキューイングされず、リソースグループの `concurrency_limit` を超えたクエリは、キューで待機せずに `Exceed concurrency limit` エラーで拒否されます。
+
+:::
+
+### ウェアハウスのクエリキューを有効にする
+
+ウェアハウスのクエリキューはデフォルトで無効です。ウェアハウスプロパティ `enable_query_queue` を設定して有効にします。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue" = "true");
+```
+
+この変更は即座に反映されます。FE ノードの再起動は不要です。
+
+`enable_query_queue` が `true` になると、SELECT クエリは常にキューイングされます。SELECT クエリ専用のプロパティはありません。ロードタスクと統計クエリもキューイングする場合は、対応するプロパティを設定します。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_load" = "true");
+ALTER WAREHOUSE <warehouse_name> SET ("enable_query_queue_statistic" = "true");
+```
+
+ウェアハウス単位に加えてリソースグループ単位でもキューイングする場合は、グローバルセッション変数 `enable_group_level_query_queue` を設定します。この変数は `enable_query_queue` が `true` になって初めて有効になります。
+
+```SQL
+SET GLOBAL enable_group_level_query_queue = true;
+```
+
+### クエリキューに関するウェアハウスプロパティ
+
+| プロパティ | デフォルト | 説明 |
+| ---------- | ---------- | ---- |
+| `enable_query_queue` | `false` | このウェアハウスでクエリキューを有効にするかどうか。マスタースイッチであり、`false` の場合、このウェアハウスのクエリはキューイングされません。 |
+| `enable_query_queue_load` | `false` | このウェアハウスのロードタスクをキューイングするかどうか。`enable_query_queue` が `true` の場合にのみ有効です。 |
+| `enable_query_queue_statistic` | `false` | このウェアハウスの統計クエリをキューイングするかどうか。`enable_query_queue` が `true` の場合にのみ有効です。 |
+| `query_queue_concurrency_limit` | `-1` | このウェアハウスで同時に実行できるクエリ数の上限。`0` より大きい値を設定した場合にのみ有効です。`0` 以下の値は無制限を意味します。 |
+| `query_queue_max_queued_queries` | `1024` | このウェアハウスのキューで待機できるクエリ数の上限。この数に達した後に到着したクエリは、キューイングされずに拒否されます。 |
+| `query_queue_pending_timeout_second` | `600` | クエリがこのウェアハウスのキューで待機できる最大時間（秒）。 |
+| `query_queue_slots_estimator_strategy` | 同名の FE 設定項目に従う | v4.1 以降でサポートされます。このウェアハウスで使用するスロット推定方式。有効な値: `PBE`、`MBE`、`CBE`。詳細は [推定方式を選択する](#推定方式を選択する) を参照してください。 |
+| `query_queue_v2_concurrency_level` | 同名の FE 設定項目に従う | v4.1 以降でサポートされます。このウェアハウスの総スロット数を計算する際に使用する論理的な同時実行レベル。詳細は [同時実行容量を調整する](#同時実行容量を調整する) を参照してください。 |
+| `query_queue_v2_mem_bytes_per_slot` | 同名の FE 設定項目に従う | v4.1 以降でサポートされます。このウェアハウスの MBE 推定方式で使用する 1 スロットあたりのメモリ目標値。 |
+| `query_queue_v2_cpu_costs_per_slot` | 同名の FE 設定項目に従う | v4.1 以降でサポートされます。このウェアハウスの CBE 推定方式で使用する 1 スロットあたりの CPU コストしきい値。 |
+| `query_queue_v2_schedule_strategy` | 同名の FE 設定項目に従う | v4.1 以降でサポートされます。このウェアハウスの待機中のクエリを並べ替える際に使用するスケジューリングポリシー。有効な値: `SWRR`、`SJF`。 |
+| `query_queue_mem_used_pct_limit` | 同名のグローバルセッション変数に従う | このウェアハウスのノードのメモリ使用率の上限で、ノードのメモリ上限に対する [0, 1] の範囲の比率です。`0` はこのウェアハウスのメモリアドミッションを無効にします。[メモリアドミッション](#メモリアドミッション) を参照してください。 |
+
+最後の 6 つのプロパティは、このウェアハウスに限り同名の FE 設定項目またはグローバルセッション変数を上書きします。設定されていない場合は、FE レベルの値が使用されます。このうち `query_queue_slots_estimator_strategy` と `query_queue_v2_schedule_strategy` は、一度設定すると未設定の状態には戻せません。上書きを解除するには、FE レベルの値を明示的に設定し直してください。`query_queue_mem_used_pct_limit` は、空文字列（`""`）を設定すると未設定の状態に戻ります。
+
+複数のプロパティを 1 つのステートメントで設定できます。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "enable_query_queue" = "true",
+    "query_queue_v2_concurrency_level" = "8",
+    "query_queue_v2_schedule_strategy" = "SJF"
+);
+```
+
+### クエリキューが機能していることを確認する
+
+ウェアハウスのクエリキューを有効にした後、次の方法でクエリがキューイングされていることを確認できます。
+
+- [SHOW RUNNING QUERIES](#show-running-queries) を実行します。キューイングされたクエリの状態は `PENDING` になり、`Slots` 列には各クエリに必要と推定されたスロット数が表示されます。
+- [SHOW PROCESSLIST](#show-processlist) を実行します。キューイングされたクエリの `IsPending` 列は `true` になります。
+- `SHOW WAREHOUSES` を実行します。`Property` 列にはそのウェアハウスで有効なクエリキュープロパティが表示されます。`RunningSql` と `QueuedSql` の各列は未実装で常に `0` を返すため、現在の負荷は以下の `warehouse_metrics` で確認してください。
+- `information_schema` の [warehouse_metrics](../../../sql-reference/information_schema/warehouse_metrics.md) ビューをクエリします。`QUEUE_PENDING_LENGTH` は現在待機中のクエリ数、`REMAIN_SLOTS` と `MAX_SLOTS` はそのウェアハウスの残りスロット数と総スロット数です。クエリキューが有効なウェアハウスのみがこのビューに表示されるため、結果が空であること自体が `enable_query_queue` がまだ `false` であることを示します。
+
+  ```SQL
+  SELECT WAREHOUSE_NAME, QUEUE_PENDING_LENGTH, QUEUE_RUNNING_LENGTH, REMAIN_SLOTS, MAX_SLOTS
+  FROM information_schema.warehouse_metrics;
+  ```
+
+- **fe.audit.log** の `PendingTimeMs` フィールドを確認します。`0` より大きい値は、そのクエリがキューで待機したことを示します。
+- FE の HTTP ポートで公開される `starrocks_fe_warehouse_query_queue` メトリクスをモニタリングします（例: `starrocks_fe_warehouse_query_queue{field="query_pending_length"}`）。詳細は [ウェアハウスのモニタリングメトリクス](../monitoring/metrics-warehouse_queue.md) を参照してください。
+
+クエリが一度もキューイングされない場合は、クエリを実行するウェアハウスで `enable_query_queue` が `true` に設定されているかを確認し、テストクエリが実際にテーブルをスキャンしているかも確認してください。スキャンノードを持たないクエリはキューに入らないため、待機もせず、スロットも消費しません。`SELECT sleep(10)`、`SELECT 1`、および `information_schema` のみを読み取るクエリはいずれもこれに該当し、クエリキューの動作確認には適していません。
+
+### ウェアハウスを調整する
+
+[推定方式を選択する](#推定方式を選択する)、[同時実行容量を調整する](#同時実行容量を調整する)、および [メモリアドミッション](#メモリアドミッション) のチューニング指針は、共有データクラスターにも適用されます。ただし、変更をクラスター全体ではなく単一のウェアハウスに適用するため、`ADMIN SET FRONTEND CONFIG` ではなく `ALTER WAREHOUSE` を使用します。
+
+たとえば、単一のウェアハウスのスロット容量を増やすには、次のようにします。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET ("query_queue_v2_concurrency_level" = "8");
+```
+
+単一のウェアハウスをメモリコストベースの推定方式に切り替え、各スロットに 2 GB のメモリを割り当てるには、次のようにします。
+
+```SQL
+ALTER WAREHOUSE <warehouse_name> SET (
+    "query_queue_slots_estimator_strategy" = "MBE",
+    "query_queue_v2_mem_bytes_per_slot" = "2147483648"
+);
+```
+
+>>>>>>> 599afa0abb3... [Feature] Apply query_queue_mem_used_pct_limit per warehouse under Query Queue V2 (#63745)
 ## Monitor query queues
 
 次の方法を使用して、クエリキューに関連する情報を表示できます。
