@@ -474,6 +474,28 @@ TEST_F(HdfsScannerTest, TestParquetCountColumnReadsFileWithoutNullCounts) {
     scanner->close();
 }
 
+// An empty file adds no row, so a COUNT grouped by partition gets no group from it.
+TEST_F(HdfsScannerTest, TestParquetCountColumnSkipsEmptyFile) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    range->__set_record_count(0);
+    range->__set_is_first_split(true);
+    range->__set_null_value_counts({{0, 0}});
+    auto* tuple_desc = _create_tuple_desc(parquet_count_column_descs);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
+    ctx->format_scan_context.options.use_count_opt = true;
+    ctx->format_scan_context.non_null_count_slots = {{1, 0}};
+
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_TRUE(scanner->get_next(_runtime_state, &chunk).is_end_of_file());
+    EXPECT_EQ(0, chunk->num_rows());
+    scanner->close();
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
