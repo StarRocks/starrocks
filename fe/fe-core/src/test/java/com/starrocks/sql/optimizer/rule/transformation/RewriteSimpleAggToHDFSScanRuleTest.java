@@ -21,13 +21,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import mockit.Expectations;
@@ -72,6 +77,62 @@ public class RewriteSimpleAggToHDFSScanRuleTest {
             }
         };
         Assertions.assertFalse(RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(countOver(table, idColumn), context));
+    }
+
+    @Test
+    public void testCountOverFilesWithEqualityDeletesDoesNotQualify(@Mocked IcebergTable table,
+                                                                    @Mocked OptimizerContext context) {
+        enableRewrite(context);
+        OptExpression count = countOver(table, idColumn);
+        scanOf(count).setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
+        Assertions.assertFalse(RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(count, context));
+    }
+
+    @Test
+    public void testMetaScanReadsTheSameFilesUnderEqualityDeletes(@Mocked IcebergTable table,
+                                                                  @Mocked OptimizerContext context) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        for (ColumnRefOperator column : List.of(idColumn, markerNamedColumn, placeholderNamedColumn)) {
+            columnRefFactory.updateColumnToRelationIds(column.getId(), 1);
+        }
+        new Expectations() {
+            {
+                context.getColumnRefFactory();
+                result = columnRefFactory;
+                minTimes = 0;
+            }
+        };
+        OptExpression count = countOver(table, idColumn);
+        IcebergTableMORParams tableFullMORParams = new IcebergTableMORParams(1, List.of(
+                IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE));
+        scanOf(count).setMORParam(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
+        scanOf(count).setTableFullMORParams(tableFullMORParams);
+        scanOf(count).setFromEqDeleteRewriteRule(true);
+
+        OptExpression rewritten = RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.transform(count, context).get(0);
+        LogicalIcebergScanOperator metaScan = scanOf(rewritten.getInputs().get(0));
+        Assertions.assertEquals(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, metaScan.getMORParam());
+        Assertions.assertSame(tableFullMORParams, metaScan.getTableFullMORParams());
+        Assertions.assertTrue(metaScan.isFromEqDeleteRewriteRule());
+    }
+
+    @Test
+    public void testCountUnderHavingOrProjectionDoesNotQualify(@Mocked IcebergTable table,
+                                                               @Mocked OptimizerContext context) {
+        enableRewrite(context);
+        OptExpression having = countOver(table, idColumn);
+        having.getOp().setPredicate(ConstantOperator.TRUE);
+        Assertions.assertFalse(RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(having, context));
+
+        OptExpression projected = countOver(table, idColumn);
+        ColumnRefOperator countRef = ((LogicalAggregationOperator) projected.getOp()).getAggregations().keySet()
+                .iterator().next();
+        projected.getOp().setProjection(new Projection(Map.of(countRef, countRef)));
+        Assertions.assertFalse(RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(projected, context));
+    }
+
+    private static LogicalIcebergScanOperator scanOf(OptExpression aggregation) {
+        return (LogicalIcebergScanOperator) aggregation.getInputs().get(0).getOp();
     }
 
     private static void enableRewrite(OptimizerContext context) {

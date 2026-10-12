@@ -33,15 +33,17 @@ import java.util.Map;
  * fills the placeholder from each data file's manifest null count and reads only the files that lack one.
  */
 public class IcebergCountColumnRewriteTest extends ConnectorPlanTestBase {
+    private boolean rewriteEnabledBefore;
 
     @BeforeEach
     public void enableRewrite() {
+        rewriteEnabledBefore = connectContext.getSessionVariable().isEnableRewriteSimpleAggToHdfsScan();
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
     }
 
     @AfterEach
     public void restoreRewrite() {
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(rewriteEnabledBefore);
     }
 
     @Test

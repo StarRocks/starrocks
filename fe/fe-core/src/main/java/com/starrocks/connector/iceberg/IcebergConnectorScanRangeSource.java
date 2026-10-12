@@ -470,7 +470,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
-                    table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
+                    table.getReadSchema(), file.lowerBounds(), file.upperBounds(),
                     file.nullValueCounts(), file.valueCounts(), slots);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }

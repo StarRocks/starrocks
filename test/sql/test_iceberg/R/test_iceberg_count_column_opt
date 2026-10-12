@@ -85,10 +85,38 @@ select p, count(*), count(c_int), count(c_string) from ice_tbl_1 group by p orde
 1	2	1	2
 2	3	2	1
 -- !result
+create external table ice_tbl_2(
+    c_int int,
+    c_string string,
+    y int,
+    m int
+) partition by (y, m);
+-- result:
+-- !result
+insert into ice_tbl_2 values (1, 'a', 2024, 12), (2, null, 2025, 1), (null, 'c', 2025, 2), (4, 'd', 2023, 6);
+-- result:
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+select count(*), count(c_int), count(c_string) from ice_tbl_2 where y * 100 + m >= 202501;
+-- result:
+2	1	1
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+-- result:
+-- !result
+select count(*), count(c_int), count(c_string) from ice_tbl_2 where y * 100 + m >= 202501;
+-- result:
+2	1	1
+-- !result
 drop table ice_tbl_0 force;
 -- result:
 -- !result
 drop table ice_tbl_1 force;
+-- result:
+-- !result
+drop table ice_tbl_2 force;
 -- result:
 -- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};

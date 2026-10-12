@@ -517,34 +517,45 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
         return true;
     };
+    // The count optimization never evaluates a conjunct spanning several slots, or none, so it is only safe when
+    // every conjunct is one the partition values of this scan range already answered.
     // A COUNT(col) placeholder can only be filled without reading the file when this scan range carries a null
     // count for its counted column. The counted columns must then be the only other materialized slots, because
-    // the count optimization leaves them NULL instead of reading them.
+    // the count optimization leaves them NULL instead of reading them, so they must also be nullable.
     auto check_count_opt = [&]() {
+        if (!_scanner_ctx.format_scan_context.conjuncts.scanner_ctxs.empty()) {
+            return false;
+        }
         const auto& non_null_count_slots = hdfs_scan_node.non_null_count_slots;
         if (non_null_count_slots.empty()) {
             return check_partition_opt();
         }
-        if (!_scan_range.delete_files.empty()) {
+        if (!_scan_range.__isset.record_count || !_scan_range.delete_files.empty()) {
             return false;
         }
-        std::unordered_set<SlotId> count_slots;
+        std::unordered_set<SlotId> placeholder_slots;
+        std::unordered_set<SlotId> counted_slots;
         for (const auto& [placeholder, counted] : non_null_count_slots) {
             if (!_scan_range.null_value_counts.contains(counted)) {
                 return false;
             }
-            count_slots.insert(placeholder);
-            count_slots.insert(counted);
+            placeholder_slots.insert(placeholder);
+            counted_slots.insert(counted);
         }
         size_t materialized_count_slots = 0;
         for (const auto* slot : _scanner_ctx.materialize_slots) {
-            if (count_slots.contains(slot->id())) {
+            if (placeholder_slots.contains(slot->id())) {
+                materialized_count_slots++;
+            } else if (counted_slots.contains(slot->id())) {
+                if (!slot->is_nullable()) {
+                    return false;
+                }
                 materialized_count_slots++;
             } else if (slot->col_name() != "___count___") {
                 return false;
             }
         }
-        return materialized_count_slots == count_slots.size();
+        return materialized_count_slots == placeholder_slots.size() + counted_slots.size();
     };
     if (!check_partition_opt()) {
         _scanner_ctx.format_scan_context.options.use_partition_column_value_only = false;
