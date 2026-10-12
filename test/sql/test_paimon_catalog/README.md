@@ -1,6 +1,6 @@
 # Paimon fixtures
 
-The filesystem cases stage immutable tables from the `test/data/paimon/warehouse/` submodule directory to the runner's OSS bucket.
+The filesystem cases stage immutable tables from the `test/data/catalog/paimon/warehouse/` submodule directory to the runner's OSS bucket.
 Community and enterprise CI use the same fixtures and cases with their own `sr.conf` credentials.
 
 ## Run
@@ -44,7 +44,7 @@ VARIANT and BLOB coverage remains in the filesystem case; those types cannot uni
 a delete and an insert. Two overlapping level-0 files remain unmerged, so each reader must
 apply primary-key merge semantics. JNI, NATIVE and AUTO check the same fixed rows, aggregates,
 and predicates on deleted keys and old values. AUTO must use JNI for this layout. The native
-profile assertion also covers this merge path. See [datagen](../../data/paimon/datagen/README.md) for the
+profile assertion also covers this merge path. See [datagen](../../data/catalog/paimon/datagen/README.md) for the
 writer version, generation command and independent Paimon reader/layout checks.
 
 ## Helper tests and data maintenance
