@@ -498,12 +498,21 @@ public class CatalogUtils {
                 : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
-    public static int calPhysicalPartitionBucketNum(OlapTable olapTable) {
+    public static int backendNumForBucketSizing(OlapTable olapTable) {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
-        if (backendNum == 0) {
+        boolean enoughMatchedBackends = GlobalStateMgr.getCurrentState().getTabletChecker()
+                .preCheckEnoughLocationMatchedBackends(olapTable.getLocation(),
+                        olapTable.getDefaultReplicationNum());
+        if (backendNum == 0 || !enoughMatchedBackends) {
             backendNum = clusterInfo.getTotalBackendNumber();
         }
+
+        return backendNum;
+    }
+
+    public static int calPhysicalPartitionBucketNum(OlapTable olapTable) {
+        int backendNum = backendNumForBucketSizing(olapTable);
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
@@ -513,11 +522,7 @@ public class CatalogUtils {
     }
 
     public static int calBucketNumAccordingToBackends(OlapTable olapTable) {
-        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
-        if (backendNum == 0) {
-            backendNum = clusterInfo.getTotalBackendNumber();
-        }
+        int backendNum = backendNumForBucketSizing(olapTable);
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());

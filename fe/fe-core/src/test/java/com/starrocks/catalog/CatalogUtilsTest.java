@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -78,6 +79,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         when(olapTable.getPartitionInfo()).thenReturn(partitionInfo);
         when(partitionInfo.isPartitioned()).thenReturn(false);
         when(olapTable.getLocation()).thenReturn(null);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
         when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
 
         new MockUp<SystemInfoService>() {
@@ -117,6 +119,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         when(olapTable.getPartitions()).thenReturn(partitions);
         when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
         when(olapTable.getLocation()).thenReturn(null);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
         when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(physicalPartition.getVisibleVersion()).thenReturn(2L);
@@ -145,6 +148,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         Multimap<String, String> location = HashMultimap.create();
         location.put("rack", "r1");
         when(olapTable.getLocation()).thenReturn(location);
+        when(olapTable.getDefaultReplicationNum()).thenReturn((short) 3);
         when(olapTable.isLightWeightTabletCreation()).thenReturn(false);
 
         new MockUp<SystemInfoService>() {
@@ -166,7 +170,27 @@ public class CatalogUtilsTest extends StarRocksTestBase {
             }
         };
 
-        // 6 labelled BEs -> 2 * 6 = 12; physical uses divisibleBucketNum(6)
+        // Single-value pin cannot cover replication_num=3 distinct locations, so
+        // placement falls back to all BEs — sizing must use total (30) -> 36.
+        new MockUp<TabletChecker>() {
+            @mockit.Mock
+            public boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation,
+                                                                 int replicaNum) {
+                return false;
+            }
+        };
+        assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(CatalogUtils.divisibleBucketNum(30),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+
+        // When location placement is feasible, use the labelled BE count (6 -> 12).
+        new MockUp<TabletChecker>() {
+            @mockit.Mock
+            public boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation,
+                                                                 int replicaNum) {
+                return true;
+            }
+        };
         assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(6),
                 CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
