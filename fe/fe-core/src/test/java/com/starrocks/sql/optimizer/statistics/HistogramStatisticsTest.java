@@ -14,10 +14,13 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
@@ -670,6 +673,46 @@ public class HistogramStatisticsTest {
         Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
     }
 
+
+    @Test
+    public void testCoalesceJoinOnBucketUpperBound() {
+        // Given l.k holding 600 x 1, 300 x 2 and 100 NULL over 1000 rows, collected with one MCV as {1: 600}
+        // plus a [2, 2] bucket, and r.k holding 1000 x 2, collected as the MCV {2: 1000}
+        // CASE WHEN l JOIN r ON COALESCE(l.k, 0) = r.k is estimated THEN r.k's 2 lands on the upper bound of
+        // the coalesce bucket, which spreads the 300 rows outside its MCVs {1: 600, 0: 100} over its one
+        // remaining value, so 300 x 1000 = 300000 rows match END
+
+        final double leftRowCount = 1000;
+        final double rightRowCount = 1000;
+        final double expectedRowCount = 300_000;
+
+        final ColumnRefOperator leftKey = new ColumnRefOperator(0, IntegerType.INT, "l.k", true);
+        final ColumnRefOperator rightKey = new ColumnRefOperator(1, IntegerType.INT, "r.k", true);
+        final ColumnRefOperator coalescedKey = new ColumnRefOperator(2, IntegerType.INT, "coalesce", true);
+        final ColumnStatistic leftKeyStatistic = new ColumnStatistic(1, 2, 0.1, 4, 2,
+                new Histogram(List.of(new Bucket(2, 2, 300L, 300L)), Map.of("1", 600L)),
+                ColumnStatistic.StatisticType.ESTIMATE);
+        final ColumnStatistic rightKeyStatistic = new ColumnStatistic(2, 2, 0, 4, 1,
+                new Histogram(Map.of("2", 1000L)), ColumnStatistic.StatisticType.ESTIMATE);
+
+        final Statistics leftStatistics = Statistics.builder()
+                .setOutputRowCount(leftRowCount)
+                .addColumnStatistic(leftKey, leftKeyStatistic)
+                .build();
+        final CallOperator coalesce = new CallOperator(FunctionSet.COALESCE, IntegerType.INT,
+                Lists.newArrayList(leftKey, ConstantOperator.createInt(0)));
+        final Statistics crossJoinStatistics = Statistics.builder()
+                .setOutputRowCount(leftRowCount * rightRowCount)
+                .addColumnStatistic(coalescedKey, ExpressionStatisticCalculator.calculate(coalesce, leftStatistics))
+                .addColumnStatistic(rightKey, rightKeyStatistic)
+                .build();
+        UtFrameUtils.createDefaultCtx().getSessionVariable().setCboEnableHistogramJoinEstimation(true);
+
+        final Statistics actual = PredicateStatisticsCalculator.statisticsCalculate(
+                new BinaryPredicateOperator(BinaryType.EQ, coalescedKey, rightKey), crossJoinStatistics);
+
+        Assertions.assertEquals(expectedRowCount, actual.getOutputRowCount(), 0.001);
+    }
 
     @Test
     public void testUpdateHistWithJoin() {
