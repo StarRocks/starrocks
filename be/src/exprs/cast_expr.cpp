@@ -57,6 +57,7 @@
 #include "util/json_converter.h"
 #include "util/mysql_global.h"
 #include "util/numeric_types.h"
+#include "util/utf8.h"
 #include "util/variant_converter.h"
 #include "util/variant_encoder.h"
 
@@ -1481,8 +1482,20 @@ SELF_CAST(TYPE_VARIANT);
 template <LogicalType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
-    DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
+    explicit VectorizedCastToStringExpr(const TExprNode& node)
+            : Expr(node), _truncate_char(node.__isset.cast_char_truncate && node.cast_char_truncate) {}
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastToStringExpr(*this)); }
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr result, _evaluate_to_string(context, ptr));
+        // Assignment casts keep the full value so the sink can validate its length.
+        if (_truncate_char && type().type == TYPE_CHAR && type().len >= 0) {
+            return _truncate_to_char_len(std::move(result), type().len);
+        }
+        return result;
+    }
+
+    StatusOr<ColumnPtr> _evaluate_to_string(ExprContext* context, Chunk* ptr) {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1533,6 +1546,8 @@ public:
     };
 
 private:
+    const bool _truncate_char;
+
     template <LogicalType FloatType>
     ColumnPtr _evaluate_float(ExprContext* context, const ColumnPtr& column) {
         if (type().len == -1) {
@@ -1577,15 +1592,36 @@ private:
         return builder.build(column->is_constant());
     }
 
-    // cast(string as string) is trivial operation, just return the input column.
-    // This behavior is not compatible with MySQL
-    // 1. cast(string as varchar(n)) supported in SR, but not supported in MySQL
-    // 2. cast(string as char(n)) supported in both SR and MySQL, but in SR, in some queries, length
-    //    of char is neglected. in MySQL, the input string shall be truncated if its length is larger than
-    //    length of char.
-    // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
-    // of the length of char/varchar and return input column directly.
+    // String conversion preserves the input; explicit CHAR(N) truncation is applied afterwards.
     ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr&& column) { return Column::mutate(std::move(column)); }
+
+    // Truncate each non-null value to its first `len` UTF-8 characters.
+    static ColumnPtr _truncate_to_char_len(ColumnPtr column, int len) {
+        if (column->only_null()) {
+            return column;
+        }
+        ColumnViewer<TYPE_VARCHAR> viewer(column);
+        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
+        for (int row = 0; row < viewer.size(); ++row) {
+            if (viewer.is_null(row)) {
+                builder.append_null();
+                continue;
+            }
+            Slice s = viewer.value(row);
+            if (s.size <= static_cast<size_t>(len)) {
+                builder.append(s);
+                continue;
+            }
+            const char* begin = s.data;
+            const char* end = s.data + s.size;
+            const char* truncated_end = skip_leading_utf8(begin, end, static_cast<size_t>(len));
+            if (truncated_end > end) {
+                truncated_end = end;
+            }
+            builder.append(Slice(begin, truncated_end - begin));
+        }
+        return builder.build(column->is_constant());
+    }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
