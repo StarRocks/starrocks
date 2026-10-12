@@ -233,6 +233,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<TableIdentifier, org.apache.iceberg.Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
+    private final Map<PredicateSearchKey, Set<Integer>> splitTaskStatsFieldIds = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final Set<PredicateSearchKey> preparedTables = ConcurrentHashMap.newKeySet();
 
@@ -1126,6 +1127,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         triggerIcebergPlanFilesIfNeeded(key, table);
+        if (!cachedSplitTasksKeepStatsOfSelectedColumns(key, (IcebergTable) table)) {
+            collectTableStatisticsAndCacheIcebergSplit(key, table, Tracers.get(), ConnectContext.get());
+        }
 
         List<FileScanTask> icebergScanTasks = splitTasks.get(key);
         if (icebergScanTasks == null) {
@@ -1359,6 +1363,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         List<FileScanTask> icebergScanTasks = planIcebergScanTasks(key, table, connectContext, false);
         splitTasks.put(key, icebergScanTasks);
+        splitTaskStatsFieldIds.put(key, selectedFieldIds((IcebergTable) table, key.getParams().getFieldNames()));
         scannedTables.add(key);
     }
 
@@ -1534,7 +1539,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         RemoteFileInfoSource baseSource;
         // Bounded-cost statistics scan (design 2.4): never read a cached split list (it may be a full,
         // non-budgeted list) - always build a fresh, budget-limited source below.
-        if (!params.hasScanBudget() && splitTasks.containsKey(predicateSearchKey)) {
+        if (!params.hasScanBudget() && splitTasks.containsKey(predicateSearchKey)
+                && cachedSplitTasksKeepStatsOfSelectedColumns(predicateSearchKey, icebergTable)) {
             baseSource = buildRemoteInfoSource(splitTasks.get(predicateSearchKey), params);
         } else {
             List<ScalarOperator> scalarOperators = Utils.extractConjuncts(params.getPredicate());
@@ -2482,6 +2488,17 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     /**
+     * Whether the cached split tasks keep the stats of every column a scan reading stats selects. The tasks keep
+     * only the stats of the columns selected by the caller that planned them, and the cache key ignores the
+     * selection, so a scan of other columns plans them again rather than lose min/max and COUNT(col).
+     */
+    private boolean cachedSplitTasksKeepStatsOfSelectedColumns(PredicateSearchKey key, IcebergTable icebergTable) {
+        GetRemoteFilesParams params = key.getParams();
+        return !params.isEnableColumnStats() || splitTaskStatsFieldIds.getOrDefault(key, Set.of())
+                .containsAll(selectedFieldIds(icebergTable, params.getFieldNames()));
+    }
+
+    /**
      * Field ids of the columns a scan selects. A cached split task keeps the stats of these columns, which
      * min/max and COUNT(col) read from each data file, and drops the rest to keep the split cache small.
      */
@@ -3177,6 +3194,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         splitTasks.clear();
+        splitTaskStatsFieldIds.clear();
         databases.clear();
         tables.clear();
         scannedTables.clear();

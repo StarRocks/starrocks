@@ -60,6 +60,20 @@ public class RewriteSimpleAggToHDFSScanRuleTest {
                 RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(countOver(table, placeholderNamedColumn), context));
     }
 
+    @Test
+    public void testCountOfColumnWhosePlaceholderNameIsTakenDoesNotQualify(@Mocked IcebergTable table,
+                                                                           @Mocked OptimizerContext context) {
+        enableRewrite(context);
+        new Expectations() {
+            {
+                table.getFullSchema();
+                result = List.of(new Column("id", IntegerType.INT), new Column("___count___ID", IntegerType.INT));
+                minTimes = 0;
+            }
+        };
+        Assertions.assertFalse(RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT.check(countOver(table, idColumn), context));
+    }
+
     private static void enableRewrite(OptimizerContext context) {
         new Expectations() {
             {

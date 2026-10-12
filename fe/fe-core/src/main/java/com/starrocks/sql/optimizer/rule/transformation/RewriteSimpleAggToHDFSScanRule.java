@@ -20,6 +20,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -237,7 +238,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
      * COUNT(col) is answered from Iceberg manifest null counts, so it qualifies only on an Iceberg scan, for a
      * scalar column that is read from the data files rather than being a partition column. A column named like
      * a placeholder is never counted this way, since the backend would take ___count___ itself for the COUNT(*)
-     * marker and a counted column could share a name with another column's placeholder.
+     * marker and a counted column could share a name with another column's placeholder. Nor is a column whose
+     * placeholder name another column of the table already has, since the backend tells partition columns
+     * apart by name and would fill the placeholder with a partition value.
      */
     private static boolean isCountOfDataColumn(CallOperator aggregator, LogicalScanOperator scanOperator) {
         if (!(scanOperator instanceof LogicalIcebergScanOperator) || !isPlainCount(aggregator)
@@ -247,7 +250,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         Column column = scanOperator.getColRefToColumnMetaMap().get((ColumnRefOperator) aggregator.getArguments().get(0));
         return column != null && column.getType().isScalarType()
                 && !scanOperator.getPartitionColumns().contains(column.getName())
-                && !column.getName().toLowerCase(Locale.ROOT).startsWith(COUNT_PLACEHOLDER);
+                && !column.getName().toLowerCase(Locale.ROOT).startsWith(COUNT_PLACEHOLDER)
+                && !hasColumnNamed(scanOperator.getTable(), COUNT_PLACEHOLDER + column.getName());
+    }
+
+    private static boolean hasColumnNamed(Table table, String name) {
+        return table.getFullSchema().stream().anyMatch(column -> column.getName().equalsIgnoreCase(name));
     }
 
     private static boolean isPlainCount(CallOperator aggregator) {
