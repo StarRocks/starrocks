@@ -606,7 +606,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
 
             } else if (desc.isChar() || desc.isVarchar()) {
-                res =  ConstantOperator.createChar(childString, desc);
+                res = ConstantOperator.createChar(childString, desc);
             } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
                 res = ConstantOperator.createBinary(childString.getBytes(), desc);
             }
@@ -617,6 +617,79 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return Optional.ofNullable(res);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Fold a cast whose source is a BINARY/VARBINARY constant.
+     * <p>
+     * The value of such a constant is a {@code byte[]}, so {@link #toString()} yields the JVM default
+     * {@code [B@<identityHashCode>}: it must never be used as the source value of a cast, otherwise the
+     * identity hash gets baked into the plan as a real value and the result is both wrong and different
+     * on every run.
+     * <p>
+     * The BE implements binary -> string as a raw passthrough of the underlying column
+     * (VectorizedCastToStringExpr in be/src/exprs/cast_expr_tpl.hpp: VARBINARY and VARCHAR share the same
+     * physical BinaryColumn, so type adaptation is the identity, with neither hex encoding nor length truncation).
+     * FE folding has to produce exactly the same bytes; explicit CHAR(N) truncation is applied afterwards.
+     */
+    private Optional<ConstantOperator> castBinaryTo(Type desc) {
+        byte[] bytes = isNull() ? null : getBinary();
+        if (bytes == null) {
+            return Optional.empty();
+        }
+
+        if (desc.isChar() || desc.isVarchar()) {
+            // The FE carries string constants as java Strings and ships them to the BE as UTF-8, so folding
+            // is only byte-exact when the bytes are valid UTF-8. Otherwise decoding substitutes U+FFFD and
+            // the folded value would no longer match what the BE computes, so leave the cast to the BE.
+            String decoded = new String(bytes, StandardCharsets.UTF_8);
+            if (!Arrays.equals(decoded.getBytes(StandardCharsets.UTF_8), bytes)) {
+                return Optional.empty();
+            }
+            return Optional.of(ConstantOperator.createChar(decoded, desc));
+        }
+
+        if (desc.getPrimitiveType().isBinaryType()) {
+            // binary -> binary is the identity, the target length is not applied (the BE does not truncate).
+            return Optional.of(ConstantOperator.createBinary(bytes, desc));
+        }
+
+        // The BE only supports casting a binary value to a string, so don't fold anything else either.
+        return Optional.empty();
+    }
+
+    // Explicit SQL casts may truncate; generic type adaptation must preserve values for sink validation.
+    public Optional<ConstantOperator> castToExplicitly(Type desc) {
+        if (isNull()) {
+            return Optional.of(ConstantOperator.createNull(desc));
+        }
+        Optional<ConstantOperator> result = castTo(desc);
+        if (!desc.isChar() || ((ScalarType) desc).getLength() < 0) {
+            return result;
+        }
+        int maxChars = ((ScalarType) desc).getLength();
+        return result.map(value -> value.isNull() ? value :
+                ConstantOperator.createChar(truncateToCodePoints(value.getVarchar(), maxChars), desc));
+    }
+
+    // Truncate to the first maxChars Unicode code points (MySQL CHAR(N) semantics). ASCII fast paths first.
+    private static String truncateToCodePoints(String value, int maxChars) {
+        if (maxChars <= 0) {
+            return "";
+        }
+        if (value.length() <= maxChars) {
+            // UTF-16 length is an upper bound on the code-point count, so the value already fits.
+            return value;
+        }
+        int codePointCount = value.codePointCount(0, value.length());
+        if (codePointCount <= maxChars) {
+            return value;
+        }
+        int endIndex = value.offsetByCodePoints(0, maxChars);
+        return value.substring(0, endIndex);
+    }
+
+>>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
     public Optional<ConstantOperator> successor() {
         return computeValue(1);
     }
