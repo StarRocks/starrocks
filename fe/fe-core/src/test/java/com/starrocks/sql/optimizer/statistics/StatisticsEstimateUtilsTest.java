@@ -311,7 +311,9 @@ public class StatisticsEstimateUtilsTest {
         // Given a union of 10000 and 20000 rows with no nulls, whose merged MCVs hold 14000 rows,
         // over the merged range [1, 200]
         // CASE WHEN the union propagates a histogram THEN it carries the rows outside the MCVs in a
-        // bucket over the merged range, so the union's total row count is no longer just its MCV rows END
+        // bucket over the merged range, so the union's total row count is no longer just its MCV rows, and
+        // spreads them evenly over the union NDV 50 + (100 / 199) * 80 = 90.2 minus the 4 MCVs, so
+        // ceil(16000 / 86.2) = 186 sit on the upper bound END
 
         final var leftColStats = ColumnStatistic.builder()
                 .setMinValue(1).setMaxValue(100)
@@ -330,7 +332,7 @@ public class StatisticsEstimateUtilsTest {
         final var expectedLowerBound = 1.0;
         final var expectedUpperBound = 200.0;
         final var expectedNonMcvRows = 16_000L;
-        final var expectedUpperRepeats = 0L;
+        final var expectedUpperRepeats = 186L;
         final var expectedTotalRows = 30_000L;
 
         final var actualHistogram = StatisticsEstimateUtils.unionColumnStatistic(

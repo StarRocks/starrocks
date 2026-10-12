@@ -921,7 +921,8 @@ public class ExpressionStatisticsCalculatorTest {
         // Given COALESCE(input1, input2) on 1000 rows, where input1 is 20% null with 300 rows in
         // MCV and input2 is 50% null with no MCV, so the result is 10% null and 900 rows survive
         // CASE WHEN the coalesce propagates MCVs THEN it also carries the 600 non-MCV rows in a
-        // bucket over the merged range, instead of reporting only its MCV rows END
+        // bucket over the merged range, instead of reporting only its MCV rows, and spreads them evenly
+        // over the 10 + 20 - 1 = 29 values outside the MCV, so ceil(600 / 29) = 21 sit on the upper bound END
 
         final long rowCount = 1000;
         final double input1NullFraction = 0.2;
@@ -930,7 +931,7 @@ public class ExpressionStatisticsCalculatorTest {
         final double expectedLowerBound = 0.0;
         final double expectedUpperBound = 200.0;
         final long expectedNonMcvRows = 600L;
-        final long expectedUpperRepeats = 0L;
+        final long expectedUpperRepeats = 21L;
         final long expectedTotalRows = 900L;
 
         final ColumnRefOperator input1 = new ColumnRefOperator(0, IntegerType.INT, "input1", true);
@@ -2357,7 +2358,9 @@ public class ExpressionStatisticsCalculatorTest {
         // Given date_trunc('day', dt) over a histogram holding 700 rows outside its MCVs and 300
         // rows in them
         // CASE WHEN the MCV keys are truncated THEN the rows outside the MCVs are carried across
-        // unchanged, because date_trunc maps every row to exactly one truncated value END
+        // unchanged, because date_trunc maps every row to exactly one truncated value, and spread evenly
+        // over the 59 days in [2024-01-01, 2024-02-28] minus the 2 MCV days, so ceil(700 / 57) = 13 sit on
+        // the upper bound END
 
         final var minDateTime = LocalDateTime.of(2024, 1, 1, 0, 0, 0);
         final var maxDateTime = LocalDateTime.of(2024, 2, 28, 0, 0, 0);
@@ -2366,7 +2369,7 @@ public class ExpressionStatisticsCalculatorTest {
                 "2024-01-15 10:20:30", 100L,
                 "2024-02-20 08:00:00", 200L);
         final long expectedNonMcvRows = 700L;
-        final long expectedUpperRepeats = 0L;
+        final long expectedUpperRepeats = 13L;
         final long expectedTotalRows = 1000L;
 
         final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
@@ -2720,7 +2723,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(actual.getMinValue(), bucket.getLower(), 0.001);
         Assertions.assertEquals(actual.getMaxValue(), bucket.getUpper(), 0.001);
         Assertions.assertEquals(700L, bucket.getCount()); // 1000 - (100 + 200)
-        Assertions.assertEquals(0L, bucket.getUpperRepeats());
+        Assertions.assertEquals(700L, bucket.getUpperRepeats()); // NDV 2 - 2 MCVs leaves one value for all 700
         final Map<String, Long> mcv = actual.getHistogram().getMCV();
         Assertions.assertEquals(2, mcv.size());
         Assertions.assertEquals(100L, mcv.get(convertTzMcvKey(dt1, fromTz, toTz)));

@@ -105,7 +105,8 @@ public class StatisticsEstimateUtils {
         boolean mcvRepresentative = totalRowCount > 0 && mcvRowCount >= mcvRowPropagationThreshold * totalRowCount;
 
         if (noBuckets || mcvRepresentative) {
-            return Histogram.ofSingleBucket(range.getLow(), range.getHigh(), nonNullRowCount, mergedMcv);
+            return Histogram.ofSingleBucket(range.getLow(), range.getHigh(), nonNullRowCount,
+                    range.getDistinctValues(), mergedMcv);
         }
 
         return null;

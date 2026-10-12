@@ -128,19 +128,21 @@ public class HistogramTest {
 
     @Test
     public void testSingleBucketCarriesNonMcvRows() {
-        // Given 1000 rows over [100, 200] of which 300 sit in the MCVs
-        // CASE WHEN a single-bucket histogram is built THEN the bucket spans the given bounds and
-        // carries the rows left outside the MCVs END
+        // Given 1000 rows over [100, 200] with 12 distinct values, of which 2 MCVs hold 300 rows
+        // CASE WHEN a single-bucket histogram is built THEN the bucket spans the given bounds, carries the
+        // 700 rows left outside the MCVs, and spreads them evenly over the 10 other values, so 70 sit on the
+        // upper bound END
 
         final Map<String, Long> mcv = Map.of("a", 100L, "b", 200L);
         final double lowerBound = 100.0;
         final double upperBound = 200.0;
         final double totalRows = 1000;
+        final double distinctValues = 12;
         final long expectedNonMcvRows = 700L;
-        final long expectedUpperRepeats = 0L;
+        final long expectedUpperRepeats = 70L;
 
         final List<Bucket> actualBuckets =
-                Histogram.ofSingleBucket(lowerBound, upperBound, totalRows, mcv).getBuckets();
+                Histogram.ofSingleBucket(lowerBound, upperBound, totalRows, distinctValues, mcv).getBuckets();
 
         Assertions.assertEquals(1, actualBuckets.size());
         Assertions.assertEquals(lowerBound, actualBuckets.get(0).getLower());
@@ -162,7 +164,7 @@ public class HistogramTest {
         final long expectedTotalRows = 1000L;
 
         final Histogram actualHistogram = Histogram.ofSingleBucket(
-                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, totalRows, mcv);
+                Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, totalRows, 10, mcv);
         final List<Bucket> actualBuckets = actualHistogram.getBuckets();
 
         Assertions.assertEquals(1, actualBuckets.size());
@@ -183,7 +185,7 @@ public class HistogramTest {
         final double totalRows = 1000;
         final long expectedTotalRows = 1000L;
 
-        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv);
+        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, 2, mcv);
 
         Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
         Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
@@ -200,10 +202,95 @@ public class HistogramTest {
         final double totalRows = 1000;
         final long expectedTotalRows = 1200L;
 
-        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv);
+        final Histogram actualHistogram = Histogram.ofSingleBucket(1.0, 2.0, totalRows, 2, mcv);
 
         Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
         Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
+    }
+
+    @Test
+    public void testSingleBucketRoundsUpperRepeatsUp() {
+        // Given 1000 rows over [1, 100] with 31 distinct values, of which 1 MCV holds 300 rows
+        // CASE WHEN the 700 non-MCV rows do not divide evenly over the 30 other values THEN the upper bound
+        // gets ceil(700 / 30) = 24 rows, matching how a bucket rounds its per-value row count END
+
+        final Map<String, Long> mcv = Map.of("a", 300L);
+        final double totalRows = 1000;
+        final double distinctValues = 31;
+        final long expectedUpperRepeats = 24L;
+
+        final Bucket actualBucket =
+                Histogram.ofSingleBucket(1.0, 100.0, totalRows, distinctValues, mcv).getBuckets().get(0);
+
+        Assertions.assertEquals(expectedUpperRepeats, actualBucket.getUpperRepeats());
+    }
+
+    @Test
+    public void testSingleBucketKeepsUpperRepeatsAboveZero() {
+        // Given 1000 rows over [1, 10000] with 5001 distinct values, of which 1 MCV holds 700 rows
+        // CASE WHEN the 300 non-MCV rows are fewer than the 5000 other values THEN the upper bound still
+        // gets 1 row, because 0 would make a join or filter on that value match nothing END
+
+        final Map<String, Long> mcv = Map.of("a", 700L);
+        final double totalRows = 1000;
+        final double distinctValues = 5001;
+        final long expectedUpperRepeats = 1L;
+
+        final Bucket actualBucket =
+                Histogram.ofSingleBucket(1.0, 10000.0, totalRows, distinctValues, mcv).getBuckets().get(0);
+
+        Assertions.assertEquals(expectedUpperRepeats, actualBucket.getUpperRepeats());
+    }
+
+    @Test
+    public void testSingleBucketWithUnknownDistinctValues() {
+        // Given 1000 rows over [1, 100] whose distinct value count is NaN, of which 1 MCV holds 300 rows
+        // CASE WHEN the distinct values are unknown THEN the upper bound gets 1 row, the least that keeps a
+        // lookup on it from matching nothing END
+
+        final Map<String, Long> mcv = Map.of("a", 300L);
+        final double totalRows = 1000;
+        final double distinctValues = Double.NaN;
+        final long expectedUpperRepeats = 1L;
+
+        final Bucket actualBucket =
+                Histogram.ofSingleBucket(1.0, 100.0, totalRows, distinctValues, mcv).getBuckets().get(0);
+
+        Assertions.assertEquals(expectedUpperRepeats, actualBucket.getUpperRepeats());
+    }
+
+    @Test
+    public void testSingleBucketWithDistinctValuesNotAboveMcvCount() {
+        // Given 1000 rows over [1, 100] reporting 2 distinct values, of which 2 MCVs hold 300 rows
+        // CASE WHEN the distinct values leave no value outside the MCVs THEN the 700 non-MCV rows are
+        // treated as one value, which all sit on the upper bound END
+
+        final Map<String, Long> mcv = Map.of("a", 100L, "b", 200L);
+        final double totalRows = 1000;
+        final double distinctValues = 2;
+        final long expectedUpperRepeats = 700L;
+
+        final Bucket actualBucket =
+                Histogram.ofSingleBucket(1.0, 100.0, totalRows, distinctValues, mcv).getBuckets().get(0);
+
+        Assertions.assertEquals(expectedUpperRepeats, actualBucket.getUpperRepeats());
+    }
+
+    @Test
+    public void testSingleBucketOverSinglePoint() {
+        // Given 1000 rows over [5, 5] with 40 distinct values, of which 1 MCV holds 300 rows
+        // CASE WHEN the bucket covers a single value THEN all 700 non-MCV rows sit on its upper bound,
+        // whatever the distinct values say END
+
+        final Map<String, Long> mcv = Map.of("a", 300L);
+        final double totalRows = 1000;
+        final double distinctValues = 40;
+        final long expectedUpperRepeats = 700L;
+
+        final Bucket actualBucket =
+                Histogram.ofSingleBucket(5.0, 5.0, totalRows, distinctValues, mcv).getBuckets().get(0);
+
+        Assertions.assertEquals(expectedUpperRepeats, actualBucket.getUpperRepeats());
     }
 
     @Test

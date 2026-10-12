@@ -113,6 +113,7 @@ public final class ConvertTzStatisticUtils {
                                                          ColumnStatistic childStats,
                                                          double minValue, double maxValue,
                                                          double rowCount,
+                                                         double distinctValues,
                                                          Optional<ConstantOperator> fromTz,
                                                          Optional<ConstantOperator> toTz) {
         Histogram hist = childStats == null ? null : childStats.getHistogram();
@@ -149,7 +150,7 @@ public final class ConvertTzStatisticUtils {
 
         // Exact per-key MCV transform; keep one covering bucket for the non-MCV mass
         // (same idea as HistogramStatisticsCollectJob.buildCollectSingleBucket in stats collection).
-        return Optional.of(Histogram.ofSingleBucket(minValue, maxValue, rowCount, newMcv));
+        return Optional.of(Histogram.ofSingleBucket(minValue, maxValue, rowCount, distinctValues, newMcv));
     }
 
 }

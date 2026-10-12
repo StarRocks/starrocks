@@ -41,7 +41,7 @@ public class Histogram {
     }
 
     public static Histogram ofSingleBucket(double minValue, double maxValue, double nonNullRowCount,
-                                          Map<String, Long> mcv) {
+                                          double distinctValues, Map<String, Long> mcv) {
         long mcvRows = mcv.values().stream().mapToLong(Long::longValue).sum();
         long nonMcvRows = Math.max(0L, Math.round(nonNullRowCount) - mcvRows);
         if (nonMcvRows == 0) {
@@ -51,8 +51,23 @@ public class Histogram {
             return new Histogram(List.of(
                     new Bucket(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, nonMcvRows, 0L)), mcv);
         }
-        long upperRepeats = minValue == maxValue ? nonMcvRows : 0L;
+        long upperRepeats = estimateUpperRepeats(minValue, maxValue, nonMcvRows, distinctValues, mcv.size());
         return new Histogram(List.of(new Bucket(minValue, maxValue, nonMcvRows, upperRepeats)), mcv);
+    }
+
+    // Nothing records how the non-MCV rows spread over the bucket, so assume they spread evenly over the distinct
+    // values outside the MCVs. Never estimate 0: the join and equality estimators trust upperRepeats, so a bucket
+    // claiming no row sits on its upper bound turns a lookup on that value into a zero-row match.
+    private static long estimateUpperRepeats(double minValue, double maxValue, long nonMcvRows,
+                                             double distinctValues, int mcvCount) {
+        if (minValue == maxValue) {
+            return nonMcvRows;
+        }
+        if (!Double.isFinite(distinctValues)) {
+            return 1L;
+        }
+        double nonMcvDistinctValues = Math.max(1, distinctValues - mcvCount);
+        return Math.max(1L, (long) Math.ceil(nonMcvRows / nonMcvDistinctValues));
     }
 
     public long getTotalRows() {
