@@ -209,4 +209,23 @@ public class WebUtils {
         }
         return sanitized.toString();
     }
+
+    /**
+     * {@link #sanitizeHttpReqUri(String)} for a log line. If the uri cannot be parsed, only its path is returned,
+     * since the query may hold a credential.
+     */
+    public static String sanitizeHttpReqUriForLog(String uri) {
+        try {
+            return sanitizeHttpReqUri(uri);
+        } catch (URISyntaxException e) {
+            // Not e.getMessage(): it quotes the whole input.
+            return hideHttpReqQuery(uri) + " (failed to sanitize uri: " + e.getReason() + ")";
+        }
+    }
+
+    // The uri with its query, if any, replaced, for when it cannot be sanitized.
+    public static String hideHttpReqQuery(String uri) {
+        int queryStart = uri.indexOf('?');
+        return queryStart < 0 ? uri : uri.substring(0, queryStart) + "?<query not shown>";
+    }
 }
