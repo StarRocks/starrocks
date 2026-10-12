@@ -395,10 +395,10 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
 }
 
-// COUNT(c1) rewrite: the placeholder `___count___c1` (slot 1) carries the non-null count of c1 (slot 0).
+// COUNT(col1) rewrite: the placeholder `___count___col1` (slot 1) carries the non-null count of col1 (slot 0).
 static SlotDesc parquet_count_column_descs[] = {
-        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-        {"___count___c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+        {"___count___col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
         {""}};
 
 TEST_F(HdfsScannerTest, TestParquetCountColumnFromNullCounts) {
@@ -466,6 +466,10 @@ TEST_F(HdfsScannerTest, TestParquetCountColumnReadsFileWithoutNullCounts) {
     ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
     ASSERT_OK(scanner->get_next(_runtime_state, &chunk));
     ASSERT_EQ(4, chunk->num_rows());
+    const auto& counted = chunk->get_column_by_slot_id(0);
+    for (size_t i = 0; i < counted->size(); i++) {
+        EXPECT_EQ(static_cast<int32_t>(i + 1), counted->get(i).get_int32());
+    }
     const auto& placeholder = chunk->get_column_by_slot_id(1);
     ASSERT_EQ(4, placeholder->size());
     for (size_t i = 0; i < placeholder->size(); i++) {
