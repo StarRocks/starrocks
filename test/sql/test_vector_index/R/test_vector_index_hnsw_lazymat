@@ -30,17 +30,25 @@ select id, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
 from lm_hnsw
 order by d, id limit 3;
 -- result:
+1	0.0
+2	5.0
+3	20.0
 -- !result
 select id, v, approx_l2_distance(v, [3, 3, 3, 3, 3]) as d
 from lm_hnsw
 order by d, id limit 2;
 -- result:
+3	[3,3,3,3,3]	0.0
+2	[2,2,2,2,2]	5.0
 -- !result
 select id, array_length(v) as len, approx_l2_distance(v, [1, 1, 1, 1, 1]) as d
 from lm_hnsw
 where array_length(v) = 5
 order by d, id limit 3;
 -- result:
+1	5	0.0
+2	5	5.0
+3	5	20.0
 -- !result
 drop table lm_hnsw;
 -- result:
@@ -72,6 +80,8 @@ select id, approx_l2_distance(v, [1, 1, 1, 1]) as d
 from lm_ivfpq
 order by d, id limit 2;
 -- result:
+1	0.0
+2	4.0
 -- !result
 drop table lm_ivfpq;
 -- result:
