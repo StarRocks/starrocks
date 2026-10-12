@@ -111,21 +111,6 @@ public class ConfigBase {
         return value;
     }
 
-    // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
-    // not masked.
-    public static String maskIfSensitive(String key, String value) {
-        if (configFields == null || Strings.isNullOrEmpty(value)) {
-            return value;
-        }
-        for (Field f : configFields) {
-            ConfField anno = f.getAnnotation(ConfField.class);
-            if (anno != null && (f.getName().equals(key) || Arrays.asList(anno.aliases()).contains(key))) {
-                return maskIfSensitive(anno, value);
-            }
-        }
-        return value;
-    }
-
     protected Properties props;
     private static boolean isPersisted = false;
     private static String configPath;
@@ -516,7 +501,8 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, parsedConfigValue.confVal, userIdentity);
+                appendPersistedProperties(key, field.getAnnotation(ConfField.class), parsedConfigValue.confVal,
+                        userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
@@ -531,7 +517,8 @@ public class ConfigBase {
         LOG.info("set config {} to {}", key, maskIfSensitive(field.getAnnotation(ConfField.class), value));
     }
 
-    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+    private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)
+            throws IOException {
         Properties props = new Properties();
         Path path = Paths.get(configPath);
         List<String> lines = Files.readAllLines(path);
@@ -544,11 +531,11 @@ public class ConfigBase {
         // but the comments pile up, and would otherwise keep every old credential in the file.
         String comment;
         if (StringUtils.isEmpty(oldValue)) {
-            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(key, value),
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         } else {
             comment = String.format("# The user %s changed %s to %s at %s", userIdentity,
-                    maskIfSensitive(key, oldValue), maskIfSensitive(key, value),
+                    maskIfSensitive(anno, oldValue), maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 

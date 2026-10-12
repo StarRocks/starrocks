@@ -331,17 +331,6 @@ public class ConfigTest {
     }
 
     @Test
-    public void testMaskIfSensitiveByKey() throws Exception {
-        Assertions.assertEquals(CredentialMask.LONG,
-                ConfigBase.maskIfSensitive("authentication_ldap_simple_bind_root_pwd", "FakeLdapPwd"));
-        // Any credential config is masked, mutable or not.
-        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("aws_s3_secret_key", "FakeS3Secret"));
-        Assertions.assertEquals("", ConfigBase.maskIfSensitive("aws_s3_secret_key", ""));
-        Assertions.assertEquals("97", ConfigBase.maskIfSensitive("adaptive_choose_instances_threshold", "97"));
-        Assertions.assertEquals("v", ConfigBase.maskIfSensitive("no_such_config", "v"));
-    }
-
-    @Test
     public void testCredentialConfigsAreSensitive() throws Exception {
         String[] credentials = {
                 "authentication_ldap_simple_ssl_conn_trust_store_pwd",
