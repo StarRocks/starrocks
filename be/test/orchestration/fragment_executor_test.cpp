@@ -14,10 +14,11 @@
 
 #include "orchestration/fragment_executor.h"
 
-#include <gtest/gtest.h>
-
 #include <stdexcept>
 #include <thread>
+
+// Third-party headers.
+#include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
 #include "common/config_exec_fwd.h"
