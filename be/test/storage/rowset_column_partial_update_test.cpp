@@ -1626,6 +1626,20 @@ TEST_P(RowsetColumnPartialUpdateTest, test_dcg_file_size) {
 }
 
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) {
+    const int64_t old_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
+    const bool old_size_tiered = config::enable_pk_size_tiered_compaction_strategy;
+    const bool old_lazy = config::enable_lazy_delta_column_compaction;
+    const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
+    config::max_update_compaction_num_level_minus_one_rowsets = 4;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    config::enable_lazy_delta_column_compaction = true;
+    config::update_compaction_per_tablet_min_interval_seconds = 86400;
+    DeferOp restore([&]() {
+        config::max_update_compaction_num_level_minus_one_rowsets = old_batch_size;
+        config::enable_pk_size_tiered_compaction_strategy = old_size_tiered;
+        config::enable_lazy_delta_column_compaction = old_lazy;
+        config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
+    });
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
@@ -1660,15 +1674,15 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) 
     ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
-    // trigger size tiered compaction
-    config::enable_pk_size_tiered_compaction_strategy = true;
-    ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
-    // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
-        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
-    }));
-    // there will be two rowsets
-    ASSERT_TRUE(tablet->updates()->num_rowsets() == 2);
+    ASSERT_EQ(11, tablet->updates()->num_rowsets());
+    for (size_t expected_count : {size_t{8}, size_t{5}, size_t{2}}) {
+        ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        ASSERT_EQ(expected_count, tablet->updates()->num_rowsets());
+        ASSERT_EQ(version, tablet->updates()->max_version());
+        ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
+        }));
+    }
 }
 
 // Test SegmentMetaCollecter with DCG (Delta Column Group) to improve code coverage
