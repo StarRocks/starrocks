@@ -37,12 +37,14 @@ package com.starrocks.http;
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.path.PathTrie;
-import org.jetbrains.annotations.NotNull;
+import io.netty.handler.codec.http.QueryStringDecoder;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.nio.charset.Charset;
-import java.util.HashMap;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -175,7 +177,11 @@ public class WebUtils {
     /**
      * This method sanitizes the input URI by replacing the values of certain query parameters with "*".
      * The parameters to be sanitized are listed in `SANITIZED_HTTP_PARAMS`.
-     * If these parameters are not present in the URI, the method returns the original URI.
+     * <p>
+     * The query is parsed the same way as {@link BaseRequest} parses it for the actions, and rebuilt from the parsed
+     * parameters: a value an action reads as a sanitized parameter is always masked, however the query is written
+     * (e.g. with ';' as a separator, or an escaped '&' in a value), and what is not parsed as a parameter is left
+     * out. If the URI has no query, it is returned as is.
      *
      * @param uri The input URI to be sanitized.
      * @return The sanitized URI with the values of certain query parameters replaced with "*".
@@ -183,36 +189,24 @@ public class WebUtils {
      */
     public static String sanitizeHttpReqUri(String uri) throws URISyntaxException {
         URI inputUri = new URI(uri);
-        Map<String, String> queryMap = getQueryMap(inputUri);
-
-        StringBuilder sanitizedQuery = new StringBuilder();
-        for (Map.Entry<String, String> entry : queryMap.entrySet()) {
-            if (sanitizedQuery.length() > 0) {
-                sanitizedQuery.append('&');
-            }
-            sanitizedQuery.append(entry.getKey()).append('=').append(entry.getValue());
+        if (inputUri.getRawQuery() == null) {
+            return uri;
         }
 
-        return new URI(inputUri.getScheme(), inputUri.getAuthority(), inputUri.getPath(),
-                sanitizedQuery.toString(), inputUri.getFragment()).toString();
-    }
-
-    @NotNull
-    private static Map<String, String> getQueryMap(URI inputUri) {
-        // Initialize queryPairs array to avoid NullPointerException
-        String query = inputUri.getQuery();
-        String[] queryPairs = query != null ? query.split("&") : new String[0];
-        Map<String, String> queryMap = new HashMap<>();
-
-        for (String pair : queryPairs) {
-            int idx = pair.indexOf("=");
-            String key = idx > 0 ? pair.substring(0, idx) : pair;
-            String value = idx > 0 && pair.length() > idx + 1 ? pair.substring(idx + 1) : null;
-            if (SANITIZED_HTTP_PARAMS.contains(key)) {
-                value = "*";
+        QueryStringDecoder decoder = BaseRequest.newQueryStringDecoder(uri);
+        StringBuilder sanitized = new StringBuilder(decoder.rawPath());
+        char separator = '?';
+        for (Map.Entry<String, List<String>> param : decoder.parameters().entrySet()) {
+            String key = param.getKey();
+            for (String value : param.getValue()) {
+                if (SANITIZED_HTTP_PARAMS.contains(key)) {
+                    value = "*";
+                }
+                sanitized.append(separator).append(URLEncoder.encode(key, StandardCharsets.UTF_8))
+                        .append('=').append(URLEncoder.encode(value, StandardCharsets.UTF_8));
+                separator = '&';
             }
-            queryMap.put(key, value);
         }
-        return queryMap;
+        return sanitized.toString();
     }
 }
