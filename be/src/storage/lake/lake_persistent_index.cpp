@@ -425,21 +425,15 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
     return Status::OK();
 }
 
-Status LakePersistentIndex::parallel_get(size_t n, const Slice* keys, IndexValue* values) {
+Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, IndexValue* values) {
     const size_t rows_per_task = get_pk_index_parallel_execution_min_rows();
     if (n <= rows_per_task || (_sstable_filesets.empty() && _inactive_memtables.empty())) {
         return get(n, keys, values);
     }
 
-    // load_dels may call this from a pk_index_execution_thread_pool worker. Submitting back to that
-    // pool and waiting would deadlock when all of its workers are loading del files. Use the segment
-    // I/O pool instead; each task only performs synchronous reads and never waits on the PK pool.
-    auto token =
-            RuntimeEnv::GetInstance()->load_segment_thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-    ParallelTaskRunner runner(token.get());
     for (size_t offset = 0; offset < n;) {
         const size_t count = std::min(rows_per_task, n - offset);
-        runner.run([this, keys, values, offset, count]() {
+        runner->run([this, keys, values, offset, count]() {
             TRACE_COUNTER_INCREMENT("rebuild_index_del_get_cnt", 1);
             // Reads share the index but write disjoint output ranges. Keep the newest-to-oldest
             // memtable/SST lookup order within every batch, including tombstones.
@@ -447,8 +441,7 @@ Status LakePersistentIndex::parallel_get(size_t n, const Slice* keys, IndexValue
         });
         offset += count;
     }
-    TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_get_wait_us");
-    return runner.join();
+    return Status::OK();
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
@@ -965,6 +958,9 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
 
     const int num_del_files = rowset->metadata().del_files_size();
+    if (num_del_files == 0) {
+        return Status::OK();
+    }
 
     // Read+deserialize one delete file into a fresh pk column. Pure I/O — safe to run off-thread.
     auto read_one = [&](int del_idx) -> StatusOr<MutableColumnPtr> {
@@ -986,9 +982,19 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // A decoded del file ready to replay: key Slices (borrowing from the owned pk column) + per-key
     // skip filter.
     struct DecodedDel {
-        MutableColumnPtr pkc;     // owns the key bytes; keys/filter borrow from it
-        Buffer<Slice> keys;       // Slices into pkc
-        std::vector<bool> filter; // true = skip this delete (too old)
+        MutableColumnPtr pkc;                 // owns the key bytes; keys/filter borrow from it
+        Buffer<Slice> keys;                   // Slices into pkc
+        std::vector<bool> filter;             // true = skip this delete (too old)
+        std::vector<IndexValue> found_values; // owned until all deferred lookups finish
+        uint32_t too_old = 0;
+    };
+
+    auto get_token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
+    ParallelTaskRunner get_runner(get_token.get());
+    auto join_get = [&]() {
+        TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_get_wait_us");
+        return get_runner.join();
     };
 
     // Extract key Slices from a decoded pk column (binary: contiguous Slices; fixed: _key_size stride).
@@ -1011,8 +1017,8 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         return Status::OK();
     };
 
-    // Phase-1 work (parallel-safe): read + decode the del file, extract keys, and build the skip
-    // filter. A delete's rssid is `origin_rowset_id + op_offset`; the filter drops keys whose current
+    // Phase-1 work (parallel-safe): read + decode the del file, extract keys, and submit lookups for
+    // the skip filter. A delete's rssid is `origin_rowset_id + op_offset`; the filter drops keys whose current
     // index entry is NEWER than the delete (rss_rowid > that), i.e. keys upserted by a later segment.
     // This is what preserves the in-transaction upsert/delete order during rebuild: the segment replay
     // (call order) overwrites by call order, so without this filter a delete applied after a later
@@ -1039,18 +1045,25 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
         const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
         if (need_filter) {
-            std::vector<IndexValue> found_values(out->keys.size(), IndexValue(NullIndexValue));
-            RETURN_IF_ERROR(parallel_get(out->keys.size(), out->keys.data(), found_values.data()));
+            out->found_values.assign(out->keys.size(), IndexValue(NullIndexValue));
             // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
             // newer (upserted by a later segment, or a newer rowset) are skipped.
-            const uint32_t too_old = del.origin_rowset_id() + op_offset;
-            for (size_t i = 0; i < out->keys.size(); i++) {
-                if (found_values[i] != IndexValue(NullIndexValue) && found_values[i].get_rssid() > too_old) {
-                    out->filter[i] = true;
-                }
-            }
+            out->too_old = del.origin_rowset_id() + op_offset;
+            // Never join here: load_one and these lookups share the PK execution pool.
+            return parallel_get(&get_runner, out->keys.size(), out->keys.data(), out->found_values.data());
         }
         return Status::OK();
+    };
+
+    // Build the filter only after every lookup finishes. vector<bool> packs adjacent flags into
+    // shared words, so even disjoint lookup batches must not write it concurrently.
+    auto filter_one = [](DecodedDel* d) {
+        for (size_t i = 0; i < d->found_values.size(); ++i) {
+            if (d->found_values[i] != IndexValue(NullIndexValue) && d->found_values[i].get_rssid() > d->too_old) {
+                d->filter[i] = true;
+            }
+        }
+        std::vector<IndexValue>().swap(d->found_values);
     };
 
     // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
@@ -1081,17 +1094,21 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
             TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
             DecodedDel d;
-            RETURN_IF_ERROR(load_one(del_idx, &d));
+            auto load_status = load_one(del_idx, &d);
+            auto get_status = join_get();
+            RETURN_IF_ERROR(load_status);
+            RETURN_IF_ERROR(get_status);
+            filter_one(&d);
             RETURN_IF_ERROR(erase_one(del_idx, d));
         }
         return Status::OK();
     }
 
     // Phase 1 (parallel): load all del files — read+decode bytes, extract keys, and (for non-origin
-    // files only) run the index get() + build the skip filter. Both the OSS byte reads and the
-    // non-origin SST get()s — the cold-start cost — overlap here. The del-file tasks use
-    // pk_index_execution_thread_pool; parallel_get fans out large lookups on load_segment_thread_pool
-    // so no task submits back to the pool it is waiting in. Memory tradeoff: holds all `num_del_files`
+    // files only) submit the index get(). Both the OSS byte reads and the non-origin SST get()s
+    // overlap here on pk_index_execution_thread_pool. load_one only submits lookups and returns;
+    // the caller joins the load runner before joining the lookup runner, so no pool worker waits
+    // for work queued to its own pool. Memory tradeoff: holds all `num_del_files`
     // decoded columns concurrently until Phase 2 consumes them — guarded above by the update-memtracker
     // pressure check.
     //
@@ -1111,10 +1128,15 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // Each task writes only its own decoded[] element.
         runner.run([&decoded, del_idx, &load_one]() { return load_one(del_idx, &decoded[del_idx]); });
     }
-    RETURN_IF_ERROR(runner.join());
+    auto load_status = runner.join();
+    // Drain lookups even if a load failed, before destroying their borrowed keys/owned results.
+    auto get_status = join_get();
+    RETURN_IF_ERROR(load_status);
+    RETURN_IF_ERROR(get_status);
 
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
+        filter_one(&decoded[del_idx]);
         RETURN_IF_ERROR(erase_one(del_idx, decoded[del_idx]));
     }
     return Status::OK();
