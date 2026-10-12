@@ -206,6 +206,7 @@ void StarOSWorker::insert_borrowed_shard_info_locked(ShardId id, BorrowedShardIn
     // so a refresh or filesystem replacement does not evict other entries that still fit.
     _borrowed_cache->erase(CacheKey(key));
     StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries.increment(1);
+    // The LRU saves this charge in its handle and uses the saved value on eviction/release.
     _borrowed_cache->release(_borrowed_cache->insert(CacheKey(key), value, charge, borrowed_value_deleter));
 }
 

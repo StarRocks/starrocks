@@ -726,6 +726,29 @@ TEST_F(StarOSWorkerTest, borrowed_shard_info_dynamic_fields_trigger_capacity_evi
             // Refreshing a large value still counts as one held entry.
             ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
             EXPECT_EQ(base + 1, count.value());
+            // A reader can retain the old large value while a smaller replacement is inserted.
+            // Releasing that reader must subtract the old saved charge, not the new value's size.
+            const auto old_charge = borrower._borrowed_cache->get_memory_usage();
+            size_t replacement_charge = 0;
+            {
+                const auto key = std::to_string(second_id);
+                auto* handle = borrower._borrowed_cache->lookup(CacheKey(key));
+                ASSERT_NE(nullptr, handle);
+                DeferOp release([&] { borrower._borrowed_cache->release(handle); });
+                ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+                const auto total_charge = borrower._borrowed_cache->get_memory_usage();
+                ASSERT_GT(total_charge, old_charge);
+                replacement_charge = total_charge - old_charge;
+                EXPECT_EQ(base + 2, count.value());
+            }
+            EXPECT_EQ(replacement_charge, borrower._borrowed_cache->get_memory_usage());
+            EXPECT_EQ(base + 1, count.value());
+            borrower._borrowed_cache->erase(CacheKey(std::to_string(second_id)));
+            EXPECT_EQ(0, borrower._borrowed_cache->get_memory_usage());
+            EXPECT_EQ(base, count.value());
+            // Leave a large value for the worker destructor to reclaim as well.
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_EQ(base + 1, count.value());
         }
         EXPECT_EQ(base, count.value());
     }
