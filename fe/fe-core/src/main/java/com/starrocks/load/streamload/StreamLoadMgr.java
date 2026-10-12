@@ -699,10 +699,21 @@ public class StreamLoadMgr implements MemoryTrackable {
     public AbstractStreamLoadTask getTaskById(long id) {
         readLock();
         try {
-            List<AbstractStreamLoadTask> taskList =
-                    idToStreamLoadTask.values().stream().filter(streamLoadTask -> id == streamLoadTask.getId())
-                            .toList();
-            return taskList.isEmpty() ? null : taskList.get(0);
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (id == task.getId()) {
+                    return task;
+                }
+                // Multi-table load views and their tracking SQL expose each sub-task's id.
+                // Only the parent is registered in this manager, so also resolve its children.
+                if (task instanceof StreamLoadMultiStmtTask multiTask) {
+                    for (StreamLoadTask child : multiTask.getTasks()) {
+                        if (id == child.getId()) {
+                            return child;
+                        }
+                    }
+                }
+            }
+            return null;
         } finally {
             readUnlock();
         }
