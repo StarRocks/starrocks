@@ -4113,7 +4113,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_empty_rowset_batches) {
             rowsets.clear();
             ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(12, &rowsets).ok());
             ASSERT_GT(previous_count, rowsets.size());
-            ASSERT_LE(previous_count - rowsets.size(), effective_batch_size + std::max<int64_t>(1, batch_size) - 1);
+            ASSERT_LE(previous_count - rowsets.size(), effective_batch_size + effective_batch_size - 1);
             size_t empty_count = 0;
             for (const auto& rowset : rowsets) {
                 empty_count += rowset->num_rows() == 0;
