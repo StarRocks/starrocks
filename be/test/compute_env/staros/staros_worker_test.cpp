@@ -692,6 +692,9 @@ TEST_F(StarOSWorkerTest, borrowed_shard_info_dynamic_fields_trigger_capacity_evi
             ASSERT_TRUE(owner.add_shard(info).ok());
             auto first = owner.export_shard_info(first_id);
             ASSERT_TRUE(first.ok()) << first.status();
+            ASSERT_TRUE(owner.add_shard(make_s3_shard_info(second_id, "s3://test_bucket/db/tbl/p82", 1)).ok());
+            auto small = owner.export_shard_info(second_id);
+            ASSERT_TRUE(small.ok()) << small.status();
             info.id = second_id;
             ASSERT_TRUE(owner.add_shard(info).ok());
             auto second = owner.export_shard_info(second_id);
@@ -702,10 +705,20 @@ TEST_F(StarOSWorkerTest, borrowed_shard_info_dynamic_fields_trigger_capacity_evi
             ASSERT_TRUE(borrower.borrow_shard_info(*first).ok());
             ASSERT_TRUE(borrower.has_borrowed_shard_info(first_id));
             EXPECT_EQ(base + 1, count.value());
+            ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+            EXPECT_EQ(base + 2, count.value());
+            // Refreshing the large entry must not evict the small neighbor: both still fit.
+            ASSERT_TRUE(borrower.borrow_shard_info(*first).ok());
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 2, count.value());
             // Building a filesystem replaces the value and must retain its dynamic-field charge.
             ASSERT_TRUE(borrower.get_shard_filesystem(first_id, {}).ok());
-            EXPECT_EQ(base + 1, count.value());
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 2, count.value());
             EXPECT_GE(borrower._borrowed_cache->get_memory_usage(), 256 * 1024);
+            // Growing the small neighbor into another large value does require eviction.
             ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
             EXPECT_FALSE(borrower.has_borrowed_shard_info(first_id));
             EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));

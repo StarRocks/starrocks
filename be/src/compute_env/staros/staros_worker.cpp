@@ -201,9 +201,12 @@ void StarOSWorker::insert_borrowed_shard_info_locked(ShardId id, BorrowedShardIn
     for (const auto& replica : info.replicas) {
         charge += replica.SpaceUsedLong() - sizeof(replica);
     }
+    const auto key = borrowed_cache_key(id);
+    // LRU insertion evicts before replacing a same-key value. Remove the old charge first
+    // so a refresh or filesystem replacement does not evict other entries that still fit.
+    _borrowed_cache->erase(CacheKey(key));
     StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries.increment(1);
-    _borrowed_cache->release(
-            _borrowed_cache->insert(CacheKey(borrowed_cache_key(id)), value, charge, borrowed_value_deleter));
+    _borrowed_cache->release(_borrowed_cache->insert(CacheKey(key), value, charge, borrowed_value_deleter));
 }
 
 absl::Status StarOSWorker::borrow_shard_info(std::string_view serialized) {
