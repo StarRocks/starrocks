@@ -26,11 +26,19 @@ public final class TopNIndexCondition extends IndexCondition {
     private final long limit;
     private final long offset;
     private final boolean ascending;
+    private final ScalarOperator partitionPredicate;
 
     public TopNIndexCondition(ScalarOperator predicate, ScalarOperator scoreExpression,
                               Map<String, ConnectorIndexType> requiredIndexes,
                               long limit, long offset, boolean ascending) {
+        this(predicate, scoreExpression, requiredIndexes, limit, offset, ascending, null);
+    }
+
+    public TopNIndexCondition(ScalarOperator predicate, ScalarOperator scoreExpression,
+                              Map<String, ConnectorIndexType> requiredIndexes,
+                              long limit, long offset, boolean ascending, ScalarOperator partitionPredicate) {
         super(predicate, requireIndexes(requiredIndexes));
+        this.partitionPredicate = partitionPredicate;
         this.scoreExpression = Objects.requireNonNull(scoreExpression, "scoreExpression is null");
         if (limit <= 0 || offset < 0 || limit > Integer.MAX_VALUE - offset) {
             throw new IllegalArgumentException("TopN candidate count must be between 1 and Integer.MAX_VALUE");
@@ -53,6 +61,10 @@ public final class TopNIndexCondition extends IndexCondition {
         return scoreExpression;
     }
 
+    public ScalarOperator getPartitionPredicate() {
+        return partitionPredicate;
+    }
+
     public long getLimit() {
         return limit;
     }
@@ -73,6 +85,9 @@ public final class TopNIndexCondition extends IndexCondition {
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet columns = super.getUsedColumns();
         columns.union(scoreExpression.getUsedColumns());
+        if (partitionPredicate != null) {
+            columns.union(partitionPredicate.getUsedColumns());
+        }
         return columns;
     }
 
@@ -89,17 +104,18 @@ public final class TopNIndexCondition extends IndexCondition {
         }
         TopNIndexCondition that = (TopNIndexCondition) o;
         return limit == that.limit && offset == that.offset && ascending == that.ascending
-                && Objects.equals(scoreExpression, that.scoreExpression);
+                && Objects.equals(scoreExpression, that.scoreExpression)
+                && Objects.equals(partitionPredicate, that.partitionPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), scoreExpression, limit, offset, ascending);
+        return Objects.hash(super.hashCode(), scoreExpression, limit, offset, ascending, partitionPredicate);
     }
 
     @Override
     public String toString() {
         return super.toString() + ", score=" + scoreExpression + ", limit=" + limit
-                + ", offset=" + offset + ", ascending=" + ascending;
+                + ", offset=" + offset + ", ascending=" + ascending + ", partition=" + partitionPredicate;
     }
 }

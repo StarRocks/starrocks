@@ -26,6 +26,14 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
 
+### 实验性带过滤向量 Top-N
+
+设置 `paimon_global_index_scan_stage = 2` 后，受支持的向量 Top-N 可以在 ANN 检索前执行 BTree 谓词与简单分区谓词。分区列不需要额外的标量索引。StarRocks 在同一快照上将标量位图与选中分区的 row-ID 范围取交，再对各索引分片的候选进行全局排序，并保留原 SQL 的排序、limit 和 offset。
+
+此路径要求 Paimon 表为开启 row tracking 和 data evolution 的追加表，向量数组及其元素均不允许 NULL，且所有所需索引完整覆盖查询快照。排序只支持单个升序 `approx_l2_distance`，或降序 `approx_cosine_similarity`/`approx_inner_product`。标量过滤必须能由 BTree 索引完整执行；简单分区列比较、`IN` 和 NULL 判断可根据分区元数据求值。首版分区支持限定为布尔、整数和字符串列。
+
+存在不支持的残余表达式、可空向量、排名窗口、增量扫描、索引缺失或覆盖不完整、快照 schema 不匹配，以及索引执行失败时，使用常规 Paimon 扫描规划。带过滤 ANN 不依靠先取 K 个候选、再补做遗漏过滤来实现；原 SQL 谓词仍保留重检。阶段 `0`、`1` 的行为不变；全文与混合检索不在此能力范围内。
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |

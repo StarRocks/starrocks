@@ -329,6 +329,88 @@ TEST(PaimonGlobalIndexEvaluatorTest, ScalesLuminaSearchListForLargeTopN) {
     EXPECT_EQ("1800", reader->last_vector_search()->options.at("lumina.diskann.search.list_size"));
 }
 
+TEST(PaimonGlobalIndexEvaluatorTest, FilteredSearchDetachesBitmapAndUsesGlobalPartitionRowIds) {
+    std::shared_ptr<paimon::VectorSearch> retained_search;
+    std::weak_ptr<paimon::GlobalIndexResult> original;
+    int materializations = 0;
+    {
+        auto scalar_result =
+                std::make_shared<paimon::BitmapGlobalIndexResult>([&]() -> paimon::Result<paimon::RoaringBitmap64> {
+                    ++materializations;
+                    return paimon::RoaringBitmap64::From(std::vector<int64_t>{101, 102, 150, 201});
+                });
+        original = scalar_result;
+        auto scalar_reader = std::make_shared<FakeGlobalIndexReader>(scalar_result);
+        auto vector_reader = std::make_shared<FakeGlobalIndexReader>(nullptr);
+        vector_reader->set_vector_result(scored_result({101, 201}, {0.1f, 0.2f}));
+        PaimonGlobalIndexEvaluator evaluator(
+                [scalar_reader,
+                 vector_reader](std::string_view column) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                    return column == "id" ? scalar_reader : vector_reader;
+                });
+        auto predicate =
+                parse_json(R"({"o":"b","b":"EQ","c":[{"o":"cr","t":"int","n":"id"},{"o":"co","t":"int","v":1}]})");
+        auto score = parse_json(
+                R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1}]}]})");
+        std::vector<paimon::Range> ranges = {{100, 110}, {200, 210}};
+        auto result = evaluator.evaluate_top_n(score, 4, &predicate, &ranges);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(1, materializations);
+        retained_search = vector_reader->last_vector_search();
+    }
+    EXPECT_TRUE(original.expired());
+    ASSERT_NE(nullptr, retained_search);
+    ASSERT_TRUE(retained_search->pre_filter);
+    EXPECT_TRUE(retained_search->pre_filter(101));
+    EXPECT_TRUE(retained_search->pre_filter(201));
+    EXPECT_FALSE(retained_search->pre_filter(1));   // Local IDs must never be used directly.
+    EXPECT_FALSE(retained_search->pre_filter(103)); // Selected partition, rejected scalar predicate.
+    EXPECT_FALSE(retained_search->pre_filter(150)); // Matching scalar, excluded partition.
+    EXPECT_FALSE(retained_search->pre_filter(-1));
+    EXPECT_EQ(1, materializations);
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, EmptyPrefiltersDoNotSearchAndErrorsFailClosed) {
+    int vector_reads = 0;
+    auto scalar = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [&](std::string_view column) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                if (column == "id") {
+                    return scalar;
+                }
+                ++vector_reads;
+                return Status::InternalError("ANN must not run");
+            });
+    auto predicate = parse_json(R"({"o":"b","b":"EQ","c":[{"o":"cr","t":"int","n":"id"},{"o":"co","t":"int","v":1}]})");
+    auto score = parse_json(
+            R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1}]}]})");
+    auto empty = evaluator.evaluate_top_n(score, 3, &predicate);
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    ASSERT_TRUE(empty.value()->IsEmpty().value());
+    EXPECT_EQ(0, vector_reads);
+    scalar->fail_with(paimon::Status::Invalid("unreadable scalar index"));
+    EXPECT_FALSE(evaluator.evaluate_top_n(score, 3, &predicate).ok());
+    std::vector<paimon::Range> no_partitions;
+    auto no_rows = evaluator.evaluate_top_n(score, 3, &predicate, &no_partitions);
+    ASSERT_TRUE(no_rows.ok()) << no_rows.status();
+    EXPECT_TRUE(no_rows.value()->IsEmpty().value());
+    EXPECT_EQ(0, vector_reads);
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, RejectsProviderIgnoringPartitionPrefilter) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(nullptr);
+    reader->set_vector_result(scored_result({150}, {0.01f}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    auto score = parse_json(
+            R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1}]}]})");
+    std::vector<paimon::Range> partitions = {{100, 110}, {200, 210}};
+    auto result = evaluator.evaluate_top_n(score, 1, nullptr, &partitions);
+    EXPECT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_internal_error());
+    EXPECT_FALSE(reader->last_vector_search()->pre_filter(150));
+}
+
 TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesVectorTopNWithLiteralFirst) {
     auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
     reader->set_vector_result(scored_result({3}, {0.8f}));

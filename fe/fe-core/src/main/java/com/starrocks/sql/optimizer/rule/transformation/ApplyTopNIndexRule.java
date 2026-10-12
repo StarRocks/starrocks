@@ -14,17 +14,21 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.index.IndexAnalyzer;
 import com.starrocks.connector.index.TopNIndexCondition;
+import com.starrocks.connector.paimon.PaimonTopNFilter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -35,9 +39,11 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -45,7 +51,7 @@ import java.util.function.Function;
  *
  * <p>This rule deliberately keeps the original TopN, score expression, and projection. The
  * connector index only narrows the scan to a globally ranked candidate set; the original plan
- * recomputes scores and applies the final limit/offset. Filtered ANN is handled by a later PR.
+ * recomputes scores and applies the final limit/offset. Every filter must execute before ANN.
  */
 public class ApplyTopNIndexRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(ApplyTopNIndexRule.class);
@@ -70,7 +76,9 @@ public class ApplyTopNIndexRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalTopNOperator topN = (LogicalTopNOperator) input.getOp();
         LogicalScanOperator scan = (LogicalScanOperator) input.inputAt(0).getOp();
-        return scan.getIndexCondition() == null && scan.getPredicate() == null
+        return !(scan.getIndexCondition() instanceof TopNIndexCondition)
+                && topN.getTopNType() == TopNType.ROW_NUMBER
+                && (topN.getPartitionByColumns() == null || topN.getPartitionByColumns().isEmpty())
                 && topN.hasLimit() && topN.getLimit() > 0 && topN.getOffset() >= 0
                 && topN.getLimit() <= Integer.MAX_VALUE - topN.getOffset()
                 && topN.getOrderByElements().size() == 1 && scan.getProjection() != null;
@@ -94,19 +102,39 @@ public class ApplyTopNIndexRule extends TransformationRule {
             return List.of();
         }
 
-        IndexAnalyzer analyzer = new IndexAnalyzer(indexMetadata);
+        // paimon-cpp supports btree scalar indexes; bitmap discovery must not mask an available btree.
+        Map<String, Set<ConnectorIndexType>> executableIndexes = new LinkedHashMap<>();
+        indexMetadata.getColumnIndexes().forEach((column, types) -> {
+            Set<ConnectorIndexType> supported = new java.util.HashSet<>(types);
+            supported.retainAll(Set.of(ConnectorIndexType.RANGE, ConnectorIndexType.VECTOR));
+            if (!supported.isEmpty()) {
+                executableIndexes.put(column, supported);
+            }
+        });
+        IndexAnalyzer analyzer = new IndexAnalyzer(ConnectorIndexMetadata.of(executableIndexes));
         Optional<ColumnRefOperator> vectorColumn =
                 analyzer.getVectorTopNColumn(scoreExpression, ordering.isAscending());
         if (vectorColumn.isEmpty()) {
             return List.of();
         }
+        PaimonTopNFilter.Selection filter = PaimonTopNFilter.analyze(
+                (PaimonTable) scan.getTable(), scan.getPredicate(), analyzer);
+        if (filter == null) {
+            return List.of();
+        }
+        if ((filter.scalar() != null || filter.partition() != null)
+                && (!(scan.getTvrVersionRange() instanceof TvrTableSnapshot)
+                    || !PaimonTopNFilter.supportsFilteredVector((PaimonTable) scan.getTable(), vectorColumn.get().getName()))) {
+            return List.of();
+        }
+        Map<String, ConnectorIndexType> requiredIndexes = new LinkedHashMap<>(filter.indexes());
+        requiredIndexes.put(vectorColumn.get().getName(), ConnectorIndexType.VECTOR);
         // The projection may expose the vector score through a monotonic floating-point cast.
         // Keep that projection and the original TopN unchanged, but send the underlying call to
         // paimon-cpp because the VectorSearch protocol accepts the distance function itself.
         ScalarOperator indexScoreExpression = unwrapFloatingPointCast(scoreExpression);
-        TopNIndexCondition condition = new TopNIndexCondition(null, indexScoreExpression,
-                Map.of(vectorColumn.get().getName(), ConnectorIndexType.VECTOR),
-                topN.getLimit(), topN.getOffset(), ordering.isAscending());
+        TopNIndexCondition condition = new TopNIndexCondition(filter.scalar(), indexScoreExpression,
+                requiredIndexes, topN.getLimit(), topN.getOffset(), ordering.isAscending(), filter.partition());
         LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scan);
         LogicalScanOperator newScan = (LogicalScanOperator) builder.withOperator(scan)
                 .setIndexCondition(condition)

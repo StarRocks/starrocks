@@ -15,7 +15,9 @@
 package com.starrocks.connector.paimon;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.index.IndexCondition;
@@ -25,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorSerializer;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -32,6 +35,7 @@ import java.util.Map;
 public final class PaimonGlobalIndexRequest {
     public static final int PREDICATE_VERSION = 1;
     public static final int TOP_N_VERSION = 2;
+    public static final int FILTERED_TOP_N_VERSION = 3;
     private static final String TOP_N_KIND = "top_n";
     private static final Gson GSON = new Gson();
 
@@ -43,19 +47,30 @@ public final class PaimonGlobalIndexRequest {
     private Integer localLimit;
     private Boolean ascending;
     private Map<String, String> indexes;
+    private List<List<Long>> partitionRanges;
 
     private PaimonGlobalIndexRequest() {
     }
 
     public static PaimonGlobalIndexRequest create(long snapshotId, IndexCondition condition) {
+        return create(snapshotId, condition, null);
+    }
+
+    static PaimonGlobalIndexRequest create(long snapshotId, IndexCondition condition, List<List<Long>> partitionRanges) {
         PaimonGlobalIndexRequest request = new PaimonGlobalIndexRequest();
         request.snapshotId = snapshotId;
         if (condition instanceof TopNIndexCondition) {
             TopNIndexCondition topN = (TopNIndexCondition) condition;
-            if (topN.getPredicate() != null) {
-                throw new IllegalArgumentException("Filtered Paimon Vector TopN is not supported by protocol v2");
+            if ((topN.getPartitionPredicate() != null) != (partitionRanges != null)) {
+                throw new IllegalArgumentException("Partition TopN requires snapshot-bound partition ranges");
             }
-            request.version = TOP_N_VERSION;
+            request.version = topN.getPredicate() != null || partitionRanges != null
+                    ? FILTERED_TOP_N_VERSION : TOP_N_VERSION;
+            request.partitionRanges = partitionRanges;
+            if (topN.getPredicate() != null) {
+                request.predicate = GSON.toJsonTree(
+                        ScalarOperatorSerializer.toJson(topN.getPredicate())).getAsJsonObject();
+            }
             request.kind = TOP_N_KIND;
             request.scoreExpression = GSON.toJsonTree(
                     ScalarOperatorSerializer.toJson(topN.getScoreExpression())).getAsJsonObject();
@@ -74,6 +89,26 @@ public final class PaimonGlobalIndexRequest {
 
     public static PaimonGlobalIndexRequest parse(String json) {
         try {
+            JsonObject envelope = JsonParser.parseString(json).getAsJsonObject();
+            if (envelope.has("partitionRanges")) {
+                JsonElement ranges = envelope.get("partitionRanges");
+                if (!ranges.isJsonArray()) {
+                    throw new IllegalArgumentException("Invalid Paimon partition ranges");
+                }
+                for (JsonElement range : ranges.getAsJsonArray()) {
+                    if (!range.isJsonArray() || range.getAsJsonArray().size() != 2) {
+                        throw new IllegalArgumentException("Invalid Paimon partition row range");
+                    }
+                    for (JsonElement endpoint : range.getAsJsonArray()) {
+                        // Match BE IsInt64: do not let Gson coerce strings, decimals, or exponents to longs.
+                        if (!endpoint.isJsonPrimitive() || !endpoint.getAsJsonPrimitive().isNumber()
+                                || !endpoint.getAsString().matches("-?(0|[1-9][0-9]*)")) {
+                            throw new IllegalArgumentException("Invalid Paimon partition row ID");
+                        }
+                        Long.parseLong(endpoint.getAsString());
+                    }
+                }
+            }
             PaimonGlobalIndexRequest request = GSON.fromJson(json, PaimonGlobalIndexRequest.class);
             if (request == null || request.snapshotId < 0
                     || request.indexes == null || request.indexes.isEmpty()) {
@@ -82,16 +117,32 @@ public final class PaimonGlobalIndexRequest {
             Map<String, ConnectorIndexType> requiredIndexes = request.getRequiredIndexes();
             if (request.version == PREDICATE_VERSION) {
                 if (request.kind != null || request.predicate == null || request.scoreExpression != null
-                        || request.localLimit != null || request.ascending != null) {
+                        || request.localLimit != null || request.ascending != null || request.partitionRanges != null) {
                     throw new IllegalArgumentException("Invalid Paimon predicate request");
                 }
-            } else if (request.version == TOP_N_VERSION) {
-                if (!TOP_N_KIND.equals(request.kind) || request.predicate != null || request.scoreExpression == null
+            } else if (request.version == TOP_N_VERSION || request.version == FILTERED_TOP_N_VERSION) {
+                boolean filtered = request.version == FILTERED_TOP_N_VERSION;
+                if (!TOP_N_KIND.equals(request.kind) || request.scoreExpression == null
                         || request.localLimit == null || request.localLimit <= 0
-                        || request.ascending == null || requiredIndexes.size() != 1
-                        || !requiredIndexes.containsValue(ConnectorIndexType.VECTOR)
+                        || request.ascending == null
+                        || requiredIndexes.values().stream().filter(type -> type == ConnectorIndexType.VECTOR).count() != 1
+                        || requiredIndexes.values().stream().anyMatch(type -> type != ConnectorIndexType.VECTOR
+                                && type != ConnectorIndexType.RANGE)
+                        || (!filtered && (request.predicate != null || request.partitionRanges != null
+                                || requiredIndexes.size() != 1))
+                        || (filtered && request.predicate == null && request.partitionRanges == null)
                         || !isValidTopNScore(request.scoreExpression, request.ascending)) {
                     throw new IllegalArgumentException("Invalid Paimon Vector TopN request");
+                }
+                if (request.partitionRanges != null) {
+                    long previous = -1;
+                    for (List<Long> range : request.partitionRanges) {
+                        if (range == null || range.size() != 2 || range.get(0) == null || range.get(1) == null
+                                || range.get(0) <= previous || range.get(1) < range.get(0)) {
+                            throw new IllegalArgumentException("Invalid Paimon partition row range");
+                        }
+                        previous = range.get(1);
+                    }
                 }
             } else {
                 throw new IllegalArgumentException("Unsupported Paimon Global Index request version");
@@ -133,6 +184,10 @@ public final class PaimonGlobalIndexRequest {
 
     public JsonObject getPredicate() {
         return predicate;
+    }
+
+    public List<List<Long>> getPartitionRanges() {
+        return partitionRanges;
     }
 
     public JsonObject getScoreExpression() {

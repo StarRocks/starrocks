@@ -16,12 +16,14 @@
 
 #include <paimon/global_index/global_index_reader.h>
 #include <paimon/global_index/global_index_result.h>
+#include <paimon/utils/range.h>
 #include <rapidjson/document.h>
 
 #include <functional>
 #include <memory>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "common/statusor.h"
 
@@ -38,8 +40,9 @@ public:
     explicit PaimonGlobalIndexEvaluator(ReaderGetter reader_getter) : _reader_getter(std::move(reader_getter)) {}
 
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate(const rapidjson::Value& node) const;
-    StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate_top_n(const rapidjson::Value& score_expression,
-                                                                        int32_t limit) const;
+    StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate_top_n(
+            const rapidjson::Value& score_expression, int32_t limit, const rapidjson::Value* predicate = nullptr,
+            const std::vector<paimon::Range>* ranges = nullptr) const;
 
 private:
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_binary(const rapidjson::Value& node) const;

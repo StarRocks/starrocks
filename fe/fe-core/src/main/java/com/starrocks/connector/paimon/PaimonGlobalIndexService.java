@@ -20,6 +20,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.index.IndexTable;
+import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
@@ -65,7 +66,18 @@ public final class PaimonGlobalIndexService {
     }
 
     public PaimonGlobalIndexResult evaluate() {
-        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(snapshotId, condition);
+        List<List<Long>> partitionRanges = null;
+        if (condition instanceof TopNIndexCondition topN
+                && (topN.getPredicate() != null || topN.getPartitionPredicate() != null)) {
+            PaimonTopNFilter.validateFilteredSnapshot(table, snapshotId, topN);
+        }
+        if (condition instanceof TopNIndexCondition topN && topN.getPartitionPredicate() != null) {
+            partitionRanges = PaimonTopNFilter.partitionRanges(table, snapshotId, topN.getPartitionPredicate());
+            if (partitionRanges.isEmpty()) {
+                return new PaimonGlobalIndexResult(snapshotId, GlobalIndexResult.createEmpty());
+            }
+        }
+        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(snapshotId, condition, partitionRanges);
         int timeout = Math.max(1, SimpleExecutor.outerRemainingQueryTimeoutS());
         List<TResultBatch> batches = executor.execute(buildSql(request.toTransportString()), timeout);
 

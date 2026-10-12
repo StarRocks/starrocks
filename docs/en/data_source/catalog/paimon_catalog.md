@@ -26,6 +26,14 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
 
+### Experimental filtered vector Top-N
+
+With `paimon_global_index_scan_stage = 2`, a supported vector Top-N can apply BTree predicates and simple partition predicates before ANN search. Partition columns do not need a separate scalar index. StarRocks intersects the scalar bitmap with the selected partitions' row-ID ranges at the same snapshot, merges candidates across index shards, and retains the original SQL ordering, limit, and offset.
+
+This path requires a Paimon append-only table with row tracking and data evolution enabled, non-null vector arrays and elements, and complete snapshot coverage by every required index. It supports a single ascending `approx_l2_distance` ordering or descending `approx_cosine_similarity`/`approx_inner_product` ordering. Scalar filters must be fully supported by BTree indexes; simple partition column comparisons, `IN`, and null checks can be evaluated from partition metadata. The initial partition support is limited to boolean, integer, and string columns.
+
+Unsupported residual expressions, nullable vectors, ranking windows, incremental scans, missing or partial index coverage, schema mismatches, and index execution failures use regular Paimon scan planning. Filtered ANN does not rely on taking K candidates first and applying missing filters afterward; the original SQL predicates remain for rechecking. Stages `0` and `1` retain their existing behavior. Full-text and hybrid retrieval are outside this capability.
+
 ## Paimon to StarRocks data types
 
 | Paimon Type           | StarRocks Type              |

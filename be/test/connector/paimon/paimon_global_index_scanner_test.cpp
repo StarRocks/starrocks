@@ -371,10 +371,63 @@ TEST(PaimonGlobalIndexScannerTest, RejectsIncompleteAndUnsupportedProtocol) {
     EXPECT_TRUE(parse_request(incomplete).is_invalid_argument());
 
     auto unsupported = valid_scan_range();
-    unsupported.__set_protocol_version(3);
+    unsupported.__set_protocol_version(4);
     Status status = parse_request(unsupported);
     EXPECT_TRUE(status.is_invalid_argument());
-    EXPECT_NE(std::string::npos, status.message().find("protocol version 3"));
+    EXPECT_NE(std::string::npos, status.message().find("protocol version 4"));
+}
+
+TEST(PaimonGlobalIndexScannerTest, ValidatesFilteredV3PartitionRangesWithoutChangingV1OrV2) {
+    auto with_ranges = [](const std::string& ranges, int version) {
+        auto request = valid_top_n_scan_range();
+        request.__set_protocol_version(version);
+        request.query_json.replace(request.query_json.find("\"version\":2"), 11,
+                                   "\"version\":" + std::to_string(version));
+        request.query_json.insert(request.query_json.size() - 1, ",\"partitionRanges\":" + ranges);
+        return request;
+    };
+    for (const std::string& ranges : {"[]", "[[0,2],[8,9]]", "[[9223372036854775807,9223372036854775807]]"}) {
+        EXPECT_TRUE(parse_request(with_ranges(ranges, 3)).ok()) << ranges;
+        EXPECT_FALSE(parse_request(with_ranges(ranges, 2)).ok()) << ranges;
+    }
+    for (const std::string& ranges :
+         {"null", "{}", "[null]", "[[]]", "[[-1,1]]", "[[2,1]]", "[[1,2],[2,3]]", "[[3,4],[0,1]]", "[[1,null]]",
+          "[[1,2,3]]", "[[\"1\",2]]", "[[1.5,2]]", "[[1e0,2]]", "[[0,9223372036854775808]]"}) {
+        EXPECT_FALSE(parse_request(with_ranges(ranges, 3)).ok()) << ranges;
+    }
+    auto scalar = valid_scan_range();
+    scalar.query_json.insert(scalar.query_json.size() - 1, ",\"partitionRanges\":[]");
+    EXPECT_FALSE(parse_request(scalar).ok());
+}
+
+TEST(PaimonGlobalIndexScannerTest, ClipsPartitionRangesBeforeSearchingPhysicalShard) {
+    RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    runtime_state.init_mem_trackers(TUniqueId());
+    MemoryFileSystem file_system;
+    HdfsScannerContext scanner_ctx;
+    THdfsScanRange scan_range = valid_top_n_hdfs_scan_range();
+    auto& request = scan_range.paimon_global_index_scan_range;
+    request.__set_protocol_version(3);
+    request.query_json.replace(request.query_json.find("\"version\":2"), 11, "\"version\":3");
+    request.query_json.insert(request.query_json.size() - 1, ",\"partitionRanges\":[[0,12],[17,30]]");
+    PaimonGlobalIndexScanner scanner;
+    ASSERT_TRUE(init_scanner(&scanner, &runtime_state, &scanner_ctx, &scan_range, &file_system).ok());
+    ASSERT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse_request(&scanner).ok());
+    auto reader = std::make_shared<FakeGlobalIndexReader>(nullptr);
+    reader->set_vector_result(scored_result({12, 17}, {0.25f, 0.75f}));
+    PaimonGlobalIndexScannerTestAccessor::set_scan(&scanner, std::make_unique<FakeGlobalIndexScan>(reader));
+    auto result = PaimonGlobalIndexScannerTestAccessor::evaluate(&scanner, &runtime_state);
+    ASSERT_TRUE(result.ok()) << result.status();
+    const auto& filter = reader->last_vector_search()->pre_filter;
+    ASSERT_TRUE(filter);
+    EXPECT_FALSE(filter(9));
+    EXPECT_TRUE(filter(10));
+    EXPECT_TRUE(filter(12));
+    EXPECT_FALSE(filter(13));
+    EXPECT_FALSE(filter(16));
+    EXPECT_TRUE(filter(17));
+    EXPECT_TRUE(filter(19));
+    EXPECT_FALSE(filter(20));
 }
 
 TEST(PaimonGlobalIndexScannerTest, RejectsInvalidShardAndJson) {

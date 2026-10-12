@@ -15,6 +15,8 @@
 #include "connector/hive/paimon/paimon_global_index_evaluator.h"
 
 #include <fmt/format.h>
+#include <paimon/global_index/bitmap_global_index_result.h>
+#include <paimon/global_index/bitmap_scored_global_index_result.h>
 #include <paimon/predicate/literal.h>
 
 #include <algorithm>
@@ -198,7 +200,8 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
 }
 
 StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator::evaluate_top_n(
-        const rapidjson::Value& score_expression, int32_t limit) const {
+        const rapidjson::Value& score_expression, int32_t limit, const rapidjson::Value* predicate,
+        const std::vector<paimon::Range>* ranges) const {
     if (limit <= 0) {
         return invalid_node("Vector TopN limit must be positive");
     }
@@ -227,6 +230,51 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     const std::string_view function(score_expression[kFunctionName.data()].GetString(),
                                     score_expression[kFunctionName.data()].GetStringLength());
     ASSIGN_OR_RETURN(paimon::VectorSearch::DistanceType distance_type, vector_distance_type(function));
+    if (ranges != nullptr && ranges->empty()) {
+        return std::static_pointer_cast<paimon::GlobalIndexResult>(
+                std::make_shared<paimon::BitmapScoredGlobalIndexResult>(
+                        paimon::RoaringBitmap64::From(std::vector<int64_t>{}), std::vector<float>{}));
+    }
+    // Materialize and detach the scalar result before creating the vector reader. A result may
+    // lazily own reader buffers, whereas VectorSearch can retain its callback beyond this call.
+    std::shared_ptr<paimon::RoaringBitmap64> bitmap;
+    if (predicate != nullptr) {
+        ASSIGN_OR_RETURN(auto scalar_result, evaluate(*predicate));
+        auto bitmap_result = std::dynamic_pointer_cast<paimon::BitmapGlobalIndexResult>(scalar_result);
+        if (bitmap_result == nullptr) {
+            return Status::NotSupported("Paimon ANN prefilter requires an exact bitmap result");
+        }
+        auto materialized = bitmap_result->GetBitmap();
+        if (!materialized.ok()) {
+            return paimon_error("prefilter materialization", materialized.status());
+        }
+        if (materialized.value() == nullptr) {
+            return Status::InternalError("Paimon ANN prefilter materialized to null");
+        }
+        bitmap = std::make_shared<paimon::RoaringBitmap64>(*materialized.value());
+    }
+    if (bitmap != nullptr && bitmap->Cardinality() == 0) {
+        return std::static_pointer_cast<paimon::GlobalIndexResult>(
+                std::make_shared<paimon::BitmapScoredGlobalIndexResult>(
+                        paimon::RoaringBitmap64::From(std::vector<int64_t>{}), std::vector<float>{}));
+    }
+    paimon::VectorSearch::PreFilter prefilter = nullptr;
+    if (bitmap != nullptr || ranges != nullptr) {
+        const auto allowed_ranges = ranges == nullptr ? std::vector<paimon::Range>{} : *ranges;
+        const bool restrict_ranges = ranges != nullptr;
+        // OffsetGlobalIndexReader converts local IDs to global IDs before calling this filter.
+        prefilter = [bitmap, allowed_ranges, restrict_ranges](int64_t id) {
+            if (id < 0 || (bitmap != nullptr && !bitmap->Contains(id))) {
+                return false;
+            }
+            if (!restrict_ranges) {
+                return true;
+            }
+            auto it = std::upper_bound(allowed_ranges.begin(), allowed_ranges.end(), id,
+                                       [](int64_t value, const paimon::Range& range) { return value < range.from; });
+            return it != allowed_ranges.begin() && id <= std::prev(it)->to;
+        };
+    }
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
 
     std::map<std::string, std::string> index_options = {{"lumina.diskann.search.list_size", "1024"},
@@ -236,7 +284,7 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
         index_options["lumina.diskann.search.list_size"] = std::to_string(limit * 3 / 2);
     }
     auto search = std::make_shared<paimon::VectorSearch>(
-            std::string(column), limit, query, nullptr, nullptr,
+            std::string(column), limit, query, prefilter, nullptr,
             std::optional<paimon::VectorSearch::DistanceType>(distance_type), std::move(index_options));
     auto result = reader->VisitVectorSearch(search);
     if (!result.ok()) {
@@ -244,6 +292,22 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     }
     if (result.value() == nullptr) {
         return Status::NotSupported("Paimon Global Index reader does not support vector TopN evaluation");
+    }
+    if (prefilter != nullptr) {
+        auto iterator_result = result.value()->CreateScoredIterator();
+        if (!iterator_result.ok()) {
+            return paimon_error("filtered vector result iteration", iterator_result.status());
+        }
+        auto iterator = std::move(iterator_result).value();
+        if (iterator == nullptr) {
+            return Status::InternalError("Paimon filtered ANN returned a null iterator");
+        }
+        while (iterator->HasNext()) {
+            auto [id, score] = iterator->NextWithScore();
+            if (!prefilter(id)) {
+                return Status::InternalError("Paimon filtered ANN returned a row outside its prefilter");
+            }
+        }
     }
     return std::static_pointer_cast<paimon::GlobalIndexResult>(std::move(result).value());
 }

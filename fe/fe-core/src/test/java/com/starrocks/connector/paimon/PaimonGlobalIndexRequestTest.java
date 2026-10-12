@@ -75,9 +75,13 @@ public class PaimonGlobalIndexRequestTest {
                 BinaryType.EQ, new ColumnRefOperator(3, IntegerType.INT, "id", false),
                 ConstantOperator.createInt(7));
         TopNIndexCondition filtered = new TopNIndexCondition(predicate, score,
-                Map.of(vector.getName(), ConnectorIndexType.VECTOR), 10, 2, false);
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> PaimonGlobalIndexRequest.create(43L, filtered));
+                Map.of(vector.getName(), ConnectorIndexType.VECTOR, "id", ConnectorIndexType.RANGE), 10, 2, false);
+        PaimonGlobalIndexRequest filteredRequest = PaimonGlobalIndexRequest.parse(
+                PaimonGlobalIndexRequest.create(43L, filtered).toJson());
+        Assertions.assertEquals(PaimonGlobalIndexRequest.FILTERED_TOP_N_VERSION, filteredRequest.getVersion());
+        Assertions.assertNotNull(filteredRequest.getPredicate());
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(
+                filteredRequest.toJson().replace("\"version\":3", "\"version\":2")));
 
         PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.parse(
                 PaimonGlobalIndexRequest.create(43L, condition).toJson());
@@ -133,5 +137,28 @@ public class PaimonGlobalIndexRequestTest {
                                 + "\"scoreExpression\":{\"o\":\"ca\",\"f\":\"unsupported\","
                                 + "\"a\":[{},{}]},\"localLimit\":1,\"ascending\":true,"
                                 + "\"indexes\":{\"embedding\":\"vector\"}}"));
+    }
+
+    @Test
+    public void testPartitionRangeProtocolIsStrictAndVersioned() {
+        String prefix = "{\"version\":3,\"snapshotId\":7,\"kind\":\"top_n\","
+                + "\"scoreExpression\":{\"o\":\"ca\",\"f\":\"approx_l2_distance\",\"a\":[{},{}]},"
+                + "\"localLimit\":4,\"ascending\":true,\"indexes\":{\"embedding\":\"vector\"},\"partitionRanges\":";
+        for (String ranges : List.of("[]", "[[0,2],[8,9]]", "[[9223372036854775807,9223372036854775807]]")) {
+            PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.parse(prefix + ranges + "}");
+            Assertions.assertNotNull(request.getPartitionRanges());
+            Assertions.assertEquals(3, request.getVersion());
+        }
+        for (String ranges : List.of("null", "{}", "[null]", "[[]]", "[[-1,1]]", "[[2,1]]",
+                "[[1,2],[2,3]]", "[[3,4],[0,1]]", "[[1,null]]", "[[1,2,3]]", "[[\"1\",2]]",
+                "[[1.5,2]]", "[[1e0,2]]", "[[0,9223372036854775808]]")) {
+            Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> PaimonGlobalIndexRequest.parse(prefix + ranges + "}"), ranges);
+        }
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(
+                (prefix + "[[0,2]]}").replace("\"version\":3", "\"version\":2")));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(
+                "{\"version\":1,\"snapshotId\":7,\"predicate\":{},\"indexes\":{\"id\":\"range\"},"
+                        + "\"partitionRanges\":[]}"));
     }
 }

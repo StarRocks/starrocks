@@ -42,6 +42,7 @@ namespace {
 
 constexpr int32_t kPredicateProtocolVersion = 1;
 constexpr int32_t kTopNProtocolVersion = 2;
+constexpr int32_t kFilteredTopNProtocolVersion = 3;
 constexpr std::string_view kIndexResultColumn = "index_result";
 constexpr std::string_view kArgsColumn = "args";
 constexpr std::string_view kRowIdColumn = "row_id";
@@ -160,7 +161,8 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
     _evaluate_ns = monotonic_nanos() - evaluate_start_ns;
 
     const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
-    const bool top_n = scan_range.protocol_version == kTopNProtocolVersion;
+    const bool top_n = scan_range.protocol_version == kTopNProtocolVersion ||
+                       scan_range.protocol_version == kFilteredTopNProtocolVersion;
     const std::string& query_json = _scanner_ctx->scan_range->paimon_global_index_scan_range.query_json;
     if (top_n) {
         auto scored = std::dynamic_pointer_cast<paimon::ScoredGlobalIndexResult>(result);
@@ -297,7 +299,8 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
         return Status::InvalidArgument("Incomplete Paimon Global Index scan range");
     }
     if (scan_range.protocol_version != kPredicateProtocolVersion &&
-        scan_range.protocol_version != kTopNProtocolVersion) {
+        scan_range.protocol_version != kTopNProtocolVersion &&
+        scan_range.protocol_version != kFilteredTopNProtocolVersion) {
         return Status::InvalidArgument(
                 fmt::format("Unsupported Paimon Global Index protocol version {}", scan_range.protocol_version));
     }
@@ -319,17 +322,31 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
     if (scan_range.protocol_version == kPredicateProtocolVersion) {
         if (!request->HasMember("predicate") || !(*request)["predicate"].IsObject() || request->HasMember("kind") ||
             request->HasMember("scoreExpression") || request->HasMember("localLimit") ||
-            request->HasMember("ascending")) {
+            request->HasMember("ascending") || request->HasMember("partitionRanges")) {
             return Status::InvalidArgument("Invalid Paimon predicate request envelope");
         }
         return Status::OK();
     }
 
     const rapidjson::Value& indexes = (*request)["indexes"];
-    if (indexes.MemberCount() != 1 || !indexes.MemberBegin()->value.IsString() ||
-        std::string_view(indexes.MemberBegin()->value.GetString(), indexes.MemberBegin()->value.GetStringLength()) !=
-                "vector" ||
-        request->HasMember("predicate") || !request->HasMember("kind") || !(*request)["kind"].IsString() ||
+    const bool filtered = scan_range.protocol_version == kFilteredTopNProtocolVersion;
+    size_t vector_count = 0;
+    for (auto it = indexes.MemberBegin(); it != indexes.MemberEnd(); ++it) {
+        if (!it->value.IsString()) {
+            return Status::InvalidArgument("Invalid Paimon TopN index type");
+        }
+        std::string_view type(it->value.GetString(), it->value.GetStringLength());
+        vector_count += type == "vector";
+        if (type != "vector" && (!filtered || type != "range")) {
+            return Status::InvalidArgument("Unsupported Paimon TopN index type");
+        }
+    }
+    if (vector_count != 1 ||
+        (!filtered &&
+         (indexes.MemberCount() != 1 || request->HasMember("predicate") || request->HasMember("partitionRanges"))) ||
+        (filtered && !request->HasMember("predicate") && !request->HasMember("partitionRanges")) ||
+        (request->HasMember("predicate") && !(*request)["predicate"].IsObject()) || !request->HasMember("kind") ||
+        !(*request)["kind"].IsString() ||
         std::string_view((*request)["kind"].GetString(), (*request)["kind"].GetStringLength()) != kTopNKind ||
         !request->HasMember("scoreExpression") || !(*request)["scoreExpression"].IsObject() ||
         !request->HasMember("localLimit") || !(*request)["localLimit"].IsInt() ||
@@ -337,6 +354,20 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
         !(*request)["ascending"].IsBool() ||
         !is_supported_vector_direction((*request)["scoreExpression"], (*request)["ascending"].GetBool())) {
         return Status::InvalidArgument("Invalid Paimon Vector TopN request envelope");
+    }
+    if (request->HasMember("partitionRanges")) {
+        const auto& ranges = (*request)["partitionRanges"];
+        if (!ranges.IsArray()) {
+            return Status::InvalidArgument("Invalid Paimon partition ranges");
+        }
+        int64_t previous = -1;
+        for (const auto& range : ranges.GetArray()) {
+            if (!range.IsArray() || range.Size() != 2 || !range[0].IsInt64() || !range[1].IsInt64() ||
+                range[0].GetInt64() <= previous || range[1].GetInt64() < range[0].GetInt64()) {
+                return Status::InvalidArgument("Invalid Paimon partition row range");
+            }
+            previous = range[1].GetInt64();
+        }
     }
     return Status::OK();
 }
@@ -385,7 +416,24 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_
 
     PaimonGlobalIndexEvaluator evaluator(std::move(reader_getter));
     std::shared_ptr<paimon::GlobalIndexResult> result;
-    if (scan_range.protocol_version == kTopNProtocolVersion) {
+    if (scan_range.protocol_version == kFilteredTopNProtocolVersion) {
+        std::vector<paimon::Range> allowed_ranges;
+        if (_request.HasMember("partitionRanges")) {
+            for (const auto& range : _request["partitionRanges"].GetArray()) {
+                int64_t from = std::max(scan_range.range_from, range[0].GetInt64());
+                int64_t to = std::min(scan_range.range_to, range[1].GetInt64());
+                if (from <= to) {
+                    allowed_ranges.emplace_back(from, to);
+                }
+            }
+        } else {
+            allowed_ranges = ranges;
+        }
+        ASSIGN_OR_RETURN(result,
+                         evaluator.evaluate_top_n(_request["scoreExpression"], _request["localLimit"].GetInt(),
+                                                  _request.HasMember("predicate") ? &_request["predicate"] : nullptr,
+                                                  &allowed_ranges));
+    } else if (scan_range.protocol_version == kTopNProtocolVersion) {
         ASSIGN_OR_RETURN(result,
                          evaluator.evaluate_top_n(_request["scoreExpression"], _request["localLimit"].GetInt()));
     } else {

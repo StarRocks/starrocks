@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.index.IndexCondition;
@@ -26,6 +27,8 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
@@ -51,6 +54,58 @@ public class ApplyConnectorIndexRuleTest {
             new ColumnRefOperator(1, IntegerType.INT, "id", true);
     private final ColumnRefOperator vectorColumn =
             new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", false);
+
+    @Test
+    public void testFilteredTopNRejectsIncrementalScanBeforeReadingNativeSchema() {
+        PaimonTable table = new PaimonTable() {
+            @Override
+            public List<String> getPartitionColumnNames() {
+                return List.of();
+            }
+
+            @Override
+            public org.apache.paimon.table.Table getNativeTable() {
+                throw new AssertionError("Incremental scans must not enter filtered ANN");
+            }
+        };
+        Column id = new Column(idColumn.getName(), IntegerType.INT);
+        Column vector = new Column(vectorColumn.getName(), ArrayType.ARRAY_FLOAT);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE, idColumn, ConstantOperator.createInt(0));
+        LogicalPaimonScanOperator scan = new LogicalPaimonScanOperator(table,
+                Map.of(idColumn, id, vectorColumn, vector), Map.of(id, idColumn, vector, vectorColumn),
+                -1, predicate, TvrTableDelta.of(1, 2));
+        ColumnRefOperator score = new ColumnRefOperator(3, FloatType.FLOAT, "score", false);
+        ScalarOperator scoreExpression = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                List.of(vectorColumn, new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                        List.of(ConstantOperator.createFloat(1)))));
+        scan = new LogicalPaimonScanOperator.Builder().withOperator(scan)
+                .setProjection(new Projection(Map.of(score, scoreExpression))).build();
+        ApplyTopNIndexRule rule = new ApplyTopNIndexRule(OperatorType.LOGICAL_PAIMON_SCAN,
+                ignored -> ConnectorIndexMetadata.of(Map.of("id", Set.of(ConnectorIndexType.RANGE),
+                        "embedding", Set.of(ConnectorIndexType.VECTOR))));
+        OptExpression input = OptExpression.create(new LogicalTopNOperator(
+                List.of(new Ordering(score, true, false)), 10, 0), OptExpression.create(scan));
+        Assertions.assertTrue(rule.check(input, null));
+        Assertions.assertTrue(rule.transform(input, null).isEmpty());
+    }
+
+    @Test
+    public void testRejectsRankingAndPartitionedTopN() {
+        ColumnRefOperator score = new ColumnRefOperator(3, FloatType.FLOAT, "score", false);
+        Projection projection = new Projection(Map.of(score, vectorColumn));
+        ApplyTopNIndexRule rule = new ApplyTopNIndexRule(
+                OperatorType.LOGICAL_PAIMON_SCAN, ignored -> ConnectorIndexMetadata.empty());
+        for (TopNType type : List.of(TopNType.RANK, TopNType.DENSE_RANK)) {
+            LogicalTopNOperator topN = new LogicalTopNOperator(10, null, null, null, -1,
+                    List.of(new Ordering(score, true, false)), 0, SortPhase.FINAL, type, false);
+            Assertions.assertFalse(rule.check(OptExpression.create(topN,
+                    OptExpression.create(createScan(null, projection))), null));
+        }
+        LogicalTopNOperator partitioned = new LogicalTopNOperator(10, null, null, List.of(idColumn), 10,
+                List.of(new Ordering(score, true, false)), 0, SortPhase.FINAL, TopNType.ROW_NUMBER, false);
+        Assertions.assertFalse(rule.check(OptExpression.create(partitioned,
+                OptExpression.create(createScan(null, projection))), null));
+    }
 
     @Test
     public void testPredicateRuleAnnotatesScanWithoutRemovingPredicate() {
@@ -174,8 +229,9 @@ public class ApplyConnectorIndexRuleTest {
 
         LogicalTopNOperator nullsLast = new LogicalTopNOperator(
                 List.of(new Ordering(scoreColumn, true, false)), 10, 0);
-        Assertions.assertFalse(rule.check(
-                OptExpression.create(nullsLast, OptExpression.create(createScan(predicate, projection))), null));
+        OptExpression filteredInput = OptExpression.create(nullsLast, OptExpression.create(createScan(predicate, projection)));
+        Assertions.assertTrue(rule.check(filteredInput, null));
+        Assertions.assertTrue(rule.transform(filteredInput, null).isEmpty());
 
         CallOperator nullableScore = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
                 List.of(nullableVector, queryVector));
