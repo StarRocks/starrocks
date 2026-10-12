@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
-#include "cache/peer_cache_engine.h"
+#include "cache/block_cache/peer_cache_wrapper.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -487,12 +487,12 @@ TEST_F(CacheInputStreamTest, test_peek) {
     }
 }
 
-class BufferedPeerCacheEngine : public PeerCacheEngine {
+class BufferedPeerCacheEngine : public PeerCacheWrapper {
 public:
     explicit BufferedPeerCacheEngine(const std::string& data) : _data(data) {}
 
     Status read(const std::string& key, size_t offset, size_t size, IOBuffer* buffer,
-                DiskCacheReadOptions* options) override {
+                ReadCacheOptions* options) override {
         if (offset > _data.size() || size > _data.size() - offset) {
             return Status::InvalidArgument("peer read exceeds file size");
         }
@@ -505,6 +505,9 @@ private:
 };
 
 TEST_F(CacheInputStreamTest, test_peer_cache_read_without_block_buffer) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
     std::string data(2 * block_size + 31, '\0');
     for (size_t i = 0; i < data.size(); ++i) {
         data[i] = static_cast<char>('a' + i % 23);
@@ -512,7 +515,7 @@ TEST_F(CacheInputStreamTest, test_peer_cache_read_without_block_buffer) {
     // Different source bytes make an unintended fallback observable.
     std::string source(data.size(), 'x');
     auto peer_cache = std::make_shared<BufferedPeerCacheEngine>(data);
-    ASSERT_OK(peer_cache->init(RemoteCacheOptions{}));
+    ASSERT_OK(peer_cache->init(options));
     BlockCache::instance()->_remote_cache = peer_cache;
 
     for (bool enable_block_buffer : {false, true}) {
