@@ -156,7 +156,7 @@ select count() from mv_right_outer;
 -- result:
 7
 -- !result
-function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder right outer join customer on lo_custkey = c_custkey where lo_orderkey = 10001", "mv_right_outer", "lo_orderkey = 1")
+function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder right outer join customer on lo_custkey = c_custkey where lo_orderkey = 10001", "mv_right_outer", "lo_orderkey = 10001")
 -- result:
 None
 -- !result
