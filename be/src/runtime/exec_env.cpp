@@ -586,7 +586,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
     max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
     if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores() / 2;
+        max_thread_count = CpuInfo::num_cores();
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
                             .set_min_threads(1)
