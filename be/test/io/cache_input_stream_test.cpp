@@ -19,6 +19,12 @@
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+<<<<<<< HEAD:be/test/io/cache_input_stream_test.cpp
+=======
+#include "cache/peer_cache_engine.h"
+#include "common/config_cache_fwd.h"
+#include "exec/exec_env.h"
+>>>>>>> 81d3c71 ([BugFix] Copy peer cache data when block buffering is disabled (#80438)):be/test/cache/scan/cache_input_stream_test.cpp
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"
@@ -460,6 +466,67 @@ TEST_F(CacheInputStreamTest, test_peek) {
         ASSERT_TRUE(res.ok());
         auto str_view = res.value();
         ASSERT_EQ(str_view.length(), peek_size);
+    }
+}
+
+class BufferedPeerCacheEngine : public PeerCacheEngine {
+public:
+    explicit BufferedPeerCacheEngine(const std::string& data) : _data(data) {}
+
+    Status read(const std::string& key, size_t offset, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        if (offset > _data.size() || size > _data.size() - offset) {
+            return Status::InvalidArgument("peer read exceeds file size");
+        }
+        buffer->raw_buf().append(_data.data() + offset, size);
+        return Status::OK();
+    }
+
+private:
+    const std::string _data;
+};
+
+TEST_F(CacheInputStreamTest, test_peer_cache_read_without_block_buffer) {
+    std::string data(2 * block_size + 31, '\0');
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = static_cast<char>('a' + i % 23);
+    }
+    // Different source bytes make an unintended fallback observable.
+    std::string source(data.size(), 'x');
+    auto peer_cache = std::make_shared<BufferedPeerCacheEngine>(data);
+    ASSERT_OK(peer_cache->init(RemoteCacheOptions{}));
+    BlockCache::instance()->_remote_cache = peer_cache;
+
+    for (bool enable_block_buffer : {false, true}) {
+        for (bool populate_cache : {false, true}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "block_buffer=" << enable_block_buffer << ", populate=" << populate_cache);
+            const std::string file_name =
+                    "peer_read_" + std::to_string(enable_block_buffer) + "_" + std::to_string(populate_cache);
+            auto stream = std::make_shared<MockSeekableInputStream>(source.data(), source.size());
+            auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data.size());
+            CacheInputStream cache_stream(sb_stream, file_name, data.size(), 1000000);
+            cache_stream.set_enable_block_buffer(enable_block_buffer);
+            cache_stream.set_enable_populate_cache(populate_cache);
+            cache_stream.set_enable_async_populate_mode(false);
+            cache_stream.set_enable_cache_io_adaptor(false);
+            cache_stream.set_peer_cache_node("peer:1234");
+
+            auto check_read = [&](int64_t offset, int64_t size) {
+                std::string result(size, '?');
+                ASSERT_OK(cache_stream.read_at_fully(offset, result.data(), size));
+                ASSERT_EQ(result, data.substr(offset, size));
+            };
+            check_read(37, 71);
+            check_read(block_size - 11, 40);
+            check_read(2 * block_size + 7, 24);
+            check_read(0, block_size);
+            ASSERT_GT(cache_stream.stats().read_peer_cache_count, 0);
+            if (!enable_block_buffer) {
+                ASSERT_TRUE(cache_stream._block_map.empty());
+                ASSERT_EQ(cache_stream.stats().read_block_buffer_count, 0);
+            }
+        }
     }
 }
 
