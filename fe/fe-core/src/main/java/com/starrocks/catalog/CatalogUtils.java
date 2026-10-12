@@ -498,12 +498,11 @@ public class CatalogUtils {
                 : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
     }
 
-    public static int backendNumForBucketSizing(OlapTable olapTable) {
+    private static int backendNumForBucketSizing(OlapTable olapTable, short replicationNum) {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         int backendNum = clusterInfo.getLabelledBackendsIds(olapTable.getLocation()).size();
         boolean enoughMatchedBackends = GlobalStateMgr.getCurrentState().getTabletChecker()
-                .preCheckEnoughLocationMatchedBackends(olapTable.getLocation(),
-                        olapTable.getDefaultReplicationNum());
+                .preCheckEnoughLocationMatchedBackends(olapTable.getLocation(), replicationNum);
         if (backendNum == 0 || !enoughMatchedBackends) {
             backendNum = clusterInfo.getTotalBackendNumber();
         }
@@ -511,8 +510,8 @@ public class CatalogUtils {
         return backendNum;
     }
 
-    public static int calPhysicalPartitionBucketNum(OlapTable olapTable) {
-        int backendNum = backendNumForBucketSizing(olapTable);
+    public static int calPhysicalPartitionBucketNum(OlapTable olapTable, short replicationNum) {
+        int backendNum = backendNumForBucketSizing(olapTable, replicationNum);
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
@@ -522,7 +521,11 @@ public class CatalogUtils {
     }
 
     public static int calBucketNumAccordingToBackends(OlapTable olapTable) {
-        int backendNum = backendNumForBucketSizing(olapTable);
+        return calBucketNumAccordingToBackends(olapTable, olapTable.getDefaultReplicationNum());
+    }
+
+    public static int calBucketNumAccordingToBackends(OlapTable olapTable, short replicationNum) {
+        int backendNum = backendNumForBucketSizing(olapTable, replicationNum);
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
@@ -545,11 +548,17 @@ public class CatalogUtils {
 
     public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
                                                         boolean enableAutoTabletDistribution) {
+        return calAvgBucketNumOfRecentPartitions(olapTable, recentPartitionNum, enableAutoTabletDistribution,
+                olapTable.getDefaultReplicationNum());
+    }
+
+    public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                        boolean enableAutoTabletDistribution, short replicationNum) {
         // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
         //    Or the Config.enable_auto_tablet_distribution is disabled
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable);
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable, replicationNum);
             // If table is not partitioned, the bucketNum should be at least DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM
             if (!olapTable.getPartitionInfo().isPartitioned()) {
                 bucketNum = Math.max(bucketNum, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
@@ -567,7 +576,7 @@ public class CatalogUtils {
             }
         }
 
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable);
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable, replicationNum);
         if (!dataImported) {
             return bucketNum;
         }

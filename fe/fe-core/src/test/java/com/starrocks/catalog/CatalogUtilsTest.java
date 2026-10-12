@@ -181,7 +181,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         };
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),
-                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
 
         // When location placement is feasible, use the labelled BE count (6 -> 12).
         new MockUp<TabletChecker>() {
@@ -191,9 +191,15 @@ public class CatalogUtilsTest extends StarRocksTestBase {
                 return true;
             }
         };
-        assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
+        assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable, (short) 3));
         assertEquals(CatalogUtils.divisibleBucketNum(6),
-                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
+
+        // With RF=1 the same pin is feasible for placement → labelled sizing (12).
+        // With RF=3 and infeasible gate → total BE sizing (36). Covered above via mocks.
+        assertEquals(12, CatalogUtils.calBucketNumAccordingToBackends(olapTable, (short) 1));
+        assertEquals(CatalogUtils.divisibleBucketNum(6),
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 1));
 
         // labels set but no BE matches -> fall back to total BE count (30)
         Multimap<String, String> unmatched = HashMultimap.create();
@@ -201,18 +207,18 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         when(olapTable.getLocation()).thenReturn(unmatched);
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),
-                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
 
         // null / empty location uses all BEs via getLabelledBackendsIds (30) -> 36
         when(olapTable.getLocation()).thenReturn(null);
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),
-                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
 
         when(olapTable.getLocation()).thenReturn(HashMultimap.create());
         assertEquals(36, CatalogUtils.calBucketNumAccordingToBackends(olapTable));
         assertEquals(CatalogUtils.divisibleBucketNum(30),
-                CatalogUtils.calPhysicalPartitionBucketNum(olapTable));
+                CatalogUtils.calPhysicalPartitionBucketNum(olapTable, (short) 3));
     }
 
     @Test
