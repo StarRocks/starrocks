@@ -1049,7 +1049,7 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToBackendRef.values().stream()
                 .filter(backend -> TabletChecker.isLocationMatch(locationLabel, backend.getSingleLevelLocationKV()))
                 .map(Backend::getId)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public List<Long> getBackendIds() {

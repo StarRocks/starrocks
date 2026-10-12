@@ -36,7 +36,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,7 +83,7 @@ public class CatalogUtilsTest extends StarRocksTestBase {
         new MockUp<SystemInfoService>() {
             @mockit.Mock
             public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
-                return LongStream.rangeClosed(1, 3).boxed().collect(Collectors.toList());
+                return LongStream.rangeClosed(1, 3).boxed().toList();
             }
         };
 
@@ -152,13 +151,13 @@ public class CatalogUtilsTest extends StarRocksTestBase {
             @mockit.Mock
             public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
                 if (locationLabel != null && locationLabel.containsEntry("rack", "r1")) {
-                    return LongStream.rangeClosed(1, 6).boxed().collect(Collectors.toList());
+                    return LongStream.rangeClosed(1, 6).boxed().toList();
                 }
                 // no matching BEs for other labels
                 if (locationLabel != null && !locationLabel.isEmpty()) {
                     return new ArrayList<>();
                 }
-                return LongStream.rangeClosed(1, 30).boxed().collect(Collectors.toList());
+                return LongStream.rangeClosed(1, 30).boxed().toList();
             }
 
             @mockit.Mock
