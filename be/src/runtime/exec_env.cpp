@@ -320,6 +320,18 @@ ExecEnv* ExecEnv::GetInstance() {
 ExecEnv::ExecEnv() = default;
 ExecEnv::~ExecEnv() = default;
 
+Status ExecEnv::_init_pk_index_execution_thread_pool() {
+    int32_t max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    return ThreadPoolBuilder("cloud_native_pk_index_execution")
+            .set_min_threads(1)
+            .set_max_threads(std::max(1, max_thread_count))
+            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
+            .build(&_pk_index_execution_thread_pool);
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -584,15 +596,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-    max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
-    if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores() / 2;
-    }
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
-                            .set_min_threads(1)
-                            .set_max_threads(std::max(1, max_thread_count))
-                            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
-                            .build(&_pk_index_execution_thread_pool));
+    RETURN_IF_ERROR(_init_pk_index_execution_thread_pool());
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
     max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
     if (max_thread_count <= 0) {
