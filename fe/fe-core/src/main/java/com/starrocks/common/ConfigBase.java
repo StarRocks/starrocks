@@ -111,6 +111,21 @@ public class ConfigBase {
         return value;
     }
 
+    // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
+    // not masked.
+    public static String maskIfSensitive(String key, String value) {
+        if (configFields == null || Strings.isNullOrEmpty(value)) {
+            return value;
+        }
+        for (Field f : configFields) {
+            ConfField anno = f.getAnnotation(ConfField.class);
+            if (anno != null && (f.getName().equals(key) || Arrays.asList(anno.aliases()).contains(key))) {
+                return maskIfSensitive(anno, value);
+            }
+        }
+        return value;
+    }
+
     protected Properties props;
     private static boolean isPersisted = false;
     private static String configPath;
@@ -513,7 +528,7 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        LOG.info("set config {} to {}", key, value);
+        LOG.info("set config {} to {}", key, maskIfSensitive(field.getAnnotation(ConfField.class), value));
     }
 
     private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
@@ -525,12 +540,15 @@ public class ConfigBase {
         }
 
         String oldValue = props.getProperty(key);
+        // Only the comment is masked: the key = value line below must keep the real value to be loaded on restart,
+        // but the comments pile up, and would otherwise keep every old credential in the file.
         String comment;
         if (StringUtils.isEmpty(oldValue)) {
-            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(key, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         } else {
-            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity,
+                    maskIfSensitive(key, oldValue), maskIfSensitive(key, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 

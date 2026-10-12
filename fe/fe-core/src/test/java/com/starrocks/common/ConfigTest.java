@@ -23,10 +23,16 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PropertyAnalyzer;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -35,6 +41,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ConfigTest {
     private final Config config = new Config();
@@ -257,6 +264,81 @@ public class ConfigTest {
 
         // Only what is reported is masked; the config itself keeps the real value.
         Assertions.assertEquals("wJalrXUtnFEMI/K7MDENG", ConfigForSensitive.prop_secret);
+    }
+
+    // Collects the messages logged to the loggers it is added to.
+    private static class MessageCollector extends AbstractAppender {
+        private final List<String> messages = new CopyOnWriteArrayList<>();
+
+        MessageCollector() {
+            super("config-test-message-collector", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            messages.add(event.getMessage().getFormattedMessage());
+        }
+    }
+
+    @Test
+    public void testSetSensitiveConfigKeepsValueOutOfLogAndComments(@TempDir Path tempDir) throws Exception {
+        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        assert resource != null;
+        Path confFile = tempDir.resolve("fe.conf");
+        Files.copy(Paths.get(resource.toURI()), confFile);
+        config.init(confFile.toString());
+        Assumptions.assumeTrue(ConfigBase.isIsPersisted(),
+                "Skipping persistence test - not available in container environment");
+
+        String key = "authentication_ldap_simple_bind_root_pwd";
+        MessageCollector collector = new MessageCollector();
+        Logger logger = (Logger) LogManager.getLogger(ConfigBase.class);
+        Level level = logger.getLevel();
+        collector.start();
+        logger.addAppender(collector);
+        logger.setLevel(Level.INFO);
+        try {
+            Config.setMutableConfig(key, "FakeLdapPwd1", true, "root");
+            Config.setMutableConfig(key, "FakeLdapPwd2", true, "root");
+            Config.setMutableConfig("adaptive_choose_instances_threshold", "97", true, "root");
+        } finally {
+            logger.setLevel(level);
+            logger.removeAppender(collector);
+            collector.stop();
+            Config.authentication_ldap_simple_bind_root_pwd = "";
+        }
+
+        // fe.log
+        Assertions.assertTrue(collector.messages.contains("set config " + key + " to " + CredentialMask.LONG),
+                collector.messages.toString());
+        Assertions.assertTrue(collector.messages.contains("set config adaptive_choose_instances_threshold to 97"),
+                collector.messages.toString());
+        Assertions.assertTrue(collector.messages.stream().noneMatch(m -> m.contains("FakeLdapPwd")),
+                collector.messages.toString());
+
+        // fe.conf: the comments are masked, the value itself is kept so that it is loaded on restart.
+        List<String> lines = Files.readAllLines(confFile);
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith(
+                "# The user root added " + key + "=" + CredentialMask.LONG + " at ")), lines.toString());
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith(
+                "# The user root changed " + CredentialMask.LONG + " to " + CredentialMask.LONG + " at ")),
+                lines.toString());
+        Assertions.assertTrue(lines.contains(key + " = FakeLdapPwd2"), lines.toString());
+        Assertions.assertEquals(1, lines.stream().filter(l -> l.contains("FakeLdapPwd")).count(), lines.toString());
+        // Other values are still written as is. (The old value depends on what testMutableConfig left in the file.)
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith("# The user root changed ")
+                && l.contains(" to 97 at ")), lines.toString());
+    }
+
+    @Test
+    public void testMaskIfSensitiveByKey() throws Exception {
+        Assertions.assertEquals(CredentialMask.LONG,
+                ConfigBase.maskIfSensitive("authentication_ldap_simple_bind_root_pwd", "FakeLdapPwd"));
+        // Any credential config is masked, mutable or not.
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("aws_s3_secret_key", "FakeS3Secret"));
+        Assertions.assertEquals("", ConfigBase.maskIfSensitive("aws_s3_secret_key", ""));
+        Assertions.assertEquals("97", ConfigBase.maskIfSensitive("adaptive_choose_instances_threshold", "97"));
+        Assertions.assertEquals("v", ConfigBase.maskIfSensitive("no_such_config", "v"));
     }
 
     @Test
