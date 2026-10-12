@@ -39,6 +39,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.DefaultHttpResponse;
@@ -165,12 +166,12 @@ public class HttpResultSender {
     }
 
     private void sendEmptyLastContent() {
-        if (context.isKeepAlive()) {
-            context.getNettyChannel().writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
-        } else {
-            context.getNettyChannel().writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT)
-                    .addListener(ChannelFutureListener.CLOSE);
+        ChannelFuture future =
+                context.getNettyChannel().writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        if (!context.isKeepAlive()) {
+            future.addListener(ChannelFutureListener.CLOSE);
         }
+        context.setLastHttpWrite(future);
     }
 
 }

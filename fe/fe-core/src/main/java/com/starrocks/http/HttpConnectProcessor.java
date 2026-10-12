@@ -148,6 +148,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         // set command as sleep,so timeCheck will close the connection
         // when client's last query is long long ago(controled by waitTimeout session variable)
         ctx.setCommand(MysqlCommand.COM_SLEEP);
+        ctx.setEndTime();
 
     }
 

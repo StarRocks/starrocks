@@ -134,7 +134,7 @@ public class DatabaseTransactionMgr {
     private final ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
 
     // count the number of running transactions of database, except for shapeless.the routine load txn
-    private int runningTxnNums = 0;
+    private volatile int runningTxnNums = 0;
 
     // count only the number of running routine load transactions of database
     private int runningRoutineLoadTxnNums = 0;
