@@ -348,6 +348,12 @@ public class ConfigBase {
 
     public static synchronized void setMutableConfig(String key, String value,
                                                      boolean isPersisted, String userIdentity) throws InvalidConfException {
+        Field field = allMutableConfigs.get(key);
+        if (field == null) {
+            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
+        }
+        ConfField anno = field.getAnnotation(ConfField.class);
+
         if (isPersisted) {
             if (!ConfigBase.isIsPersisted()) {
                 String errMsg = "set persisted config failed, because current running mode is not persisted";
@@ -356,20 +362,10 @@ public class ConfigBase {
             }
 
             try {
-<<<<<<< HEAD
-                appendPersistedProperties(key, value, userIdentity);
-=======
-                appendPersistedProperties(key, field.getAnnotation(ConfField.class), parsedConfigValue.confVal,
-                        userIdentity);
->>>>>>> 76274e5 ([BugFix] Mask credential config values set through ADMIN SET FRONTEND CONFIG (#80492))
+                appendPersistedProperties(key, anno, value, userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
-        }
-
-        Field field = allMutableConfigs.get(key);
-        if (field == null) {
-            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
         }
 
         try {
@@ -378,9 +374,8 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        // The value as it is set and persisted: e.g. a blank one sets an empty credential, which is not masked.
-        LOG.info("set config {} to {}", key,
-                maskIfSensitive(field.getAnnotation(ConfField.class), parsedConfigValue.confVal));
+        // The value as it is set (setConfigField trims it): e.g. a blank one sets an empty credential, not masked.
+        LOG.info("set config {} to {}", key, maskIfSensitive(anno, value.trim()));
     }
 
     private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)

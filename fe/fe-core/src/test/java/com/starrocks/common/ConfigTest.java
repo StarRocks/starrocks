@@ -19,15 +19,11 @@ package com.starrocks.common;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.util.CredentialMask;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.PropertyAnalyzer;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.Logger;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
->>>>>>> 76274e5 ([BugFix] Mask credential config values set through ADMIN SET FRONTEND CONFIG (#80492))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +32,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
