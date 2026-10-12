@@ -660,6 +660,97 @@ TEST_F(StarOSWorkerTest, borrowed_shard_infos_are_bounded_by_the_cache_capacity)
     EXPECT_EQ(base, count.value());
 }
 
+TEST_F(StarOSWorkerTest, borrowed_shard_info_dynamic_fields_trigger_capacity_eviction) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    // Use two keys in the same LRU shard so their combined charge exceeds its capacity.
+    auto cache_shard = [](StarOSWorker::ShardId id) {
+        const auto key = std::to_string(id);
+        return CacheKey(key).hash(key.data(), key.size(), 0) >> (32 - kNumShardBits);
+    };
+    const StarOSWorker::ShardId first_id = 8201;
+    auto second_id = first_id + 1;
+    while (cache_shard(first_id) != cache_shard(second_id)) {
+        ++second_id;
+    }
+    for (bool large_properties : {true, false}) {
+        SCOPED_TRACE(large_properties ? "properties" : "replicas");
+        {
+            StarOSWorker owner;
+            auto info = make_s3_shard_info(first_id, "s3://test_bucket/db/tbl/p82", 1);
+            if (large_properties) {
+                // Exercise both property keys and values.
+                info.properties.emplace(std::string(150 * 1024, 'k'), std::string(150 * 1024, 'v'));
+            } else {
+                // Even scalar-only protobuf replicas occupy memory in the retained vector.
+                info.replicas.resize(256 * 1024 / sizeof(staros::ReplicaInfoLite));
+                for (size_t i = 0; i < info.replicas.size(); ++i) {
+                    info.replicas[i].set_worker_id(i + 1);
+                }
+            }
+            ASSERT_TRUE(owner.add_shard(info).ok());
+            auto first = owner.export_shard_info(first_id);
+            ASSERT_TRUE(first.ok()) << first.status();
+            info.id = second_id;
+            ASSERT_TRUE(owner.add_shard(info).ok());
+            auto second = owner.export_shard_info(second_id);
+            ASSERT_TRUE(second.ok()) << second.status();
+
+            RemoteCountingStarOSWorker borrower;
+            EXPECT_CALL(borrower, _fetch_shard_info_from_remote(::testing::_)).Times(0);
+            ASSERT_TRUE(borrower.borrow_shard_info(*first).ok());
+            ASSERT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_EQ(base + 1, count.value());
+            // Building a filesystem replaces the value and must retain its dynamic-field charge.
+            ASSERT_TRUE(borrower.get_shard_filesystem(first_id, {}).ok());
+            EXPECT_EQ(base + 1, count.value());
+            EXPECT_GE(borrower._borrowed_cache->get_memory_usage(), 256 * 1024);
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_FALSE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 1, count.value());
+            // Refreshing a large value still counts as one held entry.
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_EQ(base + 1, count.value());
+        }
+        EXPECT_EQ(base, count.value());
+    }
+}
+
+TEST_F(StarOSWorkerTest, oversized_borrowed_shard_info_dynamic_fields_are_not_retained) {
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    for (bool large_properties : {true, false}) {
+        SCOPED_TRACE(large_properties ? "properties" : "replicas");
+        StarOSWorker owner;
+        auto info = make_s3_shard_info(8301, "s3://test_bucket/db/tbl/p83", 1);
+        ASSERT_TRUE(owner.add_shard(info).ok());
+        auto small = owner.export_shard_info(info.id);
+        ASSERT_TRUE(small.ok()) << small.status();
+        if (large_properties) {
+            info.properties.emplace("large", std::string(1024 * 1024, 'v'));
+        } else {
+            info.replicas.resize(1024 * 1024 / sizeof(staros::ReplicaInfoLite));
+        }
+        ASSERT_TRUE(owner.add_shard(info).ok());
+        auto large = owner.export_shard_info(info.id);
+        ASSERT_TRUE(large.ok()) << large.status();
+
+        StarOSWorker borrower;
+        ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+        EXPECT_EQ(base + 1, count.value());
+        // A 1 MiB value exceeds the 16 MiB cache's per-shard capacity, including on refresh.
+        ASSERT_TRUE(borrower.borrow_shard_info(*large).ok());
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(info.id));
+        EXPECT_EQ(0, borrower._borrowed_cache->get_memory_usage());
+        EXPECT_EQ(base, count.value());
+        ASSERT_TRUE(borrower.borrow_shard_info(*large).ok());
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(info.id));
+        EXPECT_EQ(base, count.value());
+    }
+}
+
 // The shard gets assigned to this worker while a handoff of it is between its ownership check and its
 // insertion. The handoff must not leave a borrowed copy of a shard this worker owns behind.
 TEST_F(StarOSWorkerTest, borrow_shard_info_racing_add_shard_keeps_no_copy_of_an_owned_shard) {

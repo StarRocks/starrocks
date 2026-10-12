@@ -189,8 +189,18 @@ void StarOSWorker::borrowed_value_deleter(const CacheKey& /*key*/, void* value) 
 }
 
 void StarOSWorker::insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value) {
-    const size_t charge = sizeof(BorrowedShardInfo) + value->shard_info.path_info.ByteSizeLong() +
-                          value->shard_info.cache_info.ByteSizeLong();
+    const auto& info = value->shard_info;
+    size_t charge = sizeof(BorrowedShardInfo) + info.path_info.ByteSizeLong() + info.cache_info.ByteSizeLong();
+    // Properties and replicas are also retained by the handoff, including when a filesystem
+    // replaces the cached value. Account for their containers as well as their dynamic contents.
+    charge += info.properties.bucket_count() * sizeof(void*);
+    for (const auto& property : info.properties) {
+        charge += sizeof(property) + property.first.capacity() + 1 + property.second.capacity() + 1;
+    }
+    charge += info.replicas.capacity() * sizeof(staros::ReplicaInfoLite);
+    for (const auto& replica : info.replicas) {
+        charge += replica.SpaceUsedLong() - sizeof(replica);
+    }
     StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries.increment(1);
     _borrowed_cache->release(
             _borrowed_cache->insert(CacheKey(borrowed_cache_key(id)), value, charge, borrowed_value_deleter));
