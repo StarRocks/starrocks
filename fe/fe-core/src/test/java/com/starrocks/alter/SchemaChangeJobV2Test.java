@@ -551,12 +551,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
 
     @Test
     public void testCapKeepsJobWhileItsHistorySchemaIsInUse() throws Exception {
-        com.starrocks.lake.snapshot.ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState()
-                .getClusterSnapshotMgr();
-        if (clusterSnapshotMgr instanceof com.starrocks.lake.snapshot.ClusterSnapshotMgrEPack) {
-            Deencapsulation.setField(clusterSnapshotMgr,
-                    "clusterSnapshotJobScheduler", new ClusterSnapshotJobScheduler(null, null));
-        }
         Database db = starRocksAssert.getDb(ctx.getDatabase());
         starRocksAssert.withTable("CREATE TABLE t_cap_history_schema(c0 INT) DUPLICATE KEY(c0) " +
                 "DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
