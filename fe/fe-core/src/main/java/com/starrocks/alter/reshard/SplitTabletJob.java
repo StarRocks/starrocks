@@ -65,11 +65,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
-<<<<<<< HEAD
-=======
-import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
->>>>>>> 54a7c40 ([BugFix] Reject tablet split results whose ranges disagree with FE (#80418))
 
 /*
  * SplitTabletJob is for tablet splitting.
