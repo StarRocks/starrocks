@@ -74,7 +74,10 @@ Status FlatJsonColumnCompactor::append(const Column& column) {
     _estimate_size += column.byte_size();
 
     const JsonColumn* json_col = json_data_of(column);
+    // A flat layout with no named path (only a remain column) is never streamed: the buffered path writes
+    // such a segment as plain JSON, and a flat segment without sub-columns is not a layout readers expect.
     _uniform_flat_layout = _uniform_flat_layout && json_col != nullptr && json_col->is_flat_json() &&
+                           !json_col->flat_column_paths().empty() &&
                            check_is_same_schema(json_data_of(*_json_datas.front()), json_col);
     const int64_t threshold = streaming_threshold_bytes();
     if (_uniform_flat_layout && threshold > 0 && _estimate_size > static_cast<size_t>(threshold)) {
@@ -114,8 +117,11 @@ Status FlatJsonColumnCompactor::_start_streaming() {
 Status FlatJsonColumnCompactor::_stream_write(const Column& column, const JsonColumn& json_col) {
     // _init_flat_writers() put a "nulls" writer first for a nullable column and a "remain" writer last.
     const size_t first_field = _json_meta->is_nullable() ? 1 : 0;
-    if (!json_col.is_flat_json() ||
-        json_col.flat_column_paths().size() + first_field + json_col.has_remain() != _flat_writers.size()) {
+    const size_t num_named_writers = _flat_writers.size() - first_field - (_has_remain ? 1 : 0);
+    // Check the remain column and the named paths separately: a chunk trading a named path for a remain
+    // column has as many columns as there are writers, and would put its remain JSON into a path's writer.
+    if (!json_col.is_flat_json() || json_col.has_remain() != _has_remain ||
+        json_col.flat_column_paths().size() != num_named_writers) {
         // The compaction reader gives every chunk of a segment the same layout; anything else would be
         // silently mis-written, so stop the compaction instead.
         return Status::InternalError(fmt::format("flat json compaction input changed layout mid-segment: {} -> {}",
