@@ -394,7 +394,8 @@ public class SplitTabletJobTest {
             Assertions.assertSame(expectedResource, actualResource.get());
             // The job must forward exactly what the predicate says for THIS partition at the publish's base
             // version (visibleVersion == commitVersion - 1). The shared test table may already be past
-            // version 1 here; the positive case is testRunRunningHintsSharedInitialMetadataAtVersionOne.
+            // version 1 here. This only checks that the publish forwards what the predicate computes; the
+            // predicate's own cases live in UtilsTest.
             Assertions.assertEquals(
                     Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
                     actualPreferSharedInitialMetadata.get());
@@ -406,10 +407,10 @@ public class SplitTabletJobTest {
 
     /**
      * A partition still at version 1 -- the pre-split of an empty file_bundling partition ahead of its first
-     * load -- keeps its tablets' version-1 metadata only in the partition-shared object, so the reshard
-     * publish must carry the same hint a normal load does; otherwise every old tablet 404s on a per-tablet
-     * key that was never written. Needs a table of its own: the shared test table has been published past
-     * version 1 by the other tests.
+     * load. The reshard publish must carry the hint a normal load of this partition computes. For a
+     * range-distribution table that is false; a partition created with the shared object before such tables
+     * stopped using it still resolves through the compute node's unhinted fallback.
+     * Needs a table of its own: the shared test table has been published past version 1 by the other tests.
      */
     @Test
     public void testRunRunningHintsSharedInitialMetadataAtVersionOne() throws Exception {
@@ -464,7 +465,10 @@ public class SplitTabletJobTest {
             splitJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, splitJob.getJobState());
             Assertions.assertEquals(PhysicalPartition.PARTITION_INIT_VERSION, actualBaseVersion.get());
-            Assertions.assertEquals(Boolean.TRUE, actualPreferSharedInitialMetadata.get());
+            Assertions.assertEquals(Utils.preferSharedInitialMetadata(freshTable, physicalPartition,
+                            PhysicalPartition.PARTITION_INIT_VERSION),
+                    actualPreferSharedInitialMetadata.get(),
+                    "the reshard publish must carry the hint a normal load of this partition would");
         } finally {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);

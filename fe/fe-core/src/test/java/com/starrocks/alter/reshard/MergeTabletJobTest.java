@@ -639,9 +639,8 @@ public class MergeTabletJobTest {
             Assertions.assertSame(expectedResource, actualResource.get());
             // The job must forward exactly what the predicate says for THIS partition at the publish's base
             // version (visibleVersion == commitVersion - 1). The shared test table may already be past
-            // version 1 here; the positive case, on a fresh partition still at version 1, is
-            // SplitTabletJobTest.testRunRunningHintsSharedInitialMetadataAtVersionOne -- the merge job
-            // runs the identical wiring.
+            // version 1 here. This only checks that the publish forwards what the predicate computes; the
+            // predicate's own cases live in UtilsTest.
             Assertions.assertEquals(
                     Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
                     actualPreferSharedInitialMetadata.get());
