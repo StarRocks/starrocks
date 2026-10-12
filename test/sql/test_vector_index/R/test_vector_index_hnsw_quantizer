@@ -28,6 +28,7 @@ SELECT id FROM t_hnsw_sq8
   ORDER BY approx_l2_distance([1.0, 0.0, 0.0, 0.0], vec)
   LIMIT 1;
 -- result:
+1
 -- !result
 CREATE TABLE t_hnsw_sq4 (
   id bigint NOT NULL,
@@ -56,6 +57,7 @@ SELECT id FROM t_hnsw_sq4
   ORDER BY approx_l2_distance([1.0, 0.0, 0.0, 0.0], vec)
   LIMIT 1;
 -- result:
+1
 -- !result
 CREATE TABLE t_hnsw_pq (
   id bigint NOT NULL,
@@ -94,6 +96,7 @@ DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: `M_PQ` is required when QUANTIZER = pq.')
 -- !result
 CREATE TABLE t_hnsw_pq_bad_m (
   id bigint NOT NULL,
@@ -113,6 +116,7 @@ DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: `DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index.')
 -- !result
 CREATE TABLE t_hnsw_bad_quantizer (
   id bigint NOT NULL,
@@ -131,6 +135,7 @@ DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
+E: (1064, 'Getting analyzing error. Detail message: Value of `QUANTIZER` must be in [pq, flat, sq4, sq8].')
 -- !result
 DROP TABLE IF EXISTS t_hnsw_sq8;
 -- result:
