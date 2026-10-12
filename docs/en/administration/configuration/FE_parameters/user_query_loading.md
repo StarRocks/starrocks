@@ -1193,6 +1193,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The default timeout for acquiring the db and table lock during finishing transaction.
 - Introduced in: v4.0.0, v3.5.8
 
+### `history_job_keep_max_num`
+
+- Default: 1000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of finished or cancelled alter jobs that the FE keeps in memory and shows in SHOW ALTER TABLE. Schema change and optimize jobs share one limit, and rollup jobs have their own. Once the limit is exceeded, the jobs that finished earliest are removed, even if they are still within the retention period set by `history_job_keep_max_second`. A job is kept while its old schema may still be used by a running load or, in a shared-data cluster, while a cluster snapshot still needs it, so the number of jobs can temporarily exceed this limit. `0` or a negative value disables the limit.
+- Introduced in: -
+
 ### `history_job_keep_max_second`
 
 - Default: 7 * 24 * 3600

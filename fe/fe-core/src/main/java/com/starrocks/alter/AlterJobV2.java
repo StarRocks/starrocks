@@ -290,6 +290,15 @@ public abstract class AlterJobV2 implements Writable {
         return expired;
     }
 
+    /**
+     * Whether this job's history schema holds nothing anymore: true when the job has no history schema,
+     * or when no transaction that can still be bound to it is running. Idempotent, and releases the
+     * payload exactly like {@link #isExpire()} does, but without the age condition.
+     */
+    public boolean isHistorySchemaReleased() {
+        return expireHistorySchema(getHistorySchema().orElse(null));
+    }
+
     public boolean isDone() {
         return jobState.isFinalState();
     }
