@@ -28,19 +28,15 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-=======
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Range;
->>>>>>> 6619a23 ([BugFix] Create range-distribution tablets with their own initial metadata (#80421))
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -66,12 +62,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.warehouse.cngroup.CRAcquireContext;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Invocation;
->>>>>>> 6619a23 ([BugFix] Create range-distribution tablets with their own initial metadata (#80421))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -92,11 +83,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-<<<<<<< HEAD
-=======
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
->>>>>>> 6619a23 ([BugFix] Create range-distribution tablets with their own initial metadata (#80421))
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -1086,7 +1073,7 @@ public class LakeTableSchemaChangeJobTest {
             // A value-column type change rewrites data, so it runs as a LakeTableSchemaChangeJob.
             alterTable(connectContext, "ALTER TABLE r1 MODIFY COLUMN v BIGINT");
             LakeTableSchemaChangeJob job = getAlterJob(rangeTable);
-            drivePendingJob(job);
+            job.runPendingJob();
 
             List<CreateReplicaTask> shadowTasks = built.stream()
                     .filter(task -> task.getTableId() == rangeTable.getId())
