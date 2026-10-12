@@ -12,13 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.lance;
+package com.starrocks.qe.scheduler;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
