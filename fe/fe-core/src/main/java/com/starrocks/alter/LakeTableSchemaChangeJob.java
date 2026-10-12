@@ -371,8 +371,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
 
-            // disable tablet creation optimaization to avoid overwriting files with the same name.
-            if (table.isFileBundling()) {
+            // disable tablet creation optimization to avoid overwriting files with the same name, and for a
+            // range-distribution table, whose tablets each carry their own range.
+            if (table.isFileBundling() || table.isRangeDistribution()) {
                 enableTabletCreationOptimization = false;
             }
             if (enableTabletCreationOptimization) {
