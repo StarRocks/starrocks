@@ -21,8 +21,10 @@
 #include <limits>
 #include <utility>
 
-#include "base/coding.h"
 #include "fmt/format.h"
+
+// StarRocks headers.
+#include "base/coding.h"
 
 namespace starrocks {
 namespace {
