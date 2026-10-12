@@ -852,7 +852,10 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
             break;
         }
         case TYPE_PERCENTILE: {
-            column_mapping->default_percentile = std::make_unique<PercentileValue>(value);
+            column_mapping->default_percentile = std::make_unique<PercentileValue>();
+            if (!column_mapping->default_percentile->deserialize(value.data(), value.size())) {
+                return Status::Corruption("Invalid default percentile value");
+            }
             column_mapping->default_value_datum.set_percentile(column_mapping->default_percentile.get());
             break;
         }
