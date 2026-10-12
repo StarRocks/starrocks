@@ -2437,6 +2437,51 @@ TEST_F(geographyFunctionsTest, h3FromGeoRetainsCoordinateAndTypeValidation) {
     EXPECT_FALSE(GeoFunctions::h3_from_geo(nullptr, {empty, ColumnHelper::create_const_column<TYPE_INT>(16, 1)}).ok());
 }
 
+TEST_F(geographyFunctionsTest, h3FromGeoConstantAndVaryingPointsShareDiagnostics) {
+    WkbGeometry point;
+    ASSERT_TRUE(WkbCodec::parse_wkt("POINT (181 0)", &point, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    std::string bytes;
+    ASSERT_TRUE(WkbCodec::to_wkb(point, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (const auto& coordinate : std::array<WkbCoordinate, 4>{{{181, 0}, {inf, 0}, {nan, 0}, {nan, nan}}}) {
+        const std::array<double, 2> axes{coordinate.x, coordinate.y};
+        for (size_t axis = 0; axis < axes.size(); ++axis) {
+            const uint64_t bits = std::bit_cast<uint64_t>(axes[axis]);
+            for (size_t i = 0; i < sizeof(bits); ++i) {
+                bytes[5 + axis * sizeof(bits) + i] = static_cast<char>(bits >> (8 * i));
+            }
+        }
+        GeoColumnDescriptor descriptor{
+                geography_type().geo_type.value(),
+                {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+        auto input = GeoColumn::create(descriptor);
+        input->append_wkb(Slice(bytes));
+        auto resolution = ColumnHelper::create_const_column<TYPE_INT>(9, 1);
+        auto varying = GeoFunctions::h3_from_geo(nullptr, {input, resolution});
+        auto constant_input = ConstColumn::create(input, 1);
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+                {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+        context->set_constant_columns({constant_input, resolution});
+        ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto constant = GeoFunctions::h3_from_geo(context.get(), {constant_input, resolution});
+        ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        ASSERT_EQ(std::isnan(coordinate.y), varying.ok());
+        ASSERT_EQ(varying.ok(), constant.ok());
+        if (varying.ok()) {
+            EXPECT_TRUE(ColumnViewer<TYPE_BIGINT>(*varying).is_null(0));
+            EXPECT_TRUE(ColumnViewer<TYPE_BIGINT>(*constant).is_null(0));
+        } else {
+            EXPECT_EQ(varying.status().code(), constant.status().code());
+            EXPECT_EQ(varying.status().message(), constant.status().message());
+            if (coordinate.x == inf) {
+                EXPECT_EQ("Invalid WKB: POINT coordinates must be finite or both NaN for EMPTY",
+                          varying.status().message());
+            }
+        }
+    }
+}
+
 TEST_F(geographyFunctionsTest, h3FromGeoPointBytesInBothOrdersAndMalformedPayloads) {
     const auto from_bytes = [&](const std::string& bytes) {
         GeoColumnDescriptor descriptor{

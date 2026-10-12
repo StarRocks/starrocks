@@ -144,43 +144,46 @@ StatusOr<WkbGeometry> h3_parse_geo(const H3GeoInput& input, size_t row, bool pol
     return geometry;
 }
 
+template <typename T>
+T read_wkb_number(const char* data, bool little_endian) {
+    T value;
+    std::memcpy(&value, data, sizeof(value));
+    if (little_endian != (std::endian::native == std::endian::little)) value = std::byteswap(value);
+    return value;
+}
+
+// An H3_FromGeo argument. POINT EMPTY (an all-NaN XY tuple) maps to NULL.
 struct H3Point {
-    WkbCoordinate coordinate;
+    WkbCoordinate coordinate{};
     bool empty = false;
 };
 
-StatusOr<H3Point> h3_parse_point(Slice wkb) {
-    // An XY POINT has a fixed-size header and two doubles. Validate that
-    // complete structure directly, without decoding it twice via the generic
-    // recursive inspector. Producer validation metadata is never trusted.
-    constexpr size_t kPointWkbSize = 1 + sizeof(uint32_t) + 2 * sizeof(double);
-    const bool little_endian = wkb.size != 0 && wkb.data[0] == 1;
-    uint32_t type = 0;
-    if (wkb.size == kPointWkbSize && (little_endian || wkb.data[0] == 0)) {
-        std::memcpy(&type, wkb.data + 1, sizeof(type));
-        if (little_endian != (std::endian::native == std::endian::little)) type = std::byteswap(type);
+// Decodes an XY POINT without building a WkbGeometry. inspect_geo_wkb accepts an XY
+// POINT only as exactly 21 bytes with byte order 0 or 1 and type code 1, so every
+// other payload is rejected here; inspect_geo_wkb supplies the structural diagnostic.
+// Coordinate checks and messages match WkbCodec::parse_wkb with CRS84 semantics.
+// Producer validation metadata is never trusted.
+StatusOr<H3Point> h3_decode_point(Slice wkb) {
+    constexpr size_t kTypeOffset = 1;
+    constexpr size_t kXOffset = kTypeOffset + sizeof(uint32_t);
+    constexpr size_t kYOffset = kXOffset + sizeof(double);
+    constexpr size_t kPointWkbSize = kYOffset + sizeof(double);
+    const bool known_order = wkb.size == kPointWkbSize && (wkb.data[0] == 0 || wkb.data[0] == 1);
+    const bool little_endian = known_order && wkb.data[0] == 1;
+    if (!known_order || read_wkb_number<uint32_t>(wkb.data + kTypeOffset, little_endian) != 1) {
+        RETURN_IF_ERROR(inspect_geo_wkb(wkb).status());
+        return Status::InvalidArgument("H3_FromGeo requires XY POINT");
     }
-    if (type != 1) {
-        // Keep the existing diagnostics and limits for malformed or unsupported
-        // payloads, including dimensional/SRID flags and trailing bytes.
-        ASSIGN_OR_RETURN(const auto info, inspect_geo_wkb(wkb));
-        if (info.dimension != GEO_DIMENSION_XY || info.geometry_type != 1) {
-            return Status::InvalidArgument("H3_FromGeo requires XY POINT");
-        }
+    const double x = std::bit_cast<double>(read_wkb_number<uint64_t>(wkb.data + kXOffset, little_endian));
+    const double y = std::bit_cast<double>(read_wkb_number<uint64_t>(wkb.data + kYOffset, little_endian));
+    if (std::isnan(x) && std::isnan(y)) return H3Point{{x, y}, true};
+    if (!std::isfinite(x) || !std::isfinite(y)) {
+        return Status::InvalidArgument("Invalid WKB: POINT coordinates must be finite or both NaN for EMPTY");
     }
-    const auto read_coordinate = [&](size_t offset) {
-        uint64_t bits;
-        std::memcpy(&bits, wkb.data + offset, sizeof(bits));
-        if (little_endian != (std::endian::native == std::endian::little)) bits = std::byteswap(bits);
-        return std::bit_cast<double>(bits);
-    };
-    const WkbCoordinate coordinate{read_coordinate(5), read_coordinate(13)};
-    if (std::isnan(coordinate.x) && std::isnan(coordinate.y)) return H3Point{coordinate, true};
-    if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y) || coordinate.x < -180 || coordinate.x > 180 ||
-        coordinate.y < -90 || coordinate.y > 90) {
+    if (x < -180 || x > 180 || y < -90 || y > 90) {
         return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
     }
-    return H3Point{coordinate, false};
+    return H3Point{{x, y}, false};
 }
 
 struct H3PreparedGeo {
@@ -249,7 +252,9 @@ Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::Funct
         return Status::OK();
     }
     const auto* type = context->get_arg_type(0);
-    if (type == nullptr || type->type != TYPE_GEOGRAPHY) return Status::OK();
+    if (type == nullptr || type->type != TYPE_GEOGRAPHY || context->get_return_type().type != TYPE_ARRAY) {
+        return Status::OK();
+    }
     auto state = std::make_unique<H3PreparedGeo>();
     state->constant = true;
     const auto& column = context->get_constant_column(0);
@@ -279,42 +284,26 @@ Status GeoFunctions::h3_close(FunctionContext* context, FunctionContext::Functio
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext*, const Columns& columns) {
     const size_t size = columns[0]->size();
     if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
     ASSIGN_OR_RETURN(const auto input, h3_geo_input(columns[0]));
     ColumnViewer<TYPE_INT> resolutions(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
-    ColumnBuilder<TYPE_BIGINT> result(constant ? 1 : size);
-    const auto* prepared = context == nullptr ? nullptr
-                                              : reinterpret_cast<const H3PreparedGeo*>(
-                                                        context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    std::optional<WkbGeometry> local;
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
-        // Point conversion has bounded per-row work and temporary storage.
-        // Poll once per batch instead of contending on RuntimeState's status
-        // mutex twice per point across all pipeline drivers.
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_BIGINT> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
             continue;
         }
         const int resolution = resolutions.value(row);
         RETURN_IF_ERROR(validate_h3_resolution(resolution));
-        H3Point point;
-        if (input.constant) {
-            WkbGeometry varying;
-            ASSIGN_OR_RETURN(const auto* geometry, h3_geometry(input, row, false, prepared, &local, &varying));
-            point.empty = geometry->empty;
-            if (!point.empty) point.coordinate = geometry->coordinates[0];
-        } else {
-            ASSIGN_OR_RETURN(point, h3_parse_point(input.wkb(row)));
-        }
+        ASSIGN_OR_RETURN(const H3Point point, h3_decode_point(input.wkb(row)));
         if (point.empty) {
             result.append_null();
             continue;
         }
-        // Both decode paths have already checked finite CRS84 coordinates.
-        // H3 does not need a geometry tree or an intermediate S2Point.
         const LatLng latlng{point.coordinate.y * kRadiansPerDegree, point.coordinate.x * kRadiansPerDegree};
         H3Index cell = 0;
         const H3Error error = latLngToCell(&latlng, resolution, &cell);
