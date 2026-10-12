@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.http.action.StaticResourceAction;
 import com.starrocks.http.rest.RestBaseAction;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -59,13 +60,14 @@ public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
         void run() throws Exception;
     }
 
-    // Captures, at DEBUG, what the HTTP server and the base actions log while running body.
+    // Captures, at DEBUG, what the HTTP server, the base actions and StaticResourceAction log while running body.
     private static List<String> captureLogs(ThrowingRunnable body) throws Exception {
         MessageCollector collector = new MessageCollector();
         List<Logger> loggers = List.of(
                 (Logger) LogManager.getLogger(HttpServerHandler.class),
                 (Logger) LogManager.getLogger(BaseAction.class),
-                (Logger) LogManager.getLogger(RestBaseAction.class));
+                (Logger) LogManager.getLogger(RestBaseAction.class),
+                (Logger) LogManager.getLogger(StaticResourceAction.class));
         List<Level> levels = loggers.stream().map(Logger::getLevel).collect(Collectors.toList());
         collector.start();
         // Add every appender before setting the levels: adding the first appender to a logger reconfigures the
@@ -120,6 +122,21 @@ public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
                 && m.contains("token=*")), messages.toString());
         assertTrue(messages.stream().anyMatch(m -> m.startsWith("failed to process url: /api/show_proc?")
                 && m.contains("token=*")), messages.toString());
+        assertNoCredential(messages.toString());
+    }
+
+    @Test
+    public void testTokenIsMaskedWhenActionLogsTheUri() throws Exception {
+        // StaticResourceAction logs the uri at ERROR when the res parameter is missing.
+        List<String> messages = captureLogs(() -> {
+            Request request = new Request.Builder().get().addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + "/static?token=TopSecret").build();
+            try (Response response = networkClient.newCall(request).execute()) {
+                assertEquals(400, response.code());
+            }
+        });
+        assertTrue(messages.contains("Wrong request without 'res' parameter. url: /static?token=*"),
+                messages.toString());
         assertNoCredential(messages.toString());
     }
 

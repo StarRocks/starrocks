@@ -106,7 +106,8 @@ public abstract class BaseAction implements IAction {
         try {
             execute(request, response);
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}, exception: {}", request.getRequest().uri(), DebugUtil.getStackTrace(e));
+            LOG.warn("fail to process url: {}, exception: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    DebugUtil.getStackTrace(e));
             if (e instanceof AccessDeniedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
