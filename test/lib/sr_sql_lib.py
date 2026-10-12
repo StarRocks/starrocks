@@ -78,7 +78,7 @@ from lib.hive_lib import HiveLib
 from lib.arrow_sql_lib import ArrowSqlLib
 from lib import *
 
-PAIMON_FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "data/paimon/warehouse"
+PAIMON_FIXTURE_ROOT = Path(__file__).resolve().parents[1] / "data/catalog/paimon/warehouse"
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
 root_path = os.path.abspath(os.path.join(lib_path, "../"))
