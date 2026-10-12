@@ -211,6 +211,10 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 
     // short circuit for ___count___ optimization.
     if (_scanner_ctx->format_scan_context.can_use_count_optimization()) {
+        if (_scanner_ctx->format_scan_context.file_record_count == 0) {
+            _scanner_ctx->no_more_chunks = true;
+            return Status::EndOfFile("");
+        }
         int64_t file_record_count = 0;
         if (_scanner_ctx->format_scan_context.is_first_split) {
             file_record_count = _scanner_ctx->format_scan_context.file_record_count;
