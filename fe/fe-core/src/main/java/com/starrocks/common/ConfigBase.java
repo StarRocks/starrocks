@@ -514,7 +514,9 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        LOG.info("set config {} to {}", key, maskIfSensitive(field.getAnnotation(ConfField.class), value));
+        // The value as it is set and persisted: e.g. a blank one sets an empty credential, which is not masked.
+        LOG.info("set config {} to {}", key,
+                maskIfSensitive(field.getAnnotation(ConfField.class), parsedConfigValue.confVal));
     }
 
     private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)

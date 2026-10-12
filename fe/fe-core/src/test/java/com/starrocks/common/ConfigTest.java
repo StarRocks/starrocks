@@ -23,6 +23,9 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.Util;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LogEvent;
@@ -280,17 +283,12 @@ public class ConfigTest {
         }
     }
 
-    @Test
-    public void testSetSensitiveConfigKeepsValueOutOfLogAndComments(@TempDir Path tempDir) throws Exception {
-        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
-        assert resource != null;
-        Path confFile = tempDir.resolve("fe.conf");
-        Files.copy(Paths.get(resource.toURI()), confFile);
-        config.init(confFile.toString());
-        Assumptions.assumeTrue(ConfigBase.isIsPersisted(),
-                "Skipping persistence test - not available in container environment");
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
 
-        String key = "authentication_ldap_simple_bind_root_pwd";
+    // The messages ConfigBase logs at INFO while running body.
+    private static List<String> captureConfigBaseLogs(ThrowingRunnable body) throws Exception {
         MessageCollector collector = new MessageCollector();
         Logger logger = (Logger) LogManager.getLogger(ConfigBase.class);
         Level level = logger.getLevel();
@@ -298,25 +296,70 @@ public class ConfigTest {
         logger.addAppender(collector);
         logger.setLevel(Level.INFO);
         try {
-            Config.setMutableConfig(key, "FakeLdapPwd1", true, "root");
-            Config.setMutableConfig(key, "FakeLdapPwd2", true, "root");
-            Config.setMutableConfig("adaptive_choose_instances_threshold", "97", true, "root");
+            body.run();
         } finally {
             logger.setLevel(level);
             logger.removeAppender(collector);
             collector.stop();
+        }
+        return collector.messages;
+    }
+
+    @Test
+    public void testSetSensitiveConfigKeepsValueOutOfLog() throws Exception {
+        String key = "authentication_ldap_simple_bind_root_pwd";
+        int threshold = Config.adaptive_choose_instances_threshold;
+        List<String> messages;
+        try {
+            messages = captureConfigBaseLogs(() -> {
+                Config.setMutableConfig(key, "FakeLdapPwd1", false, "");
+                Assertions.assertEquals("FakeLdapPwd1", Config.authentication_ldap_simple_bind_root_pwd);
+                // A blank value sets an empty credential, so it is logged as empty rather than masked.
+                Config.setMutableConfig(key, "   ", false, "");
+                Assertions.assertEquals("", Config.authentication_ldap_simple_bind_root_pwd);
+                Config.setMutableConfig("adaptive_choose_instances_threshold", " 97 ", false, "");
+            });
+        } finally {
             Config.authentication_ldap_simple_bind_root_pwd = "";
+            Config.adaptive_choose_instances_threshold = threshold;
         }
 
-        // fe.log
-        Assertions.assertTrue(collector.messages.contains("set config " + key + " to " + CredentialMask.LONG),
-                collector.messages.toString());
-        Assertions.assertTrue(collector.messages.contains("set config adaptive_choose_instances_threshold to 97"),
-                collector.messages.toString());
-        Assertions.assertTrue(collector.messages.stream().noneMatch(m -> m.contains("FakeLdapPwd")),
-                collector.messages.toString());
+        List<String> setConfigMessages = messages.stream().filter(m -> m.startsWith("set config ")).toList();
+        Assertions.assertEquals(List.of("set config " + key + " to " + CredentialMask.LONG,
+                "set config " + key + " to ",
+                "set config adaptive_choose_instances_threshold to 97"), setConfigMessages);
+    }
 
-        // fe.conf: the comments are masked, the value itself is kept so that it is loaded on restart.
+    @Test
+    public void testSetSensitiveConfigKeepsValueOutOfPersistedComments(@TempDir Path tempDir) throws Exception {
+        // Persisting is turned off in a container; pretend not to be in one, so that this also runs in CI.
+        new MockUp<Util>() {
+            @Mock
+            public boolean isRunningInContainer() {
+                return false;
+            }
+        };
+        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        assert resource != null;
+        Path confFile = tempDir.resolve("fe.conf");
+        Files.copy(Paths.get(resource.toURI()), confFile);
+        config.init(confFile.toString());
+        Assertions.assertTrue(ConfigBase.isIsPersisted());
+
+        String key = "authentication_ldap_simple_bind_root_pwd";
+        List<String> messages;
+        try {
+            messages = captureConfigBaseLogs(() -> {
+                Config.setMutableConfig(key, "FakeLdapPwd1", true, "root");
+                Config.setMutableConfig(key, "FakeLdapPwd2", true, "root");
+                Config.setMutableConfig("adaptive_choose_instances_threshold", "97", true, "root");
+            });
+        } finally {
+            Config.authentication_ldap_simple_bind_root_pwd = "";
+        }
+        Assertions.assertTrue(messages.stream().noneMatch(m -> m.contains("FakeLdapPwd")), messages.toString());
+
+        // The comments are masked, the value itself is kept so that it is loaded on restart.
         List<String> lines = Files.readAllLines(confFile);
         Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith(
                 "# The user root added " + key + "=" + CredentialMask.LONG + " at ")), lines.toString());
@@ -325,7 +368,7 @@ public class ConfigTest {
                 lines.toString());
         Assertions.assertTrue(lines.contains(key + " = FakeLdapPwd2"), lines.toString());
         Assertions.assertEquals(1, lines.stream().filter(l -> l.contains("FakeLdapPwd")).count(), lines.toString());
-        // Other values are still written as is. (The old value depends on what testMutableConfig left in the file.)
+        // Other values are still written as is.
         Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith("# The user root changed ")
                 && l.contains(" to 97 at ")), lines.toString());
     }
