@@ -377,6 +377,8 @@ public:
     DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
 
 private:
+    Status _init_pk_index_execution_thread_pool();
+
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
 
