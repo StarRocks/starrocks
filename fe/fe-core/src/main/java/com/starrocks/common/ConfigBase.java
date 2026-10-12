@@ -348,6 +348,12 @@ public class ConfigBase {
 
     public static synchronized void setMutableConfig(String key, String value,
                                                      boolean isPersisted, String userIdentity) throws InvalidConfException {
+        Field field = allMutableConfigs.get(key);
+        if (field == null) {
+            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
+        }
+        ConfField anno = field.getAnnotation(ConfField.class);
+
         if (isPersisted) {
             if (!ConfigBase.isIsPersisted()) {
                 String errMsg = "set persisted config failed, because current running mode is not persisted";
@@ -356,15 +362,10 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, value, userIdentity);
+                appendPersistedProperties(key, anno, value, userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
-        }
-
-        Field field = allMutableConfigs.get(key);
-        if (field == null) {
-            throw new InvalidConfException(ErrorCode.ERROR_CONFIG_NOT_EXIST, key);
         }
 
         try {
@@ -373,10 +374,12 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        LOG.info("set config {} to {}", key, value);
+        // The value as it is set (setConfigField trims it): e.g. a blank one sets an empty credential, not masked.
+        LOG.info("set config {} to {}", key, maskIfSensitive(anno, value.trim()));
     }
 
-    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+    private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)
+            throws IOException {
         Properties props = new Properties();
         Path path = Paths.get(configPath);
         List<String> lines = Files.readAllLines(path);
@@ -385,12 +388,15 @@ public class ConfigBase {
         }
 
         String oldValue = props.getProperty(key);
+        // Only the comment is masked: the key = value line below must keep the real value to be loaded on restart,
+        // but the comments pile up, and would otherwise keep every old credential in the file.
         String comment;
         if (StringUtils.isEmpty(oldValue)) {
-            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         } else {
-            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity,
+                    maskIfSensitive(anno, oldValue), maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 
