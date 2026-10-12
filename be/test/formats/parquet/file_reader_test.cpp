@@ -2884,7 +2884,7 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
             ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
             const auto& c_struct_struct = chunk->get_column_by_slot_id(3);
             expect_string_data_column(get_struct_field_column(c_struct_struct, "c0"));
-            const auto& c_struct = get_struct_field_column(c_struct_struct, "c_struct");
+            ColumnPtr c_struct = get_struct_field_column(c_struct_struct, "c_struct");
             expect_string_data_column(get_struct_field_column(c_struct, "c0"));
             expect_string_data_column(get_struct_field_column(c_struct, "c1"));
         }

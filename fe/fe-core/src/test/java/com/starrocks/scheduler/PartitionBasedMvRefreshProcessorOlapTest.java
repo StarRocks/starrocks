@@ -54,6 +54,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -91,6 +92,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -2786,6 +2788,42 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                     }
                 });
         Config.enable_mv_refresh_query_rewrite = true;
+    }
+
+    @Test
+    public void testLockRetryDoesNotLeaveViewBodiesOfTheFailedAttempt() throws Exception {
+        starRocksAssert.withView("create view v_lock_retry as select k1, k2 from tbl1", () ->
+                starRocksAssert.withMaterializedView("create materialized view mv_lock_retry \n" +
+                                "distributed by random \n" +
+                                "refresh deferred manual\n" +
+                                "as select k1, k2 from v_lock_retry;",
+                        () -> {
+                            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                                    .getLocalMetastore().getTable(testDb.getFullName(), "mv_lock_retry");
+                            // Give the refresh something to do: the MV was already refreshed when it was created.
+                            executeInsertSql(connectContext, "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);");
+                            // The first attempt pre-resolves the view body and then times out on the planner
+                            // lock, before the locked analyzer could take it. The retry runs on the same context.
+                            AtomicInteger tryLocks = new AtomicInteger();
+                            new MockUp<PlannerMetaLocker>() {
+                                @Mock
+                                public boolean tryLock(mockit.Invocation invocation, long timeout, TimeUnit unit) {
+                                    if (tryLocks.getAndIncrement() == 0) {
+                                        return false;
+                                    }
+                                    return invocation.proceed();
+                                }
+                            };
+                            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+                            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                            initAndExecuteTaskRun(taskRun);
+
+                            Assertions.assertTrue(tryLocks.get() >= 2, "the refresh never retried the lock");
+                            // Before the fix the failed attempt's body stayed queued ahead of the retry's: the
+                            // retry expanded the stale one, and the current one was left in the context.
+                            Assertions.assertTrue(taskRun.getRunCtx().getPreResolvedState().isEmpty());
+                        }));
     }
 
     @Test

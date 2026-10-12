@@ -2301,7 +2301,6 @@ TEST_F(JoinHashMapTest, BinaryColumnWithLargeOffsetsJoinHashTable) {
             const ColumnPtr& column = result_chunk->get_column_by_slot_id(slot_id);
             const Column* data_column = ColumnHelper::get_data_column(column.get());
             EXPECT_TRUE(data_column->is_binary());
-            EXPECT_FALSE(data_column->is_large_binary());
             check_binary_column(column, 5, (slot_id % 3) * 10 + 1);
         }
 

@@ -14,18 +14,27 @@
 
 package com.starrocks.catalog;
 
-import com.google.gson.annotations.SerializedName;
-
 import java.util.List;
 
 public class LanceTable extends Table {
 
-    @SerializedName(value = "uri")
     private final String uri;
 
+    private final String catalogName;
+
     public LanceTable(long id, String name, List<Column> schema, String uri) {
+        this(id, null, name, schema, uri);
+    }
+
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
+        this.catalogName = catalogName;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public String getUri() {

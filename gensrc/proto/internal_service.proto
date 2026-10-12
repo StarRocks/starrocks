@@ -304,6 +304,10 @@ message PTabletWriterAddChunksRequest {
 message PTabletWriterAddBatchResult {
     message LakeTabletData {
         repeated TxnLogPB txn_logs = 1;
+        // Serialized staros AddShardInfo of one tablet this node owns per partition in txn_logs.
+        // With it the load coordinator writes the partition's combined txn log without asking
+        // starmgr for the shard info of a tablet it does not own. Carries storage credentials.
+        repeated bytes shard_infos = 2;
     };
 
     required StatusPB status = 1;

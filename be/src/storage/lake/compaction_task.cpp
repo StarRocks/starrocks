@@ -41,9 +41,35 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
-int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
-                                                      int64_t total_mem_footprint, size_t source_num) {
+int64_t CompactionTask::stream_buffer_size(int64_t num_streams) {
+    const int64_t configured = config::lake_compaction_stream_buffer_size_bytes;
     const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (configured <= kMinStreamBufferSize || mem_limit <= 0 || num_streams <= 0) {
+        return configured;
+    }
+    return std::clamp<int64_t>(mem_limit / 2 / num_streams, kMinStreamBufferSize, configured);
+}
+
+int64_t CompactionTask::stream_buffer_size_for_pass(int64_t num_streams) {
+    const int64_t buffer_size = stream_buffer_size(num_streams);
+    if (buffer_size < config::lake_compaction_stream_buffer_size_bytes) {
+        _context->stats->stream_buffer_shrunk_passes++;
+        VLOG(1) << "Compaction read buffer shrunk. tablet: " << _tablet.id() << ", txn: " << _txn_id
+                << ", streams: " << num_streams << ", buffer: " << buffer_size
+                << ", configured: " << config::lake_compaction_stream_buffer_size_bytes;
+    }
+    return buffer_size;
+}
+
+int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
+                                                      int64_t total_mem_footprint, size_t source_num,
+                                                      int64_t stream_buffer_bytes) {
+    // The read buffers are allocated whatever the chunk size is, so they come off the budget first.
+    // stream_buffer_size() keeps them within half of it unless its floor kicks in; even then leave
+    // the chunk a quarter, so a huge fan-in degrades to small chunks rather than one-row reads.
+    const int64_t worker_limit = config::compaction_memory_limit_per_worker;
+    const int64_t mem_limit =
+            worker_limit <= 0 ? worker_limit : std::max(worker_limit - stream_buffer_bytes, worker_limit / 4);
     const int32_t config_chunk_size = config::lake_compaction_chunk_size;
     // Baseline for judging how much holding shrinks the read chunk. A non-positive limit means
     // "no memory cap", even when segment metadata remains resident.

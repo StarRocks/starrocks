@@ -280,7 +280,7 @@ public:
         // system ties the two together -- a dictionary-encoded stand-in for a string column is
         // an INT column -- so check rather than reinterpret.
         if constexpr (lt_is_string_or_binary<LT>) {
-            if (UNLIKELY(!element_data_column->is_binary() && !element_data_column->is_large_binary())) {
+            if (UNLIKELY(!element_data_column->is_binary())) {
                 LOG_FIRST_N(ERROR, 20) << "array_agg merge: array element column is " << element_data_column->get_name()
                                        << ", expected a binary column for logical type " << static_cast<int>(LT);
                 ctx->set_error("array_agg: unexpected array element column type");

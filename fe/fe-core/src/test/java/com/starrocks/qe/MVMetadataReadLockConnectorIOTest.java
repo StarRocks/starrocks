@@ -16,7 +16,6 @@ package com.starrocks.qe;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -29,15 +28,13 @@ import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * SHOW MATERIALIZED VIEWS and sys.object_dependencies walk a database's materialized views under that database's
@@ -71,18 +68,12 @@ public class MVMetadataReadLockConnectorIOTest extends MVTestBase {
     }
 
     private static class LockProbeHiveMetadata extends MockedHiveMetadata {
-        private final Thread owner = Thread.currentThread();
-        private final AtomicBoolean underLock = new AtomicBoolean(false);
-        private final AtomicInteger calls = new AtomicInteger();
+        private static final String GET_TABLE = "getTable";
+        private final LockProbe lock = LockProbe.onCurrentThread();
 
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            if (Thread.currentThread() == owner) {
-                calls.incrementAndGet();
-                if (LockHoldDepth.isUnderLock()) {
-                    underLock.set(true);
-                }
-            }
+            lock.record(GET_TABLE);
             return super.getTable(context, dbName, tblName);
         }
     }
@@ -118,7 +109,7 @@ public class MVMetadataReadLockConnectorIOTest extends MVTestBase {
                 "SHOW MATERIALIZED VIEWS FROM " + DB_NAME + " WHERE NAME = '" + MV_NAME + "'", connectContext);
         ShowResultSet result = ShowExecutor.execute(stmt, connectContext);
         Assertions.assertEquals(1, result.getResultRows().size(), "the MV over hive must still be listed");
-        Assertions.assertFalse(probe.underLock.get(),
+        Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE),
                 "SHOW MATERIALIZED VIEWS contacted the external catalog while holding the database lock");
     }
 
@@ -133,9 +124,7 @@ public class MVMetadataReadLockConnectorIOTest extends MVTestBase {
         // The external half is filled in after the lock is released; it must still be filled in.
         Assertions.assertEquals("HIVE", item.getRef_object_type());
         Assertions.assertEquals("lineitem_par", item.getRef_object_name());
-        Assertions.assertTrue(probe.calls.get() > 0,
-                "the probe never saw the connector, so this test proves nothing");
-        Assertions.assertFalse(probe.underLock.get(),
+        probe.lock.assertReachedOutsideTheLock(LockProbeHiveMetadata.GET_TABLE,
                 "sys.object_dependencies contacted the external catalog while holding the database lock");
     }
 

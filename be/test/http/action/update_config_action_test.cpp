@@ -61,6 +61,7 @@ DECLARE_int64(fslib_s3_min_upload_part_size);
 DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
 #endif
 
 namespace brpc {
@@ -405,6 +406,27 @@ TEST_F(ConfigUpdateHooksTest, update_starlet_upload_threshold_configs_reject_non
             EXPECT_EQ(mapping.valid_value, *mapping.config_value)
                     << mapping.be_config << " config not rolled back on rejected " << bad_value;
         }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, update_s3_multipart_equal_part_size) {
+    const bool saved = config::s3_multipart_equal_part_size;
+    gflags::FlagSaver flag_saver;
+    // Declared after the FlagSaver so it runs first: the config is restored through set_config, for
+    // the reason ScopedStarletUploadThresholdConfigs gives, and the gflag is restored after it.
+    DeferOp restore_config([saved] {
+        auto st = config::set_config("s3_multipart_equal_part_size", saved ? "true" : "false");
+        EXPECT_TRUE(st.ok()) << st;
+    });
+
+    auto* registry = ConfigUpdateRegistry::instance();
+    // Start from the opposite flag value each time, so both directions are really forwarded.
+    for (bool value : {true, false}) {
+        FLAGS_fslib_s3_multipart_equal_part_size = !value;
+        auto st = registry->update_config("s3_multipart_equal_part_size", value ? "true" : "false");
+        ASSERT_TRUE(st.ok()) << st;
+        EXPECT_EQ(value, config::s3_multipart_equal_part_size);
+        EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
     }
 }
 

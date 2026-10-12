@@ -45,6 +45,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
+#include "storage/lake/combined_txn_log_writer.h"
 
 namespace starrocks {
 
@@ -935,8 +936,15 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         return _err_st;
     }
 
-    VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << closure->result.DebugString() << "] from ["
-            << _node_info->host << ":" << _node_info->brpc_port << "]";
+    if (VLOG_IS_ON(2)) {
+        // Printed without the shard infos: they carry storage credentials.
+        PTabletWriterAddBatchResult printed = closure->result;
+        if (printed.has_lake_tablet_data()) {
+            printed.mutable_lake_tablet_data()->clear_shard_infos();
+        }
+        VLOG(2) << "NodeChannel[" << _load_info << "] recevied response : " << printed.DebugString() << "] from ["
+                << _node_info->host << ":" << _node_info->brpc_port << "]";
+    }
 
     Status st(closure->result.status());
     if (!st.ok()) {
@@ -1009,6 +1017,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     for (auto& log : *(closure->result.mutable_lake_tablet_data()->mutable_txn_logs())) {
         _txn_logs.emplace_back(std::move(log));
     }
+    borrow_shard_infos(closure->result.lake_tablet_data().shard_infos());
 
     if (!tablet_ids.empty()) {
         string commit_tablet_id_list_str;

@@ -894,6 +894,10 @@ public class QueryAnalyzer {
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
                 }
+                // Taken before time travel binds, which reads the native table too.
+                if (table != null) {
+                    table = table.forQueryPlanning();
+                }
                 table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
                 Relation r;
@@ -2313,8 +2317,8 @@ public class QueryAnalyzer {
                 }
                 boolean exists = metadataMgr.tableExists(session, tableName.getCatalog(), tableName.getDb(),
                         tableName.getTbl());
-                session.getPreResolvedWriteTargets().putCreateTarget(tableName,
-                        new PreResolvedWriteTargets.CreateTarget(db, exists));
+                session.getPreResolvedState().put(PreResolvedState.CREATE_TARGET, tableName,
+                        new PreResolvedState.CreateTarget(db, exists));
             } catch (RuntimeException e) {
                 // left to the locked analyzer, which reports it the way it always has
             }
@@ -2327,7 +2331,7 @@ public class QueryAnalyzer {
          * analyzer is where it belongs. An external one is the opposite -- {@code PlannerMetaLocker} never
          * put it in the lock set, so the lock makes nothing about it stable, and resolving it under the lock
          * only binds the lock's hold time to that catalog's latency. The four DML analyzers pick the answer
-         * up through {@link PreResolvedWriteTargets}.
+         * up through {@link PreResolvedState#WRITE_TARGET}.
          *
          * <p>Nothing here may change what the statement does. A name that does not normalize, a catalog that
          * is not registered, a table that is not there, a connector that refuses -- all of them leave the
@@ -2354,7 +2358,7 @@ public class QueryAnalyzer {
                 Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
                         tableName.getTbl());
                 if (table != null) {
-                    session.getPreResolvedWriteTargets().put(tableName, table);
+                    session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
                 }
             } catch (RuntimeException e) {
                 // left to the locked analyzer, which reports it the way it always has
@@ -2449,6 +2453,10 @@ public class QueryAnalyzer {
                         throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
                     }
                     tableRelation.setTable(table);
+                    // The masking / row-access policy lookup of this table runs under the lock, and would ask
+                    // the catalog for the database and the table again to build their TableUID.
+                    Authorizer.preResolvePolicyTarget(session,
+                            new TableName(catalogName, dbName, tableName.getTbl()), table);
                     if (table instanceof ConnectorView connectorView) {
                         // A view in an external catalog: same story as an internal one, its body is opaque
                         // until expansion. Capture it under the View the expansion will build for it.
@@ -2530,7 +2538,7 @@ public class QueryAnalyzer {
                 cteNameStack.clear();
                 cteNameStack.addAll(enclosingCtes);
             }
-            session.getPreResolvedViewBodies().put(view, body);
+            session.getPreResolvedState().viewBodies().put(view, body);
         }
 
         /**
@@ -2546,8 +2554,13 @@ public class QueryAnalyzer {
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
-            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            // Read twice -- directly and through a view, say -- it is refreshed once and bound to one object.
+            Table refreshedTable = InsertSourceRefresher.refreshedTable(session, resolvedTable);
+            if (refreshedTable == null) {
+                refreshedTable = InsertSourceRefresher.refreshAndReload(session, catalogName, dbName,
+                        tableName.getTbl(), resolvedTable);
+            }
+            // A table gone by now is left to the refresh after analysis, which fails the statement for it.
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 
@@ -2770,7 +2783,7 @@ public class QueryAnalyzer {
      * view and the view has not been redefined since. Null means expand it here, as before.
      */
     private QueryStatement takePreResolvedViewBody(View view) {
-        return session.getPreResolvedViewBodies().take(view);
+        return session.getPreResolvedState().viewBodies().take(view);
     }
 
     public Table resolveTable(TableRelation tableRelation) {

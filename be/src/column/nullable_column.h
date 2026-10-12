@@ -155,8 +155,6 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    bool has_large_column() const override { return _data_column->has_large_column(); }
-
     bool append_strings(const Slice* data, size_t size) override;
 
     bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;

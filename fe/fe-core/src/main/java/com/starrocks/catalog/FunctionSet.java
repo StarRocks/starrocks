@@ -55,6 +55,7 @@ import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -207,6 +208,7 @@ public class FunctionSet {
     public static final String ST_CENTROID = "st_centroid";
     public static final String ST_BUFFER = "st_buffer";
     public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_COVERAGE_SIMPLIFY = "st_coveragesimplify";
     public static final String ST_INTERSECTION = "st_intersection";
     public static final String ST_UNION = "st_union";
     public static final String ST_DIFFERENCE = "st_difference";
@@ -886,6 +888,7 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add(FunctionSet.ST_COVERAGE_SIMPLIFY)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -1617,13 +1620,14 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
-        // Contract 5.4 window reservations, without overloads or BE dispatch.
-        // Analytic builtins currently resolve by name/type, not generated scalar IDs.
-        // Reserve separate IDs for explicit future signatures (no default-argument alias):
-        // Reserved 120420: ST_CoverageSimplify / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY, window.
-        // Reserved 120421: ST_CoverageSimplify / 2 (GEOMETRY, DOUBLE) -> GEOMETRY, window.
-        // Reserved 120430: ST_CoverageSimplify / 3 (GEOGRAPHY, DOUBLE, BOOLEAN) -> GEOGRAPHY, window.
-        // Reserved 120431: ST_CoverageSimplify / 3 (GEOMETRY, DOUBLE, BOOLEAN) -> GEOMETRY, window.
+        Type coverageGeometry = AnyGeometryType.GEOMETRY;
+        AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageTwo);
+        AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
+                coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));

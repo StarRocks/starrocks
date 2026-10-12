@@ -2185,7 +2185,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // Enable `tablet_creation_optimization` creates only one shared tablet metadata for all tablets under a partition. 
         // Enable `file_bundling` reuses the optimization logic.
         // These two configure only use in shared-data mode
+        // The shared metadata carries a single tablet range, and the tablets of a range-distribution table each have
+        // their own, so those tables always get per-tablet metadata.
         option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
+                && !table.isRangeDistribution()
                 && (Config.lake_enable_tablet_creation_optimization || table.isFileBundling()));
         option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         option.setBackfill(backfill);
@@ -5073,7 +5076,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         try {
             Table tbl = getTable(db.getFullName(), hiveExternalTable);
             table = (HiveTable) tbl;
-            table.setNewFullSchema(columns);
+            table.replayModifyTableSchema(columns);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
