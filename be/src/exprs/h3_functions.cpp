@@ -98,16 +98,24 @@ StatusOr<H3Index> h3_cell(int64_t value) {
 constexpr int kH3ResolutionOffset = 52;
 constexpr H3Index kH3ResolutionMask = H3Index{15} << kH3ResolutionOffset;
 
-int h3_validated_resolution(H3Index cell) {
+int h3_cell_resolution(H3Index cell) {
     return static_cast<int>((cell & kH3ResolutionMask) >> kH3ResolutionOffset);
 }
 
-H3Index h3_validated_parent(H3Index cell, int resolution) {
-    // A valid cell already has all unused digits set to 7. Setting the suffix
-    // to 7 therefore replaces cellToParent's per-resolution digit loop.
-    const H3Index suffix = (H3Index{1} << (3 * (15 - resolution))) - 1;
-    return (cell & ~kH3ResolutionMask) | (static_cast<H3Index>(resolution) << kH3ResolutionOffset) | suffix;
-}
+// Parent of a validated cell at a coarser or equal resolution: rewrite the
+// resolution field and set the digits it no longer uses to 7. This is the result of
+// cellToParent without its per-digit loop.
+struct H3ParentMask {
+    explicit H3ParentMask(int resolution)
+            : resolution_bits(static_cast<H3Index>(resolution) << kH3ResolutionOffset),
+              unused_digits((H3Index{1} << (3 * (15 - resolution))) - 1) {}
+
+    bool is_coarser_or_equal(H3Index cell) const { return resolution_bits <= (cell & kH3ResolutionMask); }
+    H3Index parent(H3Index cell) const { return (cell & ~kH3ResolutionMask) | resolution_bits | unused_digits; }
+
+    H3Index resolution_bits;
+    H3Index unused_digits;
+};
 
 Status validate_h3_resolution(int value) {
     if (value < 0 || value > 15) {
@@ -346,15 +354,12 @@ StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext*, const Columns&
         values.resize(constant ? 1 : size);
         int resolution_or = 0;
         int resolution_and = 15;
-        for (size_t begin = 0; begin < values.size(); begin += 1024) {
-            const size_t end = std::min(begin + 1024, values.size());
-            for (size_t row = begin; row < end; ++row) {
-                ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
-                const int resolution = h3_validated_resolution(cell);
-                values[row] = resolution;
-                resolution_or |= resolution;
-                resolution_and &= resolution;
-            }
+        for (size_t row = 0; row < values.size(); ++row) {
+            ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
+            const int resolution = h3_cell_resolution(cell);
+            values[row] = resolution;
+            resolution_or |= resolution;
+            resolution_and &= resolution;
         }
         // All rows were validated even when their resolutions are identical.
         // Preserve a uniform result as a constant column for downstream operators.
@@ -364,16 +369,23 @@ StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext*, const Columns&
         }
         return result;
     }
-    ColumnBuilder<TYPE_INT> result(constant ? 1 : size);
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    auto values = Int32Column::create();
+    auto& value_data = values->get_data();
+    value_data.resize(constant ? 1 : size);
+    auto nulls = NullColumn::create(value_data.size(), 0);
+    bool any_null = false;
+    for (size_t row = 0; row < value_data.size(); ++row) {
         if (input.is_null(row)) {
-            result.append_null();
+            value_data[row] = 0;
+            nulls->get_data()[row] = 1;
+            any_null = true;
             continue;
         }
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
-        result.append(getResolution(cell));
+        value_data[row] = h3_cell_resolution(cell);
     }
-    ColumnPtr output = result.build(false);
+    ColumnPtr output = std::move(values);
+    if (any_null) output = NullableColumn::create(std::move(output), std::move(nulls));
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
 }
@@ -390,55 +402,54 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_parent(FunctionContext*, const Columns& 
         values.resize(constant ? 1 : size);
         const int constant_resolution = columns[1]->is_constant() && !values.empty() ? resolutions.value(0) : -1;
         if (constant_resolution >= 0 && constant_resolution <= 15) {
-            const H3Index parent_bits = static_cast<H3Index>(constant_resolution) << kH3ResolutionOffset;
-            const H3Index suffix = (H3Index{1} << (3 * (15 - constant_resolution))) - 1;
-            const H3Index parent_mask = parent_bits | suffix;
-            for (size_t begin = 0; begin < values.size(); begin += 1024) {
-                const size_t end = std::min(begin + 1024, values.size());
-                for (size_t row = begin; row < end; ++row) {
-                    ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
-                    if ((cell & kH3ResolutionMask) < parent_bits) {
-                        return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
-                    }
-                    values[row] = static_cast<int64_t>((cell & ~kH3ResolutionMask) | parent_mask);
+            const H3ParentMask parent(constant_resolution);
+            for (size_t row = 0; row < values.size(); ++row) {
+                ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
+                if (!parent.is_coarser_or_equal(cell)) {
+                    return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
                 }
+                values[row] = static_cast<int64_t>(parent.parent(cell));
             }
         } else {
             // Invalid constant targets use the ordinary path: cell validation
             // must still precede resolution errors, and empty inputs stay empty.
-            for (size_t begin = 0; begin < values.size(); begin += 1024) {
-                const size_t end = std::min(begin + 1024, values.size());
-                for (size_t row = begin; row < end; ++row) {
-                    ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
-                    const int resolution = resolutions.value(row);
-                    RETURN_IF_ERROR(validate_h3_resolution(resolution));
-                    if (resolution > h3_validated_resolution(cell)) {
-                        return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
-                    }
-                    values[row] = static_cast<int64_t>(h3_validated_parent(cell, resolution));
+            for (size_t row = 0; row < values.size(); ++row) {
+                ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
+                const int resolution = resolutions.value(row);
+                RETURN_IF_ERROR(validate_h3_resolution(resolution));
+                const H3ParentMask parent(resolution);
+                if (!parent.is_coarser_or_equal(cell)) {
+                    return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
                 }
+                values[row] = static_cast<int64_t>(parent.parent(cell));
             }
         }
         if (constant) return ConstColumn::create(std::move(result), size);
         return result;
     }
-    ColumnBuilder<TYPE_BIGINT> result(constant ? 1 : size);
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    auto values = Int64Column::create();
+    auto& value_data = values->get_data();
+    value_data.resize(constant ? 1 : size);
+    auto nulls = NullColumn::create(value_data.size(), 0);
+    bool any_null = false;
+    for (size_t row = 0; row < value_data.size(); ++row) {
         if (input.is_null(row) || resolutions.is_null(row)) {
-            result.append_null();
+            value_data[row] = 0;
+            nulls->get_data()[row] = 1;
+            any_null = true;
             continue;
         }
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
         const int resolution = resolutions.value(row);
         RETURN_IF_ERROR(validate_h3_resolution(resolution));
-        if (resolution > getResolution(cell))
+        const H3ParentMask parent(resolution);
+        if (!parent.is_coarser_or_equal(cell)) {
             return Status::InvalidArgument("H3_ToParent resolution exceeds cell resolution");
-        H3Index parent = 0;
-        const H3Error error = cellToParent(cell, resolution, &parent);
-        if (error != E_SUCCESS) return h3_error("H3_ToParent", error);
-        result.append(static_cast<int64_t>(parent));
+        }
+        value_data[row] = static_cast<int64_t>(parent.parent(cell));
     }
-    ColumnPtr output = result.build(false);
+    ColumnPtr output = std::move(values);
+    if (any_null) output = NullableColumn::create(std::move(output), std::move(nulls));
     if (constant) return ConstColumn::create(std::move(output), size);
     return output;
 }
