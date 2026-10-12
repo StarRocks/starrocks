@@ -996,6 +996,12 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_mv_percentile_strict_match
+
+* **Default**: false
+* **Data type**: boolean
+* **Description**: When `true`, percentile materialized-view rewrites reject stored digests whose compression is lower than the query requests. The optimizer can use a suitable digest from the same or another materialized view, or fall back to the base table. When `false`, lower-compression candidates remain eligible, but candidates with sufficient compression are preferred. Rejected equivalents are recorded in the MV trace.
+
 ### enable_profile
 
 * **Description**: Specifies whether to send the profile of a query for analysis. The default value is `false`, which means no profile is required.
