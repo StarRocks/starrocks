@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "base/container/lru_cache.h"
+#include "base/debug/trace.h"
 #include "base/phmap/btree.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -46,6 +47,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/thread/threadpool.h"
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "runtime/descriptors.h"
@@ -2466,6 +2468,7 @@ TEST_F(LakePersistentIndexTest, test_cold_rebuild_rejects_unmasked_duplicate_pri
 // that are too old for the current index entry. too_old = origin_rowset_id + op_offset: keys whose
 // current rssid (value >> 32) is <= too_old get erased; keys with a newer rssid keep their value.
 TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes) {
+    ConfigResetGuard<int64_t> min_rows_guard(&config::pk_index_parallel_execution_min_rows, 2);
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index->init(_tablet_metadata));
@@ -2479,6 +2482,7 @@ TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes)
         values.emplace_back(((uint64_t)rssids[i] << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
 
     write_binary_del_file(tablet_id, "del_nonorigin", keys);
     RowsetMetadataPB rowset_meta;
@@ -2493,7 +2497,18 @@ TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes)
     std::vector<ColumnId> pk_columns = {0};
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+    }
+    int64_t tasks = 0;
+    for (const auto& [name, value] : trace->metrics()->Get()) {
+        if (std::string(name) == "rebuild_index_del_get_cnt") {
+            tasks = value;
+        }
+    }
+    EXPECT_EQ(2, tasks); // A single del file also fans out its SST filter lookup.
 
     std::vector<IndexValue> got(keys.size());
     ASSERT_OK(index->get(keys.size(), key_slices.data(), got.data()));
@@ -2547,6 +2562,10 @@ TEST_F(LakePersistentIndexTest, test_load_dels_origin_erases_all_keys) {
 // as the single-pass path, including when del files share keys. Files are an origin + a non-origin del
 // that overlap on keys, exercising the idempotent-erase / shared-key reasoning in load_dels.
 TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
+    ConfigResetGuard<int64_t> min_rows_guard(&config::pk_index_parallel_execution_min_rows, 2);
+    // BE_TEST gives the outer PK execution pool a single worker. Each inherited del lookup must
+    // complete on a different pool even while that worker is waiting for its nested lookup tasks.
+    ASSERT_EQ(1, RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->max_threads());
     auto tablet_schema = make_varchar_pk_schema();
     std::vector<ColumnId> pk_columns = {0};
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
@@ -2570,6 +2589,7 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
             values.emplace_back(((uint64_t)rssids[i] << 32) | i);
         }
         CHECK_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+        CHECK_OK(index->sync_flush_all_memtables(10'000'000));
 
         // Two del files that share keys: one non-origin (filters stale deletes), one origin (erase all).
         write_binary_del_file(tablet_id, "del_a", {"k0", "k1", "k2"});
@@ -2586,7 +2606,21 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
         db->set_op_offset(0);
 
         auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
-        CHECK_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+        scoped_refptr<Trace> trace(new Trace);
+        {
+            ADOPT_TRACE(trace.get());
+            CHECK_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+        }
+        int64_t tasks = 0;
+        bool saw_sst_reads = false;
+        for (const auto& [name, value] : trace->metrics()->Get()) {
+            if (std::string(name) == "rebuild_index_del_get_cnt") {
+                tasks = value;
+            }
+            saw_sst_reads |= std::string(name) == "multi_get_us";
+        }
+        EXPECT_EQ(2, tasks);        // Only the inherited del's three keys need the filter lookup.
+        EXPECT_TRUE(saw_sst_reads); // The caller's trace survives both levels of pool tasks.
 
         std::vector<IndexValue> got(keys.size());
         CHECK_OK(index->get(keys.size(), key_slices.data(), got.data()));
@@ -2598,7 +2632,119 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
     ASSERT_EQ(serial.size(), parallel.size());
     for (size_t i = 0; i < serial.size(); ++i) {
         EXPECT_EQ(serial[i], parallel[i]) << "mismatch at key " << keys[i];
+        EXPECT_EQ(i == 1 ? IndexValue((uint64_t{50} << 32) | i) : IndexValue(NullIndexValue), parallel[i]);
     }
+}
+
+TEST_F(LakePersistentIndexTest, test_parallel_get_matches_get_across_index_layers) {
+    ConfigResetGuard<int64_t> min_rows_guard(&config::pk_index_parallel_execution_min_rows, 2);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    std::array<uint64_t, 7> keys = {0, 1, 2, 3, 4, 5, 6};
+    std::array<Slice, 7> slices;
+    std::array<IndexValue, 7> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        slices[i] = Slice(reinterpret_cast<const char*>(&keys[i]), sizeof(keys[i]));
+        values[i] = IndexValue((uint64_t{5} << 32) | i);
+    }
+    // The last key is absent. With no backing store, even a large lookup stays inline.
+    ASSERT_OK(index->insert(6, slices.data(), values.data(), 1));
+    scoped_refptr<Trace> memtable_trace(new Trace);
+    {
+        ADOPT_TRACE(memtable_trace.get());
+        std::array<IndexValue, 7> got;
+        ASSERT_OK(index->parallel_get(keys.size(), slices.data(), got.data()));
+        EXPECT_EQ(IndexValue(NullIndexValue), got.back());
+    }
+    for (const auto& [name, value] : memtable_trace->metrics()->Get()) {
+        EXPECT_NE("rebuild_index_del_get_cnt", std::string(name));
+    }
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    // A newer SST overrides a key and hides another behind a tombstone.
+    values[2] = IndexValue((uint64_t{50} << 32) | 2);
+    ASSERT_OK(index->insert(1, &slices[2], &values[2], 2));
+    ASSERT_OK(index->replay_erase(1, &slices[3], {false}, 2, 50));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    // The active memtable overrides an SST entry and contains another tombstone.
+    values[4] = IndexValue((uint64_t{60} << 32) | 4);
+    ASSERT_OK(index->insert(1, &slices[4], &values[4], 3));
+    ASSERT_OK(index->replay_erase(1, &slices[0], {false}, 3, 60));
+    values[0] = values[3] = values[6] = IndexValue(NullIndexValue);
+
+    // Empty/small batches exercise the inline path; 3 and 7 include a partial final task.
+    for (size_t n : {0, 1, 2, 3, 7}) {
+        std::vector<IndexValue> serial(n), parallel(n);
+        ASSERT_OK(index->get(n, slices.data(), serial.data()));
+        scoped_refptr<Trace> trace(new Trace);
+        {
+            ADOPT_TRACE(trace.get());
+            ASSERT_OK(index->parallel_get(n, slices.data(), parallel.data()));
+        }
+        EXPECT_EQ(serial, parallel);
+        int64_t tasks = 0;
+        for (const auto& [name, value] : trace->metrics()->Get()) {
+            if (std::string(name) == "rebuild_index_del_get_cnt") {
+                tasks = value;
+            }
+        }
+        EXPECT_EQ(n > 2 ? (n + 1) / 2 : 0, tasks);
+        for (size_t i = 0; i < n; ++i) {
+            EXPECT_EQ(values[i], parallel[i]) << "key " << i;
+        }
+    }
+}
+
+TEST_F(LakePersistentIndexTest, test_load_dels_parallel_get_propagates_sst_error_before_replay) {
+    ConfigResetGuard<int64_t> min_rows_guard(&config::pk_index_parallel_execution_min_rows, 2);
+    const auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
+    std::vector<Slice> slices;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        slices.emplace_back(keys[i]);
+        values.emplace_back((uint64_t{5} << 32) | i);
+    }
+    ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(999);
+    for (const auto* name : {"del_lookup_error_a", "del_lookup_error_b"}) {
+        write_binary_del_file(tablet_id, name, keys);
+        auto* del = rowset_meta.add_del_files();
+        del->set_name(name);
+        del->set_origin_rowset_id(20);
+        del->set_op_offset(0);
+    }
+    auto tablet_schema = make_varchar_pk_schema();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, 0, tablet_schema);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+
+    std::atomic<int> lookups{0};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:error", [&](void* arg) {
+        ++lookups;
+        *static_cast<Status*>(arg) = Status::IOError("injected del lookup failure");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::multi_get:error");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    const auto errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    auto st = index->load_dels(rowset, pkey_schema, 10);
+    EXPECT_TRUE(st.is_io_error()) << st;
+    EXPECT_NE(std::string::npos, st.to_string().find("injected del lookup failure"));
+    // Both del files' three batches finish before load_dels returns the original SST error.
+    EXPECT_EQ(6, lookups.load());
+    EXPECT_EQ(errors_before + 6, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    SyncPoint::GetInstance()->DisableProcessing();
+    std::vector<IndexValue> got(keys.size());
+    ASSERT_OK(index->get(keys.size(), slices.data(), got.data()));
+    EXPECT_EQ(values, got); // Phase 2 did not replay any delete on an incomplete prefetch.
 }
 
 TEST(AssignGenerationVersionsTest, stamps_new_preserves_existing_and_legacy) {

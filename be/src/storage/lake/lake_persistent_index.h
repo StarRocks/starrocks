@@ -385,6 +385,10 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
+    // Read disjoint key batches on load_segment_thread_pool. Rebuild's load_one already runs on
+    // pk_index_execution_thread_pool, so its nested lookups must use a different pool.
+    Status parallel_get(size_t n, const Slice* keys, IndexValue* values);
+
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
