@@ -1106,13 +1106,10 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
     // publish memory in the first place.
     const size_t num_keys = deletes->size();
     const Column* data_column = ColumnHelper::get_data_column(deletes);
-    const LargeBinaryColumn* large_binary_column = nullptr;
     const BinaryColumn* binary_column = nullptr;
     const uint8_t* fixed_width_data = nullptr;
     size_t fixed_width_key_size = 0;
-    if (data_column->is_large_binary()) {
-        large_binary_column = down_cast<const LargeBinaryColumn*>(data_column);
-    } else if (data_column->is_binary()) {
+    if (data_column->is_binary()) {
         binary_column = down_cast<const BinaryColumn*>(data_column);
     } else {
         // A non-binary PK column is fixed width: keys sit back to back, type_size() bytes each.
@@ -1122,9 +1119,6 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
         fixed_width_key_size = data_column->type_size();
     }
     auto key_at = [&](size_t i) -> Slice {
-        if (large_binary_column != nullptr) {
-            return large_binary_column->get_slice(i);
-        }
         if (binary_column != nullptr) {
             return binary_column->get_slice(i);
         }

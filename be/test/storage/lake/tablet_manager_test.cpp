@@ -776,6 +776,111 @@ TEST_F(LakeTabletManagerTest, create_tablet_without_range) {
     EXPECT_FALSE(metadata->has_range());
 }
 
+// A range-distribution partition creates every tablet with its own version-1 metadata and range. That
+// metadata must win over a partition-shared version-1 object in the same directory (an older partition
+// layout), and every later version must keep the tablet's own range, whether it is written per tablet or
+// into a bundle.
+TEST_F(LakeTabletManagerTest, per_tablet_initial_metadata_keeps_each_tablet_range) {
+    auto make_int_bound = [](const std::string& value) {
+        TTypeDesc type_desc;
+        type_desc.types.resize(1);
+        type_desc.types[0].type = TTypeNodeType::SCALAR;
+        type_desc.types[0].scalar_type.type = TPrimitiveType::INT;
+        type_desc.types[0].__isset.scalar_type = true;
+        type_desc.__isset.types = true;
+        TVariant variant;
+        variant.__set_type(type_desc);
+        variant.__set_value(value);
+        variant.__set_variant_type(TVariantType::NORMAL_VALUE);
+        TTuple tuple;
+        tuple.values.push_back(variant);
+        return tuple;
+    };
+    auto make_request = [&](int64_t tablet_id, int64_t schema_id, const std::string* lower, const std::string* upper,
+                            bool shared) {
+        TCreateTabletReq req;
+        req.tablet_id = tablet_id;
+        req.__set_version(1);
+        req.__set_version_hash(0);
+        req.__set_enable_tablet_creation_optimization(shared);
+        req.tablet_schema.__set_id(schema_id);
+        req.tablet_schema.__set_schema_hash(270068375);
+        req.tablet_schema.__set_short_key_column_count(1);
+        req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
+        TTabletRange range;
+        if (lower != nullptr) {
+            range.__set_lower_bound(make_int_bound(*lower));
+            range.__set_lower_bound_included(true);
+        }
+        if (upper != nullptr) {
+            range.__set_upper_bound(make_int_bound(*upper));
+            range.__set_upper_bound_included(false);
+        }
+        req.__set_range(range);
+        return req;
+    };
+
+    const std::string v100 = "100";
+    const std::string v200 = "200";
+    const auto schema_id = next_id();
+    const auto first_id = next_id();
+    const auto second_id = next_id();
+    const auto third_id = next_id();
+    // The older layout: one shared object, written from the first tablet, carrying (-inf, 100).
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(first_id, schema_id, nullptr, &v100, true)));
+    // The per-tablet layout for [100, 200) and [200, +inf).
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(second_id, schema_id, &v100, &v200, false)));
+    ASSERT_OK(_tablet_manager->create_tablet(make_request(third_id, schema_id, &v200, nullptr, false)));
+    _tablet_manager->metacache()->prune();
+
+    auto expect_range = [](const TabletMetadataPtr& metadata, const std::string* lower, const std::string* upper) {
+        ASSERT_TRUE(metadata->has_range());
+        ASSERT_EQ(lower != nullptr, metadata->range().has_lower_bound());
+        if (lower != nullptr) {
+            EXPECT_EQ(*lower, metadata->range().lower_bound().values(0).value());
+        }
+        ASSERT_EQ(upper != nullptr, metadata->range().has_upper_bound());
+        if (upper != nullptr) {
+            EXPECT_EQ(*upper, metadata->range().upper_bound().values(0).value());
+        }
+    };
+
+    ASSIGN_OR_ABORT(auto second_v1, _tablet_manager->get_tablet_metadata(second_id, 1));
+    expect_range(second_v1, &v100, &v200);
+    ASSIGN_OR_ABORT(auto third_v1, _tablet_manager->get_tablet_metadata(third_id, 1));
+    expect_range(third_v1, &v200, nullptr);
+
+    // Version 2 written per tablet keeps the range.
+    auto publish_empty_write = [&](int64_t tablet_id, int64_t txn_id, bool skip_write_tablet_metadata) {
+        auto txn_log = std::make_shared<TxnLog>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(txn_id);
+        txn_log->mutable_op_write()->mutable_rowset()->set_num_rows(0);
+        txn_log->mutable_op_write()->mutable_rowset()->set_data_size(0);
+        txn_log->mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        CHECK_OK(_tablet_manager->put_txn_log(txn_log));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_txn_type(TXN_NORMAL);
+        return lake::publish_version(_tablet_manager, lake::PublishTabletInfo(tablet_id), /*base_version=*/1,
+                                     /*new_version=*/2, std::span<const TxnInfoPB>(&txn_info, 1),
+                                     skip_write_tablet_metadata);
+    };
+    ASSIGN_OR_ABORT(auto second_v2, publish_empty_write(second_id, next_id(), false));
+    expect_range(second_v2, &v100, &v200);
+
+    // Version 2 written into a bundle (what an aggregate publish does) keeps the range too.
+    ASSIGN_OR_ABORT(auto third_v2, publish_empty_write(third_id, next_id(), true));
+    std::map<int64_t, TabletMetadataPB> bundle;
+    bundle.emplace(third_id, *third_v2);
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(bundle));
+    _tablet_manager->metacache()->prune();
+    ASSIGN_OR_ABORT(auto third_v2_read, _tablet_manager->get_tablet_metadata(third_id, 2));
+    expect_range(third_v2_read, &v200, nullptr);
+}
+
 // NOLINTNEXTLINE
 TEST_F(LakeTabletManagerTest, list_tablet_meta) {
     starrocks::TabletMetadata metadata;
@@ -2713,6 +2818,36 @@ TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all
     // unit tests (the StarOS worker is null), so the first candidate is picked immediately.
     std::vector<int64_t> candidates{300, 301, 302};
     EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+// A tablet whose shard info its owner handed over resolves without a starmgr RPC too, so it is the
+// anchor when no candidate is local. A local candidate still wins.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_prefers_borrowed_over_remote) {
+    std::shared_ptr<StarOSWorker> origin_worker = get_staros_worker();
+    auto worker = std::make_shared<StarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp op([origin_worker] { set_staros_worker_for_test(origin_worker); });
+
+    StarOSWorker owner;
+    staros::starlet::ShardInfo borrowed;
+    borrowed.id = 401;
+    borrowed.hash_code = 0;
+    ASSERT_TRUE(owner.add_shard(borrowed).ok());
+    auto exported = owner.export_shard_info(401);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+    _tablet_manager->borrow_shard_info(*exported);
+    // The tablet manager only hands out shard infos of tablets this node owns.
+    EXPECT_TRUE(_tablet_manager->export_shard_info(401).empty());
+
+    std::vector<int64_t> candidates{400, 401, 402};
+    EXPECT_EQ(401, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+
+    staros::starlet::ShardInfo local;
+    local.id = 402;
+    local.hash_code = 0;
+    ASSERT_TRUE(worker->add_shard(local).ok());
+    EXPECT_EQ(402, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+    EXPECT_FALSE(_tablet_manager->export_shard_info(402).empty());
 }
 
 #endif // USE_STAROS

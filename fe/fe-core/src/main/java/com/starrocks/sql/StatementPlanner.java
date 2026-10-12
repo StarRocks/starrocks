@@ -40,12 +40,14 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
+import com.starrocks.sql.analyzer.InsertSourceRefresher;
 import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
@@ -212,8 +214,7 @@ public class StatementPlanner {
             // consume (a view behind a branch that was never reached, a body the "still current" check
             // rejected) must not be offered to the next one. Same for a write target the analyzer did not
             // come to collect -- a statement that failed before it reached its target, say.
-            session.getPreResolvedViewBodies().clear();
-            session.getPreResolvedWriteTargets().clear();
+            session.getPreResolvedState().clear();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
@@ -315,7 +316,9 @@ public class StatementPlanner {
                     InsertAnalyzer.analyzeWithDeferredLock(insertStmt, session, takeLock);
                     Analyzer.AnalyzerVisitor.analyzeSubmitTaskOnly(insertStmt, (SubmitTaskStmt) statement, session);
                 } else {
-                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock);
+                    // The SELECT does not need the lock: refresh its remaining sources before taking it.
+                    InsertAnalyzer.analyzeWithDeferredLock((InsertStmt) statement, session, takeLock,
+                            () -> refreshRemainingInsertSources(statement, session));
                 }
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
@@ -329,9 +332,22 @@ public class StatementPlanner {
                 }
                 takeLock.run();
                 Analyzer.analyze(statement, session);
+                refreshRemainingInsertSources(statement, session);
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return false;
             }
+        }
+    }
+
+    /**
+     * The pre-pass above refreshes the sources of an INSERT it reaches; this refreshes the rest and rebinds them,
+     * now that analysis has expanded every view and subquery. Outside the lock on the deferred path, under it on
+     * the locked one. Only for an INSERT about to be planned: a SUBMIT TASK plans its INSERT when the task runs,
+     * and refreshes then.
+     */
+    private static void refreshRemainingInsertSources(StatementBase statement, ConnectContext session) {
+        if (statement instanceof InsertStmt insertStmt && InsertSourceRefresher.isEnabled(session)) {
+            InsertSourceRefresher.refreshRemaining(insertStmt.getQueryStatement(), session);
         }
     }
 
@@ -551,6 +567,9 @@ public class StatementPlanner {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setMvTransformerContext(mvTransformerContext);
             optimizerContext.setStatement(stmt);
+            // As createQueryPlanWithReTry and InsertPlanner do: whether a query is planned under the lock must
+            // not decide whether disable_table_stats_from_metadata_for_single_table applies to it.
+            optimizerContext.setSourceTablesCount(collectSourceTablesCount(session, queryStmt));
             if (isShortCircuit) {
                 optimizerContext.setOptimizerOptions(OptimizerOptions.newShortCircuitOpt());
             }
@@ -726,7 +745,7 @@ public class StatementPlanner {
 
     // Lock all database before analyze
     public static void lock(PlannerMetaLocker locker) {
-        locker.lock();
+        locker.lockForPlanning();
     }
 
     // unLock all database after analyze
@@ -754,6 +773,46 @@ public class StatementPlanner {
         resultSink.setOutfileInfo(queryStmt.getOutFileClause(), columnOutputNames);
     }
 
+    /**
+     * An EXPLAIN begins no transaction, but it plans the INSERT all the same, and an external OLAP target has to be
+     * synced from its cluster for that: the published table carries no partitions, tablets or backends of its own.
+     * So the target is swapped for a synced private copy here, before the meta lock is taken, exactly as
+     * {@link #beginTransaction} does for an INSERT that runs -- the planner never sees the published object.
+     * Only an internal-catalog target can be one, so nothing else is resolved early; anything not found is left
+     * for the analyzer to report.
+     */
+    private static void syncExternalOlapTargetForExplain(DmlStmt stmt, ConnectContext session) {
+        if (!(stmt instanceof InsertStmt)) {
+            return;
+        }
+        InsertStmt insertStmt = (InsertStmt) stmt;
+        // An OVERWRITE is refused for an external OLAP table by the analyzer anyway, so it is not worth a sync.
+        if (insertStmt.useTableFunctionAsTargetTable() || insertStmt.useBlackHoleTableAsTargetTable()
+                || insertStmt.getTableRef() == null || insertStmt.isOverwrite()) {
+            return;
+        }
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (!CatalogMgr.isInternalCatalog(tableRef.getCatalogName())) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableRef.getDbName());
+        if (db == null) {
+            return;
+        }
+        if (!(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                tableRef.getTableName()) instanceof ExternalOlapTable)) {
+            return;
+        }
+        // Resolved again the way the INSERT is, so that a temporary table of the same name still shadows it.
+        Table table = MetaUtils.getSessionAwareTable(session, db, TableName.fromTableRef(tableRef));
+        if (table instanceof ExternalOlapTable) {
+            // Written back as beginTransaction does: with the target set, InsertAnalyzer skips the resolution that
+            // would normalize it, and the privilege check needs the database of an unqualified name.
+            insertStmt.setTableRef(tableRef);
+            insertStmt.setTargetTable(MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) table));
+        }
+    }
+
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
             DuplicatedRequestException {
@@ -769,6 +828,7 @@ public class StatementPlanner {
         // 4. insert overwrite (first plan, before handleInsertOverwrite)
         // 5. txnId already set (e.g., by InsertOverwriteJobRunner for dynamic overwrite re-plan)
         if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
+            syncExternalOlapTargetForExplain(stmt, session);
             return;
         }
         if (stmt instanceof InsertStmt) {

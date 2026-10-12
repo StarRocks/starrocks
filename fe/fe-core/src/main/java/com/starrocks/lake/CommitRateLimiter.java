@@ -93,8 +93,13 @@ public class CommitRateLimiter {
     public void check(@NotNull Set<Long> partitionIds, long currentTimeMs)
             throws CommitRateExceededException, CommitFailedException {
         Preconditions.checkNotNull(partitionIds, "partitionIds is null");
-        // Does not limit the commit rate of compaction transactions
-        if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+        // Does not limit the commit rate of compaction transactions, nor of an online-rewrite alter's shadow
+        // rewrite. Compaction is skipped on a table under that alter (see CompactionScheduler), so only the
+        // rewrite finishing lets the score come down: delaying it parks the single alter scheduler thread
+        // while concurrent loads keep raising the score, and the upper bound below then rejects it outright.
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        if (sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION
+                || sourceType == TransactionState.LoadJobSourceType.SHADOW_REWRITE) {
             return;
         }
 

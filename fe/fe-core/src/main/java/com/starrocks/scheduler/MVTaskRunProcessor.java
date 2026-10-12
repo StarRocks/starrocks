@@ -95,6 +95,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     public MVTaskRunProcessor() {
     }
 
+    @Override
+    public void postTaskRun(TaskRunContext context) {
+        // Older MV tasks may still have an ANALYZE statement persisted in postRun. MV refresh no longer
+        // generates this statement, so do not let the generic task post-processor execute the legacy value.
+        // Statistics maintenance for refreshed partitions is handled by the insert-overwrite path.
+    }
+
     @VisibleForTesting
     @Override
     public TaskRunContext prepare(TaskRunContext context) throws Exception {

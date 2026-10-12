@@ -40,8 +40,6 @@ public:
     using LocationType = uint32_t;
     using Locations = std::vector<LocationType>;
 
-    bool has_large_column() const override { return false; }
-
     size_t size() const override { return _num_rows; }
 
     size_t container_memory_usage() const override;

@@ -118,6 +118,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PListCell;
@@ -1044,8 +1045,10 @@ public class AnalyzerUtils {
      * copyOnlyForQuery, unless one carries more related MVs than skip_whole_phase_lock_mv_limit and the
      * statement gives that limit a reason to apply -- see {@link CopyUnsafeTablesCollector}.
      * <p>
-     * A lock target with no snapshot to plan against -- ENGINE=MYSQL / ELASTICSEARCH, ExternalOlapTable, and
-     * resource-mapping external tables -- is copy-unsafe and does hold the lock for the whole phase.
+     * A lock target with no snapshot to plan against is copy-unsafe and does hold the lock for the whole phase.
+     * No table kind is one any more -- MYSQL, ELASTICSEARCH, resource JDBC, ExternalOlapTable and the
+     * resource-mapping tables all answer isMetaLockTarget() false -- but a kind nobody has classified yet would
+     * be, which keeps the rule fail-closed.
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
         CopyUnsafeTablesCollector collector = new CopyUnsafeTablesCollector();
@@ -1258,8 +1261,8 @@ public class AnalyzerUtils {
             } else if (target.isNativeTableOrMaterializedView()) {
                 snapshotableWriteTarget.put(targetName, target);
             } else {
-                // A lock target with no snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and
-                // resource-mapping external tables. Unchanged -- the lock has to stay for the whole phase.
+                // A lock target with no snapshot to plan against, i.e. a kind nobody has classified yet (see
+                // areTablesCopySafe). The lock has to stay for the whole phase.
                 tables.put(targetName, target);
             }
         }
@@ -1310,9 +1313,11 @@ public class AnalyzerUtils {
                 return null;
             }
             // A table the meta lock cannot protect has no say in how long that lock is held. Tables in an
-            // external catalog are exactly that set -- PlannerMetaLocker.resolveTable never puts them in the
-            // lock set -- so they abstain. Letting them vote only made the planner hold the *lockable* tables'
-            // locks across connector RPCs while giving the voter itself zero protection: an external table's
+            // external catalog are that set, and so are the internal-database tables whose data lives elsewhere
+            // (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC, ELASTICSEARCH, ExternalOlapTable; see
+            // Table.isMetaLockTarget) -- PlannerMetaLocker.resolveTable never puts them in the lock set -- so
+            // they abstain. Letting them vote only made the planner hold the *lockable* tables' locks across
+            // connector RPCs while giving the voter itself zero protection: an external table's
             // planning-phase stability comes from the query-scoped ConnectorMetadata
             // (MetadataMgr.QueryMetadatas), never from the meta lock.
             //
@@ -1438,7 +1443,10 @@ public class AnalyzerUtils {
         }
 
         private Table copyTable(Table originalTable) {
-            if (!(originalTable instanceof OlapTable)) {
+            // An external OLAP target is already a private copy, synced from its cluster before the lock was
+            // taken (StatementPlanner.beginTransaction); a shadow copy would turn it into a plain OlapTable and
+            // lose everything that sync brought in.
+            if (!(originalTable instanceof OlapTable) || originalTable.isOlapExternalTable()) {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
@@ -2479,6 +2487,22 @@ public class AnalyzerUtils {
         }
 
         return order1 > order2;
+    }
+
+    /**
+     * The table an UPDATE, DELETE or MERGE writes to. An external target was resolved before the meta lock was
+     * taken, because the lock covers nothing about it (see {@link PreResolvedState#WRITE_TARGET}); a miss -- an
+     * internal target, or a pre-resolve that did not succeed -- resolves it here, the way it always was.
+     */
+    public static Table resolveWriteTarget(ConnectContext session, TableName tableName) {
+        return session.getPreResolvedState().takeOrResolve(PreResolvedState.WRITE_TARGET, tableName, () -> {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            return MetaUtils.getSessionAwareTable(session, null, tableName);
+        });
     }
 
     public static TableRef normalizedTableRef(TableRef tableRef, ConnectContext context) {

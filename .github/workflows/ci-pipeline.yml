@@ -92,8 +92,11 @@ jobs:
           cd ci-tool
           ./scripts/check-testcase.sh
 
-      - name: Check Feature Issue
+      - name: Check Linked Issue
         id: check_issue
+        env:
+          # off / warn / enforce; unset = off. Logic lives in ci-tool (scripts/get_pr_issue.py).
+          ISSUE_CHECK_MODE: ${{ vars.ISSUE_CHECK_MODE }}
         run: |
           cd ci-tool
           python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}

@@ -288,6 +288,39 @@ public class CommitRateLimiterTest {
     }
 
     @Test
+    public void testShadowRewriteTxn() throws CommitRateExceededException {
+        long partitionId = 54321;
+        long currentTimeMs = System.currentTimeMillis();
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        new MockUp<CommitRateLimiter>() {
+            @Mock
+            long compactionScoreUpperBound() {
+                return (long) (threshold + 10);
+            }
+        };
+        // Above both the slowdown threshold and the upper bound, as on a table whose compaction is skipped
+        // while an online-rewrite schema change runs.
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 20)));
+
+        // A client load is delayed, then rejected by the upper bound.
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        CommitRateExceededException e =
+                Assertions.assertThrows(CommitRateExceededException.class, () -> limiter.check(partitions, currentTimeMs));
+        Assertions.assertThrows(CommitFailedException.class, () -> limiter.check(partitions, e.getAllowCommitTime()));
+
+        // The rewrite commits right away, even after a write long enough to be delayed past its own timeout.
+        TransactionState rewriteTxn = new TransactionState(dbId, Lists.newArrayList(tableId), 123457L, "rewrite",
+                null, TransactionState.LoadJobSourceType.SHADOW_REWRITE, null, 0, timeoutMs);
+        rewriteTxn.setPrepareTime(currentTimeMs - 50_000);
+        rewriteTxn.setWriteEndTimeMs(currentTimeMs);
+        new CommitRateLimiter(compactionMgr, rewriteTxn, tableId).check(partitions, currentTimeMs);
+        Assertions.assertEquals(-1, rewriteTxn.getAllowCommitTimeMs());
+    }
+
+    @Test
     public void testCompactionUpperBoundLimit01() {
         long partitionId = 54321;
         Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));

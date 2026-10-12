@@ -27,14 +27,13 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * ALTER MATERIALIZED VIEW ... ACTIVE -- run by a user, by MVActiveChecker, and by an MV task run that finds
@@ -60,29 +59,24 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
     }
 
     /**
-     * Samples {@link LockHoldDepth#isUnderLock()} on getTable, OR-accumulated, for calls made on the thread
-     * that installed it only: creating an MV hands its definition to the mv-plan-cache executor, which
-     * resolves the same hive table at an arbitrary moment on a thread whose lock state is unrelated.
+     * Probes getTable on the thread that installed it only: creating an MV hands its definition to the
+     * mv-plan-cache executor, which resolves the same hive table at an arbitrary moment on a thread whose lock
+     * state is unrelated.
      */
     private static class LockProbeHiveMetadata extends MockedHiveMetadata {
-        private final Thread owner = Thread.currentThread();
-        private final AtomicBoolean underLock = new AtomicBoolean(false);
-        private final AtomicInteger calls = new AtomicInteger();
+        private static final String GET_TABLE = "getTable";
+        private final LockProbe lock = LockProbe.onCurrentThread();
         // Run once, on the first call made without the lock held.
         private volatile Runnable onUnlockedGetTable;
 
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            if (Thread.currentThread() == owner) {
-                calls.incrementAndGet();
-                if (LockHoldDepth.isUnderLock()) {
-                    underLock.set(true);
-                } else {
-                    Runnable hook = onUnlockedGetTable;
-                    onUnlockedGetTable = null;
-                    if (hook != null) {
-                        hook.run();
-                    }
+            lock.record(GET_TABLE);
+            if (lock.isProbedThread() && !LockHoldDepth.isUnderLock()) {
+                Runnable hook = onUnlockedGetTable;
+                onUnlockedGetTable = null;
+                if (hook != null) {
+                    hook.run();
                 }
             }
             return super.getTable(context, dbName, tblName);
@@ -111,8 +105,7 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
     }
 
     private void assertNoConnectorCallUnderTheLock() {
-        Assertions.assertTrue(probe.calls.get() > 0, "the activation never reached the connector");
-        Assertions.assertFalse(probe.underLock.get(),
+        probe.lock.assertReachedOutsideTheLock(LockProbeHiveMetadata.GET_TABLE,
                 "the activation resolved an external base table while holding the MV lock");
     }
 
@@ -160,6 +153,40 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
     }
 
     /**
+     * An MV over an MV over a hive table. The rebuild reloads, under the top MV's lock, every base MV that has
+     * not reloaded yet -- one in that state after a restart, say -- and that reload resolves the base MV's own
+     * base tables. Those are pre-resolved too, so the hive table is not reached under the lock either.
+     */
+    @Test
+    public void testAlterActiveResolvesNoExternalTableOfAnUnreloadedBaseMvUnderTheLock() throws Exception {
+        String baseMvName = "mv_activate_before_lock_base";
+        String topMvName = "mv_activate_before_lock_top";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + baseMvName + "\n" + HIVE_MV_DEFINITION);
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + topMvName + "\n"
+                + "DISTRIBUTED BY RANDOM\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "AS SELECT l_orderkey, l_shipdate FROM " + baseMvName + ";");
+        try {
+            MaterializedView baseMv = getMv(DB_NAME, baseMvName);
+            MaterializedView topMv = getMv(DB_NAME, topMvName);
+            topMv.setInactiveAndReason("test: forced inactive before the activation");
+            // As after a restart, before the startup reload got to it.
+            baseMv.changeReloadState(-1);
+            Assertions.assertFalse(baseMv.hasReloaded());
+
+            installProbe();
+            starRocksAssert.ddl("ALTER MATERIALIZED VIEW " + topMvName + " ACTIVE");
+
+            Assertions.assertTrue(topMv.isActive(), topMv.getInactiveReason());
+            Assertions.assertTrue(baseMv.hasReloaded(), "the activation did not reload the base MV");
+            assertNoConnectorCallUnderTheLock();
+        } finally {
+            starRocksAssert.dropMaterializedView(topMvName);
+            starRocksAssert.dropMaterializedView(baseMvName);
+        }
+    }
+
+    /**
      * The definition is what the analysis done before the lock was derived from. If it changes before the
      * lock is taken, the analysis no longer describes the MV and must not be applied.
      */
@@ -179,7 +206,7 @@ public class AlterMVActivateResolveBeforeLockTest extends MVTestBase {
 
             Assertions.assertTrue(e.getMessage().contains("altered concurrently"), e.getMessage());
             Assertions.assertFalse(mv.isActive());
-            Assertions.assertFalse(probe.underLock.get());
+            Assertions.assertFalse(probe.lock.everUnderLock(LockProbeHiveMetadata.GET_TABLE));
         } finally {
             mv.setOriginalViewDefineSql(originalDefineSql);
             starRocksAssert.dropMaterializedView(mvName);

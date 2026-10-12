@@ -20,6 +20,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(EXPR_FILES
+  agg/coverage_window.cpp
   agg/data_sketch/ds_hll.cpp
   agg/data_sketch/ds_theta.cpp
   agg/combinator/agg_state_utils.cpp

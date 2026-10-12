@@ -295,8 +295,8 @@ TEST_F(LeadLagWindowTest, test_default_value_is_col) {
     }
 }
 
-TEST_F(LeadLagWindowTest, test_lag_large_binary) {
-    auto data_col = LargeBinaryColumn::create();
+TEST_F(LeadLagWindowTest, test_lag_varchar) {
+    auto data_col = BinaryColumn::create();
     auto null_col = NullColumn::create();
 
     data_col->append(Slice("a"));
@@ -1152,10 +1152,9 @@ TEST_F(LeadLagWindowTest, test_array_non_const_default_out_of_range_sets_null_ig
     ASSERT_TRUE(s->is_null);
 }
 
-TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
-    // LargeBinaryColumn as value, regular BinaryColumn as non-const default.
-    // This tests the fix for wrong down_cast on columns[2] when columns[0] is LargeBinaryColumn.
-    auto data_col = LargeBinaryColumn::create();
+TEST_F(LeadLagWindowTest, test_lag_varchar_non_const_default) {
+    // VARCHAR value with a non-const VARCHAR default column.
+    auto data_col = BinaryColumn::create();
     auto null_col = NullColumn::create();
 
     data_col->append(Slice("alpha"));
@@ -1167,7 +1166,7 @@ TEST_F(LeadLagWindowTest, test_lag_large_binary_non_const_default) {
 
     ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
 
-    // Default column is regular BinaryColumn (not LargeBinaryColumn)
+    // Default column is a separate non-const BinaryColumn
     auto def_data_col = BinaryColumn::create();
     auto def_null_col = NullColumn::create();
     def_data_col->append(Slice("d0"));

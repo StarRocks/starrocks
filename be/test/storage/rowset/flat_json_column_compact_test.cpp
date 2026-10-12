@@ -1454,6 +1454,26 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson4) {
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
+// Compaction derives its read layout from the input segments' metadata. With complex types left
+// out of flattening (the default), the scalar sub-columns must still count as base-typed, or no path
+// survives and every flat input is merged back into whole JSON just to be flattened again.
+TEST_F(FlatJsonColumnCompactTest, testCompactPathKeepsScalarSubColumnsWithoutComplexType) {
+    config::enable_json_flat_complex_type = false;
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "b": "x1", "c": [1, 2]})", false),
+            flat_json(R"({"a": 2, "b": "x2", "c": [3]})", false),
+            flat_json(R"({"a": 3, "b": "x3", "c": []})", false),
+    });
+    // clang-format on
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
+
+    // The array-valued "c" stays in remain, as it does when flattening from data.
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain) {
     config::json_flat_sparsity_factor = 0.6;
     // clang-format off

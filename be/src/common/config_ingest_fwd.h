@@ -232,4 +232,10 @@ CONF_mBool(enable_parallel_memtable_finalize, "true");
 
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 
+// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
+// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
+// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
+// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
+CONF_mBool(lake_enable_tablet_location_handoff, "true");
+
 } // namespace starrocks::config

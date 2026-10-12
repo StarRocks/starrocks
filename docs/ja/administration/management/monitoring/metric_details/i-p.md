@@ -291,6 +291,18 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_tablet_location_handoff_entries`
+
+- 単位: 件数
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE が所有していない tablet について保持しているストレージロケーションの件数。これらは combined txn log を書き込むために、ロード時に tablet の所有ノードから引き渡されたものです（BE 設定項目 `lake_enable_tablet_location_handoff` を参照）。エントリは 16 MiB の LRU キャッシュに保持され、最後の更新から 5 分間有効で、キャッシュに空きが必要になったときに削除されます。そのため、この値は引き渡しが現在使われているかどうかではなく、キャッシュの占有量を表します。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE が所有していない tablet のストレージロケーションを、StarMgr に問い合わせる代わりに所有ノードから引き渡されたロケーションで解決した回数。1 回増えるごとに StarMgr の GetShard RPC が 1 回省かれます。`file_bundling` が有効なテーブルへのロードを調整するノードで増加します。`staros_shard_info_fallback_total` と合わせると、引き渡しのヒット率は `hits / (hits + fallback)` で求められます。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 単位: 件数（バッチあたりファイル数）
