@@ -2392,13 +2392,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     @Override
     public void inferDistribution(DistributionInfo info) throws DdlException {
+        inferDistribution(info, getDefaultReplicationNum());
+    }
+
+    /**
+     * Same specialization as {@link #inferDistribution(DistributionInfo)}, but sizes the empty-MV
+     * backend fallback with the caller-supplied replication_num (e.g. partition RF on ADD PARTITION).
+     * Must override the two-arg form: callers that pass RF would otherwise hit
+     * {@link OlapTable#inferDistribution(DistributionInfo, short)} and skip base-table inference.
+     */
+    @Override
+    public void inferDistribution(DistributionInfo info, short replicationNum) throws DdlException {
         if (info.getBucketNum() == 0) {
             // if mv has been already refreshed, deduce bucket num from existing tablets
             boolean hasRefreshed = getVisiblePartitions().stream().anyMatch(Partition::hasData);
             if (hasRefreshed) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(this,
                         FeConstants.DEFAULT_INFER_BUCKET_NUM_RECENT_PARTITION_NUM,
-                        Config.enable_auto_tablet_distribution);
+                        Config.enable_auto_tablet_distribution,
+                        replicationNum);
                 // use the numBucket only when it's greater than 1, otherwise skip
                 if (numBucket > 1) {
                     info.setBucketNum(numBucket);
@@ -2423,7 +2435,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
             if (inferredBucketNum == 0) {
-                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends(this);
+                inferredBucketNum = CatalogUtils.calBucketNumAccordingToBackends(this, replicationNum);
             }
             info.setBucketNum(inferredBucketNum);
         }
