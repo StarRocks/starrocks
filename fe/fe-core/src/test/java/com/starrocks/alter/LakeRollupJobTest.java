@@ -34,12 +34,8 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-=======
 import com.starrocks.sql.ast.CancelAlterTableStmt;
-import com.starrocks.sql.ast.CreateSyncMVStmt;
->>>>>>> cd3d27e ([BugFix] Cancel all rollup jobs when CANCEL ALTER TABLE ROLLUP has no ids (#80450))
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
@@ -399,45 +395,6 @@ public class LakeRollupJobTest {
         Assertions.assertTrue(exception.getMessage().contains("No alive backend"));
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, lakeRollupJob3.getJobState());
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testLightWeightTabletCreationSkipsSendTask() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE base_table_lw\n" +
-                "(\n" +
-                "    k1 date,\n" +
-                "    k2 int,\n" +
-                "    k3 int\n" +
-                ")\n" +
-                "PARTITION BY RANGE(k1)\n" +
-                "(\n" +
-                "    PARTITION p1 values [('2022-02-01'),('2022-02-16'))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('light_weight_tablet_creation' = 'true');");
-
-        LakeRollupJob job = createJob(
-                "create materialized view mv_lw as select k2, k1 from base_table_lw order by k2;");
-        OlapTable lwTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getDb(DB).getTable("base_table_lw");
-        Assertions.assertTrue(lwTable.isLightWeightTabletCreation());
-
-        AtomicBoolean sendCalled = new AtomicBoolean(false);
-        new MockUp<LakeRollupJob>() {
-            @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
-                                             com.starrocks.common.util.concurrent.MarkedCountDownLatch<Long, Long> latch,
-                                             long timeoutSeconds) {
-                sendCalled.set(true);
-            }
-        };
-
-        job.runPendingJob();
-        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
-        Assertions.assertFalse(sendCalled.get(),
-                "sendAgentTaskAndWait must not be invoked when light_weight_tablet_creation is enabled");
-    }
 
     @Test
     public void testCancelWithoutJobIdsReportsJobInFinishedRewriting() throws Exception {
@@ -519,5 +476,4 @@ public class LakeRollupJobTest {
             rollupHandler.clearJobs();
         }
     }
->>>>>>> cd3d27e ([BugFix] Cancel all rollup jobs when CANCEL ALTER TABLE ROLLUP has no ids (#80450))
 }
