@@ -302,6 +302,12 @@ public class HDFSBackendSelector implements BackendSelector {
                 end.setEmpty(true);
                 end.setHas_more(hasMore);
                 for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                    // Eager Lance scans need terminal markers only where this scan has data.
+                    if (scanNode instanceof LanceScanNode &&
+                            !assignment.getOrDefault(computeNode.getId(), Collections.emptyMap())
+                                    .containsKey(scanNode.getId().asInt())) {
+                        continue;
+                    }
                     assignment.put(computeNode.getId(), scanNode.getId().asInt(), end);
                 }
             }

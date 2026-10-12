@@ -102,11 +102,15 @@ public class LanceBackendSelectorTest {
                     context(forceLocal), new HashSet<>(), incremental);
             Assertions.assertInstanceOf(HDFSBackendSelector.class, selector);
             selector.computeScanRangeAssignment();
+            // A terminal marker must not deploy idle instances on the other eligible workers.
+            Assertions.assertEquals(1, assignment.size());
             int datasetRanges = 0;
+            int terminalRanges = 0;
             for (Map.Entry<Long, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
                 Assertions.assertTrue(eligible.contains(entry.getKey()));
                 for (TScanRangeParams params : entry.getValue().get(scan.getId().asInt())) {
                     if (params.isEmpty()) {
+                        terminalRanges++;
                         Assertions.assertFalse(params.isHas_more());
                     } else {
                         datasetRanges++;
@@ -118,6 +122,7 @@ public class LanceBackendSelectorTest {
                 }
             }
             Assertions.assertEquals(1, datasetRanges);
+            Assertions.assertEquals(incremental ? 1 : 0, terminalRanges);
         }
         Assertions.assertEquals(eligible, assignedQueries.keySet());
         assignedQueries.values().forEach(count -> Assertions.assertEquals(2, count.intValue()));
