@@ -15,7 +15,6 @@
 #include "fs/fs_util.h"
 
 #include <fmt/format.h>
-#include <openssl/evp.h>
 
 #include <iomanip>
 #include <set>
@@ -62,9 +61,14 @@ StatusOr<std::string> md5sum(const std::string& path) {
     }
     RETURN_IF_ERROR(file->read_fully(buf.get(), length));
     unsigned char result[MD5_DIGEST_LENGTH];
-    if (EVP_Digest(buf.get(), length, result, nullptr, EVP_md5(), nullptr) != 1) {
-        return Status::InternalError(fmt::format("failed to compute md5 of {}", path));
-    }
+    // TODO: MD5() is deprecated since OpenSSL 3.0. Replace it with
+    // EVP_Digest(buf, length, result, nullptr, EVP_md5(), nullptr) once that has been tested
+    // enough on the clone/snapshot/replication checksum paths. Until then keep MD5() and only
+    // silence the deprecation warning here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    MD5(buf.get(), length, result);
+#pragma GCC diagnostic pop
     std::stringstream ss;
     for (unsigned char i : result) {
         ss << std::setfill('0') << std::setw(2) << std::hex << (int)i;
