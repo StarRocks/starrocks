@@ -41,6 +41,7 @@
 #include <mutex>
 #include <string>
 
+<<<<<<< HEAD
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
 #include "cache/datacache.h"
@@ -49,6 +50,12 @@
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
+=======
+#include "base/auth/credential_mask.h"
+#include "common/config_update_registry.h"
+#include "common/configbase.h"
+#include "common/logging.h"
+>>>>>>> 367bb54 ([BugFix] Mask credential config values set through BE /api/update_config (#80280))
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -489,7 +496,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 }
 
 void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+    // A credential config's new value must not reach the log or the response, so it is masked everywhere below.
+    LOG(INFO) << req->debug_string(config::is_sensitive_config);
 
     Status s;
     std::string msg;
@@ -502,8 +510,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         const std::string& new_value = req->params()->begin()->second;
         s = update_config(config, new_value);
         if (!s.ok()) {
-            LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
-            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
+            const std::string shown_value =
+                    config::is_sensitive_config(config) ? std::string(kCredentialMask) : new_value;
+            LOG(WARNING) << "set_config " << config << "=" << shown_value << " failed";
+            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, shown_value, s.to_string());
         }
     }
 
