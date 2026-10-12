@@ -15,9 +15,13 @@
 package com.starrocks.connector;
 
 import com.starrocks.authorization.AllowAllAccessController;
+<<<<<<< HEAD
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
+=======
+import com.starrocks.authorization.ranger.hive.RangerHiveCatalogProperties;
+>>>>>>> cc814932d6a... [Feature] Prefix the Ranger hive `database` resource with the catalog name (#64861)
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -45,6 +49,7 @@ public class LazyConnector implements Connector {
         synchronized (this) {
             if (delegate == null) {
                 try {
+<<<<<<< HEAD
                     // init access control
                     String serviceName = context.getProperties().get("ranger.plugin.hive.service.name");
                     String accessControl =
@@ -66,6 +71,19 @@ public class LazyConnector implements Connector {
                     }
                     // create connector
                     delegate = ConnectorFactory.createRealConnector(context);
+=======
+                    // Before the Ranger service name, so a catalog naming both is refused instead of taking the Ranger path.
+                    if (LakeFormationActivation.isRequested(context.getProperties())) {
+                        delegate = LakeFormationActivation.activate(context);
+                        return;
+                    }
+                    // Lake Formation properties without the mode, or with a mistyped one, would otherwise be ignored.
+                    LakeFormationActivation.refuseLakeFormationPropertiesWithoutMode(context.getProperties());
+                    // Connector first: if it rejects the properties, ALTER CATALOG fails with the old controller intact.
+                    Connector connector = ConnectorFactory.createRealConnector(context);
+                    installAccessControl();
+                    delegate = connector;
+>>>>>>> cc814932d6a... [Feature] Prefix the Ranger hive `database` resource with the catalog name (#64861)
                 } catch (Exception e) {
                     LOG.error("Failed to init connector [type: {}, name: {}]",
                             context.getType(), context.getCatalogName(), e);
@@ -73,6 +91,47 @@ public class LazyConnector implements Connector {
                             context.getType(), context.getCatalogName(), e.getMessage());
                 }
             }
+        }
+    }
+
+    // Registers this catalog's access controller from its current properties, replacing any older one.
+    private void installAccessControl() {
+        String serviceName = context.getProperties().get(RangerHiveCatalogProperties.SERVICE_NAME);
+        String accessControl =
+                context.getProperties().getOrDefault("catalog.access.control", Config.access_control);
+        if (serviceName == null || serviceName.isEmpty()) {
+            if (accessControl.equals("ranger")) {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(),
+                                new RangerStarRocksAccessControllerEPack());
+            } else if (accessControl.equals("allowall")) {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(), new AllowAllAccessController());
+            } else {
+                Authorizer.getInstance()
+                        .setAccessControl(context.getCatalogName(), new NativeAccessControllerEPack());
+            }
+        } else {
+            Boolean catalogPrefixEnabled =
+                    RangerHiveCatalogProperties.parseCatalogPrefixEnabled(context.getProperties());
+            Authorizer.getInstance().setAccessControl(context.getCatalogName(),
+                    new RangerHiveAccessControllerEPack(serviceName, catalogPrefixEnabled));
+        }
+    }
+
+    /**
+     * On a follower, an ALTER CATALOG is replayed without initializing the new connector, so the
+     * controller registered by the previous connector would keep authorizing with the old properties
+     * until something touches this catalog's metadata. Statements such as USE or SHOW CREATE DATABASE
+     * authorize before any metadata access, so refresh the controller right away when one is
+     * already registered; a catalog that was never initialized here stays lazy.
+     */
+    public void refreshAccessControlIfRegistered() {
+        if (LakeFormationActivation.isRequested(context.getProperties())) {
+            return;   // Lake Formation installs its own controller during activation
+        }
+        if (Authorizer.getInstance().catalogToAccessControl.containsKey(context.getCatalogName())) {
+            installAccessControl();
         }
     }
 

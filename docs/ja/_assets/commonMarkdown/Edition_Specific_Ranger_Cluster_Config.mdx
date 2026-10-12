@@ -78,3 +78,206 @@ External Catalog については、外部サービス (Hive Service など) を�
        ```
 
 ​    この操作により、既存の Catalog の認証方法が Ranger ベースの認証に変更されます。
+<<<<<<< HEAD
+=======
+
+4. (オプション) データベース名の前に Catalog 名を付ける。`ranger.plugin.hive.service.name` を設定した External Catalog (Hive、Iceberg、Hudi Catalog など) であれば、本節が適用されます。
+
+   Ranger の Hive Service が認識するのは `database`、`table`、`column` の 3 階層だけで、Catalog の階層はありません。そのため、複数の External Catalog が 1 つの Hive Service を共有している場合 (たとえば複数の AWS Glue Catalog)、複数の Catalog に同名のデータベースがあると同じポリシーにマッチしてしまいます。そのような Catalog にプロパティ `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` を設定すると、StarRocks は Ranger に送る `database` リソースとして、素のデータベース名ではなく `<catalog_name>_<database_name>` を使用します。たとえば `glue_prod.sales.orders` へのクエリは、database が `glue_prod_sales` である Ranger ポリシーに対して権限チェックされます。
+
+   ```SQL
+   CREATE EXTERNAL CATALOG glue_prod
+   PROPERTIES (
+       "type" = "hive",
+       "hive.metastore.type" = "glue",
+       "aws.glue.region" = "us-west-2",
+       "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>",
+       "ranger.plugin.hive.catalog_prefix.enabled" = "true"
+   );
+
+   -- 既存の Catalog にも設定できます。新しい値はステートメントが返った時点で有効になります。
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 有効な値は `true` と `false` のみです。それ以外の値を指定すると CREATE または ALTER CATALOG が失敗します。
+   - このプロパティを設定しない場合、Catalog は FE 設定項目 `ranger_hive_catalog_prefix_enabled` (デフォルト `false`) に従います。`ranger.plugin.hive.service.name` を設定していない Catalog ではこのプロパティは無視されます。
+   - Catalog 名とデータベース名の間の区切り文字は FE 設定項目 `ranger_hive_catalog_prefix_separator` (デフォルト `_`) で決まります。1 つの Ranger Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+
+:::
+
+:::product cloud
+
+### ファイルを準備する
+
+以下にリストされたファイルを準備し、必要な変更を加え、Ranger と統合したいクラスターのデータクレデンシャルで参照されている **リモートストレージ バケット（コンテナ）** にファイルをアップロードします。
+
+:::note
+
+外部カタログについては、Ranger 上の外部サービス（Hive Service など）のアクセス ポリシーを再利用してアクセス制御を行うことができます。StarRocks は外部カタログと Ranger 外部サービスを一致させることをサポートしています。ユーザーが外部テーブルにアクセスすると、システムはその外部テーブルに対応する Ranger サービスのアクセス ポリシーを再利用してアクセス制御を実行します。
+
+:::
+
+#### `ranger-starrocks-security.xml`
+
+- 必須: はい
+- 説明: StarRocks と Apache Ranger の間で使用される設定ファイル。
+- ダウンロードリンク: [ranger-starrocks-security.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-security.xml)
+- 次の設定を変更します:
+  - `ranger.plugin.starrocks.service.name`: ステップ 4 で作成した StarRocks Service の名前に変更します。
+  - `ranger.plugin.starrocks.policy.rest.url`: Ranger Admin のアドレスに変更します。
+
+他の設定を変更する必要がある場合は、Apache Ranger の公式ドキュメントを参照してください。たとえば、`ranger.plugin.starrocks.policy.pollIntervalM` を変更してポリシー変更の取得間隔を変更できます。
+
+例:
+
+   ```XML
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.service.name</name>
+           <value>starrocks</value>
+           <description>
+               Name of the Ranger service containing policies for this StarRocks instance
+           </description>
+       </property>
+   ...
+   
+   ...
+       <property>
+           <name>ranger.plugin.starrocks.policy.rest.url</name>
+           <value>http://localhost:6080</value>
+           <description>
+               URL to Ranger Admin
+           </description>
+       </property>   
+   ...
+   ```
+
+#### `ranger-starrocks-audit.xml`
+
+- 必須: いいえ
+- 説明: Ranger の監査ログサービスを有効にするために使用される設定ファイル。
+- ダウンロードリンク: [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml)
+- 次の設定を変更します:
+  - `xasecure.audit.solr.solr_url`: 自分の `solr_url` に変更します。
+
+#### `ranger-policymgr-ssl.xml`
+
+- 必須: いいえ
+- 説明: Trust Store または Key Store に対応するファイルの実際のローカルパス（サーバー上）を指定するために使用される設定ファイル。
+- ダウンロードリンク: [ranger-policymgr-ssl.xml](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-policymgr-ssl.xml)
+
+#### Trust Store または Key Store のクレデンシャル
+
+- 必須: いいえ
+- 説明: 安全な接続を有効にするために使用される Trust Store または Key Store のパスとクレデンシャル。
+  - Trust Store の場合、`truststore.jks` と `truststore.jceks` が必要です。
+  - Key Store の場合、`keystore.jks` と `keystore.jceks` が必要です。
+
+#### `ranger-hive-security.xml`
+
+- 必須: いいえ
+- 説明: Hive Catalog のために Ranger のアクセス制御を有効にするために使用される設定ファイル。
+- ダウンロードリンク: [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml)
+
+#### `ranger-hive-audit.xml`
+
+- 必須: いいえ
+- 説明: Hive Catalog のために Ranger の監査ログサービスを有効にするために使用される設定ファイル。
+- ダウンロードリンク: [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml)
+
+### Ranger 統合を作成する
+
+1. [PhoenixAI Cloud コンソール](https://cloud.celerdata.com/login) にサインインします。
+
+2. 左側のナビゲーション ペインで **Integration Hub** を選択します。
+
+3. **Integration Hub** ページで、**Apache Ranger** カードをクリックします。
+
+4. **Apache Ranger** ページで、**Create Configuration** をクリックします。
+
+5. **Create Ranger Configuration** ダイアログ ボックスで、次のように設定します。
+
+   a. **Name** フィールドに構成の名前を入力します。
+
+   b. Ranger が管理するアクセス制御の範囲を選択します。**All catalogs** を選択した場合、Ranger は内部 Catalog（ネイティブデータが格納されている`default_catalog`）と外部 Catalog の両方に対するアクセス制御を管理します。**External catalogs only** を選択した場合、Ranger は外部 Catalog に対するアクセス制御のみを管理します。
+
+   c. リモートストレージにアップロードした `ranger-starrocks-security.xml` の場所を指定します。
+
+   d. (オプション) Ranger の監査ログサービスを使用する場合は、**Enable Audit Logs** セクションのスイッチをオンにし、リモートストレージにアップロードした `ranger-starrocks-audit.xml` の場所を **Audit XML** フィールドに指定します。
+
+   e. (オプション) Ranger の安全な接続を有効にする場合は、**Secure connection** セクションのスイッチをオンにし、シナリオに基づいて **Trust Store** または **Key Store** を選択し、**Policy Manager SSL XML** フィールドに `ranger-policymgr-ssl.xml` の場所を指定し、Trust Store または Key Store のパスとクレデンシャルの場所を指定します。
+
+   f. (オプション) Hive Catalog に対する Ranger のアクセス制御を再利用する場合は、**Apply to Hive Catalog** セクションのスイッチをオンにし、リモートストレージにアップロードした `ranger-hive-security.xml` の場所を **Hive Security XML** フィールドに指定します。
+
+   g. (オプション) Hive Catalog のために Ranger の監査ログサービスを使用する場合は、**Enable audit logs for Hive** セクションのスイッチをオンにし、リモートストレージにアップロードした `ranger-hive-audit.xml` の場所を **Hive Audit XML** フィールドに指定します。
+
+   :::note
+
+   リモートストレージ場所の形式は以下の通りです：
+
+   ```Plain
+   -- AWS S3
+   s3://bucket_name/path1
+   -- Google Cloud Storage
+   gs://bucket_name/path1
+   -- Azure Blob Storage
+   azblob://storage_account_name/container_name/path1
+   ```
+
+   :::
+
+6. **Submit** をクリックして統合を作成します。
+
+## クラスターに統合を適用する
+
+1. [PhoenixAI Cloud コンソール](https://cloud.celerdata.com/login) にサインインします。
+
+2. **Clusters** ページで、統合を適用したいクラスターをクリックします。
+
+3. クラスター詳細ページの **Cluster parameters** タブで、**Apache Ranger integration** セクションの **Apache Ranger Configurations** ドロップダウン リストからクラスター用に作成した Ranger 統合を選択します。
+
+4. **Validate** をクリックして、構成がクラスターに適用できるかどうかを確認します。
+
+   :::note
+   クラスターが実行中の状態にある場合にのみ、Ranger 構成を検証および適用できます。
+   :::
+
+5. 検証が成功した場合、**Apply** をクリックして構成を適用します。
+
+6. Hive Catalog に対する Ranger のアクセス制御を再利用したい場合は、`db_admin` ロールがアクティブ化されたユーザーとしてクラスターにログインし、外部カタログを次のように設定する必要があります。
+
+   - 外部カタログを作成する際に、プロパティ `"ranger.plugin.hive.service.name"` を追加します。
+
+     ```SQL
+     CREATE EXTERNAL CATALOG hive_catalog_1
+     PROPERTIES (
+         "type" = "hive",
+         "hive.metastore.type" = "hive",
+         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+         "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
+     )
+     ```
+
+   - 既存の外部カタログにこのプロパティを追加することもできます。
+
+     ```SQL
+     ALTER CATALOG hive_catalog_1
+     SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
+     ```
+
+     この操作により、既存のカタログの認証方法が Ranger ベースの認証に変更されます。
+
+7. (オプション) 複数の外部カタログが 1 つの Ranger Hive Service を共有し、同名のデータベースを含む場合は、それらのカタログにプロパティ `"ranger.plugin.hive.catalog_prefix.enabled" = "true"` を設定します。StarRocks は Ranger に送る `database` リソースとして、素のデータベース名ではなく `<catalog_name>_<database_name>` を使用します。たとえば `glue_prod.sales.orders` へのクエリは、database が `glue_prod_sales` である Ranger ポリシーに対して権限チェックされます。
+
+   ```SQL
+   ALTER CATALOG glue_prod
+   SET ("ranger.plugin.hive.catalog_prefix.enabled" = "true");
+   ```
+
+   - 有効な値は `true` と `false` のみです。それ以外の値を指定すると CREATE または ALTER CATALOG が失敗します。
+   - このプロパティを設定しない場合、カタログは FE 設定項目 `ranger_hive_catalog_prefix_enabled` (デフォルト `false`) に従います。`ranger.plugin.hive.service.name` を設定していないカタログではこのプロパティは無視されます。
+   - カタログ名とデータベース名の間の区切り文字は FE 設定項目 `ranger_hive_catalog_prefix_separator` (デフォルト `_`) で決まります。
+
+:::
+>>>>>>> cc814932d6a... [Feature] Prefix the Ranger hive `database` resource with the catalog name (#64861)
