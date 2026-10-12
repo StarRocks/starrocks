@@ -160,7 +160,7 @@ function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantit
 -- result:
 None
 -- !result
-select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UNORDERED]select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder right outer join customer
 on lo_custkey = c_custkey
 where lo_orderkey = 10001;
@@ -209,12 +209,12 @@ function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantit
 -- result:
 None
 -- !result
-select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+[UNORDERED]select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
 from lineorder inner join customer
 on lo_custkey = c_custkey and lo_linenumber = c_id;
 -- result:
-10002	2	20	2	2	name_2	2
 10001	1	10	1	1	name_1	1
+10002	2	20	2	2	name_2	2
 -- !result
 drop materialized view mv_right_outer_2;
 -- result:
@@ -485,18 +485,15 @@ None
 -- !result
 select lo_orderkey, lo_linenumber, lo_quantity
 from customer_unique right semi join lineorder
-on lo_custkey = c_custkey;
+on lo_custkey = c_custkey
+order by lo_orderkey,lo_linenumber;
 -- result:
 10001	1	10
 10001	2	10
-10003	1	30
-10003	1	30
 10002	1	20
 10002	2	20
--- !result
-order by lo_orderkey,lo_linenumber;
--- result:
-E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'order', the most similar input is {'PREPARE', 'RECOVER', 'REFRESH', 'RESTORE', 'DESC', '(', ';'}.")
+10003	1	30
+10003	1	30
 -- !result
 drop materialized view mv_inner_join_6;
 -- result:

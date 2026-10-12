@@ -123,7 +123,7 @@ select count() from mv_right_outer;
 
 function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder right outer join customer on lo_custkey = c_custkey where lo_orderkey = 10001", "mv_right_outer", "lo_orderkey = 1")
 
-select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UNORDERED]select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder right outer join customer
 on lo_custkey = c_custkey
 where lo_orderkey = 10001;
@@ -153,7 +153,7 @@ select count() from mv_right_outer_2;
 
 function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id from lineorder inner join customer on lo_custkey = c_custkey and lo_linenumber = c_id", "mv_right_outer_2", "lo_linenumber IS NOT NULL")
 
-select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+[UNORDERED]select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
 from lineorder inner join customer
 on lo_custkey = c_custkey and lo_linenumber = c_id;
 
@@ -346,7 +346,7 @@ function: assert_explain_contains("select lo_orderkey, lo_linenumber, lo_quantit
 
 select lo_orderkey, lo_linenumber, lo_quantity
 from customer_unique right semi join lineorder
-on lo_custkey = c_custkey;
+on lo_custkey = c_custkey
 order by lo_orderkey,lo_linenumber;
 
 drop materialized view mv_inner_join_6;
