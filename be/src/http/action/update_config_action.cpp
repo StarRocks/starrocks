@@ -41,21 +41,15 @@
 #include <mutex>
 #include <string>
 
-<<<<<<< HEAD
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
+#include "base/auth/credential_mask.h"
 #include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
-=======
-#include "base/auth/credential_mask.h"
-#include "common/config_update_registry.h"
-#include "common/configbase.h"
-#include "common/logging.h"
->>>>>>> 367bb54 ([BugFix] Mask credential config values set through BE /api/update_config (#80280))
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -488,7 +482,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
                 }
             } else {
-                LOG(INFO) << "set_config " << name << "=" << value << " success";
+                LOG(INFO) << "set_config " << name << "="
+                          << (config::is_sensitive_config(name) ? std::string(kCredentialMask) : value) << " success";
             }
         }
     }

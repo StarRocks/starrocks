@@ -21,11 +21,11 @@
 #include <mutex>
 #include <string>
 
-#include "common/config_update_registry.h"
 #include "http/action/update_config_action.h"
-#include "platform/http/http_channel.h"
-#include "platform/http/http_request.h"
-#include "platform/http/http_status.h"
+#include "http/http_channel.h"
+#include "http/http_request.h"
+#include "http/http_status.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
@@ -67,14 +67,7 @@ public:
     static void SetUpTestSuite() { s_injected_send_reply = inject_send_reply; }
     static void TearDownTestSuite() { s_injected_send_reply = nullptr; }
 
-    // A registry that is not ready accepts every update without trying it, so make it ready to reach the
-    // failure path.
-    void SetUp() override {
-        k_response_str.clear();
-        ConfigUpdateRegistry::instance()->TEST_reset();
-        ConfigUpdateRegistry::instance()->set_ready();
-    }
-    void TearDown() override { ConfigUpdateRegistry::instance()->TEST_reset(); }
+    void SetUp() override { k_response_str.clear(); }
 
 protected:
     // Runs POST <uri> through the action and returns what it logged; the reply ends up in k_response_str.
@@ -88,7 +81,7 @@ protected:
             HttpRequest req(ev_req);
             EXPECT_EQ(0, req.init_from_evhttp());
             CapturingLogSink sink;
-            UpdateConfigAction action;
+            UpdateConfigAction action(ExecEnv::GetInstance());
             action.handle(&req);
             logged = sink.messages();
         }

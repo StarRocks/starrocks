@@ -283,17 +283,12 @@ set(EXEC_FILES
         ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
-<<<<<<< HEAD
+        ./http/update_config_action_redaction_test.cpp
         ./http/action/update_config_action_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
         ./io/fd_output_stream_test.cpp
-=======
-        ./http/update_config_action_redaction_test.cpp
-        ./http/action/pprof_actions_test.cpp
-        ./http/action/proc_profile_e2e_test.cpp
->>>>>>> 367bb54 ([BugFix] Mask credential config values set through BE /api/update_config (#80280))
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
