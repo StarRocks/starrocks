@@ -11,7 +11,8 @@ CREATE TABLE lm_hnsw (
         "metric_type" = "l2_distance",
         "is_vector_normed" = "false",
         "M" = "16",
-        "efconstruction" = "100")
+        "efconstruction" = "100",
+        "index_build_threshold" = "1")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
