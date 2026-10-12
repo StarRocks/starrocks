@@ -168,5 +168,23 @@ public class HttpUriLogMaskingTest extends StarRocksHttpTestCase {
 
         assertEquals("/api/show_proc?<query not shown>", WebUtils.hideHttpReqQuery(URL));
         assertEquals("/api/show_proc", WebUtils.hideHttpReqQuery("/api/show_proc"));
+
+        // What follows a '?' that java.net.URI does not take as a query is hidden too.
+        assertEquals("http:foo?<query not shown>", WebUtils.sanitizeHttpReqUriForLog("http:foo?token=TopSecret"));
+        assertEquals("/api#frag?<query not shown>", WebUtils.sanitizeHttpReqUriForLog("/api#frag?token=TopSecret"));
+        assertEquals("/api/show_proc#frag", WebUtils.sanitizeHttpReqUriForLog("/api/show_proc#frag"));
+    }
+
+    @Test
+    public void testTokenIsHiddenWhenItIsNotInTheQuery() throws Exception {
+        // HTTP clients drop the fragment, so send the target as is through a raw socket. HttpServerHandler logs it
+        // before routing.
+        for (String target : List.of("/api/show_proc#frag?token=TopSecret", "http:foo?token=TopSecret")) {
+            List<String> messages = captureLogs(() -> sendRawRequest("GET " + target
+                    + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"));
+            assertTrue(messages.stream().anyMatch(m -> m.startsWith("request: url:[")
+                    && m.contains("?<query not shown>")), messages.toString());
+            assertNoCredential(messages.toString());
+        }
     }
 }
