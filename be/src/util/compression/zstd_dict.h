@@ -90,6 +90,7 @@ public:
 
 private:
     explicit ZstdDDict(ZSTD_DDict* d);
+
     ZSTD_DDict* _dict = nullptr;
     uint64_t _id = 0;
 };
