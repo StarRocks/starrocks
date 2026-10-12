@@ -22,6 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -129,10 +130,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         if (scanOperator instanceof LogicalHiveScanOperator) {
             newMetaScan = new LogicalHiveScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
-        } else if (scanOperator instanceof LogicalIcebergScanOperator) {
-            newMetaScan = new LogicalIcebergScanOperator(scanOperator.getTable(),
-                    newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate(),
-                    scanOperator.getTvrVersionRange());
+        } else if (scanOperator instanceof LogicalIcebergScanOperator icebergScanOperator) {
+            newMetaScan = icebergMetaScan(icebergScanOperator, newScanColumnRefs, newScanColumnMeta);
         } else if (scanOperator instanceof LogicalFileScanOperator) {
             newMetaScan = new LogicalFileScanOperator(scanOperator.getTable(),
                     newScanColumnRefs, newScanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate());
@@ -152,7 +151,6 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), countRewrite.aggCalls);
-        newAggOperator.setProjection(aggregationOperator.getProjection());
 
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         newProjectMap.putAll(newAggOperator.getColumnRefMap());
@@ -166,6 +164,21 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         optExpression.getInputs().add(aggExpression);
         aggExpression.getInputs().add(OptExpression.create(newMetaScan));
         return optExpression;
+    }
+
+    /**
+     * The Iceberg scan that replaces the original one, reading the same files: under the equality delete rewrite
+     * that is only the data files without equality deletes, so the MOR parameters must carry over.
+     */
+    private static LogicalIcebergScanOperator icebergMetaScan(LogicalIcebergScanOperator scanOperator,
+                                                              Map<ColumnRefOperator, Column> scanColumns,
+                                                              Map<Column, ColumnRefOperator> scanColumnMeta) {
+        LogicalIcebergScanOperator metaScan = new LogicalIcebergScanOperator(scanOperator.getTable(), scanColumns,
+                scanColumnMeta, scanOperator.getLimit(), scanOperator.getPredicate(), scanOperator.getTvrVersionRange());
+        metaScan.setMORParam(scanOperator.getMORParam());
+        metaScan.setTableFullMORParams(scanOperator.getTableFullMORParams());
+        metaScan.setFromEqDeleteRewriteRule(scanOperator.isFromEqDeleteRewriteRule());
+        return metaScan;
     }
 
     private LogicalScanOperator getScanOperator(final OptExpression input) {
@@ -191,6 +204,10 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
+        if (readsFilesWithEqualityDeletes(scanOperator)) {
+            return false;
+        }
+
         // no materialized column in predicate of scan
         if (hasMaterializedColumnInPredicate(scanOperator, scanOperator.getPredicate())) {
             return false;
@@ -209,8 +226,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        // no materialized column in predicate of aggregation
-        if (hasMaterializedColumnInPredicate(scanOperator, aggregationOperator.getPredicate())) {
+        // the rewritten aggregation carries neither the predicate nor the projection of this one
+        if (aggregationOperator.getPredicate() != null || aggregationOperator.getProjection() != null) {
             return false;
         }
 
@@ -221,6 +238,16 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
         return aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> isCountOfRows(aggregator) || isCountOfDataColumn(aggregator, scanOperator));
+    }
+
+    /**
+     * Data files with equality deletes are scanned for an anti join with their delete files, so the rows they
+     * contribute are not their record count.
+     */
+    private static boolean readsFilesWithEqualityDeletes(LogicalScanOperator scanOperator) {
+        return scanOperator instanceof LogicalIcebergScanOperator icebergScanOperator
+                && icebergScanOperator.getMORParam().getScanTaskType()
+                == IcebergMORParams.ScanTaskType.DATA_FILE_WITH_EQ_DELETE;
     }
 
     /**
@@ -236,11 +263,11 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
     /**
      * COUNT(col) is answered from Iceberg manifest null counts, so it qualifies only on an Iceberg scan, for a
-     * scalar column that is read from the data files rather than being a partition column. A column named like
-     * a placeholder is never counted this way, since the backend would take ___count___ itself for the COUNT(*)
-     * marker and a counted column could share a name with another column's placeholder. Nor is a column whose
-     * placeholder name another column of the table already has, since the backend tells partition columns
-     * apart by name and would fill the placeholder with a partition value.
+     * scalar column other than a variant that is read from the data files rather than being a partition column.
+     * A column named like a placeholder is never counted this way, since the backend would take ___count___
+     * itself for the COUNT(*) marker and a counted column could share a name with another column's placeholder.
+     * Nor is a column whose placeholder name another column of the table already has, since the backend looks
+     * some slot properties up by column name.
      */
     private static boolean isCountOfDataColumn(CallOperator aggregator, LogicalScanOperator scanOperator) {
         if (!(scanOperator instanceof LogicalIcebergScanOperator) || !isPlainCount(aggregator)
@@ -248,7 +275,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
         Column column = scanOperator.getColRefToColumnMetaMap().get((ColumnRefOperator) aggregator.getArguments().get(0));
-        return column != null && column.getType().isScalarType()
+        return column != null && column.getType().isScalarType() && !column.getType().isVariantType()
                 && !scanOperator.getPartitionColumns().contains(column.getName())
                 && !column.getName().toLowerCase(Locale.ROOT).startsWith(COUNT_PLACEHOLDER)
                 && !hasColumnNamed(scanOperator.getTable(), COUNT_PLACEHOLDER + column.getName());

@@ -47,8 +47,25 @@ set enable_rewrite_simple_agg_to_hdfs_scan = true;
 function: assert_explain_contains('select p, count(c_int) from ice_tbl_1 group by p', '___count___c_int')
 select p, count(*), count(c_int), count(c_string) from ice_tbl_1 group by p order by p;
 
+-- A predicate spanning several partition columns is not answered by partition values, so files are read.
+create external table ice_tbl_2(
+    c_int int,
+    c_string string,
+    y int,
+    m int
+) partition by (y, m);
+
+insert into ice_tbl_2 values (1, 'a', 2024, 12), (2, null, 2025, 1), (null, 'c', 2025, 2), (4, 'd', 2023, 6);
+
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+select count(*), count(c_int), count(c_string) from ice_tbl_2 where y * 100 + m >= 202501;
+
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+select count(*), count(c_int), count(c_string) from ice_tbl_2 where y * 100 + m >= 202501;
+
 drop table ice_tbl_0 force;
 drop table ice_tbl_1 force;
+drop table ice_tbl_2 force;
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog default_catalog;
 drop catalog iceberg_sql_test_${uuid0};
