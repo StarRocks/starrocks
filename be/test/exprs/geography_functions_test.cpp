@@ -2495,9 +2495,9 @@ TEST_F(geographyFunctionsTest, h3ArraysRetainErrorPrecedenceAndEmptyBatches) {
                                    : GeoFunctions::h3_grid_disk(nullptr, {cells, parameters});
             ASSERT_FALSE(actual.ok());
             EXPECT_TRUE(actual.status().is_invalid_argument());
-            EXPECT_EQ(invalid_cell
-                              ? "H3 requires a valid positive cell index"
-                              : (children ? "H3 resolution must be between 0 and 15" : "H3_GridDisk requires non-negative k"),
+            EXPECT_EQ(invalid_cell ? "H3 requires a valid positive cell index"
+                                   : (children ? "H3 resolution must be between 0 and 15"
+                                               : "H3_GridDisk requires non-negative k"),
                       actual.status().message());
         }
         for (bool constant_cell : {false, true}) {
