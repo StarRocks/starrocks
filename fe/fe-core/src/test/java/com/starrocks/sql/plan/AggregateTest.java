@@ -720,6 +720,16 @@ public class AggregateTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: k3 <=> 17: k3"), explainString);
+
+        boolean old = connectContext.getSessionVariable().isCboCteReuse();
+        try {
+            connectContext.getSessionVariable().setCboCteReuse(false);
+            explainString = getFragmentPlan(queryStr);
+            Assertions.assertTrue(explainString.contains("output: multi_distinct_count(1: k1, 2: k2), " +
+                    "multi_distinct_count(4: k4)"));
+        } finally {
+            connectContext.getSessionVariable().setCboCteReuse(old);
+        }
     }
 
     @Test
