@@ -443,7 +443,7 @@ public class AlterHandlerEditLogTest {
         }
 
         @Override
-        protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
+        public boolean isHistorySchemaReleased() {
             return !historySchemaInUse;
         }
     }

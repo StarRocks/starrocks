@@ -58,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -715,10 +716,10 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             SchemaChangeJobV2 restoredRunning =
                     (SchemaChangeJobV2) restoredHandler.getAlterJobsV2().get(runningJob.getJobId());
             Assertions.assertNotNull(restoredRunning);
-            Assertions.assertFalse(restoredRunning.physicalPartitionIndexTabletMap.isEmpty());
-            Assertions.assertFalse(restoredRunning.physicalPartitionIndexMap.isEmpty());
-            Assertions.assertFalse(restoredRunning.indexMetaIdToSchema.isEmpty());
-            Assertions.assertFalse(restoredRunning.indexMetaIdToShortKey.isEmpty());
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "physicalPartitionIndexTabletMap"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "physicalPartitionIndexMap"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "indexMetaIdToSchema"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "indexMetaIdToShortKey"));
         } finally {
             handler.getAlterJobsV2().remove(doneJob.getJobId());
             handler.getAlterJobsV2().remove(runningJob.getJobId());
@@ -738,11 +739,20 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         return job;
     }
 
+    // The per-job schema maps are private on this branch.
+    private static boolean fieldIsEmpty(SchemaChangeJobV2 job, String field) {
+        Object value = Deencapsulation.getField(job, field);
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).isEmpty();
+        }
+        return ((com.google.common.collect.Table<?, ?, ?>) value).isEmpty();
+    }
+
     private static void assertPruned(SchemaChangeJobV2 job) {
-        Assertions.assertTrue(job.physicalPartitionIndexTabletMap.isEmpty());
-        Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
-        Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
-        Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
+        Assertions.assertTrue(fieldIsEmpty(job, "physicalPartitionIndexTabletMap"));
+        Assertions.assertTrue(fieldIsEmpty(job, "physicalPartitionIndexMap"));
+        Assertions.assertTrue(fieldIsEmpty(job, "indexMetaIdToSchema"));
+        Assertions.assertTrue(fieldIsEmpty(job, "indexMetaIdToShortKey"));
     }
 
     private void assertHistorySchemaMatches(OlapTable table, long indexMetaId, MaterializedIndexMeta originMeta,

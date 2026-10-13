@@ -844,7 +844,7 @@ public class AlterJobMgr {
             // Images written by older versions or by follower checkpoints still carry both
             // schemas of every finished job.
             if (alterJobV2 instanceof SchemaChangeJobV2 && alterJobV2.isDone()) {
-                alterJobV2.pruneMeta();
+                ((SchemaChangeJobV2) alterJobV2).pruneMeta();
             }
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
