@@ -25,7 +25,6 @@
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #include <arm_acle.h>
 #endif
-#include <strings.h>
 
 #include <atomic>
 #include <cstdint>
@@ -255,28 +254,14 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
-namespace {
-static bool is_pmull_disabled_by_env() {
-    const char* env = getenv("STARROCKS_DISABLE_PMULL");
-    if (env == nullptr || env[0] == '\0') {
-        return false;
-    }
-    if (strcmp(env, "0") == 0 || strcasecmp(env, "false") == 0 || strcasecmp(env, "off") == 0 ||
-        strcasecmp(env, "no") == 0) {
-        return false;
-    }
-    return true;
-}
-} // namespace
-
-bool IsPmullDisabledByEnvForTesting() {
-    return is_pmull_disabled_by_env();
-}
-
 #if defined(__ARM_NEON) && defined(__aarch64__)
 namespace {
 #if defined(USE_ARM_PMULL)
 std::atomic<int8_t> s_has_pmull{-1};
+
+#ifdef BE_TEST
+std::atomic<bool> s_pmull_disabled_for_testing{false};
+#endif
 
 __attribute__((noinline)) static bool init_arm_pmull() {
     static const bool s_hw_has_pmull = []() {
@@ -289,11 +274,16 @@ __attribute__((noinline)) static bool init_arm_pmull() {
 #endif
     }();
 
-    bool enabled = s_hw_has_pmull && !is_pmull_disabled_by_env();
+    bool enabled = s_hw_has_pmull;
+#ifdef BE_TEST
+    if (s_pmull_disabled_for_testing.load(std::memory_order_relaxed)) {
+        enabled = false;
+    }
+#endif
     s_has_pmull.store(enabled ? 1 : 0, std::memory_order_relaxed);
     return enabled;
 }
-#endif
+#endif // USE_ARM_PMULL
 
 inline bool has_arm_pmull() {
 #if defined(USE_ARM_PMULL)
@@ -308,25 +298,38 @@ inline bool has_arm_pmull() {
 }
 } // namespace
 
+#ifdef BE_TEST
 void ResetArmPmullForTesting() {
 #if defined(USE_ARM_PMULL)
     s_has_pmull.store(-1, std::memory_order_relaxed);
 #endif
 }
 
+void SetArmPmullDisabledForTesting(bool disabled) {
+#if defined(USE_ARM_PMULL)
+    s_pmull_disabled_for_testing.store(disabled, std::memory_order_relaxed);
+    ResetArmPmullForTesting();
+#endif
+}
+
 bool HasArmPmull() {
     return has_arm_pmull();
 }
+#endif // BE_TEST
 
 #if defined(USE_ARM_PMULL)
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
 #endif
-#else
-void ResetArmPmullForTesting() {}
+#else // !defined(__ARM_NEON) || !defined(__aarch64__)
 
+#ifdef BE_TEST
+void ResetArmPmullForTesting() {}
+void SetArmPmullDisabledForTesting(bool /*disabled*/) {}
 bool HasArmPmull() {
     return false;
 }
+#endif // BE_TEST
+
 #endif
 
 uint32_t ExtendFallback(uint32_t crc, const char* buf, size_t size) {
