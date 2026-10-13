@@ -56,6 +56,18 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     return only_null;
 }
 
+static bool type_contains_variant(const TypeDescriptor& type) {
+    if (type.type == TYPE_VARIANT) {
+        return true;
+    }
+    for (const auto& child : type.children) {
+        if (type_contains_variant(child)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
     const size_t num_rows = column->size();
@@ -65,7 +77,27 @@ StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Ch
     }
 
     ColumnBuilder<TYPE_VARIANT> builder(num_rows);
-    RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
+    const bool is_complex_type =
+            _from_type.type == TYPE_ARRAY || _from_type.type == TYPE_MAP || _from_type.type == TYPE_STRUCT;
+    if (is_complex_type && type_contains_variant(_from_type)) {
+        for (size_t row = 0; row < num_rows; ++row) {
+            auto encoded = VariantColumn::encode_typed_row_as_variant(column.get(), row, _from_type);
+            if (!encoded.ok()) {
+                if (_allow_throw_exception) {
+                    return encoded.status();
+                }
+                builder.append_null();
+                continue;
+            }
+            if (encoded->state == VariantColumn::EncodedVariantState::kNull) {
+                builder.append_null();
+            } else {
+                builder.append(std::move(encoded->value));
+            }
+        }
+    } else {
+        RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
+    }
 
     return builder.build(column->is_constant());
 }
@@ -279,18 +311,6 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
     }
     case TYPE_STRUCT: {
         TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
-
-        // Validate that every struct field name is a parseable variant path before constructing
-        // CastVariantToStruct, whose ctor would otherwise throw an uncaught std::runtime_error
-        // that propagates out of create_expr_tree and aborts the BE at fragment prepare.
-        // Returning nullptr surfaces a clean Status::NotSupported instead.
-        for (const auto& field_name : expected_type.field_names) {
-            std::string path_string = "$." + field_name;
-            if (!VariantPathParser::parse(Slice(path_string)).ok()) {
-                LOG(WARNING) << "Cannot cast variant to struct: field name is not a valid variant path: " << field_name;
-                return nullptr;
-            }
-        }
 
         std::vector<Expr*> field_casts(expected_type.children.size());
         for (int i = 0; i < expected_type.children.size(); ++i) {

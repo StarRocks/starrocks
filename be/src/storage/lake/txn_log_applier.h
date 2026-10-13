@@ -24,11 +24,17 @@
 namespace starrocks {
 class TxnLogPB;
 class TabletMetadataPB;
+class RowsetMetadataPB;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
 class Tablet;
+
+// Does this rowset hold any rows? Neither the rowset-level count nor the segment count alone can
+// answer it -- see the definition for why. Callers use it to decide whether an op_write carries
+// anything at all.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset);
 
 class TxnLogApplier {
 public:

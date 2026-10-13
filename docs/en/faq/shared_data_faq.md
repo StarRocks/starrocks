@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "FAQ for common StarRocks shared-data cluster questions."
 ---
@@ -100,7 +101,7 @@ You can diagnose insufficient compaction by:
 
   Compaction Score should remain below ~10. Excessively high Compaction Scores often indicate compaction failures.
 
-- Reviewing Query Profile metrics such as `SegmentsReadCount`.
+- Reviewing Query Profile metrics such as `PhySegmentsCount`.
 
   If Segment counts are high, compaction may be lagging or stuck.
 

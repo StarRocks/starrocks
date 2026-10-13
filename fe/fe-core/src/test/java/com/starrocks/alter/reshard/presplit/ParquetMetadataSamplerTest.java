@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
@@ -102,6 +103,26 @@ public class ParquetMetadataSamplerTest {
         Assertions.assertEquals(bigintTuple(200), result.getBoundaries().get(0));
         Assertions.assertEquals(bigintTuple(400), result.getBoundaries().get(1));
         Assertions.assertEquals(bigintTuple(600), result.getBoundaries().get(2));
+    }
+
+    @Test
+    public void testProfileSeparatesStatisticsFetchFromBoundaryPlanning() throws Exception {
+        List<RowGroupStatistics> statistics = List.of(
+                rowGroup(0, 99, 100), rowGroup(100, 199, 100),
+                rowGroup(200, 299, 100), rowGroup(300, 399, 100));
+        ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
+        AtomicLong nowNs = new AtomicLong();
+        PreSplitProfile profile = new PreSplitProfile(() -> nowNs.getAndAdd(10L));
+
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+            sampler.tryPlan(singleColumnRequest(), 2);
+        }
+
+        Assertions.assertEquals(10L,
+                profile.toRuntimeProfile().getCounter(PreSplitProfile.SOURCE_SAMPLING_TIME).getValue());
+        Assertions.assertEquals(10L, profile.toRuntimeProfile()
+                .getCounter(PreSplitProfile.PARTITION_AND_BOUNDARY_PLANNING_TIME).getValue());
     }
 
     @Test

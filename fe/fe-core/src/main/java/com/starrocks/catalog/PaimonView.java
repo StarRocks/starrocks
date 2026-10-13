@@ -35,7 +35,7 @@ public class PaimonView extends ConnectorView {
             if (Strings.isNullOrEmpty(name.getCatalog()) &&
                     Strings.isNullOrEmpty(name.getDb()) &&
                     cteRelationNames.contains(name.getTbl())) {
-                return;
+                continue;
             }
 
             if (Strings.isNullOrEmpty(name.getCatalog())) {

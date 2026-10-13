@@ -1,0 +1,143 @@
+-- name: test_push_down_count_aggregate
+DROP TABLE if exists pdc_t0_${uuid0};
+-- result:
+-- !result
+DROP TABLE if exists pdc_t1_${uuid0};
+-- result:
+-- !result
+CREATE TABLE pdc_t0_${uuid0}
+(
+v1 BIGINT NOT NULL,
+v2 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE pdc_t1_${uuid0}
+(
+v4 BIGINT NOT NULL,
+v5 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO pdc_t0_${uuid0} (v1, v2) VALUES (1, 10), (1, 20);
+-- result:
+-- !result
+INSERT INTO pdc_t1_${uuid0} (v4, v5) VALUES (1, 100), (1, 200), (1, 300);
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=1;
+-- result:
+-- !result
+select t0.v1, sum(t0.v2), count(*) from pdc_t0_${uuid0} t0 join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	90	6
+-- !result
+select t0.v1, sum(t1.v5), count(*) from pdc_t0_${uuid0} t0 left join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	1200	6
+-- !result
+select t0.v1, count(*) from pdc_t0_${uuid0} t0 join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	6
+-- !result
+select t0.v1, sum(t0.v2) from pdc_t0_${uuid0} t0 join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	90
+-- !result
+set cbo_push_down_aggregate_mode=-1;
+-- result:
+-- !result
+select t0.v1, sum(t0.v2), count(*) from pdc_t0_${uuid0} t0 join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	90	6
+-- !result
+select t0.v1, sum(t1.v5), count(*) from pdc_t0_${uuid0} t0 left join pdc_t1_${uuid0} t1 on t0.v1 = t1.v4 group by t0.v1;
+-- result:
+1	1200	6
+-- !result
+INSERT INTO pdc_t0_${uuid0} (v1, v2) VALUES (2, 30), (2, 40), (3, 50);
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=1;
+-- result:
+-- !result
+select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+1	2
+-- !result
+select t0.v1, sum(t0.v2), count(*) from pdc_t0_${uuid0} t0 where t0.v1 in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+1	30	2
+-- !result
+select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 not in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+2	2
+3	1
+-- !result
+set cbo_push_down_aggregate_mode=-1;
+-- result:
+-- !result
+select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+1	2
+-- !result
+select t0.v1, sum(t0.v2), count(*) from pdc_t0_${uuid0} t0 where t0.v1 in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+1	30	2
+-- !result
+select t0.v1, count(*) from pdc_t0_${uuid0} t0 where t0.v1 not in (select t1.v4 from pdc_t1_${uuid0} t1) group by t0.v1 order by 1;
+-- result:
+2	2
+3	1
+-- !result
+CREATE TABLE pdc_e0_${uuid0}
+(
+v1 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE pdc_e1_${uuid0}
+(
+v4 BIGINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v4`)
+DISTRIBUTED BY HASH(`v4`) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=1;
+-- result:
+-- !result
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=-1;
+-- result:
+-- !result
+select k, count(*) from (select 1 as k from pdc_e0_${uuid0} union all select 1 from pdc_e1_${uuid0}) u group by k order by 1;
+-- result:
+-- !result
+DROP TABLE pdc_e0_${uuid0};
+-- result:
+-- !result
+DROP TABLE pdc_e1_${uuid0};
+-- result:
+-- !result
+set cbo_push_down_aggregate_mode=0;
+-- result:
+-- !result
+DROP TABLE pdc_t0_${uuid0};
+-- result:
+-- !result
+DROP TABLE pdc_t1_${uuid0};
+-- result:
+-- !result

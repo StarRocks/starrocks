@@ -34,7 +34,8 @@ StarRocks が LDAP システム内でユーザーを直接取得する方法で�
 ```Properties
 # ユーザーのベース DN を追加し、ユーザーの取得範囲を指定します。
 authentication_ldap_simple_bind_base_dn =
-# LDAP オブジェクト内でユーザーを識別する属性の名前を追加します。デフォルトは uid です。
+# ログイン名を保持する属性の名前を追加します。デフォルトは uid（OpenLDAP の慣例）です。
+# Active Directory では sAMAccountName を使用してください。
 authentication_ldap_simple_user_search_attr =
 # ユーザーを取得するための管理者 DN を追加します。
 authentication_ldap_simple_bind_root_dn =
@@ -92,6 +93,45 @@ v3.5.0 以降、StarRocks は LDAP 認証時にユーザーの識別名 (DN) 情
 1. **ユーザー指定の DN**: ユーザー作成時に明示的な DN が指定されている場合（`CREATE USER ... AS 'dn'`）、その DN が直接使用されます。
 2. **DN パターンによるダイレクトバインド**: `authentication_ldap_simple_bind_dn_pattern` が設定されている場合、システムはパターンから DN を構築し、直接バインドを試みます。複数のパターンは順番に試行されます。
 3. **検索バインド**: 上記のいずれも該当しない場合、システムは管理者アカウントを使用して LDAP 内のユーザーを検索し、見つかった DN でバインドします。
+
+## ユーザーエントリーからグループを解決する（memberOf）
+
+v4.2 以降、LDAP ユーザーのグループは、設定でどのグループを参照するかを宣言する代わりに、ユーザー自身のエントリーのグループメンバーシップ属性から読み取ることができます。この場合、ディレクトリー側で新しく作成されたグループは、設定を変更しなくても次回ログイン時に反映されます。
+
+2 つの FE 設定項目で制御します。どちらも動的に変更できます。
+
+```Properties
+# グループの取得元: group_provider（デフォルト）| memberof | both
+authentication_ldap_simple_group_source = group_provider
+# ユーザーエントリー上でグループメンバーシップを保持する属性名
+authentication_ldap_simple_memberof_attr = memberOf
+```
+
+- `group_provider`（デフォルト）は以前のバージョンと同じ動作で、Group Provider のみを使用します。
+- `memberof` はユーザー自身のエントリーの属性のみを使用します。設定された Group Provider は無視されますが、設定は保持されます。
+- `both` は両方の和集合を返します。
+
+`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。
+
+これらはクラスター全体のデフォルト値です。security integration は同名のプロパティで両方を上書きできます。LDAP サービスごとに設定する場合はこちらが推奨されます。各認証モードで属性がどのように読み取られるか、および対象外となるもの（ネストされたグループ、Active Directory のプライマリーグループ、クロスドメインのグループ）を含む完全な動作は [Security Integration](./security_integration.md) を参照してください。
+
+:::note
+
+明示的な DN を指定して作成されたユーザー（`CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'`）は、この機能を**サポートしません**。この形式は廃止予定のユーザー単位の旧メカニズムであり、そのグループ解決の動作は変更されません。ユーザー作成時に `AS '<dn>'` を省略するか、security integration を使用してください。
+
+:::
+
+## 大文字小文字の扱い
+
+LDAP 関連の設定には統一した答えはありません。FE が比較する値とディレクトリーが比較する値があるため、以下の表で項目ごとに示します。
+
+| 項目 | 比較する場所 | 大文字小文字を区別するか |
+| --- | --- | --- |
+| 属性名: `authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_memberof_attr` | ディレクトリー、および FE が結果を読み取るとき | **区別しません。** LDAP の属性名（attribute description）は定義上大文字小文字を区別しないため、`memberof` と `memberOf` は同じ属性です。 |
+| `authentication_ldap_simple_group_source` | FE | **区別しません。** 前後の空白も無視されます。認識できない値は `CREATE` / `ALTER SECURITY INTEGRATION` では拒否され、FE 設定項目から渡された場合は `group_provider` にフォールバックしてログに ERROR を出します。 |
+| DN の値: `authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | ディレクトリー | **ディレクトリー次第です。** DN 内の属性タイプ（`cn=`、`ou=`、`dc=`）は常に大文字小文字を区別しません。値を区別するかは各属性のマッチングルールによりますが、一般的な `cn` / `ou` / `dc` は区別しません。 |
+| ログイン名 | FE、ディレクトリーに送る前 | **区別しません。** 検索フィルターに入れる前、またはバインド DN パターンに代入する前に小文字に変換されます。これは Active Directory がアカウント名を扱う方式に合わせたものです。 |
+| グループ名 | FE | **照合では区別せず、表示では原文を保ちます。** `GRANT ... TO EXTERNAL GROUP` と `permitted_groups` は大文字小文字を無視して照合されますが、グループ名の文字列自体は書き換えられません。`current_group()` と Apache Ranger に渡されるグループ集合は、ディレクトリーが返した表記をそのまま保ちます。Ranger はグループ名を大文字小文字を区別して照合するため、そのポリシーはディレクトリー側の表記に合わせる必要があります。 |
 
 ## LDAP でユーザーを作成する
 

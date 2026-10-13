@@ -98,6 +98,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -157,6 +158,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -931,6 +933,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, ConnectContext context) {
             GroupProviderStatementAnalyzer.analyze(statement, context);
             return null;
@@ -939,6 +947,49 @@ public class Analyzer {
         @Override
         public Void visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
             GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- AI Provider Statement --------------------------------------------------
+        @Override
+        public Void visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -1015,6 +1066,12 @@ public class Analyzer {
         @Override
         public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
             RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
+            DropSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 

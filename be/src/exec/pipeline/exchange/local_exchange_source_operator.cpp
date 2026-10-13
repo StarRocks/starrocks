@@ -130,6 +130,10 @@ std::string LocalExchangeSourceOperator::get_name() const {
 const size_t min_local_memory_limit = 1LL * 1024 * 1024;
 
 void LocalExchangeSourceOperator::enter_release_memory_mode() {
+    // Lowering the limit records a full event (see update_max_memory_usage()); consume it here instead of waiting
+    // for the next pull, which may never come once the buffer is drained.
+    auto* exchanger = down_cast<LocalExchangeSourceOperatorFactory*>(_factory)->exchanger();
+    auto notify = exchanger->defer_notify_sink();
     // limit the memory limit to a very small value so that the upstream will not write new data until all the data has been pushed to the downstream operators
     size_t max_memory_usage = min_local_memory_limit * _memory_manager->get_max_input_dop();
     _memory_manager->update_max_memory_usage(max_memory_usage);

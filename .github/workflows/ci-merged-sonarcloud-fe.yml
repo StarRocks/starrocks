@@ -29,11 +29,11 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v5
         with:
-          java-version: 17
-          distribution: 'adopt'
+          java-version: 21
+          distribution: 'temurin'
 
       - name: Cache SonarCloud packages
         uses: actions/cache@v5

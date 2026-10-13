@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 description: "使用 Stream Load 事务接口实现两阶段提交，支持 Flink 和 Kafka 等系统的高并发流式导入和多表事务。"
 keywords: ['Stream Load']
@@ -19,7 +20,7 @@ import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
 Stream Load 事务接口支持通过兼容 HTTP 协议的工具或语言发起接口请求。本文以 curl 工具为例介绍如何使用该接口。该接口提供事务管理、数据写入、事务预提交、事务去重和超时管理等功能。
 
 :::note
-Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的数据文件数量较少、单个数据文件的大小不超过 10 GB 时使用。Stream Load 不支持 Parquet 文件格式。如果要导入 Parquet 格式的数据，请使用 [INSERT+files()](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件).
+Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的数据文件数量较少、单个数据文件的大小不超过 10 GB 时使用。Stream Load 不支持 Parquet 文件格式。如果要导入 Parquet 格式的数据，请使用 [INSERT+files()](./InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件).
 :::
 
 ### 事务管理
@@ -62,11 +63,11 @@ stateDiagram-v2
 
 ### 超时管理
 
-当开始事务时，您可以使用 HTTP 请求 Header 中的 `timeout` 字段来指定从 `PREPARE` 状态到 `PREPARED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成准备，将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`stream_load_default_timeout_second`](../administration/management/FE_configuration.md#stream_load_default_timeout_second) 决定（默认：600 秒）。
+当开始事务时，您可以使用 HTTP 请求 Header 中的 `timeout` 字段来指定从 `PREPARE` 状态到 `PREPARED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成准备，将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`stream_load_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#stream_load_default_timeout_second) 决定（默认：600 秒）。
 
 当开始事务时，您还可以通过HTTP请求 Header 中的 `idle_transaction_timeout` 字段指定事务可保持空闲状态的超时时间（以秒为单位）。若在此期间内未写入任何数据，该事务将被自动回滚。
 
-在预提交事务时，您可以通过 HTT P请求 Header 中的 `prepared_timeout` 字段指定事务从 `PREPARED` 状态转换为 `COMMITTED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成提交，系统将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
+在预提交事务时，您可以通过 HTT P请求 Header 中的 `prepared_timeout` 字段指定事务从 `PREPARED` 状态转换为 `COMMITTED` 状态的超时时间（以秒为单位）。如果在此时间段内事务未完成提交，系统将自动取消该事务。如果未指定此字段，默认值由 FE 配置 [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) 决定（默认：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 ## 接口优势
 
@@ -108,7 +109,7 @@ Stream Load 事务接口具有如下优势：
 
 ### 查看网络配置
 
-确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保待导入数据所在的机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) 端口（默认 `8030`）、以及 BE 节点的 [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) 端口（默认 `8040`）。
 
 ## 基本操作
 
@@ -318,7 +319,7 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 > **说明**
 >
-> `prepared_timeout` 字段为可选。如果未指定该字段，其默认值由 FE 配置中的 [`prepared_transaction_default_timeout_second`](../administration/management/FE_configuration.md#prepared_transaction_default_timeout_second) 决定（默认值：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
+> `prepared_timeout` 字段为可选。如果未指定该字段，其默认值由 FE 配置中的 [`prepared_transaction_default_timeout_second`](../administration/configuration/FE_parameters/FE_parameters.md#prepared_transaction_default_timeout_second) 决定（默认值：86400 秒）。`prepared_timeout` 自 v3.5.4 版本起支持。
 
 #### 返回结果
 
@@ -542,6 +543,6 @@ curl --location-trusted -u <jack>:<123456> -H "label:streamload_txn_example1_tab
 
 ## 相关文档
 
-有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[使用 Stream Load 从本地导入](../loading/StreamLoad.md#使用-stream-load-从本地导入)。
+有关 Stream Load 适用的业务场景、支持的数据文件格式、基本原理等信息，参见[使用 Stream Load 从本地导入](./StreamLoad.md#使用-stream-load-从本地导入)。
 
 有关创建 Stream Load 作业的语法和参数，参见[STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md)。

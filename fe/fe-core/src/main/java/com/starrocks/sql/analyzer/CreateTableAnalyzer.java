@@ -105,15 +105,21 @@ public class CreateTableAnalyzer {
         final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        // A CTAS into an external catalog had both answers fetched before the meta lock; see
+        // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
+        PreResolvedState.CreateTarget preResolved = context.getPreResolvedState().take(
+                PreResolvedState.CREATE_TARGET, com.starrocks.catalog.TableName.fromTableRef(tableRef));
+        Database dbObj = preResolved != null ? preResolved.db()
+                : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
         if (dbObj == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
-            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
+            boolean tableExists = preResolved != null ? preResolved.tableExists()
+                    : GlobalStateMgr.getCurrentState().getMetadataMgr().tableExists(context, catalogName, db, tableName);
+            if (tableExists && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -537,8 +543,15 @@ public class CreateTableAnalyzer {
                 }
 
                 if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
-                    throw new SemanticException("The sort columns must be same with primary key columns " +
-                                                "and the order must be consistent");
+                    Map<String, String> properties = stmt.getProperties();
+                    boolean fileBundling = properties == null ? Config.enable_file_bundling
+                            : Boolean.parseBoolean(properties.getOrDefault(
+                                    PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                                    Boolean.toString(Config.enable_file_bundling)));
+                    if (!fileBundling) {
+                        throw new SemanticException("Range-distributed primary key tables with ORDER BY different "
+                                + "from the primary key require file_bundling=true");
+                    }
                 } else if (keysType != KeysType.PRIMARY_KEYS &&
                                 !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
@@ -940,6 +953,8 @@ public class CreateTableAnalyzer {
                         new RelationFields(columns.stream().map(col -> new Field(
                                         col.getName(), col.getType(), tableNameObject, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();

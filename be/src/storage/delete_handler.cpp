@@ -253,4 +253,41 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
     return true;
 }
 
+bool DeleteHandler::is_delete_condition_evaluated(const TabletSchema& schema, const std::string& column_name) {
+    return schema.field_index(column_name) < schema.num_key_columns() || schema.keys_type() == DUP_KEYS;
+}
+
+Status DeleteHandler::delete_predicate_column_ids(const DelPredicateArray& delete_predicates,
+                                                  const TabletSchema& schema, int64_t max_version,
+                                                  std::set<ColumnId>* column_ids) {
+    // An unknown column is not evaluated either: the reader's parse_thrift_cond rejects it outright.
+    auto keep = [&](const std::string& column_name) {
+        const size_t index = schema.field_index(column_name);
+        if (index < schema.num_columns()) {
+            column_ids->insert(index);
+        }
+    };
+    for (const DeletePredicatePB& pred_pb : delete_predicates) {
+        if (pred_pb.version() > max_version) {
+            continue;
+        }
+        for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
+            TCondition cond;
+            if (!parse_condition(pred_pb.sub_predicates(i), &cond)) {
+                LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
+                return Status::InternalError("invalid delete condition string");
+            }
+            if (!is_delete_condition_evaluated(schema, cond.column_name)) {
+                continue;
+            }
+            keep(cond.column_name);
+        }
+        // The reader applies no non-key filter to IN predicates, so neither does this.
+        for (int i = 0; i != pred_pb.in_predicates_size(); ++i) {
+            keep(pred_pb.in_predicates(i).column_name());
+        }
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks

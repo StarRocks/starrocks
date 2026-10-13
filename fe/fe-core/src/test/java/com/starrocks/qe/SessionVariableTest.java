@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TBinaryEncodingFormat;
 import com.starrocks.thrift.TBinaryEncodingLevel;
@@ -23,6 +24,57 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 public class SessionVariableTest {
+
+    @Test
+    public void testAITopNThresholdValidationAndState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertTrue(variables.isEnableAiTopnPushdown());
+        Assertions.assertEquals(1000, variables.getAiTopnPushdownMaxGlobalLimit());
+        variables.replayFromJson("{}");
+        Assertions.assertTrue(variables.isEnableAiTopnPushdown());
+        Assertions.assertEquals(1000, variables.getAiTopnPushdownMaxGlobalLimit());
+
+        variables.setAiTopnPushdownMaxGlobalLimit(0);
+        variables.setEnableAiTopnPushdown(false);
+        Assertions.assertEquals(false,
+                variables.getNonDefaultVariables().get(SessionVariable.ENABLE_AI_TOPN_PUSHDOWN).actualValue);
+        Assertions.assertEquals(0L,
+                variables.getNonDefaultVariables().get(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertFalse(clone.isEnableAiTopnPushdown());
+        Assertions.assertFalse(restored.isEnableAiTopnPushdown());
+        Assertions.assertEquals(0, clone.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, restored.getAiTopnPushdownMaxGlobalLimit());
+
+        clone.setAiTopnPushdownMaxGlobalLimit(Long.MAX_VALUE);
+        clone.setEnableAiTopnPushdown(true);
+        Assertions.assertTrue(clone.isEnableAiTopnPushdown());
+        Assertions.assertFalse(variables.isEnableAiTopnPushdown());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertEquals(0, variables.getAiTopnPushdownMaxGlobalLimit());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setAiTopnPushdownMaxGlobalLimit(-1));
+        Assertions.assertEquals(0, variables.getAiTopnPushdownMaxGlobalLimit());
+    }
+
+    @Test
+    public void testPaimonReaderMode() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.AUTO, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertEquals("AUTO",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "auto"));
+        Assertions.assertEquals("JNI",
+                VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "jNi"));
+        String nativeMode = VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "native");
+        Assertions.assertEquals("NATIVE", nativeMode);
+        sessionVariable.setPaimonReaderMode(nativeMode);
+        Assertions.assertEquals(SessionVariable.PaimonReaderMode.NATIVE, sessionVariable.getPaimonReaderMode());
+
+        Assertions.assertThrows(DdlException.class,
+                () -> VariableVarConverters.convert(SessionVariable.PAIMON_READER_MODE, "invalid"));
+    }
 
     @Test
     public void testNonDefaultVariables() {

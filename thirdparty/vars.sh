@@ -94,10 +94,10 @@ LIBEVENT_SOURCE=libevent-24236aed01798303745470e6c498bf606e88724a
 LIBEVENT_MD5SUM="c6c4e7614f03754b8c67a17f68177649"
 
 # openssl
-OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/archive/OpenSSL_1_1_1m.tar.gz"
-OPENSSL_NAME=openssl-OpenSSL_1_1_1m.tar.gz
-OPENSSL_SOURCE=openssl-OpenSSL_1_1_1m
-OPENSSL_MD5SUM="710c2368d28f1a25ab92e25b5b9b11ec"
+OPENSSL_DOWNLOAD="https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz"
+OPENSSL_NAME=openssl-3.5.7.tar.gz
+OPENSSL_SOURCE=openssl-3.5.7
+OPENSSL_MD5SUM="36608cd5445f708d0c2200aea9682c35"
 
 # thrift
 THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.24.0/thrift-0.24.0.tar.gz"
@@ -130,10 +130,10 @@ GTEST_SOURCE=googletest-release-1.10.0
 GTEST_MD5SUM="ecd1fa65e7de707cd5c00bdac56022cd"
 
 # snappy
-SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.1.8.tar.gz"
-SNAPPY_NAME=snappy-1.1.8.tar.gz
-SNAPPY_SOURCE=snappy-1.1.8
-SNAPPY_MD5SUM="70e48cba7fecf289153d009791c9977f"
+SNAPPY_DOWNLOAD="https://github.com/google/snappy/archive/1.2.1.tar.gz"
+SNAPPY_NAME=snappy-1.2.1.tar.gz
+SNAPPY_SOURCE=snappy-1.2.1
+SNAPPY_MD5SUM="dd6f9b667e69491e1dbf7419bdf68823"
 
 # gperftools
 GPERFTOOLS_DOWNLOAD="https://github.com/gperftools/gperftools/archive/gperftools-2.7.tar.gz"
@@ -214,10 +214,10 @@ SASL_SOURCE=cyrus-sasl-2.1.28
 SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # MIT Kerberos publishes release archives from web.mit.edu/kerberos/dist.
-KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.19/krb5-1.19.4.tar.gz"
-KRB5_NAME=krb5-1.19.4.tar.gz
-KRB5_SOURCE=krb5-1.19.4
-KRB5_MD5SUM="ef76083e58f8c49066180642d7c2814a"
+KRB5_DOWNLOAD="https://web.mit.edu/kerberos/dist/krb5/1.21/krb5-1.21.3.tar.gz"
+KRB5_NAME=krb5-1.21.3.tar.gz
+KRB5_SOURCE=krb5-1.21.3
+KRB5_MD5SUM="beb34d1dfc72ba0571ce72bed03e06eb"
 
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.11.0.tar.gz"
@@ -260,6 +260,12 @@ S2_DOWNLOAD="https://github.com/google/s2geometry/archive/v0.9.0.tar.gz"
 S2_NAME=s2geometry-0.9.0.tar.gz
 S2_SOURCE=s2geometry-0.9.0
 S2_MD5SUM="293552c7646193b8b4a01556808fe155"
+
+# H3
+H3_DOWNLOAD="https://codeload.github.com/uber/h3/tar.gz/1b536c34225191ba24a75a840f634d4a48c3b206"
+H3_NAME=h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz
+H3_SOURCE=h3-1b536c34225191ba24a75a840f634d4a48c3b206
+H3_MD5SUM="f30096c74df021de1ee15f0e03d083fe"
 
 # BITSHUFFLE
 BITSHUFFLE_DOWNLOAD="https://github.com/kiyo-masui/bitshuffle/archive/0.5.1.tar.gz"
@@ -353,10 +359,10 @@ BENCHMARK_SOURCE=benchmark-1.9.5
 BENCHMARK_MD5SUM="12c6c0c228fc07106c62634222bd2541"
 
 # fast-float
-FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz"
-FAST_FLOAT_NAME="fast-float-3.5.1.tar.gz"
-FAST_FLOAT_SOURCE="fast-float-3.5.1"
-FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
+FAST_FLOAT_DOWNLOAD="https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz"
+FAST_FLOAT_NAME="fast-float-8.2.10.tar.gz"
+FAST_FLOAT_SOURCE="fast-float-8.2.10"
+FAST_FLOAT_MD5SUM="ddcf64ffe15f1e1ed964a355db7a04f3"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -401,10 +407,10 @@ FIU_SOURCE="libfiu-1.1"
 FIU_MD5SUM="51092dcb7801efb511b7b962388d9ff4"
 
 # libdeflate
-LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip"
-LIBDEFLATE_NAME="libdeflate-1.18.zip"
-LIBDEFLATE_SOURCE="libdeflate-1.18"
-LIBDEFLATE_MD5SUM="1ec42dfe7d777929ade295281560d750"
+LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.26.zip"
+LIBDEFLATE_NAME="libdeflate-1.26.zip"
+LIBDEFLATE_SOURCE="libdeflate-1.26"
+LIBDEFLATE_MD5SUM="15fde5dcbc584d1adee99c0ed13212db"
 
 # llvm
 LLVM_DOWNLOAD="https://github.com/llvm/llvm-project/releases/download/llvmorg-18.1.8/llvm-project-18.1.8.src.tar.xz"
@@ -438,10 +444,10 @@ GRPC_SOURCE="grpc-1.43.0"
 GRPC_MD5SUM="92559743e7b5d3f67486c4c0de2f5cbe"
 
 # simdutf
-SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz"
-SIMDUTF_NAME="simdutf-5.2.8.tar.gz"
-SIMDUTF_SOURCE="simdutf-5.2.8"
-SIMDUTF_MD5SUM="731c78ab5a10c6073942dc93d5c4b04c"
+SIMDUTF_DOWNLOAD="https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz"
+SIMDUTF_NAME="simdutf-9.1.0.tar.gz"
+SIMDUTF_SOURCE="simdutf-9.1.0"
+SIMDUTF_MD5SUM="e55123960edadb8d9987fa30f877e588"
 
 # icu
 ICU_DOWNLOAD="https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip"
@@ -501,13 +507,43 @@ BENCHGEN_NAME=benchgen-26.03.11.tar.gz
 BENCHGEN_SOURCE=benchgen-26.03.11
 BENCHGEN_MD5SUM="fd97eb82eb4c629d7916b6d012c7e81d"
 
+# paimon-cpp
+# NOTE: all its third-party deps are BUNDLED and downloaded by its own cmake
+# at build time (network required when building this package)
+PAIMON_CPP_DOWNLOAD="https://github.com/apache/paimon-cpp/releases/download/v0.3.0/apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_NAME="apache-paimon-cpp-0.3.0-src.tgz"
+PAIMON_CPP_SOURCE="paimon-cpp-0.3.0"
+PAIMON_CPP_MD5SUM="e82940588fa423926cb47b2617cf21dc"
+
+# nsjail, the sandbox a deployment can launch Python UDF workers under (see the
+# PyWorkerManager launch hook in be/src/exprs/udf/python/env.h)
+NSJAIL_DOWNLOAD="https://github.com/google/nsjail/archive/refs/tags/3.6.tar.gz"
+NSJAIL_NAME=nsjail-3.6.tar.gz
+NSJAIL_SOURCE=nsjail-3.6
+NSJAIL_MD5SUM="9abc3a5567dd3cd2fc1c79c41ea0e5eb"
+
+# kafel, the seccomp policy compiler nsjail builds into itself. nsjail keeps it as a
+# git submodule, which its release archive does not carry, so it is downloaded on its
+# own and moved into the nsjail source tree (see download-thirdparty.sh). The revision
+# is the one nsjail 3.6 pins.
+KAFEL_DOWNLOAD="https://github.com/google/kafel/archive/76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz"
+KAFEL_NAME=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3.tar.gz
+KAFEL_SOURCE=kafel-76d0f41bf3eb5c4008713d64b9767b461a9129a3
+KAFEL_MD5SUM="ebc4f191e6ed09a1f1b271dc3f0679a5"
+
+# libnl, which nsjail includes unconditionally for its macvlan support
+LIBNL_DOWNLOAD="https://github.com/thom311/libnl/releases/download/libnl3_12_0/libnl-3.12.0.tar.gz"
+LIBNL_NAME=libnl-3.12.0.tar.gz
+LIBNL_SOURCE=libnl-3.12.0
+LIBNL_MD5SUM="f9112ca215807fe65eecd583d8f180cc"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="CLUCENE LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
-            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
+            RE2 BOOST LEVELDB BRPC ROCKSDB KRB5 SASL LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 H3 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOPSRC JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
             BENCHMARK FAST_FLOAT STARCACHE STREAMVBYTE JANSSON AVRO SERDES GCS_CONNECTOR LZO2 DATASKETCHES \
             FIU LIBDEFLATE LLVM ABSL CARES GRPC SIMDUTF TENANN POCO ICU XSIMD LIBXML2 AZURE LIBDIVIDE PPROF FLAMEGRAPH XXHASH \
-            BLAKE3 BENCHGEN"
+            BLAKE3 BENCHGEN PAIMON_CPP LIBNL KAFEL NSJAIL"
 
 if [[ -n "${STARROCKS_TP_VARS_OVERRIDE:-}" ]]; then
     . "${STARROCKS_TP_VARS_OVERRIDE}"

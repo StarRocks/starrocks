@@ -1,0 +1,54 @@
+---
+sidebar_position: 10
+displayed_sidebar: docs
+description: "Hardware and software requirements for servers before deploying StarRocks."
+---
+
+# Deployment Prerequisites
+
+This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](./plan_cluster.md).
+
+## Hardware
+
+### CPU
+
+StarRocks relies on AVX2 instruction sets to fully unleash its vectorization capability. Therefore, in a production environment, we highly recommend you deploy StarRocks on machines with x86 architecture CPUs.
+
+You can run the following command in your terminal to check if the CPUs on your machines support the AVX2 instruction sets:
+
+```Bash
+cat /proc/cpuinfo | grep avx2
+```
+
+### Memory
+
+No specific requirement is imposed on memory kits used for StarRocks. See [Plan StarRocks cluster - CPU and Memory](./plan_cluster.md#cpu-and-memory) for the recommended memory size.
+
+### Storage
+
+StarRocks supports both HDD and SSD as storage medium.
+
+If your applications require real-time data analytics, intensive data scans, or random disk access, we strongly recommend you use SSD storage.
+
+If your applications involve [Primary Key tables](../../table_design/table_types/primary_key_table.md) with the persistent index, you must use SSD storage.
+
+### Network
+
+We recommend that you use 10 Gigabit Ethernet networking to ensure stable data transmission across nodes within your StarRocks cluster.
+
+## Operating System
+
+For StarRocks v4.1 and earlier, supported operating systems include Red Hat Enterprise Linux 7.9, CentOS Linux 7.9, Ubuntu Linux 22.04, and Ubuntu Linux 24.04.
+
+Starting from StarRocks v4.2, binaries built on Rocky Linux 9 require glibc 2.34 or later. Therefore, these binaries do not run on operating systems with glibc earlier than 2.34, including EL7 and EL8 distributions, CentOS 8, Alibaba Cloud Linux 3, Kylin OS V10, and Amazon Linux 2.
+
+## Software
+
+You must install the corresponding JDK version on the server to run StarRocks.
+
+- For StarRocks v3.3 and v3.4, use JDK 11 or later.
+- For StarRocks v3.5 and later, use JDK 17 or later.
+
+:::important
+StarRocks does not support JRE.
+:::

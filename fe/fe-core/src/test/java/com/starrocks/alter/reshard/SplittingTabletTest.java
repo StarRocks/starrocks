@@ -19,6 +19,7 @@ import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
 import com.starrocks.common.Range;
+import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.SplittingTabletInfoPB;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -87,12 +88,37 @@ public class SplittingTabletTest {
         Assertions.assertFalse(t.isIdenticalTablet());
         Assertions.assertEquals(3, t.getNewTabletRanges().size());
 
+        ReshardingTabletInfoPB beforeFallback = t.toProto();
+
         t.fallbackToIdenticalTablet();
+
+        Assertions.assertEquals(List.of(21L, 22L, 23L),
+                beforeFallback.splittingTabletInfo.newTabletIds);
+        Assertions.assertEquals(3, beforeFallback.splittingTabletInfo.newTabletRanges.size());
+        ReshardingTabletInfoPB afterFallback = t.toProto();
+        Assertions.assertNull(afterFallback.splittingTabletInfo);
+        Assertions.assertNotNull(afterFallback.identicalTabletInfo);
+        Assertions.assertEquals(Long.valueOf(2L), afterFallback.identicalTabletInfo.oldTabletId);
+        Assertions.assertEquals(Long.valueOf(21L), afterFallback.identicalTabletInfo.newTabletId);
 
         Assertions.assertTrue(t.isIdenticalTablet());
         Assertions.assertEquals(1, t.getNewTabletIds().size());
         Assertions.assertTrue(t.getNewTabletRanges().isEmpty(),
                 "fallback must clear stale FE-supplied ranges along with the trailing new tablet ids");
+    }
+
+    @Test
+    public void testDataDrivenFallbackReplaysAsIdenticalTablet() {
+        SplittingTablet tablet = new SplittingTablet(2, new ArrayList<>(List.of(21L, 22L)));
+        tablet.fallbackToIdenticalTablet();
+
+        SplittingTablet replayed = GSON.fromJson(GSON.toJson(tablet), SplittingTablet.class);
+        ReshardingTabletInfoPB proto = replayed.toProto();
+
+        Assertions.assertNull(proto.splittingTabletInfo);
+        Assertions.assertNotNull(proto.identicalTabletInfo);
+        Assertions.assertEquals(Long.valueOf(2L), proto.identicalTabletInfo.oldTabletId);
+        Assertions.assertEquals(Long.valueOf(21L), proto.identicalTabletInfo.newTabletId);
     }
 
     @Test

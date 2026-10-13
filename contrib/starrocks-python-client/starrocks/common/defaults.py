@@ -196,6 +196,26 @@ class ReflectionMVDefaults(ReflectionViewDefaults):
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
 
+    # Properties that information_schema.tables_config omits for materialized views, and which
+    # must therefore be read from the PROPERTIES clause of the CREATE MATERIALIZED VIEW ddl.
+    # Without this, such a property looks absent on the reflected side while being present in
+    # the metadata, so autogenerate reports the same phantom change on every run.
+    #
+    # Keep this an explicit allowlist rather than merging the whole ddl PROPERTIES clause:
+    # SHOW CREATE MATERIALIZED VIEW also prints effective values that tables_config leaves out
+    # on purpose (e.g. replicated_storage), and those have no entry in _DEFAULT_PROPERTIES, so
+    # merging them in would warn about an unmanaged database value on every autogenerate.
+    _DDL_ONLY_PROPERTY_KEYS: frozenset = frozenset({
+        'colocate_with',
+    })
+
+    @classmethod
+    def ddl_only_property_keys(cls) -> frozenset:
+        """Property names (lowercase) to take from the MV ddl instead of tables_config.
+        See ``_DDL_ONLY_PROPERTY_KEYS``.
+        """
+        return cls._DDL_ONLY_PROPERTY_KEYS
+
     @classmethod
     def apply(cls, *, name: str, definition: str, comment: Union[str, None] = None, security: Union[str, None] = None) -> ReflectedMVState:
         """Apply defaults and normalization to reflected materialized view values.

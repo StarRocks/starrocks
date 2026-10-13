@@ -220,7 +220,10 @@ public class ShowMetaInfoAction extends RestBaseAction {
         long tableSize = 0;
         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
             long partitionSize = 0;
-            for (MaterializedIndex mIndex : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            // Query-visible layout, like RowCountAction: during an ORDER BY split's UNSHARE window the
+            // children share the parent's files, so summing them answers a question about data volume
+            // with a number no single reader ever sees. Outside that window this is the latest layout.
+            for (MaterializedIndex mIndex : partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE)) {
                 partitionSize += mIndex.getDataSize(singleReplica);
             } // end for indexes
             tableSize += partitionSize;

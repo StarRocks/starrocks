@@ -41,11 +41,6 @@
 
 namespace starrocks::lake {
 
-PkTabletUnsortSSTWriter::PkTabletUnsortSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr,
-                                                 int64_t tablet_id)
-        : PkTabletSSTWriter(std::move(tablet_schema_ptr), tablet_mgr, tablet_id),
-          _map(std::less<>(), MapAllocator(&_map_node_bytes)) {}
-
 Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                                                  const std::shared_ptr<FileSystem>& fs) {
     _location_provider = location_provider;
@@ -58,10 +53,11 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
         _encryption_meta = std::move(pair.encryption_meta);
     }
     if (location_provider && fs) {
-        ASSIGN_OR_RETURN(_wf,
-                         fs->new_writable_file(wopts, location_provider->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(_wf, fs->new_writable_file(
+                                      wopts, location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     } else {
-        ASSIGN_OR_RETURN(_wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(
+                _wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     }
     _map.clear();
     _deleted_rowids.clear();
@@ -199,8 +195,11 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
 }
 
 size_t PkTabletUnsortSSTWriter::map_memory_usage() const {
-    DCHECK_GE(_map_node_bytes, 0);
-    return sizeof(_map) + static_cast<size_t>(_map_node_bytes) + _keys_heap_size;
+    // Same accounting as PersistentIndexMemtable::memory_usage(): _keys_heap_size is the memory of the
+    // heap-allocated std::string keys, and _map.bytes_used() is the memory of the btree itself.
+    // Asking the container is exact by construction -- an incrementally maintained byte counter has to
+    // be kept in step with every single allocation and deallocation, and any drift is silent.
+    return _keys_heap_size + _map.bytes_used();
 }
 
 size_t PkTabletUnsortSSTWriter::memory_usage() const {
@@ -219,8 +218,8 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
         encryption_meta = std::move(pair.encryption_meta);
     }
     const std::string location = (_location_provider && _fs)
-                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename())
-                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename());
+                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))
+                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id));
     std::unique_ptr<WritableFile> wf;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(wf, _fs->new_writable_file(wopts, location));
@@ -273,8 +272,15 @@ Status PkTabletUnsortSSTWriter::merge_intermediates_into(sstable::TableBuilder* 
             ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, sst.location));
         }
         std::unique_ptr<sstable::Table> table;
-        RETURN_IF_ERROR(sstable::Table::Open(sstable::Options{}, rf.get(), sst.size, table));
-        auto* iter = table->NewIterator(sstable::ReadOptions{});
+        // Verify block checksums when re-reading the intermediate ssts this load just
+        // wrote: corrupted bytes (usually a bad local cache copy) must fail as
+        // Corruption instead of being silently merged into a wrong dedup result.
+        sstable::Options open_options;
+        open_options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
+        RETURN_IF_ERROR(sstable::Table::Open(open_options, rf.get(), sst.size, table));
+        sstable::ReadOptions read_options;
+        read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+        auto* iter = table->NewIterator(read_options);
         iter_holders.emplace_back(iter);
         child_iters.push_back(iter);
         rfs.push_back(std::move(rf));

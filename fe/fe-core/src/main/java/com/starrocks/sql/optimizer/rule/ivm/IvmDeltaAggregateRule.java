@@ -62,7 +62,7 @@ import java.util.stream.Collectors;
  * <p>The output plan structure:
  * <pre>
  *   Project(state_union(intermediate, mv_state), original_projection...)
- *     └── LeftOuterJoin(encode_row_id(group_keys) = mv.__ROW_ID__)
+ *     └── LeftOuterJoin(encode(group_keys) = mv.__ROW_ID__)
  *           ├── Aggregate(intermediate _combine)
  *           │     └── Delta(...)       ← preserved for subsequent iterations
  *           │           └── child...

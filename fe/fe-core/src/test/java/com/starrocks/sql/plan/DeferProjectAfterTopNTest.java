@@ -18,6 +18,34 @@ import org.junit.jupiter.api.Test;
 
 public class DeferProjectAfterTopNTest extends PlanTestBase {
 
+    /**
+     * The rule keeps a projection below the TopN when the expression may benefit from subfield
+     * pruning, and it decides that by looking the column up among the access paths pushed down for
+     * the scan - whose roots are storage-side column ids. A rename changes Column#getName and leaves
+     * that id alone, so matching on the name makes a renamed column look as if nothing pruned it: the
+     * projection is deferred, the whole struct travels through the TopN and the exchange, and the
+     * scan ends up with no access path at all because no subfield expression is left above it.
+     */
+    @Test
+    public void testSubfieldPruningSurvivesColumnRename() throws Exception {
+        starRocksAssert.withTable("create table defer_rename(k int, c struct<a int, b int>, pad varchar(64)) " +
+                "duplicate key(k) distributed by hash(k) buckets 1 properties('replication_num'='1')");
+        try {
+            String before = getVerboseExplain("select c.a, pad from defer_rename order by k limit 10");
+            assertContains(before, "ColumnAccessPath: [/c/a]");
+
+            starRocksAssert.ddl("alter table defer_rename rename column c to c_new");
+            String after = getVerboseExplain("select c_new.a, pad from defer_rename order by k limit 10");
+            // the path is rooted at the id the rename left alone ...
+            assertContains(after, "ColumnAccessPath: [/c/a]");
+            // ... and the subfield is still extracted below the TopN, so the exchange carries an int
+            // rather than the whole struct
+            assertContains(after, "4 <-> [4: c_new.a, INT, true]");
+        } finally {
+            starRocksAssert.dropTable("defer_rename");
+        }
+    }
+
     @Test
     public void testNormalCases() throws Exception {
         {

@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.KeysDesc;
 import com.starrocks.sql.ast.OptimizeClause;
@@ -97,15 +98,21 @@ public class OptimizeJobV2BuilderTest {
         OptimizeJobV2Builder builder = new OptimizeJobV2Builder(table);
         builder.withOptimizeClause(new OptimizeClause(null, null, null, null, null, null));
 
-        // Call the build() method
-        AlterJobV2 job = builder.build();
+        boolean savedEnableOnlineOptimizeTable = Config.enable_online_optimize_table;
+        Config.enable_online_optimize_table = true;
+        try {
+            // Call the build() method
+            AlterJobV2 job = builder.build();
 
-        // Assert that the returned job is an instance of OnlineOptimizeJobV2
-        Assertions.assertTrue(job instanceof OnlineOptimizeJobV2);
+            // Assert that the returned job is an instance of OnlineOptimizeJobV2
+            Assertions.assertTrue(job instanceof OnlineOptimizeJobV2);
 
-        // Assert that the job has the correct properties
-        OnlineOptimizeJobV2 onlineOptimizeJob = (OnlineOptimizeJobV2) job;
-        Assertions.assertEquals(123L, onlineOptimizeJob.getTableId());
-        Assertions.assertEquals("myTable", onlineOptimizeJob.getTableName());
+            // Assert that the job has the correct properties
+            OnlineOptimizeJobV2 onlineOptimizeJob = (OnlineOptimizeJobV2) job;
+            Assertions.assertEquals(123L, onlineOptimizeJob.getTableId());
+            Assertions.assertEquals("myTable", onlineOptimizeJob.getTableName());
+        } finally {
+            Config.enable_online_optimize_table = savedEnableOnlineOptimizeTable;
+        }
     }
 }

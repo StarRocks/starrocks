@@ -1042,6 +1042,20 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         }
     }
 
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * maps from temp to source partitions and the optimize clause. getInfo reads none of them, and a done job never
+     * runs again (the leader handoff reset skips it too), so nothing reads the clause either. The maps are replaced,
+     * not cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+        tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
+        optimizeClause = null;
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         List<Comparable> info = Lists.newArrayList();

@@ -282,6 +282,24 @@ public class HistogramStatisticsTest {
         Assertions.assertNotEquals(estimated.getColumnStatistic(leftColumnRefOperator).getHistogram(), leftHistogram);
         Assertions.assertNotEquals(estimated.getColumnStatistic(rightColumnRefOperator).getHistogram(), rightHistogram);
         Assertions.assertEquals(83576, estimated.getOutputRowCount(), 0.1);
+
+        // Histogram row counts exclude nulls, but the input cardinality still includes them.
+        double leftNullFraction = 0.2;
+        double rightNullFraction = 0.3;
+        Statistics statisticsWithNulls = Statistics.buildFrom(statistics)
+                .addColumnStatistic(leftColumnRefOperator,
+                        ColumnStatistic.buildFrom(statistics.getColumnStatistic(leftColumnRefOperator))
+                                .setNullsFraction(leftNullFraction)
+                                .build())
+                .addColumnStatistic(rightColumnRefOperator,
+                        ColumnStatistic.buildFrom(statistics.getColumnStatistic(rightColumnRefOperator))
+                                .setNullsFraction(rightNullFraction)
+                                .build())
+                .build();
+        Statistics estimatedWithNulls = PredicateStatisticsCalculator.statisticsCalculate(
+                binaryPredicateOperator, statisticsWithNulls);
+        Assertions.assertEquals(83576 * (1 - leftNullFraction) * (1 - rightNullFraction),
+                estimatedWithNulls.getOutputRowCount(), 0.1);
     }
 
     @Test

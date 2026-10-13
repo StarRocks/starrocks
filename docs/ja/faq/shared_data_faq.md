@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "共有データクラスタのオブジェクトストレージ設定エラーと一般的なトラブルシューティング方法を紹介します。"
 ---
@@ -99,7 +100,7 @@ v3.1.4 以降、データはパーティションごとに整理されます。�
 
   Compaction Score は約 10 以下に保たれるべきです。過度に高い Compaction Score はコンパクションの失敗を示すことがよくあります。
 
-- `SegmentsReadCount` などの Query Profile メトリクスを確認します。
+- `PhySegmentsCount` などの Query Profile メトリクスを確認します。
 
   セグメント数が多い場合、コンパクションが遅れているか、停止している可能性があります。
 

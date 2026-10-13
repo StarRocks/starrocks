@@ -244,10 +244,11 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 leaderNodeHostPort,
                 true);
-        Assertions.assertTrue(true);
         try {
             maserEnvironment.setup(true);
         } catch (JournalException e) {
+            // Per the javadoc above, either outcome is acceptable. What must not happen is a raw
+            // RollbackException (or any other type) escaping: that would fail this test.
             LOG.warn("got Rollback Exception, as expect, ", e);
         }
         System.out.println("testRollbackExceptionOnSetupCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");

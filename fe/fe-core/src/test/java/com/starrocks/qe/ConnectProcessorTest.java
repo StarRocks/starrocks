@@ -38,7 +38,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AccessControlContext;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
@@ -50,12 +52,16 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.mysql.MysqlColType;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
+import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -84,6 +90,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -98,6 +107,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -294,6 +304,114 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     @Test
+    public void testStmtCloseUsesLittleEndianStatementId() throws Exception {
+        int stmtId = 0x01020304;
+        for (ByteOrder byteOrder : new ByteOrder[] {ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN}) {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+            serializer.writeInt4(stmtId);
+            MysqlChannel channel = mockChannel(serializer.toByteBuffer().order(byteOrder));
+            ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+            PrepareStmtContext preparedStmt = new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null);
+            ctx.putPreparedStmt(String.valueOf(stmtId), preparedStmt);
+            ctx.putPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId)), preparedStmt);
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)), byteOrder.toString());
+            Assertions.assertSame(preparedStmt, ctx.getPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId))));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
+    }
+
+    @Test
+    public void testStmtCloseFromPackageDecoder() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt4(5); // three-byte payload length followed by sequence ID 0
+        serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        serializer.writeInt4(1);
+        MysqlPackageDecoder decoder = new MysqlPackageDecoder();
+        decoder.consume(serializer.toByteBuffer());
+        RequestPackage request = decoder.poll();
+        Assertions.assertNotNull(request);
+
+        MysqlChannel channel = mockChannel(request.byteBuffer());
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        ctx.putPreparedStmt("1", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
+
+        new ConnectProcessor(ctx).processOnce(request);
+
+        Assertions.assertNull(ctx.getPreparedStmt("1"));
+        Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+        Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+    }
+
+    @Test
+    public void testStmtCloseAfterLargeExecutePacket() throws Exception {
+        int stmtId = 1;
+        String value = "x".repeat(16 * 1024);
+        MysqlSerializer execute = MysqlSerializer.newInstance();
+        execute.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
+        execute.writeInt4(stmtId);
+        execute.writeInt1(0); // flags
+        execute.writeInt4(1); // iteration count
+        execute.writeInt1(0); // null bitmap
+        execute.writeInt1(1); // new parameter types
+        execute.writeInt2(MysqlColType.MYSQL_TYPE_STRING.getCode());
+        execute.writeLenEncodedString(value);
+
+        MysqlSerializer close = MysqlSerializer.newInstance();
+        close.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        close.writeInt4(stmtId);
+
+        MysqlSerializer packets = MysqlSerializer.newInstance();
+        for (ByteBuffer payload : new ByteBuffer[] {execute.toByteBuffer(), close.toByteBuffer()}) {
+            packets.writeInt1(payload.remaining() & 0xff);
+            packets.writeInt2(payload.remaining() >> 8);
+            packets.writeInt1(0); // each command starts a new packet sequence
+            packets.writeBytes(payload.array());
+        }
+        ByteBuffer input = packets.toByteBuffer();
+        MysqlChannel channel = Mockito.spy(new MysqlChannel(connection) {
+            @Override
+            public int realNetRead(ByteBuffer destination) {
+                if (!input.hasRemaining()) {
+                    return -1;
+                }
+                int length = Math.min(destination.remaining(), input.remaining());
+                for (int i = 0; i < length; i++) {
+                    destination.put(input.get());
+                }
+                return length;
+            }
+        });
+        Mockito.doNothing().when(channel).sendAndFlush(Mockito.any(ByteBuffer.class));
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        Deencapsulation.setField(ctx.getSessionVariable(), "auditExecuteStmt", false);
+        PrepareStmt prepareStmt = (PrepareStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "SELECT ?", ctx.getSessionVariable()).get(0);
+        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(prepareStmt, ctx, null));
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        try (MockedConstruction<StmtExecutor> executors = Mockito.mockConstruction(StmtExecutor.class)) {
+            processor.processOnce();
+            Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+            Assertions.assertEquals(1, executors.constructed().size());
+            Mockito.verify(executors.constructed().get(0)).execute();
+            Assertions.assertNotNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Mockito.clearInvocations(channel);
+
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
+    }
+
+    @Test
     public void testQuit() throws IOException {
         ConnectContext ctx = initMockContext(mockChannel(quitPacket), GlobalStateMgr.getCurrentState());
 
@@ -359,6 +477,76 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
         Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
         Assertions.assertFalse(myContext.isKilled());
+    }
+
+    // A pooled connection handed back out must not expose the previous unit of work's diagnostics:
+    // statements that preserve the diagnostics area (SHOW, SET, transaction control) would
+    // otherwise let the next user read them.
+    @Test
+    public void testResetConnectionClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(resetConnectionPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Error", "1064", "leftover error from the previous session"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_RESET_CONNECTION, myContext.getCommand());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // COM_CHANGE_USER re-authenticates a different user on the same ConnectContext
+    // (MysqlProto.changeUser mutates it in place) and then falls through to the reset path, so the
+    // previous user's error text and load tracking URL must not survive into the new user's session.
+    // changeUserPacket cannot authenticate against the test catalog, so stub a successful
+    // change-user to reach handleResetConnection.
+    @Test
+    public void testChangeUserClearsSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                return true;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265",
+                "1 row(s) filtered or substituted to NULL during load; "
+                        + "tracking_url=http://127.0.0.1:8040/api/_load_error_log?file=previous_user"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_CHANGE_USER, myContext.getCommand());
+        Assertions.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlOkPacket);
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // A rejected COM_CHANGE_USER is answered by MysqlProto.changeUser itself and returns before
+    // resetConnectionSession() runs, so the error the client just received has to be recorded on
+    // the way out of handleChangeUser.
+    @Test
+    public void testChangeUserFailureReplacesSessionWarnings() throws IOException {
+        new MockUp<MysqlProto>() {
+            @Mock
+            public boolean changeUser(ConnectContext context, ByteBuffer buffer) {
+                // Mirrors the real rejection paths: MysqlProto leaves the error on the state and
+                // answers the client itself.
+                context.getState().setError("Unknown database(no_such_db)");
+                return false;
+            }
+        };
+
+        ConnectContext ctx = initMockContext(mockChannel(changeUserPacket), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
     @Test
@@ -483,6 +671,261 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(1, auditRecords.size());
         Assertions.assertTrue(auditRecords.get(0).startsWith("ERR:"));
         Assertions.assertEquals("ERR:select from", auditRecords.get(0));
+    }
+
+    // Verify a parse failure replaces the previous statement's diagnostics with its own error:
+    // the statement never reaches StmtExecutor.execute() (which normally clears the buffer and
+    // records the failure), so without the explicit handling in handleQuery, SHOW WARNINGS would
+    // return stale entries after a syntax error and SHOW ERRORS would not return the error.
+    @Test
+    public void testParseFailureReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select from");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a pre-execution rejection (here: the per-statement authentication re-check in
+    // validateStmtBeforeExecution) replaces the previous statement's diagnostics the same way a
+    // parse failure does: the statement parses fine but never reaches StmtExecutor.execute(), so
+    // without recording in the rejection path SHOW WARNINGS would return stale entries.
+    @Test
+    public void testPreExecutionRejectionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        Mockito.doReturn(null).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify the per-statement authentication re-check failure (AuthenticationException from
+    // checkLoginSuccess) replaces the previous statement's diagnostics like the other
+    // pre-execution rejections.
+    @Test
+    public void testAuthenticationExceptionReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        AuthenticationProvider provider = Mockito.mock(AuthenticationProvider.class);
+        Mockito.doThrow(new AuthenticationException("mock: login revoked"))
+                .when(provider).checkLoginSuccess(Mockito.anyInt(), Mockito.any());
+        Mockito.doReturn(provider).when(ctx).getAuthenticationProvider();
+        // ErrorReport.report writes the error message through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // Verify a COM_STMT_EXECUTE that fails before reaching StmtExecutor.execute() (here: unknown
+    // prepared statement id) replaces the previous statement's diagnostics with its own error,
+    // matching the COM_QUERY pre-execution contract.
+    @Test
+    public void testExecuteUnknownPreparedStmtReplacesSessionWarnings() throws Exception {
+        ByteBuffer packet = createExecutePacket(42, new ArrayList<>());
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A COM_QUERY statement can also fail after its StmtExecutor has been constructed but before
+    // execute() is entered. execute() owns the diagnostics area, so this window must record the
+    // failure too. The executor field cannot decide that: it is already assigned here.
+    @Test
+    public void testQueryFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void addRunningQueryDetail(StatementBase parsedStmt) {
+                throw new IllegalStateException("mock: failed after executor creation, before execute");
+            }
+        };
+
+        ByteBuffer packet = createQueryPacket("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(packet), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // The same window on the COM_STMT_EXECUTE path: a prepared statement that fails between
+    // executor creation and execute() must also replace the previous statement's diagnostics.
+    @Test
+    public void testExecuteFailureAfterExecutorCreatedReplacesSessionWarnings() throws Exception {
+        boolean oldAuditStmtBeforeExecute = Config.audit_stmt_before_execute;
+        Config.audit_stmt_before_execute = true;
+        try {
+            ByteBuffer executePacket = createExecutePacket(1, new ArrayList<>());
+            ConnectContext ctx = initMockContext(mockChannel(executePacket), GlobalStateMgr.getCurrentState());
+
+            PrepareStmt prepareStmt = createMockPrepareStmt("SELECT 1 + 2");
+            ctx.putPreparedStmt("1", new PrepareStmtContext(prepareStmt, ctx, null));
+            ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+            ConnectProcessor processor = new ConnectProcessor(ctx) {
+                @Override
+                public void auditBeforeExec(String origStmt, StatementBase parsedStmt) {
+                    throw new IllegalStateException("mock: failed after executor creation, before execute");
+                }
+            };
+            processor.processOnce();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertEquals(1, ctx.getWarnings().size());
+            QueryWarning diagnostic = ctx.getWarnings().get(0);
+            Assertions.assertEquals("Error", diagnostic.getLevel());
+            Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+        } finally {
+            Config.audit_stmt_before_execute = oldAuditStmtBeforeExecute;
+        }
+    }
+
+    // A client that switches database with COM_INIT_DB instead of a USE statement never builds a
+    // StmtExecutor, so nothing would clear the diagnostics area and the previous statement's
+    // warnings would stay visible after the switch.
+    @Test
+    public void testInitDbClearsSessionWarnings() throws IOException {
+        ConnectContext ctx = initMockContext(mockChannel(initDbPacket), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_INIT_DB, myContext.getCommand());
+        Assertions.assertFalse(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getWarnings().isEmpty());
+    }
+
+    // A failing COM_INIT_DB answers with an ERR packet, so SHOW ERRORS has to report that error
+    // rather than the previous statement's diagnostics.
+    @Test
+    public void testInitDbFailureReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_INIT_DB.getCommandCode());
+        serializer.writeEofString("db_that_does_not_exist");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // COM_FIELD_LIST is the other command answered without a StmtExecutor that can report an error
+    // of its own, so it follows the same contract.
+    @Test
+    public void testFieldListFailureReplacesSessionWarnings() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_FIELD_LIST.getCommandCode());
+        serializer.writeNulTerminateString("");
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code the dispatcher does not implement is rejected with an ERR packet before any
+    // statement handling, and must replace the diagnostics area like the handled commands do.
+    @Test
+    public void testUnsupportedCommandReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(MysqlCommand.COM_CREATE_DB.getCommandCode());
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
+    }
+
+    // A command code that maps to no MysqlCommand is rejected before the dispatch switch is even
+    // reached, which is the other path that answers with an ERR packet and no StmtExecutor.
+    @Test
+    public void testUnknownCommandCodeReplacesSessionWarnings() throws IOException {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(100);
+        serializer.writeEofString("");
+
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.addWarning(new QueryWarning("Warning", "1265", "left over from the previous statement"));
+        // ErrorReport.report writes the error code through the thread-local ConnectContext.
+        ctx.setThreadLocalInfo();
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        QueryWarning diagnostic = ctx.getWarnings().get(0);
+        Assertions.assertEquals("Error", diagnostic.getLevel());
+        Assertions.assertEquals(ctx.getState().getErrorMessage(), diagnostic.getMessage());
     }
 
     // Verify LargeInPredicate retry is scoped to the failing stmt instead of replaying previous stmts.
@@ -1084,6 +1527,110 @@ public class ConnectProcessorTest extends DDLTestBase {
                 auditEvent.queriedRelations);
     }
 
+    // ErrorCode only carries a coarse category, so a failure must also record the message.
+    @Test
+    public void testAuditRecordsErrorMessageOnFailure() throws Exception {
+        auditBuilder.reset();
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select * from no_such_table_post1799");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+        Assertions.assertEquals(AuditEvent.normalizeErrorMessage(myContext.getState().getErrorMessage()),
+                auditEvent.errorMessage, "the audit event must carry the message the client received");
+        Assertions.assertTrue(auditEvent.errorMessage.contains("no_such_table_post1799"),
+                "unexpected message: " + auditEvent.errorMessage);
+    }
+
+    // A parser error quotes the offending token with no key beside it, so a credential in it can no
+    // longer be recognised - the audited statement is redacted while the message would not be.
+    @Test
+    public void testAuditedErrorMessageDropsMessageWhenStatementCarriesCredentials() {
+        String stmt = "CREATE EXTERNAL CATALOG c PROPERTIES (\"aws.s3.secret_key\" = AKIA123SECRET)";
+        String message = "Getting syntax error at line 1, column 60. Detail message: Unexpected input "
+                + "'AKIA123SECRET', the most similar input is {SINGLE_QUOTED_TEXT, DOUBLE_QUOTED_TEXT}.";
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage(message, stmt));
+
+        // A statement without credentials keeps its message.
+        String plain = "SELECT * FROM no_such_table";
+        Assertions.assertEquals("Unknown table 'no_such_table'.",
+                ConnectProcessor.auditedErrorMessage("Unknown table 'no_such_table'.", plain));
+
+        // Nothing to record for a successful statement, and nothing when SQL auditing is off.
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage("", plain));
+        Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage(null, plain));
+        boolean original = Config.enable_audit_sql;
+        try {
+            Config.enable_audit_sql = false;
+            Assertions.assertEquals("", ConnectProcessor.auditedErrorMessage("Unknown table 'x'.", plain));
+        } finally {
+            Config.enable_audit_sql = original;
+        }
+    }
+
+    // The message quotes the statement that enable_audit_sql=false withholds.
+    @Test
+    public void testAuditOmitsErrorMessageWhenSqlAuditDisabled() throws Exception {
+        auditBuilder.reset();
+
+        boolean original = Config.enable_audit_sql;
+        try {
+            Config.enable_audit_sql = false;
+
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(3);
+            serializer.writeEofString("select * from no_such_table_post1799");
+            ConnectContext ctx =
+                    initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            myContext.setDatabase("testDb1");
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            processor.processOnce();
+
+            AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+            Assertions.assertEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+            Assertions.assertEquals("?", auditEvent.stmt);
+            Assertions.assertEquals("", auditEvent.errorMessage);
+        } finally {
+            Config.enable_audit_sql = original;
+        }
+    }
+
+    // ignore_empty only helps if a successful statement really leaves the field empty.
+    @Test
+    public void testAuditLeavesErrorMessageEmptyOnSuccess() throws Exception {
+        auditBuilder.reset();
+
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString("select 1");
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        myContext.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        myContext.setDatabase("testDb1");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+        processor.processOnce();
+
+        AuditEvent auditEvent = ctx.getAuditEventBuilder().build();
+        Assertions.assertNotEquals(QueryState.MysqlStateType.ERR.name(), auditEvent.state);
+        Assertions.assertEquals("", auditEvent.errorMessage);
+    }
+
     // A forwarding follower never analyzes the statement, so its local parse tree still carries
     // CTE aliases and unqualified names. When the Leader resolved the relations and shipped them
     // back, the follower must log the Leader's list rather than its own inaccurate collection.
@@ -1411,6 +1958,26 @@ public class ConnectProcessorTest extends DDLTestBase {
             Assertions.assertEquals("", ctx.getCustomQueryId());
             Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
         }
+    }
+
+    @ParameterizedTest
+    @MethodSource("customQueryIdCases")
+    public void testAuditRecordsEffectiveCustomQueryId(String sql, String expectedCustomQueryId) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.getSessionVariable().setCustomQueryId("session_id");
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertEquals(expectedCustomQueryId, ctx.getAuditEventBuilder().build().customQueryId);
+    }
+
+    private static Stream<Arguments> customQueryIdCases() {
+        return Stream.of(
+                Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
+                Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
+                Arguments.of("select 1", "session_id"));
     }
 
     @Test

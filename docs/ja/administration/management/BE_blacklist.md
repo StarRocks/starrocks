@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "StarRocks で BE と CN をブラックリストに追加し、接続失敗ノードをクエリ実行から除外する設定方法。"
 ---
@@ -97,7 +98,7 @@ SHOW COMPUTE NODE BLACKLIST;
 
 BE/CN ノードが FE ノードへの接続を失うたびに、または BE/CN ノードでタイムアウトによるクエリが失敗するたびに、FE ノードは BE/CN ノードをその BE と CN ブラックリストに追加します。FE ノードは、一定期間内の接続失敗をカウントすることで、ブラックリスト内の BE/CN ノードの接続性を常に評価します。StarRocks は、接続失敗の数が事前に指定された閾値を下回った場合にのみ、ブラックリストにある BE/CN ノードを削除します。
 
-次の [FE 設定](./FE_configuration.md) を使用して、BE と CN ブラックリストの自動管理を設定できます:
+次の [FE 設定](../configuration/FE_parameters/FE_parameters.md) を使用して、BE と CN ブラックリストの自動管理を設定できます:
 
 - `black_host_history_sec`: ブラックリスト内の BE/CN ノードの接続失敗の履歴を保持する期間。
 - `black_host_connect_failures_within_time`: ブラックリストにある BE/CN ノードに許可される接続失敗の閾値。

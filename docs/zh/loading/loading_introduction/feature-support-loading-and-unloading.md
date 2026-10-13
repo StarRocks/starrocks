@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "StarRocks 数据导入导出功能支持的文件格式、数据源和版本参考。"
 sidebar_label: "能力边界"

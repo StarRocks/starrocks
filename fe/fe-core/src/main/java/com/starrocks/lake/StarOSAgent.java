@@ -47,6 +47,7 @@ import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
@@ -576,6 +577,32 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Dissolve the anonymous PACK groups StarOS created from creation-time placement preferences --
+     * the WITH_SHARD pin a tablet split/merge uses so the new shards reuse the source worker's warm
+     * cache. Until the pin is dropped the new shards cannot be spread across workers by the
+     * background balancer, and StarOS only drops it on its own when the superseded shards are
+     * deleted, which is tens of minutes later.
+     *
+     * <p>Each entry of {@code preferenceMembers} names the shards forming one preference group -- for
+     * a reshard, the superseded shard the pin targeted and the new shard created with it. Naming the
+     * members is what makes the request unambiguous: a shard can be the target of one preference and
+     * the owner of another, so "every group containing this shard" would dissolve pins that belong to
+     * a later reshard. Idempotent on the StarOS side.
+     */
+    public void clearPlacementPreference(List<List<Long>> preferenceMembers) throws DdlException {
+        if (preferenceMembers.isEmpty()) {
+            return;
+        }
+        prepare();
+        try {
+            client.clearPlacementPreference(serviceId, preferenceMembers);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to clear placement preference for " + preferenceMembers
+                    + ". error: " + e.getMessage());
+        }
+    }
+
     public List<ShardGroupInfo> listShardGroup() throws DdlException {
         prepare();
         try {
@@ -595,6 +622,48 @@ public class StarOSAgent {
         }
     }
 
+    @FunctionalInterface
+    private interface CreateShardCall {
+        List<ShardInfo> call(List<CreateShardInfo> createShardInfos) throws StarClientException;
+    }
+
+    /**
+     * Send {@code createShardInfos} through {@code call}, replaying the identical request once if it fails
+     * without a StarMgr status.
+     *
+     * <p>StarClient reports every gRPC-level failure, such as DEADLINE_EXCEEDED, as {@link StatusCode#GRPC},
+     * and such a failure leaves the outcome unknown: StarMgr may have committed the shards and then outlasted
+     * the client deadline, for example while waiting best-effort for their placement. The replay is sent only
+     * when every entry carries a caller-assigned shard id. StarMgr answers ids it already holds with the
+     * existing shards, so such a replay is safe and normally returns promptly; an entry without an id would
+     * get a fresh one and create a second shard. A StarMgr status is a definite answer and is not retried,
+     * and neither is a call whose thread has been interrupted. An unresponsive StarMgr fails both attempts,
+     * so the worst-case wait is two write deadlines.
+     */
+    private List<ShardInfo> createShardRetryOnTransportError(List<CreateShardInfo> createShardInfos,
+                                                             CreateShardCall call) throws StarClientException {
+        try {
+            return call.call(createShardInfos);
+        } catch (StarClientException firstError) {
+            boolean everyShardIdAssigned = createShardInfos.stream()
+                    .allMatch(createShardInfo -> createShardInfo.getShardId() != Constant.DEFAULT_ID);
+            if (firstError.getCode() != StatusCode.GRPC || Thread.currentThread().isInterrupted()
+                    || !everyShardIdAssigned) {
+                throw firstError;
+            }
+            List<ShardInfo> shardInfos;
+            try {
+                shardInfos = call.call(createShardInfos);
+            } catch (StarClientException retryError) {
+                throw new StarClientException(retryError.getCode(), "the outcome of the first attempt is unknown ("
+                        + firstError.getMessage() + ") and replaying it failed: " + retryError.getMessage());
+            }
+            LOG.warn("Creating {} shards failed without a StarMgr status; replaying the request with the same shard"
+                    + " ids succeeded. first attempt: {}", createShardInfos.size(), firstError.getMessage());
+            return shardInfos;
+        }
+    }
+
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
@@ -604,12 +673,35 @@ public class StarOSAgent {
                                    ComputeResource computeResource)
         throws DdlException {
         return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
-                computeResource);
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    /**
+     * Create shards that join {@code metaGroupId} at creation. Joining at creation has the same
+     * effect as the later {@code updateMetaGroup} join for these shards: each is appended to the
+     * meta group's anonymous group of its bucket position, so the very first placement already
+     * honors the colocation constraint and no shard migration is needed after the data is loaded.
+     */
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long metaGroupId, ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                metaGroupId, computeResource);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                    List<Long> groupIds, @Nullable List<Long> matchShardIds,
                                    @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupIds, matchShardIds, properties,
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties, long metaGroupId,
                                    ComputeResource computeResource)
         throws DdlException {
         Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
@@ -644,7 +736,8 @@ public class StarOSAgent {
                 }
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos, metaGroupId));
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
@@ -658,15 +751,18 @@ public class StarOSAgent {
      * Create shards for a tablet split.
      *
      * <p>Each new shard joins its own list of group ids (PACK group per colocate range). Unless
-     * {@code spreadNewShards} is set, it also pins placement to its old shard via
+     * {@code unpinPlacement} is set, it also pins placement to its old shard via
      * {@code PlacementRelationship.WITH_SHARD} so an online split reuses the source worker's warm
-     * cache. Pre-split passes {@code spreadNewShards == true}: the source tablet is empty, so the
-     * WITH_SHARD pin is dropped and StarOS spreads the new shards across workers (via the SPREAD
-     * group), preventing every tablet's delta-writer / flush / spill-merge from funneling onto one
-     * node during the load that follows. The colocate PACK group, when present, is unaffected.
+     * cache. Callers pass {@code unpinPlacement == true} when there is no warm cache worth keeping:
+     * pre-split (the source tablet is empty) and an ORDER BY != PK online split of a still-small
+     * index (its new shards are rewritten wholesale by the following UNSHARE compaction, which would
+     * otherwise run entirely on the source worker). The WITH_SHARD pin is then dropped and StarOS
+     * spreads the new shards across workers via the SPREAD group, preventing every tablet's
+     * delta-writer / flush / spill-merge -- and that UNSHARE rewrite -- from funneling onto one node.
+     * The colocate PACK group, when present, is unaffected.
      *
      * <p>{@code newToOldShardId} maps each new shard id to its parent old shard id (used only for
-     * the WITH_SHARD pin; ignored when {@code spreadNewShards} is true).
+     * the WITH_SHARD pin; ignored when {@code unpinPlacement} is true).
      * {@code newShardIdToGroupIds} maps each new shard id to its target group ids
      * (typically {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must
      * have the same key set; the call fails if a new shard has no group assignment.
@@ -677,7 +773,7 @@ public class StarOSAgent {
                                                  FileCacheInfo cacheInfo,
                                                  @NotNull Map<String, String> properties,
                                                  ComputeResource computeResource,
-                                                 boolean spreadNewShards) throws DdlException {
+                                                 boolean unpinPlacement) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
         try {
@@ -697,7 +793,7 @@ public class StarOSAgent {
                 builder.clearPlacementPreferences();
                 builder.clearGroupIds();
                 builder.addAllGroupIds(groupIds);
-                if (!spreadNewShards) {
+                if (!unpinPlacement) {
                     builder.addPlacementPreferences(PlacementPreference.newBuilder()
                             .setPlacementPolicy(PlacementPolicy.PACK)
                             .setPlacementRelationship(PlacementRelationship.WITH_SHARD)
@@ -707,7 +803,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            List<ShardInfo> shardInfos = client.createShard(serviceId, createShardInfoList);
+            List<ShardInfo> shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create per-new-shard split shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -715,8 +812,21 @@ public class StarOSAgent {
         }
     }
 
-    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds, FilePathInfo pathInfo,
-            FileCacheInfo cacheInfo, long groupId, @NotNull Map<String, String> properties,
+    /**
+     * Create shards for a tablet merge.
+     *
+     * <p>Each new shard joins its own list of group ids and pins placement to every source shard it
+     * merges via {@code PlacementRelationship.WITH_SHARD}, so the merged shard lands on a worker that
+     * already has some of the data cached.
+     *
+     * <p>{@code newToOldShardIds} maps each new shard id to the source shard ids it merges.
+     * {@code newShardIdToGroupIds} maps each new shard id to its target group ids (typically
+     * {@code [SPREAD, PACK-for-this-shard's-ColocateRange]}). Both maps must have the same key set;
+     * the call fails if a new shard has no group assignment.
+     */
+    public void createShardsForMerge(Map<Long, List<Long>> newToOldShardIds,
+            Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+            FileCacheInfo cacheInfo, @NotNull Map<String, String> properties,
             ComputeResource computeResource) throws DdlException {
         long workerGroupId = computeResource.getWorkerGroupId();
         prepare();
@@ -724,7 +834,6 @@ public class StarOSAgent {
         try {
             CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
             builder.setReplicaCount(1)
-                    .addGroupIds(groupId)
                     .setPathInfo(pathInfo)
                     .setCacheInfo(cacheInfo)
                     .putAllShardProperties(properties)
@@ -736,7 +845,12 @@ public class StarOSAgent {
                 List<Long> oldShardIds = entry.getValue();
                 Preconditions.checkState(oldShardIds != null && !oldShardIds.isEmpty(),
                         "Empty old shard ids for new shard " + newShardId);
+                List<Long> groupIds = newShardIdToGroupIds.get(newShardId);
+                Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
+                        "Missing group ids for new shard " + newShardId);
 
+                builder.clearGroupIds();
+                builder.addAllGroupIds(groupIds);
                 builder.clearPlacementPreferences();
                 for (Long oldShardId : oldShardIds) {
                     PlacementPreference preference = PlacementPreference.newBuilder()
@@ -750,7 +864,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -779,7 +894,8 @@ public class StarOSAgent {
 
             builder.setShardId(vTabletId);
             createShardInfoList.add(builder.build());
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos != null && shardInfos.size() == 1);
             LOG.debug("Create virtual shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -817,7 +933,8 @@ public class StarOSAgent {
             shardInfo = client.listShard(serviceId, Arrays.asList(groupId), DEFAULT_WORKER_GROUP_ID,
                                          true /* withoutReplicaInfo */);
         } catch (StarClientException e) {
-            throw new DdlException(String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()));
+            throw new DdlException(
+                    String.format("Failed to list shards in group %d. error:%s", groupId, e.getMessage()), e);
         }
         return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toList());
     }

@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -50,6 +51,7 @@ import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
@@ -67,6 +69,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewClause;
@@ -126,6 +129,17 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     protected TableName tableName;
     protected Database db;
     protected Table table;
+
+    /**
+     * Work a clause visitor defers until the metadata lock is released.
+     *
+     * <p>The rewrite caches of a materialized view are refreshed by re-analyzing its define query,
+     * which resolves every base table -- a connector round trip for an external one. Done inside the
+     * critical section, the MV's write lock is held for the length of that round trip and every
+     * reader of the MV waits on the metastore. It does not belong there on its own terms either: the
+     * editlog is already written by then, so a cache refresh is not part of the metadata change.
+     */
+    protected final List<Runnable> postUnlockActions = new ArrayList<>();
     private boolean isSynchronous;
 
     public AlterJobExecutor() {
@@ -292,6 +306,35 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         return null;
     }
 
+    /**
+     * Resolve, before the lock is taken, whatever the clause visitors would otherwise resolve while
+     * holding it: a critical section may mutate state already in hand, it may not go and find state.
+     * For an MV over external base tables "finding" means a connector call with the MV's write lock
+     * held. visitAlterTableStatement already has this shape -- it runs updateTableConstraint before
+     * locking -- and this hook gives ALTER MATERIALIZED VIEW the same one.
+     *
+     * <p>Overrides read the clause and stash what they resolved; the clause visitor then consumes it
+     * instead of resolving again, so each resolve still happens exactly once.
+     */
+    protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+    }
+
+    /**
+     * Run what the clause visitors deferred. A failure here is logged, not thrown: the metadata
+     * change is already committed to the editlog, so failing the statement now would report an error
+     * for a change that happened. The caches involved rebuild themselves on the next miss.
+     */
+    protected void runPostUnlockActions() {
+        for (Runnable action : postUnlockActions) {
+            try {
+                action.run();
+            } catch (Exception e) {
+                LOG.warn("post-unlock action failed for {}", tableName, e);
+            }
+        }
+        postUnlockActions.clear();
+    }
+
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
@@ -329,6 +372,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         AlterClause alterClause = stmt.getAlterTableClause();
         boolean dbLevelClause = alterClause instanceof TableRenameClause || alterClause instanceof SwapTableClause;
 
+        // Everything that has to be resolved for this clause is resolved here, outside the lock.
+        resolveBeforeLock(alterClause, context);
+
         Locker locker = new Locker();
         if (dbLevelClause) {
             locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -351,8 +397,7 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         + "Do not allow to do ALTER ops");
             }
 
-            visit(alterClause);
-            return null;
+            visit(alterClause, context);
         } finally {
             if (dbLevelClause) {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -360,6 +405,11 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             }
         }
+
+        // Only on the success path: if visit threw, the exception propagates through the finally
+        // above and there is no committed change whose caches need refreshing.
+        runPostUnlockActions();
+        return null;
     }
 
     //Alter table clause
@@ -532,6 +582,29 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
     }
 
     @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        // Pure FE metadata change: add/remove columns from the persisted no-dict forbid set. Canonicalize
+        // each name to the column's stored spelling (table column lookup is case-insensitive) so the
+        // persisted set matches the later case-sensitive isNoDictColumn(getId()) checks, and so ENABLE
+        // fully clears a differently cased DISABLE (e.g. DISABLE (C1) then ENABLE (c1)).
+        Set<String> cols = new java.util.HashSet<>();
+        for (String c : clause.getColumns()) {
+            Column col = table.getColumn(c);
+            cols.add(col != null ? col.getName() : c);
+        }
+        long dbId = db.getId();
+        long tableId = table.getId();
+        if (clause.isEnable()) {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, java.util.Collections.emptySet(), cols);
+        } else {
+            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .updateNoDictColumns(dbId, tableId, cols, java.util.Collections.emptySet());
+        }
+        return null;
+    }
+
+    @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
         try {
             Map<String, String> properties = clause.getProperties();
@@ -582,8 +655,13 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                         TTabletMetaType.ENABLE_LOAD_PROFILE);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
                 try {
-                    GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
-                            table.getId(), properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES));
+                    String forbiddenTimeRanges =
+                            properties.get(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
+                    CompactionControlScheduler.toQuartzExpression(forbiddenTimeRanges);
+                    if (!table.isCloudNativeTableOrMaterializedView()) {
+                        GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
+                                table.getId(), forbiddenTimeRanges);
+                    }
                     schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                             TTabletMetaType.BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
                 } catch (Exception e) {

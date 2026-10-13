@@ -364,8 +364,10 @@ public class StatisticSQLBuilder {
     }
 
     public static String buildDropExternalStatSQL(String catalogName, String dbName, String tableName) {
-        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME + " WHERE CATALOG_NAME = '" + catalogName + "'" +
-                " AND DB_NAME = '" + dbName + "' AND TABLE_NAME = '" + tableName + "'";
+        return "DELETE FROM " + EXTERNAL_FULL_STATISTICS_TABLE_NAME +
+                " WHERE CATALOG_NAME = '" + SqlUtils.escapeSqlString(catalogName) + "'" +
+                " AND DB_NAME = '" + SqlUtils.escapeSqlString(dbName) + "'" +
+                " AND TABLE_NAME = '" + SqlUtils.escapeSqlString(tableName) + "'";
     }
 
     public static String buildDropPartitionSQL(List<Long> pids) {
@@ -441,9 +443,12 @@ public class StatisticSQLBuilder {
 
     public static String buildDropExternalHistogramSQL(String catalogName, String dbName, String tableName,
                                                        List<String> columnNames) {
-        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME + " where catalog_name = '"
-                + catalogName + "' and db_name = '" + dbName + "' and table_name = '" + tableName + "' and column_name in ("
-                + Joiner.on(", ").join(columnNames.stream().map(c -> "'" + c + "'").collect(Collectors.toList())) + ")";
+        return "delete from " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+                + " where catalog_name = '" + SqlUtils.escapeSqlString(catalogName) + "'"
+                + " and db_name = '" + SqlUtils.escapeSqlString(dbName) + "'"
+                + " and table_name = '" + SqlUtils.escapeSqlString(tableName) + "'"
+                + " and column_name in (" + Joiner.on(", ").join(columnNames.stream()
+                        .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.toList())) + ")";
     }
 
     private static String build(VelocityContext context, String template) {

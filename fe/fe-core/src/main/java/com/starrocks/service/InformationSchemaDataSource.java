@@ -39,7 +39,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
@@ -133,20 +132,17 @@ public class InformationSchemaDataSource {
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        for (String fullName : dbNames) {
-
+        for (String dbName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, dbName);
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            final String dbName = ClusterNamespace.getNameFromFullName(fullName);
-
             if (!PatternMatcher.matchPattern(authInfo.getPattern(), dbName, matcher, caseSensitive)) {
                 continue;
             }
-            authorizedDbs.add(fullName);
+            authorizedDbs.add(dbName);
         }
         return new AuthDbRequestResult(authorizedDbs, context);
     }
@@ -522,10 +518,8 @@ public class InformationSchemaDataSource {
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
-        // BUCKETS: each physical partition can carry its own bucket count (e.g. ADD PHYSICAL PARTITION),
-        // so prefer the per-physical value and fall back to the table-level distribution default.
-        partitionMetaInfo.setBuckets(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
+        // BUCKETS
+        partitionMetaInfo.setBuckets(physicalPartition.getActualBucketNum(distributionInfo));
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
@@ -867,7 +861,7 @@ public class InformationSchemaDataSource {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }
-            MaterializedIndex baseIndex = partition.getLatestBaseIndex();
+            MaterializedIndex baseIndex = partition.getQueryableBaseIndex();
             totalRowsOfTable = baseIndex.getRowCount() + totalRowsOfTable;
             totalBytesOfTable = baseIndex.getDataSize() + totalBytesOfTable;
         }

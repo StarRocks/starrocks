@@ -25,6 +25,7 @@ import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.Transaction;
 import com.sleepycat.je.TransactionConfig;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -205,10 +206,11 @@ public class BDBJEJournalTest {
 
         Assertions.assertEquals(Arrays.asList(1L), journal.getDatabaseNames());
         Assertions.assertEquals(3, journal.getMaxJournalId());
+        Assertions.assertEquals(Pair.create(1L, 3L), journal.getJournalIdRange());
         journal.rollJournal(4);
         Assertions.assertEquals(3, journal.getMaxJournalId());
         Assertions.assertEquals(Arrays.asList(1L, 4L), journal.getDatabaseNames());
-        journal.deleteJournals(4);
+        Assertions.assertEquals(4L, journal.deleteJournalsAndGetMinJournalId(4));
         Assertions.assertEquals(Arrays.asList(4L), journal.getDatabaseNames());
 
         journal.close();

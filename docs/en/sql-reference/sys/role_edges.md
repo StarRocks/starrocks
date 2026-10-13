@@ -9,7 +9,7 @@ You can view the grantees of roles by querying the view `role_edges`.
 
 :::note
 
-By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md).
+By default, only users or roles with the `user_admin` role can access this view. You can grant other users the SELECT privilege on this view using [GRANT](../sql-statements/account-management/GRANT.md).
 
 :::
 

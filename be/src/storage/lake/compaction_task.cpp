@@ -14,10 +14,15 @@
 
 #include "storage/lake/compaction_task.h"
 
+#include <algorithm>
+#include <ctime>
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/runtime_env.h"
+#include "storage/compaction_utils.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
@@ -36,7 +41,87 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
           _context(context),
           _tablet_schema(std::move(tablet_schema)) {}
 
+int64_t CompactionTask::stream_buffer_size(int64_t num_streams) {
+    const int64_t configured = config::lake_compaction_stream_buffer_size_bytes;
+    const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    if (configured <= kMinStreamBufferSize || mem_limit <= 0 || num_streams <= 0) {
+        return configured;
+    }
+    return std::clamp<int64_t>(mem_limit / 2 / num_streams, kMinStreamBufferSize, configured);
+}
+
+int64_t CompactionTask::stream_buffer_size_for_pass(int64_t num_streams) {
+    const int64_t buffer_size = stream_buffer_size(num_streams);
+    if (buffer_size < config::lake_compaction_stream_buffer_size_bytes) {
+        _context->stats->stream_buffer_shrunk_passes++;
+        VLOG(1) << "Compaction read buffer shrunk. tablet: " << _tablet.id() << ", txn: " << _txn_id
+                << ", streams: " << num_streams << ", buffer: " << buffer_size
+                << ", configured: " << config::lake_compaction_stream_buffer_size_bytes;
+    }
+    return buffer_size;
+}
+
+int32_t CompactionTask::chunk_size_with_held_segments(int64_t held_segments_bytes, int64_t total_num_rows,
+                                                      int64_t total_mem_footprint, size_t source_num,
+                                                      int64_t stream_buffer_bytes) {
+    // The read buffers are allocated whatever the chunk size is, so they come off the budget first.
+    // stream_buffer_size() keeps them within half of it unless its floor kicks in; even then leave
+    // the chunk a quarter, so a huge fan-in degrades to small chunks rather than one-row reads.
+    const int64_t worker_limit = config::compaction_memory_limit_per_worker;
+    const int64_t mem_limit =
+            worker_limit <= 0 ? worker_limit : std::max(worker_limit - stream_buffer_bytes, worker_limit / 4);
+    const int32_t config_chunk_size = config::lake_compaction_chunk_size;
+    // Baseline for judging how much holding shrinks the read chunk. A non-positive limit means
+    // "no memory cap", even when segment metadata remains resident.
+    const int32_t unheld_chunk_size = CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
+                                                                           total_mem_footprint, source_num);
+    if (mem_limit <= 0) {
+        return unheld_chunk_size;
+    }
+
+    const auto chunk_size_for_resident_segments = [&](int64_t resident_bytes) -> int32_t {
+        const int64_t remaining = mem_limit - resident_bytes;
+        // A memo can retain segments even after holding is disabled. An exhausted budget must
+        // produce the smallest read chunk, not the unlimited sizing a non-positive limit selects.
+        return remaining > 0 ? CompactionUtils::get_read_chunk_size(remaining, config_chunk_size, total_num_rows,
+                                                                    total_mem_footprint, source_num)
+                             : 1;
+    };
+    if (!_hold_input_segments) {
+        return chunk_size_for_resident_segments(held_segments_bytes);
+    }
+
+    const int32_t held_chunk_size = chunk_size_for_resident_segments(held_segments_bytes);
+    // Holding buys one segment load for the whole task; it is not worth an order-of-magnitude
+    // smaller read chunk (that many more iterations, and at the floor a single row per read).
+    if (held_chunk_size >= std::max<int32_t>(2, unheld_chunk_size / kMaxHeldChunkShrink)) {
+        return held_chunk_size;
+    }
+    LOG(WARNING) << "Compaction input segments do not leave a workable read budget, falling back to the metadata "
+                    "cache. tablet: "
+                 << _tablet.id() << ", txn: " << _txn_id << ", held bytes: " << held_segments_bytes
+                 << ", budget: " << mem_limit << ", chunk size held/unheld: " << held_chunk_size << "/"
+                 << unheld_chunk_size;
+    for (auto& rowset : _input_rowsets) {
+        rowset->release_held_segments();
+    }
+    _hold_input_segments = false;
+    // get_segments_checked() may still own the same segments for flat-JSON inspection. Only the
+    // bytes actually released are available to the read buffers, both now and on later passes.
+    int64_t retained_segments_bytes = 0;
+    for (const auto& rowset : _input_rowsets) {
+        retained_segments_bytes += rowset->held_segments_bytes();
+    }
+    return chunk_size_for_resident_segments(retained_segments_bytes);
+}
+
 Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_context->is_unshare) {
+        // UNSHARE rewrites shared data files only. Rebuilding/major-compacting the
+        // cloud-native PK index in the same transaction adds substantial I/O and is
+        // unnecessary for the atomic query-layout cutover.
+        return Status::OK();
+    }
     if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
         SCOPED_RAW_TIMER(&_context->stats->pk_sst_merge_ns);
         auto metadata = _tablet.metadata();
@@ -64,6 +149,9 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
 }
 
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {
+    if (_context->is_base_compaction) {
+        op_compaction->set_base_compaction_time(time(nullptr));
+    }
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }

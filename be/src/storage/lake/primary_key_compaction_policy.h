@@ -120,8 +120,8 @@ struct PKSizeTieredLevel {
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
     explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                     bool force_base_compaction)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
+                                     bool force_base_compaction, bool allow_base_compaction = true)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction, allow_base_compaction) {}
 
     ~PrimaryCompactionPolicy() override = default;
 
@@ -150,6 +150,20 @@ public:
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata);
+};
+
+// One-shot policy used after a range-tablet split. A rowset is the metadata and
+// conflict-resolution unit, so a rowset containing any shared segment must be
+// rewritten in full. This deliberately bypasses every normal score, size and
+// input-count gate. Rowset readers apply the child tablet range only to shared
+// segments; private segments in a mixed rowset are already child-local.
+class UnshareCompactionPolicy final : public CompactionPolicy {
+public:
+    explicit UnshareCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), false) {}
+
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
+    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
 };
 
 } // namespace starrocks::lake

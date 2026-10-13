@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
+#include "common/column_id.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
@@ -52,6 +55,12 @@ class TabletManager;
 // Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
 SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
 
+// Column ids the tablet's delete predicates evaluate; mirrors TabletReader::init_delete_predicates, which
+// filters neither by version nor by key column, so a caller keeping them out of the unused-output set cannot
+// disagree with what the reader reads.
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids);
+
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
     using ChunkIteratorPtr = starrocks::ChunkIteratorPtr;
@@ -75,7 +84,7 @@ public:
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                 std::shared_ptr<const TabletSchema> tablet_schema);
+                 std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer = nullptr);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -89,8 +98,20 @@ public:
 
     void close() override;
 
-    const OlapReaderStatistics& stats() const { return _stats; }
+    const OlapReaderStatistics& stats() const;
+    // Snapshot only the counters consumed by CompactionTaskStats::collect().
+    const OlapReaderStatistics& compaction_stats() const;
     OlapReaderStatistics* mutable_stats() { return &_stats; }
+    void reset_stats();
+
+    struct RealtimeStats {
+        int64_t raw_rows_read = 0;
+        int64_t bytes_read = 0;
+        int64_t decompress_ns = 0;
+        int64_t vec_cond_ns = 0;
+        int64_t del_filter_ns = 0;
+    };
+    RealtimeStats realtime_stats() const;
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
@@ -120,9 +141,12 @@ private:
     using PredicateList = std::vector<const ColumnPredicate*>;
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
-    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state);
+    // Both add the reads they make to |prepare_stats|.
+    Status build_prepared_tablet_read_state(const TabletReaderParams& params, PreparedTabletReadState* state,
+                                            OlapReaderStatistics* prepare_stats);
     Status build_initial_coarse_split_tasks(const TabletReaderParams& params,
-                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state);
+                                            const PreparedTabletReadStatePtr& prepared_tablet_read_state,
+                                            OlapReaderStatistics* prepare_stats);
     Status refine_initial_coarse_split_and_append_refined_tasks(const TabletReaderParams& params,
                                                                 RowidRangeOptionPtr* local_rowid_range);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
@@ -154,6 +178,11 @@ private:
     PredicateList _predicate_free_list;
 
     OlapReaderStatistics _stats;
+    // A SegmentIterator retains its stats pointer after rowset->read() returns. Keep each parallel
+    // rowset's statistics alive until the reader and its iterators are finished.
+    std::vector<std::unique_ptr<OlapReaderStatistics>> _parallel_rowset_stats;
+    mutable OlapReaderStatistics _combined_stats;
+    mutable OlapReaderStatistics _compaction_stats;
 
     MemPool _mempool;
     ObjectPool _obj_pool;
@@ -169,6 +198,7 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 
     std::shared_ptr<VersionedTablet> _tablet;
 

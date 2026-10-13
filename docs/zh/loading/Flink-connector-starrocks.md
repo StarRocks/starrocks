@@ -1,9 +1,12 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
 ---
 
 # 从 Apache Flink® 持续导入
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks 提供 Apache Flink® 连接器 (以下简称 Flink connector)，可以通过 Flink 导入数据至 StarRocks表。
 
@@ -92,6 +95,10 @@ Flink connector JAR 文件的命名格式如下：
     >
     > 未正式发布的 Flink connector 的名称包含 `SNAPSHOT` 后缀。
 
+## 连接 StarRocks
+
+<FlinkStarRocksConnection />
+
 ## 参数说明
 
 ### 常用选项
@@ -143,7 +150,7 @@ Flink connector JAR 文件的命名格式如下：
 - **是否必填**：否
 - **默认值**：AUTO
 - **描述**：用于数据导入的接口。该参数自 Flink connector 1.2.4 版本起支持。取值范围：
-  - `V1`: 使用 [Stream Load](../loading/StreamLoad.md) 接口导入数据。1.2.4 之前的 Connector 仅支持此模式。
+  - `V1`: 使用 [Stream Load](./StreamLoad.md) 接口导入数据。1.2.4 之前的 Connector 仅支持此模式。
   - `V2`: 使用 [Stream Load transaction](./Stream_Load_transaction_interface.md) 接口导入数据。要求 StarRocks 版本至少为 2.4。推荐使用 `V2`，因为它优化了内存使用，并提供了更稳定的 exactly-once 实现。
   - `AUTO`: 如果 StarRocks 版本支持事务 Stream Load，则自动选择 `V2`，否则选择 `V1`。
 
@@ -214,6 +221,12 @@ Flink connector JAR 文件的命名格式如下：
 - **是否必填**：否
 - **默认值**：true
 - **描述**：自 1.2.8 版本起支持。是否在向主键表导入数据时忽略来自 Flink 的 `UPDATE_BEFORE` 类型记录。如果设置为 false，则该记录会被当做删除操作。
+
+#### sink.json.columns-from-flink-schema
+
+- **必填**：否
+- **默认值**：false
+- **描述**：自 1.2.16 起支持。指定当格式为 `json` 时，是否根据 Flink 表 Schema 生成 Stream Load 的 `columns` Header。默认情况下，`json` 格式不会发送 Header，因此服务器会声明表中的所有列；如果 Payload 中未包含某列，即使该列定义了 `DEFAULT` 值，服务器也会将其存储为显式的 `NULL`。设置为 `true` 时，Flink 表的列会作为 Header 发送，因此 Flink Schema 中未定义的列会被省略，服务器会对这些列应用其 `DEFAULT` 值。此选项要求存在 Flink Schema 和 `sink.properties.format=json`，且不能与 `sink.properties.columns` 或 `sink.properties.jsonpaths` 同时使用。
 
 #### sink.parallelism
 
@@ -441,6 +454,22 @@ Merge Commit 有助于扩展吞吐量，而不会成比例地增加 StarRocks �
   - `sink.buffer-flush.max-bytes` 控制所有表的缓存数据的总内存限制。当总缓存数据超过此限制时，connector 将提前驱逐 chunk 以释放内存。
   - 因此，应将 `sink.buffer-flush.max-bytes` 设置为大于 `sink.merge-commit.chunk.size`，以允许累积至少一个完整的 chunk。通常，`sink.buffer-flush.max-bytes` 应比 `sink.merge-commit.chunk.size` 大几倍，尤其是在有多个表或高并发的情况下。
 
+### 让服务器端 DEFAULT 值在 JSON 格式下生效
+
+使用 `json` 格式时，Connector 默认不会发送 `columns` Header。因此，服务器会将表中的所有列纳入本次导入。如果 JSON Payload 中缺少某列，服务器会将该列视为显式的 `NULL`，从而覆盖该列定义的 `DEFAULT` 值。例如，如果表中包含 `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP`，而每一行都未提供 `ingest_ts` 的值，则该列会被加载为 `NULL`。
+
+要使服务器端的 `DEFAULT` 值生效，请设置 `sink.json.columns-from-flink-schema=true`。Connector 随后会使用 Flink 表 Schema 生成 `columns` Header，其处理方式类似于 Flink 和 StarRocks Schema 不一致时对 `csv` 格式的处理方式。
+
+Flink 表 Schema 中未定义的 StarRocks 列会从 `columns` Header 中省略，因此服务器可以对这些列应用其 `DEFAULT` 值。因此，哪些列包含在导入中由 Flink 表定义决定：
+
+- **Flink Schema 中省略某列：** Connector 不会发送该列，因此 StarRocks 会应用该列的 `DEFAULT` 值。
+
+- **Flink Schema 中定义某列：** Connector 会发送该行中的对应值；如果该值为 null，则会发送 `NULL`。
+
+此选项要求存在 Flink 表 Schema，因此适用于 Flink SQL 以及使用 Schema 创建的 Sink。对于 `sink.version=V1`，还必须设置 `sink.properties.strip_outer_array=true`。V1 Sink 会将每个 Batch 作为 JSON 数组发送，并且不会像 V2 一样自动设置此属性。
+
+原始的 `String` DataStream Sink 没有 Schema，因此如果设置 `sink.json.columns-from-flink-schema=true`，该 Sink 会在启动时拒绝此配置。对于此类 Sink，请改为显式设置 `sink.properties.columns`。
+
 ### 监控导入指标
 
 Flink connector 提供以下指标来监控导入情况。
@@ -487,7 +516,7 @@ DISTRIBUTED BY HASH(id);
 
 #### 网络配置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) 端口（默认 `8040`）。
 
 ### 使用 Flink SQL 写入数据
 

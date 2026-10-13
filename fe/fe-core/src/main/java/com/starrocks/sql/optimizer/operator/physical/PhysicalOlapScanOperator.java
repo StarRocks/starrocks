@@ -148,7 +148,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         for (Long partitionId : getSelectedPartitionId()) {
             final Partition partition = ((OlapTable) getTable()).getPartition(partitionId);
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                final MaterializedIndex selectedTable = subPartition.getLatestIndex(getSelectedIndexMetaId());
+                final MaterializedIndex selectedTable = subPartition.getQueryableIndex(getSelectedIndexMetaId());
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }

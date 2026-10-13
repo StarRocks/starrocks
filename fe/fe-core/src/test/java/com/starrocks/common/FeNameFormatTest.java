@@ -118,10 +118,67 @@ public class FeNameFormatTest {
     }
 
     @Test
+    public void testCheckNameTooLongMessage() {
+        // over-length names report ERR_TOO_LONG_IDENT ("is too long"), not the generic wrong-name error
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkTableName("a".repeat(1025)));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkDbName("a".repeat(257)));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkColumnName("a".repeat(1025)));
+    }
+
+    @Test
+    public void testCheckNameCountsCodePointsNotCodeUnits() {
+        // A supplementary character (surrogate pair) is one identifier character -- matching MySQL, which measures
+        // identifier limits in characters, and the old {1,N} regex quantifiers (one code point per repetition). It
+        // must count as one toward the limit, not two (its UTF-16 String.length()). TABLE_NAME_REGEX ("^[^\0]+$")
+        // allows arbitrary non-NUL characters, so this isolates the length-counting behaviour.
+        String emoji = new String(Character.toChars(0x1F600)); // U+1F600: String.length()==2, one code point
+        // 1024 code points (String.length()==2048) equals the table-name limit and must be accepted
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkTableName(emoji.repeat(1024)));
+        // 1025 code points exceeds the limit and reports ERR_TOO_LONG_IDENT rather than a format error
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkTableName(emoji.repeat(1025)));
+    }
+
+    @Test
     public void testCheckNamespace() {
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("abc"));
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2"));
         Assertions.assertDoesNotThrow(() -> FeNameFormat.checkNamespace("ns1.ns2.ns3"));
+        // leading special character is rejected
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkNamespace("!ns"));
+        // over-length (> 256) reports ERR_TOO_LONG_IDENT
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkNamespace("a".repeat(257)));
+    }
+
+    @Test
+    public void testCheckPartitionName() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkPartitionName("p1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkPartitionName("_p1"));
+        // invalid character / empty go through the generic wrong-name error
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkPartitionName("!p"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkPartitionName(""));
+        // over-length (> 64) reports ERR_TOO_LONG_IDENT
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkPartitionName("a".repeat(65)));
+        // forbidden placeholder prefix is rejected even when the format is otherwise valid
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkPartitionName(FeNameFormat.FORBIDDEN_PARTITION_NAME + "x"));
+    }
+
+    @Test
+    public void testCheckCommonName() {
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkResourceName("res1"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkCatalogName("cat1"));
+        // invalid character / empty go through the generic wrong-name-format error
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkResourceName("!res"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkWarehouseName(""));
+        // over-length (> 64) reports ERR_TOO_LONG_IDENT
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "is too long",
+                () -> FeNameFormat.checkStorageVolumeName("a".repeat(65)));
     }
 
     @Test

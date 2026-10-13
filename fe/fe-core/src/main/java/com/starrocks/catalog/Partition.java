@@ -39,7 +39,6 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -94,6 +93,11 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private Partition() {
     }
 
+    /**
+     * Leaves the default physical partition without a version epoch, because taking one means
+     * calling the GTID generator, which only the leader may do. Creating a partition for a table
+     * goes through the metastore's DDL path, which assigns the epoch after construction.
+     */
     public Partition(long id,
                      long physicalPartitionId,
                      String name,
@@ -111,7 +115,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         this.nextVersion = this.visibleVersion + 1;
         this.dataVersion = this.visibleVersion;
         this.nextDataVersion = this.nextVersion;
-        this.versionEpoch = this.nextVersionEpoch();
         this.versionTxnType = TransactionType.TXN_NORMAL;
         this.distributionInfo = distributionInfo;
 
@@ -288,9 +291,6 @@ public class Partition extends MetaObject implements GsonPostProcessable {
         if (nextDataVersion == 0) {
             nextDataVersion = nextVersion;
         }
-        if (versionEpoch == 0) {
-            versionEpoch = nextVersionEpoch();
-        }
         if (versionTxnType == null) {
             versionTxnType = TransactionType.TXN_NORMAL;
         }
@@ -369,8 +369,4 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     private volatile long versionEpoch;
     @SerializedName(value = "versionTxnType")
     private volatile TransactionType versionTxnType;
-
-    public long nextVersionEpoch() {
-        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
-    }
 }

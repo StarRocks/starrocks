@@ -63,6 +63,7 @@ public class VectorIndexParamsTest {
     @Test
     public void testMetricTypeAcceptsKnown() {
         Assertions.assertDoesNotThrow(() -> CommonIndexParamKey.METRIC_TYPE.check("cosine_similarity"));
+        Assertions.assertDoesNotThrow(() -> CommonIndexParamKey.METRIC_TYPE.check("INNER_PRODUCT"));
         Assertions.assertDoesNotThrow(() -> CommonIndexParamKey.METRIC_TYPE.check("L2_DISTANCE"));
     }
 

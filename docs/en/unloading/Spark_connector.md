@@ -24,13 +24,16 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 ## Version requirements
 
-| Spark connector | Spark         | StarRocks       | Java | Scala |
-|---------------- | ------------- | --------------- | ---- | ----- |
-| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later   | 8    | 2.12  |
-| 1.1.1           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
-| 1.1.0           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
-| 1.0.0           | 3.x           | 1.18 and later  | 8    | 2.12  |
-| 1.0.0           | 2.x           | 1.18 and later  | 8    | 2.11  |
+| Spark connector | Spark              | StarRocks      | Java | Scala |
+| --------------- | ------------------ | -------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 and later  | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 and later  | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later  | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 and later  | 8    | 2.12  |
+| 1.0.0           | 3.x                | 1.18 and later | 8    | 2.12  |
+| 1.0.0           | 2.x                | 1.18 and later | 8    | 2.11  |
 
 > **NOTICE**
 >
@@ -220,10 +223,12 @@ The following parameters apply only to the Spark RDD reading method.
 | STRING              | DataTypes.StringType      |
 | DATE                | DataTypes.DateType        |
 | DATETIME            | DataTypes.TimestampType   |
-| JSON | DataTypes.StringType <br /> **NOTE:** <br /> This data type mapping is supported since Spark connector v1.1.2, and requires a StarRocks version of at least 2.5.13, 3.0.3, 3.1.0 or later. |
-| ARRAY               | Unsupported datatype      |
+| JSON                | DataTypes.StringType<br />**NOTE:**<br />This data type mapping is supported since Spark connector v1.1.2, and requires a StarRocks version of at least 2.5.13, 3.0.3, 3.1.0 or later. |
+| ARRAY               | ArrayType<br />**NOTE:**<br />This data type mapping is supported since Spark connector v1.1.3. Nested types must be declared via `starrocks.column.types`. See [Read nested columns](#read-nested-columns-struct-array-and-map). |
 | HLL                 | Unsupported datatype      |
 | BITMAP              | Unsupported datatype      |
+| MAP                 | MapType<br />**NOTE:**<br />This data type mapping is supported since Spark connector v1.1.3. Nested types must be declared via `starrocks.column.types`. See [Read nested columns](#read-nested-columns-struct-array-and-map). |
+| STRUCT              | StructType<br />**NOTE:**<br />This data type mapping is supported since Spark connector v1.1.3. Nested types must be declared via `starrocks.column.types`. See [Read nested columns](#read-nested-columns-struct-array-and-map). |
 
 ### Spark connector 1.0.0
 
@@ -273,7 +278,7 @@ The following examples assume you have created a database named `test` in your S
 
 ### Network configuration
 
-Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
+Ensure that the machine where Spark is located can access the FE nodes of the StarRocks cluster via the `http_port` (default: `8030`) and `query_port` (default: `9030`), and the BE nodes via the `be_port` (default: `9060`).
 
 ### Data example
 
@@ -931,3 +936,67 @@ In this example, both partition pruning and bucket pruning are performed. Theref
    ```
 
 In this example, the filter condition `k = 1` can hit the prefix index. Therefore, Spark can filter out three rows (as suggested by `ShortKeyFilterRows: 3`).
+
+## Read nested columns (STRUCT, ARRAY, and MAP)
+
+Reading nested columns is supported since version 1.1.3.
+
+The Spark connector supports reading StarRocks columns of type `STRUCT`, `ARRAY`, and `MAP`. Because the connector cannot automatically infer the full nested type from the StarRocks schema, you must declare the column types explicitly using the `starrocks.column.types` option for every nested column.
+
+### Nested data type mapping
+
+| StarRocks data type                       | Spark data type |
+| ----------------------------------------- | --------------- |
+| `STRUCT<field1 TYPE1, field2 TYPE2, ...>` | `StructType`    |
+| `ARRAY<TYPE>`                             | `ArrayType`     |
+| `MAP<KEY_TYPE, VALUE_TYPE>`               | `MapType`       |
+
+Nested types can be composed arbitrarily (for example, `STRUCT<a ARRAY<INT>, b MAP<STRING, BIGINT>>`).
+
+### Type-mapping caveats inside nested types
+
+Logical StarRocks types that share an Arrow wire representation (notably `DATE`, `DATETIME`, and some `DECIMAL` encodings) are decoded correctly only when the declared type is provided via `starrocks.column.types`. Without it, those fields fall back to plain `STRING`.
+
+### Example
+
+Given the following StarRocks table:
+
+```SQL
+CREATE TABLE nested_tbl (
+    id       INT,
+    info     STRUCT<type STRING, phone BIGINT, created DATETIME>,
+    tags     ARRAY<STRING>,
+    metadata MAP<STRING, STRUCT<value STRING, count INT>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4;
+```
+
+Read the table with Spark:
+
+```Scala
+val columnTypes =
+  "info STRUCT<type STRING, phone BIGINT, created TIMESTAMP>, " +
+  "tags ARRAY<STRING>, " +
+  "metadata MAP<STRING, STRUCT<value STRING, count INT>>"
+
+val df = spark.read.format("starrocks")
+  .option("starrocks.fenodes", "127.0.0.1:8030")
+  .option("starrocks.table.identifier", "test.nested_tbl")
+  .option("starrocks.user", "root")
+  .option("starrocks.password", "")
+  .option("starrocks.column.types", columnTypes)
+  .load()
+
+df.printSchema()
+// root
+//  |-- id: integer
+//  |-- info: struct<type: string, phone: long, created: timestamp>
+//  |-- tags: array<string>
+//  |-- metadata: map<string, struct<value: string, count: integer>>
+```
+
+### Current limitations
+
+- Nested type inference is **not** automatic. You must supply `starrocks.column.types` for every nested column.
+- `DATE` and `DATETIME` fields inside nested types are returned as Spark `DateType` / `TimestampType` only when the declared type is provided. Without the declaration they fall back to `StringType`.

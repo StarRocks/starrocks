@@ -18,7 +18,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -84,9 +86,25 @@ public class ColumnReuseChecker implements PlanValidator.Checker {
         }
 
         @Override
+        public Void visitLogicalAIProject(OptExpression optExpression, Void context) {
+            LogicalAIProjectOperator projectOperator = optExpression.getOp().cast();
+            checkReusedColumnRef(projectOperator, projectOperator.getColumnRefMap());
+            checkReusedColumnRef(projectOperator, projectOperator.getCommonSubOperatorMap());
+            return visit(optExpression, context);
+        }
+
+        @Override
         public Void visitPhysicalProject(OptExpression optExpression, Void context) {
             PhysicalProjectOperator projectOperator = optExpression.getOp().cast();
             checkReusedColumnRef(projectOperator, projectOperator.getColumnRefMap());
+            return visit(optExpression, context);
+        }
+
+        @Override
+        public Void visitPhysicalAIProject(OptExpression optExpression, Void context) {
+            PhysicalAIProjectOperator projectOperator = optExpression.getOp().cast();
+            checkReusedColumnRef(projectOperator, projectOperator.getColumnRefMap());
+            checkReusedColumnRef(projectOperator, projectOperator.getCommonSubOperatorMap());
             return visit(optExpression, context);
         }
     }

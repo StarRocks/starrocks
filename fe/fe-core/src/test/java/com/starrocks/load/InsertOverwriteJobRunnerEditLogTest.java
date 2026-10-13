@@ -15,6 +15,7 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -30,10 +31,14 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalWriteException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.InsertStmt;
@@ -50,6 +55,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -110,6 +117,171 @@ public class InsertOverwriteJobRunnerEditLogTest {
     public void tearDown() {
         Config.partition_recycle_retention_period_secs = oldPartitionRetentionSecs;
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    /**
+     * A tablet reshard (a pre-split job, or the background split/merge daemon) holds
+     * {@code TABLET_RESHARD} on the table until it finishes, and it cannot be aborted once it has left
+     * PENDING. Failing the commit for that would throw away everything the overwrite already wrote,
+     * so doCommit waits it out within the load's own remaining budget and then commits normally.
+     */
+    @Test
+    public void testDoCommitWaitsOutTabletReshard() throws Exception {
+        InsertOverwriteJob job = new InsertOverwriteJob(2101L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, contextWithBudget(3600), null);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        Thread restorer = new Thread(() -> {
+            try {
+                Thread.sleep(1200);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            // Taking the table's WRITE lock here also proves doCommit does not hold it while waiting:
+            // a real reshard job needs that lock to restore NORMAL, so holding it would deadlock.
+            Locker locker = new Locker();
+            Assertions.assertTrue(locker.lockTableAndCheckDbExist(db, table.getId(), LockType.WRITE));
+            try {
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            }
+        }, "reshard-state-restorer");
+        restorer.start();
+        try {
+            runner.doCommit();
+        } finally {
+            restorer.join();
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+
+        Partition replaced = table.getPartition(TABLE_NAME);
+        Assertions.assertNotNull(replaced);
+        Assertions.assertEquals(tempPartitionId, replaced.getId());
+        Assertions.assertFalse(table.existTempPartitions());
+    }
+
+    /**
+     * Only {@code TABLET_RESHARD} is safe to wait out. An alter state can change the schema or index
+     * metadata this job's temporary partition and already-built insert plan were derived from, so
+     * committing after it finished could target a layout that no longer matches -- those keep failing
+     * immediately, even when the load has budget left.
+     */
+    @Test
+    public void testDoCommitFailsFastWhileTableIsAltering() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2102L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, contextWithBudget(3600), null);
+
+        for (OlapTable.OlapTableState altering : Lists.newArrayList(
+                OlapTable.OlapTableState.SCHEMA_CHANGE, OlapTable.OlapTableState.ROLLUP)) {
+            table.setState(altering);
+            try {
+                long startMs = System.currentTimeMillis();
+                DmlException ex = Assertions.assertThrows(DmlException.class, runner::doCommit);
+                long elapsedMs = System.currentTimeMillis() - startMs;
+                assertTableStateFailure(ex);
+                Assertions.assertTrue(elapsedMs < 2000,
+                        "must not wait for state " + altering + ", waited " + elapsedMs + "ms");
+            } finally {
+                table.setState(OlapTable.OlapTableState.NORMAL);
+            }
+        }
+        Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
+    /**
+     * A reshard that outlasts the load's own budget still fails, with exactly the pre-existing error:
+     * the wait only ever delays that failure, it never introduces a different one.
+     */
+    @Test
+    public void testDoCommitGivesUpOnReshardingTableWhenBudgetIsExhausted() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2103L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        // Started two hours ago with a one-second budget: the deadline is long past.
+        ConnectContext context = contextWithBudget(1);
+        context.setStartTime(Instant.now().minus(Duration.ofHours(2)));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        try {
+            long startMs = System.currentTimeMillis();
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::doCommit);
+            long elapsedMs = System.currentTimeMillis() - startMs;
+            assertTableStateFailure(ex);
+            Assertions.assertTrue(elapsedMs < 2000, "budget was exhausted, waited " + elapsedMs + "ms");
+        } finally {
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
+    @Test
+    public void testDoCommitGivesUpOnReshardingTableWhenTheStatementIsCancelled() {
+        // A cancelled statement must not keep the request alive for the rest of its budget. By this
+        // point the data is written and the coordinator has finished, so nothing else would interrupt
+        // this thread -- only the explicit check does.
+        InsertOverwriteJob job = new InsertOverwriteJob(2104L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        job.setSourcePartitionNames(Lists.newArrayList(TABLE_NAME));
+        // Enough budget left that returning quickly can only be the cancellation check, but not so much
+        // that losing the check would hang this test instead of failing it.
+        ConnectContext context = contextWithBudget(60);
+        // The real cancellation route, not setKilled(): kill(false, ...) is what KILL QUERY, a cancelled
+        // MV TaskRun and a closed client all use, and it deliberately leaves isKilled false.
+        context.setExecutor(new StmtExecutor(context, mock(InsertStmt.class)));
+        context.kill(false, "kill TaskRun");
+        Assertions.assertFalse(context.isKilled(), "kill(false, ...) must not set the connection flag");
+        Assertions.assertTrue(context.isStatementCancelled(), "the statement must still read as cancelled");
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, null);
+
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        try {
+            long startMs = System.currentTimeMillis();
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::doCommit);
+            long elapsedMs = System.currentTimeMillis() - startMs;
+            assertTableStateFailure(ex);
+            Assertions.assertTrue(elapsedMs < 2000,
+                    "a cancelled statement must not wait out the reshard, waited " + elapsedMs + "ms");
+        } finally {
+            table.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertTrue(table.existTempPartitions(), "a failed commit must not swap partitions");
+    }
+
+    /** A context whose remaining budget is {@code timeoutSeconds} from now. */
+    private static ConnectContext contextWithBudget(int timeoutSeconds) {
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.getSessionVariable().setQueryTimeoutS(timeoutSeconds);
+        context.setStartTime(Instant.now());
+        return context;
+    }
+
+    /**
+     * doCommit wraps everything thrown inside its locked section into
+     * {@code DmlException("replace partitions failed", cause)}, so the table-state message can be at
+     * either level depending on where it was raised.
+     */
+    private static void assertTableStateFailure(DmlException thrown) {
+        for (Throwable current = thrown; current != null; current = current.getCause()) {
+            if (current.getMessage() != null && current.getMessage().contains("table state is")) {
+                return;
+            }
+        }
+        Assertions.fail("expected the unchanged table-state error, got: " + thrown.getMessage());
     }
 
     @Test
@@ -324,6 +496,21 @@ public class InsertOverwriteJobRunnerEditLogTest {
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }
+    }
+
+    /**
+     * A runner rebuilt for replay has no plan behind it, so it must report no estimate at all. A
+     * derived boundary source sizes its split off this number, and a leftover non-zero value would
+     * make it carve tablets for data the replay is not loading.
+     */
+    @Test
+    public void testReplayRunnerHasZeroOutputEstimates() {
+        InsertOverwriteJob job = new InsertOverwriteJob(2010L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+
+        Assertions.assertEquals(Estimates.ZERO, runner.getOutputEstimates());
     }
 
     private static OlapTable createHashOlapTable(long dbId, long tableId, String tableName, long partitionId,

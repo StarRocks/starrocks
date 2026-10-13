@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "将 QuickBI 连接到 StarRocks 数据库，通过 QuickBI 对 StarRocks 中的数据进行可视化分析。"
 ---

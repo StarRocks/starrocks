@@ -2,6 +2,10 @@
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- result:
 -- !result
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "true")
+-- result:
+None
+-- !result
 CREATE TABLE vt (
     id   bigint        NOT NULL,
     vec  ARRAY<FLOAT>  NOT NULL,
@@ -134,6 +138,10 @@ None
 -- !result
 DROP TABLE vt_pk;
 -- result:
+-- !result
+function: update_be_config("enable_vector_index_topk_underfill_fallback", "false")
+-- result:
+None
 -- !result
 ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "false");
 -- result:

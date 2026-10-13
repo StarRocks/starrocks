@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "Hex で StarRocks の内部・外部データをクエリし可視化する方法と接続パラメータを説明します。"
 ---

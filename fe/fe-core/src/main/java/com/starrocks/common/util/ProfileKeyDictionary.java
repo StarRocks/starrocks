@@ -38,6 +38,7 @@ public final class ProfileKeyDictionary {
 
     // --- Summary info-string keys ---
     public static final String QUERY_ID = "Query ID";
+    public static final String CUSTOM_QUERY_ID = "Custom Query ID";
     public static final String START_TIME = "Start Time";
     public static final String END_TIME = "End Time";
     public static final String TOTAL_TIME = "Total";
@@ -173,7 +174,7 @@ public final class ProfileKeyDictionary {
     public static final String PRED_FILTER = "PredFilter";
     public static final String PRED_FILTER_ROWS = "PredFilterRows";
     public static final String ZONE_MAP_INDEX_FILTER_ROWS = "ZoneMapIndexFilterRows";
-    public static final String ZONE_MAP_INDEX_FITER = "ZoneMapIndexFiter";
+    public static final String ZONE_MAP_INDEX_FILTER = "ZoneMapIndexFilter";
     public static final String SHORT_KEY_FILTER_ROWS = "ShortKeyFilterRows";
     public static final String SHORT_KEY_RANGE_NUMBER = "ShortKeyRangeNumber";
     public static final String BITMAP_INDEX_FILTER_ROWS = "BitmapIndexFilterRows";
@@ -269,6 +270,7 @@ public final class ProfileKeyDictionary {
 
             // --- Summary info-string keys ---
             QUERY_ID,
+            CUSTOM_QUERY_ID,
             START_TIME,
             END_TIME,
             TOTAL_TIME,
@@ -378,7 +380,7 @@ public final class ProfileKeyDictionary {
             PRED_FILTER,
             PRED_FILTER_ROWS,
             ZONE_MAP_INDEX_FILTER_ROWS,
-            ZONE_MAP_INDEX_FITER,
+            ZONE_MAP_INDEX_FILTER,
             SHORT_KEY_FILTER_ROWS,
             SHORT_KEY_RANGE_NUMBER,
             BITMAP_INDEX_FILTER_ROWS,

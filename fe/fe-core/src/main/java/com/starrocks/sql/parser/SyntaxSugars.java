@@ -20,7 +20,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.combinator.AggStateUtils;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,7 +41,7 @@ public class SyntaxSugars {
                 .put(FunctionSet.DS_HLL_ACCUMULATE, SyntaxSugars::dsHllCountDistinctStateUnion)
                 .put(FunctionSet.DS_HLL_COMBINE, SyntaxSugars::dsHllCountDistinctUnion)
                 .put(FunctionSet.DS_HLL_ESTIMATE, SyntaxSugars::dsHllCountDistinctMerge)
-                .put(FunctionSet.ENCODE_ROW_ID, SyntaxSugars::encodeRowId)
+                .put(FunctionSet.DS_THETA_ACCUMULATE, SyntaxSugars::dsThetaCountDistinctStateUnion)
                 .build();
     }
 
@@ -107,9 +106,11 @@ public class SyntaxSugars {
                 call.getChildren());
     }
 
-    private static FunctionCallExpr encodeRowId(FunctionCallExpr call) {
-        final String encodeRowIdFuncName = IvmOpUtils.getEncodeRowIdFunctionNameChecked(
-                call.getChildren());
-        return new FunctionCallExpr(encodeRowIdFuncName, call.getChildren());
+    private static FunctionCallExpr dsThetaCountDistinctStateUnion(FunctionCallExpr call) {
+        final FunctionCallExpr aggStateFuncExpr =
+                new FunctionCallExpr(AggStateUtils.aggStateFunctionName(FunctionSet.DS_THETA_COUNT_DISTINCT),
+                        call.getChildren());
+        return new FunctionCallExpr(AggStateUtils.aggStateUnionFunctionName(FunctionSet.DS_THETA_COUNT_DISTINCT),
+                Lists.newArrayList(aggStateFuncExpr));
     }
 }

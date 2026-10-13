@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks データレイク分析の catalog 設定とクエリ問題に関する FAQ と解決策。"
 ---
@@ -39,13 +40,13 @@ HDFS クラスターに保存されているデータファイルにアクセス
 
 この問題を解決するために、次のいずれかの解決策を使用できます。
 
-- **[推奨]** [Data Cache](../data_source/data_cache.md) 機能を有効にします。これにより、外部ストレージシステムから StarRocks クラスターの BEs または CNs にデータを自動的にキャッシュすることで、遅い HDFS DataNode がクエリに与える影響を排除します。
+- **[推奨]** [Data Cache](./data_cache/data_cache.md) 機能を有効にします。これにより、外部ストレージシステムから StarRocks クラスターの BEs または CNs にデータを自動的にキャッシュすることで、遅い HDFS DataNode がクエリに与える影響を排除します。
 - **[推奨]** HDFS クライアントと DataNode 間のタイムアウト時間を短縮します。この解決策は、Data Cache が遅い HDFS DataNode の問題を解決できない場合に適しています。
 - [Hedged Read](https://hadoop.apache.org/docs/r2.8.3/hadoop-project-dist/hadoop-common/release/2.4.0/RELEASENOTES.2.4.0.html) 機能を有効にします。この機能を有効にすると、ブロックからの読み取りが遅い場合、StarRocks は新しい読み取りを開始し、元の読み取りと並行して実行し、異なるブロックレプリカに対して読み取ります。2 つの読み取りのいずれかが返された場合、もう一方の読み取りはキャンセルされます。**Hedged Read 機能は読み取りを高速化するのに役立ちますが、Java 仮想マシン (JVM) のヒープメモリ消費量を大幅に増加させます。そのため、物理マシンのメモリ容量が小さい場合は、Hedged Read 機能を有効にしないことをお勧めします。**
 
 #### [推奨] Data Cache
 
-[Data Cache](../data_source/data_cache.md) を参照してください。
+[Data Cache](./data_cache/data_cache.md) を参照してください。
 
 #### [推奨] HDFS クライアントと DataNode 間のタイムアウト時間を短縮
 

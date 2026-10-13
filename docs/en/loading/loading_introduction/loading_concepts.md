@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "Key concepts for data loading in StarRocks: privileges, labels, atomicity, data type conversion, column mapping, and error tolerance (max_filter_ratio)."
@@ -32,7 +33,7 @@ StarRocks supports loading data of all data types. You only need to take note of
 
 ## Strict mode
 
-Strict mode is an optional property that you can configure for data loads. It affects the loading behavior and the final loaded data. For details, see [Strict mode](../load_concept/strict_mode.md).
+Strict mode is an optional property that you can configure for data loads. It affects the loading behavior and the final loaded data. For details, see [Strict mode](../strict_mode.md).
 
 ## Loading modes
 

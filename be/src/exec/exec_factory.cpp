@@ -41,11 +41,13 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "connector_primitive/connector.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
 #include "exec/aggregate/distinct_blocking_node.h"
 #include "exec/aggregate/distinct_streaming_node.h"
+#include "exec/ai_project_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
 #include "exec/capture_version_node.h"
@@ -110,7 +112,7 @@ Status check_tuple_ids_in_descs(const DescriptorTbl& descs, const TPlanNode& pla
             ss << "DescriptorTbl: " << descs.debug_string();
             LOG(ERROR) << ss.str();
             ss.str("");
-            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(plan_node);
+            ss << "TPlanNode: " << thrift_plan_debug_string(plan_node);
             LOG(ERROR) << ss.str();
             return Status::InternalError("Tuple ids are not in descs");
         }
@@ -294,6 +296,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         return Status::OK();
     case TPlanNodeType::PROJECT_NODE:
         CREATE_NODE(ProjectNode, pool, tnode, descs);
+        return Status::OK();
+    case TPlanNodeType::AI_PROJECT_NODE:
+        CREATE_NODE(AIProjectNode, pool, tnode, descs);
         return Status::OK();
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         CREATE_NODE(TableFunctionNode, pool, tnode, descs);

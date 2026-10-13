@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "ストレージとコンピューティングが分離されている共有データ StarRocks クラスタを手動でデプロイする方法。"
 ---
@@ -11,9 +12,9 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
 <ManualPrep />
 
-このトピックでは、共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](../deployment/deployment_overview.md)を参照してください。
+このトピックでは、共有データ StarRocks クラスタ（ストレージとコンピューティングが分離されている）を手動でデプロイする方法について説明します。他のインストールモードについては、[デプロイメント概要](./deployment.md)を参照してください。
 
-共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）をデプロイするには、[共有なし StarRocks を手動でデプロイする](../deployment/deploy_manually.md)を参照してください。
+共有なし StarRocks クラスタ（BE がストレージとコンピューティングの両方を担当する）をデプロイするには、[共有なし StarRocks を手動でデプロイする](./deploy_manually.md)を参照してください。
 
 ## 概要
 
@@ -43,7 +44,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
    mkdir -p <meta_dir>
    ```
 
-2. 以前に準備した[StarRocks FE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
+2. 以前に準備した[StarRocks FE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、FE 設定ファイル **fe/conf/fe.conf** を修正します。
 
    a. 共有データの実行モードを設定します。
 
@@ -58,7 +59,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       meta_dir = <meta_dir>
       ```
 
-   c. [環境設定チェックリスト](../deployment/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   c. [環境設定チェックリスト](./preparation/environment_configurations.md#fe-ポート)で言及されている FE ポートが占有されている場合は、FE 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       http_port = aaaa               # デフォルト: 8030
@@ -90,7 +91,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/management/FE_configuration.md)を参照してください。
+   高度な設定項目については、[パラメータ設定 - FE 設定項目](../administration/configuration/FE_parameters/FE_parameters.md)を参照してください。
 
 3. FE ノードを起動します。
 
@@ -110,7 +111,7 @@ import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
      > **注意**
      >
-     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+     > FQDN アクセスを有効にして FE ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
 
 4. FE ログを確認して、FE ノードが正常に起動したかどうかを確認します。
 
@@ -137,7 +138,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
    mkdir -p <storage_root_path>
    ```
 
-2. 以前に準備した[StarRocks BE デプロイメントファイル](../deployment/prepare_deployment_files.md)を保存しているディレクトリに移動し、CN 設定ファイル **be/conf/cn.conf** を修正します。
+2. 以前に準備した[StarRocks BE デプロイメントファイル](./preparation/prepare_deployment_files.md)を保存しているディレクトリに移動し、CN 設定ファイル **be/conf/cn.conf** を修正します。
 
    a. 設定項目 `storage_root_path` にデータディレクトリを指定します。複数のボリュームはセミコロン (;) で区切ります。例: `/data1;/data2`。
 
@@ -161,7 +162,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
       >
       > データはディレクトリ **`<storage_root_path>/starlet_cache`** にキャッシュされます。
 
-   b. [環境設定チェックリスト](../deployment/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
+   b. [環境設定チェックリスト](./preparation/environment_configurations.md)で言及されている CN ポートが占有されている場合は、CN 設定ファイルで有効な代替ポートを割り当てる必要があります。
 
       ```YAML
       be_port = vvvv                   # デフォルト: 9060
@@ -189,7 +190,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
       JAVA_HOME = <path_to_JDK>
       ```
 
-   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/management/BE_configuration.md)を参照してください。CN のパラメータのほとんどは BE から継承されています。
+   高度な設定項目については、[パラメータ設定 - BE 設定項目](../administration/configuration/BE_parameters/BE_parameters.md)を参照してください。CN のパラメータのほとんどは BE から継承されています。
 
 3. CN ノードを起動します。
 
@@ -199,7 +200,7 @@ BEノードは共有なしクラスタにのみ追加でき、CNノードは共�
 
    > **注意**
    >
-   > - FQDN アクセスを有効にして CN ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](../deployment/environment_configurations.md#ホスト名)を参照してください。
+   > - FQDN アクセスを有効にして CN ノードを起動する前に、すべてのインスタンスにホスト名を割り当てたことを確認してください。詳細については、[環境設定チェックリスト - ホスト名](./preparation/environment_configurations.md#ホスト名)を参照してください。
    > - CN ノードを起動する際にパラメータ `--host_type` を指定する必要はありません。
 
 4. CN ログを確認して、CN ノードが正常に起動したかどうかを確認します。
@@ -646,7 +647,7 @@ mysql> SHOW PROC "/dbs/xxxxx";
 
 ### 共有データ StarRocks クラスターへのデータロード
 
-共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/Loading_intro.md) を参照してください。
+共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../loading/loading_introduction/loading_introduction.mdx) を参照してください。
 
 ### 共有データ StarRocks クラスターでのクエリ
 
@@ -694,4 +695,4 @@ FE または CN ノードを起動する際に発生するエラーを特定す�
 
 ## 次に行うこと
 
-StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](../deployment/post_deployment_setup.md)を参照してください。
+StarRocks クラスタをデプロイした後、初期管理手順については[デプロイ後のセットアップ](./manage_deployment/post_deployment_setup.md)を参照してください。

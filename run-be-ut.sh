@@ -76,6 +76,7 @@ Usage: $0 <options>
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
+     --without-paimon-cpp           build without paimon-cpp library; default is ON on Linux, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -129,10 +130,12 @@ OPTS=$(${GETOPT_BIN} \
   -l 'enable-shared-data' \
   -l 'build-target:' \
   -l 'without-starcache' \
-  -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -l 'without-tenann' \
+  -l 'without-paimon-cpp' \
+  -l 'without-arm-crc32' \
+  -l 'with-arm-crc32' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -171,12 +174,54 @@ if starrocks_is_darwin; then
 else
     WITH_TENANN=ON
 fi
+WITH_PAIMON_CPP=ON
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
 if [[ -z ${THIN_ARCHIVE} ]]; then
     THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
 fi
+if [[ -z ${USE_SSE4_2} ]]; then
+    USE_SSE4_2=ON
+fi
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
+if [[ -z ${USE_AVX2} ]]; then
+    USE_AVX2=ON
+fi
+if [[ -z ${USE_AVX512} ]]; then
+    # Disable it by default
+    USE_AVX512=OFF
+fi
+if [[ -z ${USE_ARM_CRC32} ]]; then
+    USE_ARM_CRC32=ON
+fi
+if [ -e /proc/cpuinfo ] ; then
+    # detect cpuinfo
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
+        USE_AVX2=OFF
+    fi
+    if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
+        USE_AVX512=OFF
+    fi
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
+        USE_SSE4_2=OFF
+    fi
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
+    fi
+    if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
+        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
+        features_count=${features_count:-0}
+        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
+        crc_count=${crc_count:-0}
+        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
+            USE_ARM_CRC32=OFF
+        fi
+    fi
+fi
+
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -200,6 +245,9 @@ while true; do
         --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
         --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
         --without-tenann) WITH_TENANN=OFF; shift ;;
+        --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
+        --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
+        --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -211,6 +259,11 @@ if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     exit 1
 fi
 
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
+fi
+
 if [ ${HELP} -eq 1 ]; then
     usage
     exit 0
@@ -218,34 +271,6 @@ fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
 CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
-if [[ -z ${USE_SSE4_2} ]]; then
-    USE_SSE4_2=ON
-fi
-if [[ -z ${USE_BMI_2} ]]; then
-    USE_BMI_2=ON
-fi
-if [[ -z ${USE_AVX2} ]]; then
-    USE_AVX2=ON
-fi
-if [[ -z ${USE_AVX512} ]]; then
-    # Disable it by default
-    USE_AVX512=OFF
-fi
-if [ -e /proc/cpuinfo ] ; then
-    # detect cpuinfo
-    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
-        USE_AVX2=OFF
-    fi
-    if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
-        USE_AVX512=OFF
-    fi
-    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
-        USE_SSE4_2=OFF
-    fi
-    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
-        USE_BMI_2=OFF
-    fi
-fi
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
         ENABLE_JIT=OFF
@@ -313,7 +338,8 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2 \
+            -DUSE_ARM_CRC32=$USE_ARM_CRC32 \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
@@ -323,6 +349,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
@@ -383,6 +410,7 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shar
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"

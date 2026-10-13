@@ -14,17 +14,22 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -41,9 +46,11 @@ import org.mockito.InOrder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -120,6 +127,35 @@ public class LakeMvSortKeyRewriteJobTest {
         GlobalStateMgr.getCurrentState().getTaskManager().createTask(task);
         registeredTask = task;
         return task;
+    }
+
+    @Test
+    public void testZeroTargetUsesInheritedSelectionWithoutChangingRefreshLifecycle() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            LakeMvSortKeyRewriteJob job = newJobWithStubbedCatalog();
+            job.setRefreshWasActiveAtSubmit(true);
+            LakeMvSortKeyRewriteJob.RefreshCoordinator coord = mock(
+                    LakeMvSortKeyRewriteJob.RefreshCoordinator.class);
+            job.setRefreshCoordinator(coord);
+            MaterializedIndex baseIndex = new MaterializedIndex(
+                    40001L, MaterializedIndex.IndexState.NORMAL, 50001L);
+            baseIndex.addTablet(new LakeTablet(60001L), null, false);
+            baseIndex.addTablet(new LakeTablet(60002L), null, false);
+            PendingPartitionPlan plan = new PendingPartitionPlan(
+                    70001L, baseIndex, baseIndex.getShardGroupId(), "p0", 1024L, MV_NAME, null);
+
+            job.beforeShadowBuild();
+            assertEquals(2, job.selectRequestedTabletCount(plan, 3));
+            job.afterJobSettled(false);
+
+            InOrder inOrder = inOrder(coord);
+            inOrder.verify(coord).suspendRefresh();
+            inOrder.verify(coord).resumeRefresh();
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
     }
 
     @Test
@@ -359,5 +395,32 @@ public class LakeMvSortKeyRewriteJobTest {
         jobNoMv.setRefreshWasActiveAtSubmit(true);
         assertDoesNotThrow(jobNoMv::beforeShadowBuild);
         assertDoesNotThrow(() -> jobNoMv.afterJobSettled(false));
+    }
+
+    @Test
+    public void testCancelPrunesPartitionStatesOnLeaderAndOnReplay() throws Exception {
+        LakeMvSortKeyRewriteJob job = newJobWithStubbedCatalog();
+        job.setRefreshWasActiveAtSubmit(true);
+        LakeMvSortKeyRewriteJob.RefreshCoordinator coord = mock(LakeMvSortKeyRewriteJob.RefreshCoordinator.class);
+        job.setRefreshCoordinator(coord);
+        MaterializedIndex shadowIndex = new MaterializedIndex(40001L, MaterializedIndex.IndexState.SHADOW, 50001L);
+        shadowIndex.addTablet(new LakeTablet(60001L), null, false);
+        job.stateOf(70001L).shadowIndex = shadowIndex;
+
+        assertTrue(job.cancel("cancel"));
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        verify(coord).resumeRefresh();
+        assertTrue(job.partitionStates.isEmpty());
+
+        // The journaled entry keeps the partition states; a follower replaying it prunes the job it keeps.
+        LakeMvSortKeyRewriteJob entry = (LakeMvSortKeyRewriteJob) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+        assertEquals(AlterJobV2.JobState.CANCELLED, entry.getJobState());
+        assertEquals(Set.of(70001L), entry.partitionStates.keySet());
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        followerHandler.replayAlterJobV2(entry);
+        assertSame(entry, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        assertTrue(entry.partitionStates.isEmpty());
     }
 }

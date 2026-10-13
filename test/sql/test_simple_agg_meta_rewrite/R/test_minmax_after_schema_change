@@ -1,4 +1,7 @@
 -- name: test_minmax_after_schema_change @native
+admin set frontend config ("min_max_stats_collect_interval_sec" = "0");
+-- result:
+-- !result
 DROP DATABASE IF EXISTS test_minmax_schema_change;
 -- result:
 -- !result

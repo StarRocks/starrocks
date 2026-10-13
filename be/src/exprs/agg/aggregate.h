@@ -190,6 +190,35 @@ public:
     // this information should be updated as well.
     virtual void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const {}
 
+    // For window functions evaluated in streaming mode whose look-back is bounded but data-dependent.
+    // Returns the earliest input row position, in the analytor's local column coordinates, that this function may still
+    // read for subsequent rows. The analytor may evict any buffered row strictly before the minimum such position across
+    // all its functions.
+    // Returns std::nullopt when the function imposes no retention requirement beyond the operator's frame-based bound.
+    virtual std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
+                                                             ConstAggDataPtr __restrict state) const {
+        return std::nullopt;
+    }
+
+    // Whether `is_window_result_ready` below can ever return false for this function. The analytor
+    // collects the functions that answer true once during prepare, so the per-row readiness check
+    // costs nothing for the functions (and the queries) that never wait.
+    // Must be overridden together with `is_window_result_ready`.
+    virtual bool needs_window_result_ready_check() const { return false; }
+
+    // For streaming window evaluation whose result can depend on data not yet in the physical frame
+    // (e.g. `lead ... IGNORE NULLS`). Return false to keep `_current_row_position` unmoved until more
+    // input arrives or the partition is known complete. Default true: the physical frame is enough.
+    // The state is mutable so implementations can memoize scan progress across calls.
+    // On success, ready_end may extend the caller's exclusive ready-row bound, in local column
+    // coordinates. The caller initializes it to current_row + 1; it is meaningful only on success.
+    virtual bool is_window_result_ready(FunctionContext* ctx, AggDataPtr __restrict state, const Columns& columns,
+                                        int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                        int64_t frame_end, bool partition_is_complete,
+                                        int64_t* ready_end = nullptr) const {
+        return true;
+    }
+
     virtual std::string get_name() const = 0;
 
     // State management methods:
@@ -302,6 +331,12 @@ public:
     // There may be other operators which may change immediate state's nullable between multi stage aggregate,
     // so even for non-nullable aggregate function, we still need to support nullable immediate input.
     virtual bool support_nullable_immediate_input() const { return false; }
+
+    // Whether this aggregate never emits a NULL result, even over a nullable input or an empty window frame
+    // (e.g. count, bitmap_union_count). Declared per-function; the analytic executor uses it to materialize a
+    // non-nullable result column. NOTE: this is NOT the same as the AggNonNullPred wrapper -- sum/avg/max/min
+    // use that wrapper too yet still return NULL over an empty frame -- so each such function opts in itself.
+    virtual bool is_result_non_nullable() const { return false; }
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"

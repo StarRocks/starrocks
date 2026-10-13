@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
 
 :::
 
@@ -55,37 +55,6 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 标签：`compaction_type` (`manual` 或 `auto`)
 - 描述：Iceberg 压缩 (`rewrite_data_files`) 任务的总数。
-
-## `iceberg_delete_bytes`
-
-- 单位：字节
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总字节数。对于 `metadata` 删除，这表示已删除数据文件的大小。对于 `position` 删除，这表示创建的位置删除文件的大小。
-
-## `iceberg_delete_duration_ms_total`
-
-- 单位：毫秒
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务的总执行时间（毫秒）。每个任务的持续时间在其结束后添加。`delete_type` 区分两种删除方法。
-
-## `iceberg_delete_rows`
-
-- 单位：行
-- 类型：累积
-- 标签：`delete_type` (`position` 或 `metadata`)
-- 描述：Iceberg `DELETE` 任务删除的总行数。对于 `metadata` 删除，这表示已删除数据文件中的行数。对于 `position` 删除，这表示创建的位置删除数。
-
-## `iceberg_delete_total`
-
-- 单位：计数
-- 类型：累积
-- 标签：
-  - `status` (`success` 或 `failed`)
-  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
-  - `delete_type` (`position` 或 `metadata`)
-- 描述：针对 Iceberg 表的 `DELETE` 任务总数。无论任务成功或失败，每当任务结束时，该指标都会增加 1。`delete_type` 区分两种删除方法：`position`（生成位置删除文件）和 `metadata`（元数据级别删除）。
 
 ## `iceberg_merge_bytes`
 
@@ -245,6 +214,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：字节
 - 描述：应用程序分配的总字节数。
 
+## `jemalloc_dirty_bytes`
+
+- 单位：字节
+- 描述：未使用的脏页（dirty page）中的总字节数。这些页面尚未通过 madvise 归还给操作系统，可直接复用于新的内存分配而不会触发缺页中断。
+
 ## `jemalloc_mapped_bytes`
 
 - 单位：字节
@@ -260,6 +234,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：用于元数据的透明巨页数量。
 
+## `jemalloc_muzzy_bytes`
+
+- 单位：字节
+- 描述：未使用的 muzzy 页中的总字节数。muzzy 是脏页与保留页（retained）之间的中间衰减状态，页面已通过 madvise（例如 MADV_FREE）处理，但地址映射仍被保留。
+
 ## `jemalloc_resident_bytes`
 
 - 单位：字节
@@ -274,6 +253,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：字节
 - 描述：JIT 编译函数缓存使用的内存。
+
+## `lake_compaction_held_segment_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：正在运行的存算分离（lake）压缩任务当前持有的输入 Segment 元数据大小（由 `lake_compaction_hold_input_segments` 控制）。与元数据缓存不同，这部分内存不受 LRU 管理，随持有它的任务结束而释放；因此该值长期偏高说明存在长时间运行的压缩任务，而不是缓存需要调大。
 
 ## `lake_compaction_failed`
 
@@ -305,6 +290,18 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
+
+## `lake_tablet_location_handoff_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。本 BE 解析自己不持有的 tablet 的存储位置时，直接使用持有节点交来的位置、没有向 StarMgr 查询的次数。每增加 1，就少发一次 StarMgr GetShard RPC。该指标在负责向开启了 `file_bundling` 的表导入数据的协调节点上增长。结合 `staros_shard_info_fallback_total`，交接的命中率为 `hits / (hits + fallback)`。
 
 ## `lake_vacuum_del_file_batch_size_minute`
 
@@ -476,6 +473,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：摘要
 - 描述：RPC 请求和等待流式加载管道可用性的总延迟。
 
+## `meta_replay_lag_second`
+
+- 单位：秒
+- 类型：Gauge
+- 描述：当前 FE 已回放的元数据比 Leader 的时钟落后多久。Leader FE 每 10 秒向日志中写入一个时间戳，该指标即本节点已回放的最新时间戳距今的时长。`max_journal_replay_lag` 只由 Leader 上报，而该指标由落后的节点自身上报；某条日志回放卡住期间，该值会持续增长。Leader FE 只写时间戳、不回放时间戳，因此始终上报 `0`。该值超过 `meta_delay_toleration_second` 后，该节点不再用本地元数据提供读服务，而是把查询转发给 Leader。有两种例外：一是 `ignore_meta_check` 设为 `true` 时，该节点照常提供读服务；二是该节点自上次检查以来没有回放任何日志，且与 Leader 的连接正常，此时该节点维持当前的读服务状态，因为 Leader 没有写入新日志，落后于它的时钟并不说明该节点自身有问题。第二种情况只是不把节点移出服务，并不会让已经停止提供读服务的节点重新对外服务。
+
 ## `meta_request_duration`
 
 - 单位：us
@@ -561,6 +564,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
 
+## `pipe_drivers`
+
+- 单位：计数
+- 描述：BE 准入控制当前预留的逻辑 driver 配额。包含 fragment 实例化 driver 和 operator 期间持有的配额，以及实例化后尚未释放的配额。该值遵循逻辑 DOP 计数规则（包括 colocate 执行组），并非已实例化的 driver 对象数或运行线程数。配额释放时（包括准备失败或 fragment 完成时），该值随之减少。
+
 ## `pipe_poller_block_queue_len`
 
 - 单位：计数
@@ -605,7 +613,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 类型：计数器
 - 单位：计数
-- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败时增加。
+- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败，或 Compaction 读取输入 SST 文件时检测到数据损坏时增加。
 
 ## `pk_index_sst_write_error_total`
 

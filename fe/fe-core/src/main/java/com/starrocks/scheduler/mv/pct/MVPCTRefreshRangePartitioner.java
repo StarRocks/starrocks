@@ -18,7 +18,6 @@ package com.starrocks.scheduler.mv.pct;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -55,7 +54,6 @@ import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -65,7 +63,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.SyncPartitionUtils.createRange;
@@ -450,8 +447,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             partitionDescs.add(singleRangePartitionDesc);
         }
 
-        // create partitions in small batch, to avoid create too many partitions at once
-        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+        addPartitionsInBatches(partitionDescs, batch -> {
             RangePartitionDesc rangePartitionDesc =
                     new RangePartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
@@ -466,7 +462,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                         "failed to add range partition, db: %s, cause: %s",
                         e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
-            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
-        }
+        });
     }
 }

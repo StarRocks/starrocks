@@ -1,4 +1,4 @@
--- name: test_pipeline_time_guard @sequential
+-- name: test_pipeline_time_guard @sequential @slow
 
 update default_catalog.information_schema.be_configs set `value` = "1000" where name= "pipeline_prepare_timeout_guard_ms";
 update default_catalog.information_schema.be_configs set `value` = "5000" where name= "pipeline_process_timeout_guard_ms";

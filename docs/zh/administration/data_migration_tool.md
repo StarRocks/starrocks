@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 ---
@@ -159,6 +160,60 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
    - 建议为源存储卷使用临时凭证（access key / secret key），迁移完成后可以将其吊销。
    :::
 
+#### 迁移 Range 分布表
+
+Range 分布表迁移仅支持从存算分离集群迁移到存算分离集群。迁移工具会根据源表定义自动创建缺失的目标表，请勿手动创建目标表。
+
+请先记录以下 FE 配置的原值。对于每项动态配置，还需在每个适用 FE 的 **fe.conf** 中持久化相同设置，避免 FE 重启后迁移约束发生变化。
+
+1. 在源集群和目标集群上禁用 Tablet 合并，并保持 Range 分布启用：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true");
+   ```
+
+2. `enable_execute_script_on_frontend` 是静态配置。请在源集群和目标集群的每个 FE 的 **fe.conf** 中将其设置为 `true`，并在迁移窗口开始前重启 FE。
+
+   ```Properties
+   enable_execute_script_on_frontend = true
+   ```
+
+3. 在目标集群上将目标大小设置为一个极大值，以抑制由大小触发的 Tablet 自动分裂：
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ```
+
+4. 启动工具前，分别在源集群和目标集群上执行以下查询：
+
+   ```SQL
+   SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_TYPE = 'MERGE_TABLET'
+     AND JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   只有该查询在两个集群上都没有返回相关行时，才能开始迁移。该条件会等待所有非终态合并作业排空，包括 `PENDING`、`PREPARING`、`RUNNING`、`CLEANING` 和 `ABORTING`。保持源集群自动分裂启用，使源拓扑可以继续演进。迁移期间不要在目标集群上执行可能改变拓扑的独立写入或预分裂操作。
+
+工具通过仅在 Leader 上执行的 `ADMIN EXECUTE ON FRONTEND` 调用读取源集群和目标集群的实际拓扑。每个 Tablet 的完整 Range 值包含 `lowerBound`、`lowerIncluded`、`upperBound` 和 `upperIncluded`。空端点表示负无穷或正无穷。在有限的多列端点列表中，空单元格表示 SQL NULL，其余单元格均为规范字符串值。该表示方式保留两端的包含标志，并能区分字面字符串 `NULL` 与 SQL NULL。该桥接会保留完整表示以便后续扩展，但当前 FE 到 BE 的分裂链路仅接受左闭右开的 `[lower, upper)` 子区间。
+
+`ADMIN EXECUTE ON FRONTEND` 不会转发到其他 FE。工具必须发现并直连每个集群的 Leader FE，迁移用户必须拥有 SYSTEM 级别的 `OPERATE` 权限。FE 脚本属于特权代码：请使用专用可信账号、妥善保护凭证，并将生成的脚本参数作为正确转义的 JSON 放入单个 SQL 字符串中。DDL 执行器必须完整发送 ADMIN 语句，不得按分号拆分。迁移后，请按下文说明恢复已记录的静态脚本执行配置。
+
+对于每张 Range 分布表，工具会比较最新读取的源拓扑和目标拓扑。如果两者不一致，工具会停止为该表生成新的复制作业，但允许已排队、正在发送和已在目标集群运行的作业完成。这些作业及复制事务全部排空后，工具通过既有 DDL 队列提交精确边界 Tablet 分裂。只有再次读取拓扑并确认源、目标 Range 在结构上完全相等后，才会恢复复制。
+
+Range 分布不会改变存算分离的版本同步语义。每次复制仍使用源物理分区的 `visibleVersion`，比较完整的元数据和文件集合，并跳过目标集群上已存在的文件。
+
+在存算分离集群之间迁移并使用透明数据加密 (TDE) 时，新复制的私有独立物理文件会使用源加密元数据读取，然后按目标策略重新加密。若无法解封装源密钥层级，迁移会在目标端发布前失败。当源文件已加密或目标端启用 TDE 时，不支持新复制共享或打包的物理文件。目标端已存在的对象可以直接复用，并保留其目标端加密元数据。从存算一体源迁移到存算分离目标时，如果源 Rowset 或 DCG 文件已加密，迁移会以失败关闭方式停止；该路径不支持对这些文件解密并按目标策略重新加密。
+
+:::warning
+
+此流程仅支持通过分裂收敛。如果收敛需要目标集群执行合并，流程将以失败关闭方式停止，包括源集群发生合并、目标集群存在独有边界、Range 交叉或目标拓扑比源拓扑更细的情况。Range Colocate 布局也不受支持。
+
+:::
+
+迁移完成后，请先等待工具、复制作业和事务以及 Tablet Reshard 作业全部排空。对于源、目标集群的合并配置和目标 Tablet 大小等动态配置，请使用 `ADMIN SET FRONTEND CONFIG` 恢复，并在 **fe.conf** 中恢复其已记录的值。仅当迁移前已启用自动 Reshard 时才恢复该行为，否则保持禁用。对于静态配置 `enable_execute_script_on_frontend`，请在每个 FE 的 **fe.conf** 中恢复已记录的值并重启 FE。仅当其原值为 `false`，或您有意采用更严格的迁移后安全策略时，才禁用脚本执行。
+
 </TabItem>
 </Tabs>
 
@@ -208,7 +263,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### FE 参数
 
-以下 FE 参数为动态配置项。有关如何修改，请参阅[配置 FE 动态参数](../administration/management/FE_configuration.md#配置-fe-动态参数)。
+以下 FE 参数为动态配置项。有关如何修改，请参阅[配置 FE 动态参数](./configuration/FE_parameters/FE_parameters.md#配置-fe-动态参数)。
 
 | **参数**                                | **默认值** | **单位** | **描述**                                                     |
 | --------------------------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -219,7 +274,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### BE 参数
 
-以下 BE 参数为动态配置项。有关如何修改，请参阅[配置 BE 动态参数](../administration/management/BE_configuration.md)。
+以下 BE 参数为动态配置项。有关如何修改，请参阅[配置 BE 动态参数](./configuration/BE_parameters/BE_parameters.md)。
 
 | **参数**            | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -322,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 各参数说明如下：
@@ -372,6 +436,13 @@ enable_table_property_sync=false
 | ddl_job_allow_drop_inconsistent_view              | 是否允许迁移工具删除源集群和目标集群之间不一致的视图。默认值为 `true`，表示将被删除。可以使用此项的默认值。迁移工具将在迁移期间自动同步被删除的视图。 |
 | ddl_job_allow_drop_view_target_only               | 是否允许迁移工具删除在源集群中已删除的视图，以保持源集群和目标集群之间的视图一致性。默认值为 `true`，表示将被删除。可以使用此项的默认值。 |
 | enable_table_property_sync                        | 是否启用表属性的同步。                                       |
+| enable_privilege_sync                             | 是否启用用户、角色及其权限的同步。默认值为 `false`，表示不同步账户元数据。 |
+| ddl_job_allow_drop_user_target_only               | 是否允许迁移工具删除仅存在于目标集群而不存在于源集群的用户。默认值为 `false`，表示不会被删除。 |
+| ddl_job_allow_drop_role_target_only               | 是否允许迁移工具删除仅存在于目标集群而不存在于源集群的角色。默认值为 `false`，表示不会被删除。 |
+| ddl_job_allow_drop_inconsistent_user              | 是否允许迁移工具重建（即删除后重新创建）源集群和目标集群之间定义不一致的用户。默认值为 `true`。仅当该用户的权限在同一轮次中被成功读取时才会重建，以便重建后立即重新授予其权限。 |
+| ddl_job_allow_revoke_grant_target_only            | 是否允许迁移工具回收仅在目标集群中授予而在源集群中未授予的权限。默认值为 `false`，表示不会被回收。 |
+| privilege_sync_exclude_users                      | 迁移工具不修改的用户，多个用户之间以英文逗号（`,`）分隔。用户可以指定为用户名（`jack`），也可以指定为完整的用户标识（`'jack'@'%'`）。`root` 和 `target_cluster_user` 中指定的用户始终被排除。 |
+| privilege_sync_exclude_roles                      | 迁移工具不修改的角色，多个角色之间以英文逗号（`,`）分隔。 |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="从存算一体迁移" default>
@@ -508,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### 用户、角色和权限同步（可选）
+
+默认情况下，迁移工具不同步账户元数据。如果将 `enable_privilege_sync` 设置为 `true`，迁移工具还会将源集群的用户、角色及其权限同步到目标集群。
+
+迁移工具每次获取元数据时，都会读取源集群和目标集群的用户、角色及其权限，进行比对，并执行使目标集群与源集群保持一致所需的 DDL 语句。用户定义通过 `SHOW CREATE USER` 获取，该语句返回的密码为密文，因此迁移过程中不会处理明文密码。
+
+以下对象始终不会被迁移工具修改：
+
+- `root` 以及 `target_cluster_user` 中指定的用户。覆盖目标集群 `root` 的密码会导致目标集群的运维人员无法登录，删除迁移工具连接所使用的账号会中断工具自身的连接。
+- 不可变的内置角色 `root`、`db_admin`、`cluster_admin`、`user_admin` 和 `security_admin`。`public` 是内置角色但可以修改，因此其权限会被同步，而角色本身不会被改动。
+- `privilege_sync_exclude_users` 中指定的用户和 `privilege_sync_exclude_roles` 中指定的角色。
+
+:::note
+
+- 两个集群的 FE 都必须支持 `SHOW CREATE USER`。如果任一集群的 FE 不支持该语句，迁移工具将跳过用户及其权限，仅同步角色和角色权限。
+- 权限同步的进度会以 `Sync privilege progress` 为前缀打印到日志文件 **log/sync.INFO.log** 中，其中列出角色、角色权限、用户和用户权限四个部分各自的状态。
+- 在一次性同步模式（`one_time_run_mode=true`）下，只有权限也同步一致后，迁移工具才会成功退出。如果任一集群不支持 `SHOW CREATE USER`，或者权限在连续三次比对后仍不一致，迁移工具将以失败状态退出。
+
+:::
+
 ## 步骤三：启动迁移工具
 
 配置完成后，启动迁移工具以开始数据迁移过程。
@@ -635,6 +726,7 @@ ORDER BY TABLE_NAME;
 - 内部表及其数据
 - 物化视图的 Schema 及其构建语句（物化视图中的数据不会被同步。如果物化视图的基表未同步到目标集群，物化视图的后台刷新任务将报错。）
 - 逻辑视图
+- 用户、角色及其权限（默认不同步，通过 `enable_privilege_sync` 开启）
 
 对于存算分离集群之间的迁移：
 

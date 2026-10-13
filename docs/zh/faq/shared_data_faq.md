@@ -1,4 +1,5 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
 description: "存算分离集群常见问题解答。"
 ---
@@ -100,7 +101,7 @@ mysql> SHOW PROC '/dbs/load_benchmark';
 
   Compaction Score 应保持在 ~10 以下。过高的 Compaction Score 通常表示 Compaction 失败。
 
-- 查看 Query Profile 指标，如 `SegmentsReadCount`。
+- 查看 Query Profile 指标，如 `PhySegmentsCount`。
 
   如果 Segment 数量很高，可能是 Compaction 滞后或卡住。
 

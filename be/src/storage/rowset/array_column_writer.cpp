@@ -47,6 +47,15 @@ public:
     Status write_zone_map() override { return Status::OK(); }
 
     Status write_bitmap_index() override { return Status::OK(); }
+    // Same order and the same is_nullable() guard as write_ordinal_index(), so the deferred
+    // writes land exactly where the immediate ones would have.
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        if (is_nullable()) {
+            _null_writer->take_ordinal_index_builders(out);
+        }
+        _array_size_writer->take_ordinal_index_builders(out);
+        _element_writer->take_ordinal_index_builders(out);
+    }
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 

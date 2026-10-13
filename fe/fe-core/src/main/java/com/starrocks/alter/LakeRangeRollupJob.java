@@ -23,13 +23,11 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
 import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
 import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
-import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
-import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -248,19 +246,22 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: choose {@code K}
-     * from the base data size and the active compute-node count, sample by the rollup sort key, plan
-     * the boundaries, and build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
+     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: use the shared
+     * tablet-count policy, which preserves the latest base-index {@code K} when the target is zero and
+     * otherwise derives {@code K} adaptively from base data size and active compute-node count. When
+     * {@code K > 1}, sample by the rollup sort key and plan the boundaries; {@code K == 1} skips sampling.
+     * Build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
      * NO db lock is held here.
      */
     @Override
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        Estimates estimates = new Estimates(plan.partitionDataSize, 0L);
-        int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
-        List<Tuple> boundaries = planBoundaries(dbName, plan.tableName, plan.partitionName,
-                plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
+        List<Tuple> boundaries = requestedTabletCount == 1
+                ? List.of()
+                : planBoundaries(dbName, plan.tableName, plan.partitionName,
+                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
         // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
         int shadowTabletCount = boundaries.size() + 1;
         List<TabletRange> ranges = buildTabletRanges(boundaries);

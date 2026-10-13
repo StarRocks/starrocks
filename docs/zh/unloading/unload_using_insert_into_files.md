@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 description: "From v3.2 onwards, StarRocks supports using the table function FILES() to define writable files in remote storage for data export."
 ---

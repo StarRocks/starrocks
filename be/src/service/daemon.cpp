@@ -55,6 +55,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <iostream>
 
 #include "base/time/monotime.h"
 #include "base/time/time.h"
@@ -238,11 +239,16 @@ std::string dump_memory_tracker() {
     DUMP_METRIC(jit, mem_metrics->jit_cache_mem_bytes.value())
     DUMP_METRIC(brpc_iobuf, mem_metrics->brpc_iobuf_mem_bytes.value())
     DUMP_METRIC(replication, mem_metrics->replication_mem_bytes.value())
+    DUMP_METRIC(vector_index, mem_metrics->vector_index_mem_bytes.value())
 
     DUMP_METRIC(jemalloc_active, mem_metrics->jemalloc_active_bytes.value())
     DUMP_METRIC(jemalloc_allocated, mem_metrics->jemalloc_allocated_bytes.value())
     DUMP_METRIC(jemalloc_metadata, mem_metrics->jemalloc_metadata_bytes.value())
     DUMP_METRIC(jemalloc_rss, mem_metrics->jemalloc_resident_bytes.value())
+    DUMP_METRIC(jemalloc_mapped, mem_metrics->jemalloc_mapped_bytes.value())
+    DUMP_METRIC(jemalloc_retained, mem_metrics->jemalloc_retained_bytes.value())
+    DUMP_METRIC(jemalloc_dirty, mem_metrics->jemalloc_dirty_bytes.value())
+    DUMP_METRIC(jemalloc_muzzy, mem_metrics->jemalloc_muzzy_bytes.value())
 
     return fmt::to_string(buffer);
 }
@@ -347,10 +353,12 @@ void init_minidump() {
 
 void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetricsRegistry* process_metrics_registry) {
     DCHECK(process_metrics_registry != nullptr);
-    if (as_cn) {
-        init_glog("cn", true);
-    } else {
-        init_glog("be", true);
+    if (!init_glog(as_cn ? "cn" : "be", true)) {
+        // init_glog has already explained the problem on stderr. Carrying on would leave glog
+        // uninitialized, which sends every log line to stderr instead of the log dir, with none of
+        // the configured rolling or cleanup.
+        std::cerr << "failed to initialize logging, exiting" << std::endl;
+        exit(-1);
     }
     init_runtime_logging_hooks();
 

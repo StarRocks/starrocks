@@ -17,6 +17,7 @@ package com.starrocks.common.util;
 import com.google.common.collect.ImmutableSet;
 import com.google.re2j.Matcher;
 import com.google.re2j.Pattern;
+import com.starrocks.authentication.LDAPGroupProvider;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -33,9 +34,16 @@ import java.util.Set;
  */
 public class SqlCredentialRedactor {
 
-    // Set of credential keys that should be redacted
-    // some of them are taken from common.util.PrintableMap
+    // Set of credential keys that should be redacted.
+    //
+    // Seeded from PrintableMap.SENSITIVE_KEY rather than hand-copied from it: the two registries
+    // exist for the same purpose - PrintableMap masks what SHOW CREATE prints, this masks what the
+    // audit log records - and keeping two hand-maintained copies is what let
+    // authentication_ldap_simple_bind_root_pwd, authentication_ldap_simple_ssl_conn_trust_store_pwd
+    // and client_secret be masked in one and printed in plain text in the other. Adding a key to
+    // PrintableMap now covers both.
     private static final Set<String> CREDENTIAL_KEYS = ImmutableSet.<String>builder()
+            .addAll(PrintableMap.SENSITIVE_KEY)
             .add(CloudConfigurationConstants.AWS_S3_ACCESS_KEY)
             .add(CloudConfigurationConstants.AWS_S3_SECRET_KEY)
             .add(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN)
@@ -81,8 +89,14 @@ public class SqlCredentialRedactor {
             .add("password")
             .add("passwd")
             .add("pwd")
+            // CREATE / ALTER GROUP PROVIDER carries these in plain text in the statement itself,
+            // which is what lands in the audit log. (The security integration equivalents,
+            // authentication_ldap_simple_*_pwd and client_secret, come in with SENSITIVE_KEY above.)
+            .add(LDAPGroupProvider.LDAP_PROP_ROOT_PWD_KEY)
+            .add(LDAPGroupProvider.LDAP_SSL_CONN_TRUST_STORE_PWD)
             .add("property.sasl.password")
             .add("broker.password")
+            .add("api_key")
             .build();
 
     // Lowercase set for O(1) lookup (case-insensitive matching)
@@ -141,7 +155,6 @@ public class SqlCredentialRedactor {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL | Pattern.MULTILINE
     );
 
-    private static final String REDACTED_VALUE = "***";
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
@@ -211,10 +224,10 @@ public class SqlCredentialRedactor {
                 if (matcher.group(4) != null && matcher.group(5) != null) {
                     // Quoted value case
                     String valueQuote = matcher.group(4);
-                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + CredentialMask.SHORT + valueQuote;
                 } else {
                     // Unquoted value case
-                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+                    replacement = keyPrefix + key + keySuffix + " = " + CredentialMask.SHORT;
                 }
                 result.append(replacement);
             } else {
@@ -242,11 +255,11 @@ public class SqlCredentialRedactor {
             } else {
                 result.append(matcher.group(1)).append(plugin).append(matcher.group(3));
                 if (matcher.group(4) != null) {
-                    result.append('\'').append(REDACTED_VALUE).append('\'');
+                    result.append('\'').append(CredentialMask.SHORT).append('\'');
                 } else if (matcher.group(5) != null) {
-                    result.append('"').append(REDACTED_VALUE).append('"');
+                    result.append('"').append(CredentialMask.SHORT).append('"');
                 } else {
-                    result.append(REDACTED_VALUE);
+                    result.append(CredentialMask.SHORT);
                 }
             }
             lastEnd = matcher.end();
@@ -271,11 +284,11 @@ public class SqlCredentialRedactor {
 
             result.append(matcher.group(prefixGroup));
             if (matcher.group(singleQuotedGroup) != null) {
-                result.append('\'').append(REDACTED_VALUE).append('\'');
+                result.append('\'').append(CredentialMask.SHORT).append('\'');
             } else if (matcher.group(doubleQuotedGroup) != null) {
-                result.append('"').append(REDACTED_VALUE).append('"');
+                result.append('"').append(CredentialMask.SHORT).append('"');
             } else {
-                result.append(REDACTED_VALUE);
+                result.append(CredentialMask.SHORT);
             }
             if (suffixGroup > 0 && matcher.group(suffixGroup) != null) {
                 result.append(matcher.group(suffixGroup));

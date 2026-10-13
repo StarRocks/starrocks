@@ -7,7 +7,7 @@ description: "現在のクラスターの設定を表示します（現在は FE
 
 ## 説明
 
-現在のクラスターの設定を表示します（現在は FE の設定項目のみ表示可能です）。これらの設定項目の詳細については、[Configuration](../../../../administration/management/FE_configuration.md) を参照してください。
+現在のクラスターの設定を表示します（現在は FE の設定項目のみ表示可能です）。これらの設定項目の詳細については、[Configuration](../../../../administration/configuration/FE_parameters/FE_parameters.md) を参照してください。
 
 設定項目を設定または変更したい場合は、[ADMIN SET CONFIG](ADMIN_SET_CONFIG.md) を使用してください。
 
@@ -35,6 +35,8 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 5. IsMutable:  ADMIN SET CONFIG コマンドで設定可能かどうか
 6. Comment:    設定項目の説明
 ```
+
+パスワード、シークレットキー、トークンなどの認証情報を保持する設定項目では、`Value` に実際の値は表示されません。設定されている場合は `******` と表示され、設定されていない場合は空になります。マスクは表示にのみ適用され、FE は引き続き実際の値を使用します。
 
 ## 例
 

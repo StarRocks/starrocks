@@ -25,6 +25,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -184,6 +185,12 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         }
     }
 
+    /** applyCatalogMutation re-stamps these metas with a new schema id, retiring the previous one. */
+    @Override
+    protected Collection<Long> retiredIndexMetaIdsAtFlip() {
+        return indexMetaIdToNewSchema == null ? List.of() : List.copyOf(indexMetaIdToNewSchema.keySet());
+    }
+
     @Override
     protected void applyCatalogMutation(OlapTable table) {
         List<Index> existing = table.getIndexes();
@@ -276,6 +283,9 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         copy.partitionToTablets = this.partitionToTablets;
         copy.tabletToIndexMetaId = this.tabletToIndexMetaId;
         copy.commitVersionMap = this.commitVersionMap;
+        // Must be journaled: replay() installs whatever the FINISHED entry carries, so a null here
+        // would leave a recovered FE unable to resolve the schema this flip retired.
+        copy.historySchema = this.historySchema;
         copySubclassFields(copy);
         return copy;
     }

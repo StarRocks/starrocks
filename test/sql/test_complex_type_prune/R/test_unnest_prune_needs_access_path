@@ -1,0 +1,97 @@
+-- name: test_unnest_prune_needs_access_path
+drop database if exists test_unnest_prune_needs_access_path;
+-- result:
+-- !result
+create database test_unnest_prune_needs_access_path;
+-- result:
+-- !result
+use test_unnest_prune_needs_access_path;
+-- result:
+-- !result
+create table citations_tbl (
+  id bigint null,
+  engine_id int null,
+  cites array<struct<root_domain varchar(64), normalized_url varchar(64),
+                     prunedawaymarker1 int, prunedawaymarker2 int>>
+) duplicate key(id)
+distributed by hash(id) buckets 3 properties("replication_num"="1");
+-- result:
+-- !result
+create table engines_tbl (
+  engine_id int null,
+  engine_name varchar(32) null
+) duplicate key(engine_id)
+distributed by hash(engine_id) buckets 3 properties("replication_num"="1");
+-- result:
+-- !result
+insert into citations_tbl values
+  (1, 1, [row('apple.com', 'https://a/1', 11, 12), row('other.com', 'https://o/1', 13, 14)]),
+  (2, 2, null),
+  (3, 1, []),
+  (4, 2, [row('apple.com', 'https://a/2', null, null)]),
+  (5, 1, [row(null, null, 15, 16), row('apple.com', 'https://a/3', 17, 18)]);
+-- result:
+-- !result
+insert into engines_tbl values (1, 'e1'), (2, 'e2');
+-- result:
+-- !result
+function: assert_explain_verbose_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'prunedawaymarker1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'prunedawaymarker2')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select count(*) from (select cites from citations_tbl order by id limit 100) s left join unnest(s.cites) t(x) on true where x.root_domain = "apple.com"', 'ColumnAccessPath')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select count(*) from (select cites, dense_rank() over (partition by engine_id order by id) rn from citations_tbl) s left join unnest(s.cites) t(x) on true where rn = 1 and x.root_domain = "apple.com"', 'prunedawaymarker1')
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains('select cites[1].root_domain from citations_tbl', 'ColumnAccessPath')
+-- result:
+None
+-- !result
+select count(*) from (select cites, engine_id from citations_tbl order by id limit 100) s
+left join unnest(s.cites) as t(x) on true
+join engines_tbl e on s.engine_id = e.engine_id
+where x.root_domain = 'apple.com';
+-- result:
+3
+-- !result
+set enable_exchange_pass_through = false;
+-- result:
+-- !result
+select e.engine_name, count(*) from (select cites, engine_id from citations_tbl order by id limit 100) s
+left join unnest(s.cites) as t(x) on true
+join engines_tbl e on s.engine_id = e.engine_id
+group by e.engine_name order by e.engine_name;
+-- result:
+e1	5
+e2	2
+-- !result
+select x.root_domain, count(*) from (
+  select cites, dense_rank() over (partition by engine_id order by id) rn from citations_tbl
+) s left join unnest(s.cites) as t(x) on true
+where rn = 1
+group by 1 order by 1;
+-- result:
+None	1
+apple.com	1
+other.com	1
+-- !result
+select x.root_domain, x.normalized_url, x.prunedawaymarker1, x.prunedawaymarker2
+from citations_tbl c, unnest(c.cites) as t(x) order by 1, 2, 3, 4;
+-- result:
+None	None	15	16
+apple.com	https://a/1	11	12
+apple.com	https://a/2	None	None
+apple.com	https://a/3	17	18
+other.com	https://o/1	13	14
+-- !result
+drop database test_unnest_prune_needs_access_path;
+-- result:
+-- !result

@@ -25,6 +25,7 @@
 #include "common/system/cpu_info.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "common/system/mem_info.h"
+#include "exprs/jit/jit_engine.h"
 #include "runtime/runtime_env.h"
 #endif
 #include "types/time_types.h"
@@ -90,6 +91,13 @@ int main(int argc, char** argv) {
     auto runtime_env_status = starrocks::RuntimeEnv::GetInstance()->init(nullptr);
     if (!runtime_env_status.ok()) {
         fprintf(stderr, "failed to initialize RuntimeEnv: %s\n", runtime_env_status.to_string().c_str());
+        return 1;
+    }
+    // Production initializes the JIT engine in ExecEnv::init(). Without it support_jit() is
+    // false and every ExprsTestHelper::verify_with_jit() call silently skips the JIT path.
+    auto jit_status = starrocks::JITEngine::get_instance()->init();
+    if (!jit_status.ok()) {
+        fprintf(stderr, "failed to initialize JIT engine: %s\n", jit_status.to_string().c_str());
         return 1;
     }
 #endif

@@ -48,6 +48,9 @@ under the License.
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
+
+        <!-- Empty unless the jdk-allow-security-manager profile below activates it. -->
+        <security.manager.arg></security.manager.arg>
     </properties>
 
     <profiles>
@@ -109,6 +112,22 @@ under the License.
             </activation>
             <properties>
                 <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
+            </properties>
+        </profile>
+
+        <!-- CreateFunctionAnalyzer installs a UDFSecurityManager around UDF class loading.
+             JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started
+             with -Djava.security.manager=allow, so the test JVM needs the flag to exercise
+             that path. The range is bounded on both ends on purpose: the flag is a no-op on
+             JDK 17, and JDK 24+ (JEP 486) makes the launcher reject any value other than
+             'disallow', which would stop the test JVM from starting at all. -->
+        <profile>
+            <id>jdk-allow-security-manager</id>
+            <activation>
+                <jdk>[18,24)</jdk>
+            </activation>
+            <properties>
+                <security.manager.arg>-Djava.security.manager=allow</security.manager.arg>
             </properties>
         </profile>
     </profiles>
@@ -228,6 +247,13 @@ under the License.
         <dependency>
             <groupId>com.github.hazendaz.jmockit</groupId>
             <artifactId>jmockit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
+        <dependency>
+            <groupId>com.unboundid</groupId>
+            <artifactId>unboundid-ldapsdk</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -848,8 +874,7 @@ under the License.
         <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-inline</artifactId>
-            <version>4.11.0</version>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -1185,12 +1210,14 @@ under the License.
                     <reuseForks>false</reuseForks>
 
                     <argLine>
-                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
+                        -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
                         ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
+                        ${security.manager.arg}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>

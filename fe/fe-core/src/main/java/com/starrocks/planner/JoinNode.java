@@ -66,6 +66,7 @@ import java.util.stream.Collectors;
  * a single input tuple.
  */
 public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNode {
+
     private static final Logger LOG = LogManager.getLogger(JoinNode.class);
 
     protected final JoinOperator joinOp;
@@ -336,7 +337,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
-        if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
+        if (joinOp.isAsofJoin()) {
+            // an ASOF join picks each left row's match among the right rows: filtering the right input makes it pick
+            // another (earlier) row instead of dropping the left row
+            sides = ImmutableList.of(0);
+        } else if (joinOp.isLeftAntiJoin() || joinOp.isAnyLeftOuterJoin()) {
             sides = ImmutableList.of(0);
         } else if (joinOp.isRightAntiJoin() || joinOp.isRightOuterJoin()) {
             sides = ImmutableList.of(1);
@@ -346,7 +351,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
         boolean result = false;
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
-                canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+                canPushDownRuntimeFilterCrossExchange(partitionByExprs, context.getDescTbl());
         if (optCandidatePartitionByExprs.isEmpty()) {
             return Optional.of(false);
         }

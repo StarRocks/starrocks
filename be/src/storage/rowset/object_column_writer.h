@@ -35,6 +35,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); }
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); }
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); }
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); }
     Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); }
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); }

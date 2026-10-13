@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 description: "StarRocks 表设计常见问题：表创建、schema 变更、分区、分桶和索引配置故障排查。"
 ---

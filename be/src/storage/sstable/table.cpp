@@ -120,6 +120,50 @@ Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval
     return st;
 }
 
+Status Table::sample_keys_in_range(std::vector<std::string>* keys, const Slice& seek_key, const Slice& stop_key,
+                                   size_t max_samples) const {
+    if (max_samples == 0) {
+        return Status::OK();
+    }
+    const Comparator* comparator = rep_->options.comparator;
+    auto new_index_iter = [&]() {
+        std::unique_ptr<Iterator> iter(rep_->index_block->NewIterator(comparator));
+        if (seek_key.empty()) {
+            iter->SeekToFirst();
+        } else {
+            iter->Seek(seek_key);
+        }
+        return iter;
+    };
+    auto before_stop = [&](const Slice& key) { return stop_key.empty() || comparator->Compare(key, stop_key) < 0; };
+
+    // Count the in-range index entries first. The index block is already resident, so the extra walk
+    // costs no IO and lets the second pass space the samples evenly over the caller's range instead
+    // of over the whole table.
+    size_t in_range_count = 0;
+    {
+        auto iter = new_index_iter();
+        for (; iter->Valid() && before_stop(iter->key()); iter->Next()) {
+            ++in_range_count;
+        }
+        if (!iter->status().ok()) {
+            return iter->status();
+        }
+    }
+    if (in_range_count == 0) {
+        return Status::OK();
+    }
+
+    const size_t step = (in_range_count + max_samples - 1) / max_samples;
+    auto iter = new_index_iter();
+    for (size_t index = 0; iter->Valid() && before_stop(iter->key()); iter->Next(), ++index) {
+        if (index % step == 0) {
+            keys->emplace_back(iter->key().to_string());
+        }
+    }
+    return iter->status();
+}
+
 void Table::ReadMeta(const Footer& footer) {
     if (rep_->options.filter_policy == nullptr) {
         return; // Do not need any metadata

@@ -100,7 +100,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1' " +
+                        "get_json_string(history_content_json, 'dbName') IN ('d1', 'default_cluster:d1') " +
                         "ORDER BY create_time DESC LIMIT 10000", anyInt);
             }
         };

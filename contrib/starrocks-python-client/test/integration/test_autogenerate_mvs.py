@@ -26,6 +26,7 @@ from starrocks.alembic.ops import (
     CreateMaterializedViewOp,
     DropMaterializedViewOp,
 )
+from starrocks.common.types import SystemRunMode
 from starrocks.sql.schema import MaterializedView
 from test import conftest_sr
 
@@ -371,6 +372,62 @@ class TestAlterMaterializedView(TestAutogenerateBase):
                 assert mv_ops == [], f"Unexpected op for MV with omitted distribution: {mv_ops}"
             finally:
                 conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+
+    def test_no_diff_for_colocated_mv(self) -> None:
+        """No change: an MV whose metadata declares colocate_with must not diff every run.
+
+        Regression test for the reported failure. information_schema.tables_config does not
+        report colocate_with for MVs, so the reflected side looked as though the property were
+        absent while the metadata declared it. Autogenerate reported the same change on every
+        run and emitted ``ALTER MATERIALIZED VIEW ... SET ("colocate_with" = ...)``, which
+        StarRocks rejects outright: colocate_with is create-only for an MV in a shared-nothing
+        cluster, so the migration could never succeed.
+        """
+        engine = self.engine
+        if engine.dialect.run_mode == SystemRunMode.SHARED_DATA:
+            pytest.skip("MV colocation behaviour on shared-data clusters is not verified")
+
+        mv_name = "test_mv_colocate_no_diff"
+        base_table = "t_autogen_colocate"
+        group_name = "test_mv_colocate_no_diff_group"
+        with engine.connect() as conn:
+            conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+            conn.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
+            # The base table defines the colocation group; the MV must match its bucket count,
+            # replication count and distribution column type to join it.
+            conn.execute(text(
+                f"CREATE TABLE {base_table} (val INT) "
+                "DISTRIBUTED BY HASH(val) BUCKETS 3 "
+                f"PROPERTIES ('replication_num' = '1', 'colocate_with' = '{group_name}')"
+            ))
+            conn.execute(text(
+                f"CREATE MATERIALIZED VIEW {mv_name} "
+                "DISTRIBUTED BY HASH(val) BUCKETS 3 "
+                "REFRESH ASYNC "
+                f"PROPERTIES ('replication_num' = '1', 'colocate_with' = '{group_name}') "
+                f"AS SELECT val FROM {base_table}"
+            ))
+            try:
+                target_metadata = MetaData()
+                MaterializedView(
+                    mv_name,
+                    target_metadata,
+                    definition=f"SELECT val FROM {base_table}",
+                    starrocks_refresh="ASYNC",
+                    starrocks_distributed_by="HASH(val) BUCKETS 3",
+                    starrocks_properties={"replication_num": "1", "colocate_with": group_name},
+                )
+                mc = create_migration_context(conn, target_metadata)
+                migration_script = api.produce_migrations(mc, target_metadata)
+
+                mv_ops = [op for op in migration_script.upgrade_ops.ops if getattr(op, "view_name", None) == mv_name]
+                assert mv_ops == [], (
+                    f"Unexpected op for colocated MV whose metadata matches the database: "
+                    f"{[getattr(op, 'properties', op) for op in mv_ops]}"
+                )
+            finally:
+                conn.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
+                conn.execute(text(f"DROP TABLE IF EXISTS {base_table}"))
 
     def test_refresh_interval_change_detected(self) -> None:
         """ALTER: a genuine change to the refresh interval is still detected.

@@ -1304,7 +1304,7 @@ void PInternalServiceImplBase<T>::update_fail_point_status(google::protobuf::Rpc
                 .to_protobuf(response->mutable_status());
         return;
     }
-    fp->setMode(request->trigger_mode());
+    fp->setMode(starrocks::failpoint::trigger_mode_from_request(*request));
     Status::OK().to_protobuf(response->mutable_status());
 #else
     Status::NotSupported("FailPoint is not supported, need re-compile BE with ENABLE_FAULT_INJECTION")

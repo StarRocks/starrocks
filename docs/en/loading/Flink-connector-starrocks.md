@@ -1,9 +1,12 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "How to use the StarRocks Flink connector to continuously load data from Apache Flink into StarRocks, supporting DataStream API, Table API & SQL, and Python API."
 ---
 
 # Continuously load data from Apache Flink®
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
@@ -17,6 +20,7 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
@@ -89,6 +93,10 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 >
 > The name of Flink connector which is not formally released contains the `SNAPSHOT` suffix.
 
+## Connect to StarRocks
+
+<FlinkStarRocksConnection />
+
 ## Options
 
 ### General Options
@@ -140,7 +148,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: AUTO
 - **Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. Valid Values:
-  - `V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
+  - `V1`: Use [Stream Load](./StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
   - `V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation.
   - `AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1`
 
@@ -211,6 +219,12 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: true
 - **Description**: Supported since version 1.2.8. Whether to ignore `UPDATE_BEFORE` records from Flink when loading data to Primary Key tables. If this parameter is set to false, the record is treated as a delete operation to StarRocks table.
+
+#### sink.json.columns-from-flink-schema
+
+- **Required**: No
+- **Default value**: false
+- **Description**: Supported since 1.2.16. Whether the Stream Load `columns` header is derived from the Flink table schema when the format is `json`. By default no header is sent for `json`, so the server declares every table column and a column the payload does not carry is stored as NULL even when it has a DEFAULT. When `true`, the Flink table's columns are sent as the header, so a column the Flink schema does not declare is left off and the server applies its DEFAULT. Requires a Flink schema and `sink.properties.format=json`, and cannot be combined with `sink.properties.columns` or `sink.properties.jsonpaths`.
 
 #### sink.parallelism
 
@@ -347,9 +361,9 @@ The following Stream Load properties are used to control the Merge Commit behavi
 | DATE                              | DATE                  |
 | TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME              |
 | TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME              |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;        |
-| MAP&lt;KT,VT&gt;                  | JSON STRING           |
-| ROW&lt;arg T...&gt;               | JSON STRING           |
+| ARRAY`<`T`>`                    | ARRAY`<`T`>`        |
+| MAP`<`KT,VT`>`                  | JSON STRING           |
+| ROW`<`arg T...`>`               | JSON STRING           |
 
 ## Usage notes
 
@@ -453,6 +467,21 @@ Below are some important notes when using Merge Commit:
   - `sink.buffer-flush.max-bytes` controls the total memory limit for all cached data across all tables. When the total cached data exceeds this limit, the connector will evict chunks early to free memory.
   - Therefore, `sink.buffer-flush.max-bytes` should be set larger than `sink.merge-commit.chunk.size` to allow at least one full chunk to be accumulated. In general, `sink.buffer-flush.max-bytes` should be several times larger than `sink.merge-commit.chunk.size`, especially when there are multiple tables or high concurrency.
 
+### Let server-side DEFAULT values apply with the JSON format
+
+With the `json` format, the connector does not send a `columns` header by default. The server therefore includes all table columns in the load. If a column is missing from the JSON payload, the server treats it as an explicit `NULL`, which overrides any `DEFAULT` value defined for that column. For example, if a table contains `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP`, the column is loaded as `NULL` unless every row provides a value for `ingest_ts`.
+
+To allow server-side `DEFAULT` values to take effect, set `sink.json.columns-from-flink-schema=true`. The connector then uses the Flink table schema to generate the `columns` header, similar to how it handles `csv` when the Flink and StarRocks schemas differ.
+
+A StarRocks column that is not defined in the Flink table schema is omitted from the `columns` header, allowing the server to apply its `DEFAULT` value. Therefore, the Flink table definition determines which columns are included in the load:
+
+- **Column omitted from the Flink schema:** The connector does not send the column, so StarRocks applies its `DEFAULT` value.
+- **Column defined in the Flink schema:** The connector sends the value from the row, including `NULL` if the value is null.
+
+This option requires a Flink table schema and therefore applies to Flink SQL and sinks created with a schema. For `sink.version=V1`, you must also set `sink.properties.strip_outer_array=true`. The V1 sink sends each batch as a JSON array and does not set this property automatically, unlike V2.
+
+The raw `String` DataStream sink does not have a schema and therefore rejects `sink.json.columns-from-flink-schema=true` at startup. For this sink, set `sink.properties.columns` explicitly instead.
+
 ### Monitoring load metrics
 
 The Flink connector provides the following metrics to monitor loading.
@@ -503,7 +532,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) (default: `8040`).
 
 ### Run with Flink SQL
 

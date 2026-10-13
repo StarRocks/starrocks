@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "query_dump インターフェースで SQL クエリの詳細を取得してトラブルシューティングする方法。"
 ---

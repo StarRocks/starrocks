@@ -19,7 +19,6 @@
 #include <unordered_map>
 
 #include "common/status.h"
-#include "storage/persistent_index_compaction_manager.h"
 
 namespace starrocks {
 
@@ -30,22 +29,22 @@ namespace lake {
 class UpdateManager;
 
 #ifdef USE_STAROS
-class LocalPkIndexManager : public PersistentIndexCompactionManager {
+// Cleanup of local persistent-index directories left behind on the BE's local disks.
+//
+// Shared-data primary-key tablets no longer use a local persistent index at all -- every PK
+// tablet's metadata is normalized to CLOUD_NATIVE (force_cloud_native_pk_persistent_index),
+// so nothing writes these directories any more. What remains is reclaiming the residue on
+// clusters upgraded from a version that did: gc() drops directories whose tablet is gone,
+// evict() drops directories whose index is idle, and clear_persistent_index() is the
+// single-tablet entry point used by the drop path.
+class LocalPkIndexManager {
 public:
-    LocalPkIndexManager() = default;
-
-    ~LocalPkIndexManager() override = default;
-
     static void gc(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     static void evict(UpdateManager* update_manager, DataDir* data_dir, std::set<std::string>& tablet_ids);
 
     // remove pk index meta first, and if success then remove dir.
     static Status clear_persistent_index(int64_t tablet_id);
-
-    void schedule(const std::function<std::vector<TabletAndScore>()>& pick_algo) override;
-
-    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction(UpdateManager* update_magager);
 
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);

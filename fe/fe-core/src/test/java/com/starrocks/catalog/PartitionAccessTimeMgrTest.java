@@ -84,6 +84,77 @@ public class PartitionAccessTimeMgrTest {
         // Must not throw on a null / empty id collection, and must not create an entry.
         mgr.recordAccess(DB_ID, TABLE_ID, null);
         mgr.recordAccess(DB_ID, TABLE_ID, Lists.newArrayList());
+        mgr.mergeEntries(null);
+        mgr.removePartitions(null);
         Assertions.assertTrue(mgr.getLocalAccessTimes(refs(DB_ID, TABLE_ID)).isEmpty());
+        Assertions.assertTrue(mgr.collectAllKeys().isEmpty());
+    }
+
+    @Test
+    public void testMergeEntriesMaxMergesWithoutClearing() {
+        PartitionAccessTimeMgr mgr = new PartitionAccessTimeMgr();
+        mgr.mergeEntries(Lists.newArrayList(
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 100L, 500L),
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 200L, 20L)));
+        // A lower ts for an existing key does not move it backwards; a higher one wins.
+        mgr.mergeEntries(Lists.newArrayList(
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 100L, 400L),
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 200L, 999L)));
+        Assertions.assertEquals(500L, mgr.getLastAccessTime(DB_ID, TABLE_ID, 100L));
+        Assertions.assertEquals(999L, mgr.getLastAccessTime(DB_ID, TABLE_ID, 200L));
+        // mergeEntries leaves the map populated (it is a max-merge, never a drain).
+        Assertions.assertEquals(2, mgr.getLocalAccessTimes(refs(DB_ID, TABLE_ID)).size());
+    }
+
+    @Test
+    public void testSnapshotSinceIsInclusiveAndDoesNotClear() {
+        PartitionAccessTimeMgr mgr = new PartitionAccessTimeMgr();
+        mgr.mergeEntries(Lists.newArrayList(
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 100L, 40L),
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 200L, 50L),
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 300L, 60L)));
+        // Inclusive boundary: >= 50 returns the 50 and 60 entries; the 40 entry is excluded.
+        List<PartitionAccessTimeEntry> newer = mgr.snapshotSince(50L);
+        List<Long> ids = Lists.newArrayList();
+        for (PartitionAccessTimeEntry e : newer) {
+            ids.add(e.getPartitionId());
+        }
+        Assertions.assertEquals(2, ids.size());
+        Assertions.assertTrue(ids.contains(200L) && ids.contains(300L));
+        // A watermark below every entry returns them all; the snapshot never clears the map.
+        Assertions.assertEquals(3, mgr.snapshotSince(0L).size());
+        Assertions.assertEquals(60L, mgr.getLastAccessTime(DB_ID, TABLE_ID, 300L));
+    }
+
+    @Test
+    public void testCollectAllKeysAndRemovePartitions() {
+        PartitionAccessTimeMgr mgr = new PartitionAccessTimeMgr();
+        mgr.mergeEntries(Lists.newArrayList(
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 100L, 10L),
+                new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 200L, 20L)));
+        Assertions.assertEquals(2, mgr.collectAllKeys().size());
+
+        // Removing one key drops it from the map (and trims the now-smaller table map) but keeps the other.
+        mgr.removePartitions(Lists.newArrayList(new long[] {DB_ID, TABLE_ID, 200L}));
+        Assertions.assertEquals(0L, mgr.getLastAccessTime(DB_ID, TABLE_ID, 200L));
+        Assertions.assertEquals(10L, mgr.getLastAccessTime(DB_ID, TABLE_ID, 100L));
+        List<long[]> remaining = mgr.collectAllKeys();
+        Assertions.assertEquals(1, remaining.size());
+        Assertions.assertArrayEquals(new long[] {DB_ID, TABLE_ID, 100L}, remaining.get(0));
+
+        // Removing the last key trims the whole table/db entry.
+        mgr.removePartitions(Lists.newArrayList(new long[] {DB_ID, TABLE_ID, 100L}));
+        Assertions.assertTrue(mgr.collectAllKeys().isEmpty());
+        Assertions.assertTrue(mgr.getLocalAccessTimes(refs(DB_ID, TABLE_ID)).isEmpty());
+    }
+
+    @Test
+    public void testGetAccessTimesReturnsMemoryWithoutQueryingTable() {
+        PartitionAccessTimeMgr mgr = new PartitionAccessTimeMgr();
+        // Single-FE test env: getSelfNode() is null (no cluster bootstrap), so remote collection is skipped and
+        // the read is served purely from memory -- the redesign removed the internal-table SELECT entirely.
+        mgr.mergeEntries(Lists.newArrayList(new PartitionAccessTimeEntry(DB_ID, TABLE_ID, 100L, 777L)));
+        Map<Long, Long> res = mgr.getAccessTimes(DB_ID, TABLE_ID);
+        Assertions.assertEquals(777L, res.get(100L));
     }
 }

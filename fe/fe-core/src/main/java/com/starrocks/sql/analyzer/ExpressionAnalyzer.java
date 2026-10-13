@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -151,6 +150,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyze(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        analyzeState.registerLocalScope(scope);
         Visitor visitor = new Visitor(analyzeState, session);
         bottomUpAnalyze(visitor, expression, scope);
     }
@@ -161,6 +161,7 @@ public class ExpressionAnalyzer {
     }
 
     public void analyzeWithVisitor(Expr expression, AnalyzeState analyzeState, Scope scope, Visitor visitor) {
+        analyzeState.registerLocalScope(scope);
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -713,6 +714,8 @@ public class ExpressionAnalyzer {
             // construct a new scope to analyze the lambda function
             Scope lambdaScope = new Scope(args, scope);
             ExpressionAnalyzer.analyzeExpression(node.getChild(0), this.analyzeState, lambdaScope, this.session);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    node.getChild(0), AIFunctionUsageAnalyzer.PlacementContext.LAMBDA_FUNCTION_BODY);
             node.setType(FunctionType.FUNCTION);
             scope.clearLambdaInputs();
             return null;
@@ -757,11 +760,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
@@ -901,7 +904,6 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
-
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
@@ -1151,6 +1153,8 @@ public class ExpressionAnalyzer {
                 node.setFn(fn);
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
+                verifyNoAiInConditionalFunction(node);
+                checkGetQueryProfileAccess(node);
                 return null;
             }
 
@@ -1175,6 +1179,8 @@ public class ExpressionAnalyzer {
                     node.setFn(fn);
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
+                    verifyNoAiInConditionalFunction(node);
+                    checkGetQueryProfileAccess(node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1189,7 +1195,29 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
+            verifyNoAiInConditionalFunction(node);
+            checkGetQueryProfileAccess(node);
             return null;
+        }
+
+        // get_query_profile() serves the same payload as ANALYZE PROFILE through a BE-side RPC that carries no
+        // caller identity, so the access rule is applied here, once the call has resolved to the builtin; a UDF
+        // that happens to share the name never touches the profile RPC and is left alone.
+        private void checkGetQueryProfileAccess(FunctionCallExpr node) {
+            if (Authorizer.isGetQueryProfileBuiltin(node.getFn()) && node.getChildren().size() == 1) {
+                Authorizer.checkGetQueryProfileAccess(session, node.getChild(0));
+            }
+        }
+
+        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
+            String resolvedFunctionName = node.getFn().functionName();
+            if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.NULLIF.equalsIgnoreCase(resolvedFunctionName)
+                    || FunctionSet.COALESCE.equalsIgnoreCase(resolvedFunctionName)) {
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        node, AIFunctionUsageAnalyzer.PlacementContext.CONDITIONAL_EXPRESSION);
+            }
         }
 
         /**
@@ -1229,6 +1257,10 @@ public class ExpressionAnalyzer {
         }
 
         private void checkFunction(String fnName, FunctionCallExpr node, Type[] argumentTypes) {
+            if ((FunctionSet.ROW.equals(fnName) || FunctionSet.NAMED_STRUCT.equals(fnName)) &&
+                    node.getChildren().stream().anyMatch(child -> child.getType().isGeoType())) {
+                throw new SemanticException(fnName + " does not support native GEO arguments", node.getPos());
+            }
             switch (fnName) {
                 case FunctionSet.AES_ENCRYPT:
                 case FunctionSet.AES_DECRYPT:
@@ -1624,6 +1656,8 @@ public class ExpressionAnalyzer {
             }
 
             node.setType(returnType);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    node, AIFunctionUsageAnalyzer.PlacementContext.CONDITIONAL_EXPRESSION);
             return null;
         }
 
@@ -1663,7 +1697,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);

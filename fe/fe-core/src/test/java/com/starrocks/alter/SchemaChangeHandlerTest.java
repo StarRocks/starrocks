@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.Index;
@@ -52,8 +53,11 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.TestWithFeService;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
@@ -192,6 +196,78 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     }
 
     @Test
+    public void testAggAddColumnWithoutAggTypeOrKeyIsRejected() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "sc_agg");
+
+        // Pin the config and assert the guard itself, not whichever default the branch ships.
+        // The compiled default is expected to differ between branches over time.
+        boolean saved = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = false;
+        try {
+            // Neither an agg function nor KEY: ambiguous, so it must be rejected rather than silently
+            // promoted to a key column.
+            AlterTableStmt ambiguous = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "alter table test.sc_agg add column amb_col int default '0'");
+            DdlException exception = Assertions.assertThrows(DdlException.class, () ->
+                    new SchemaChangeHandler().process(ambiguous.getAlterClauseList(), db, tbl));
+            Assertions.assertTrue(exception.getMessage().contains("must specify either an aggregate function"),
+                    exception.getMessage());
+            Assertions.assertTrue(exception.getMessage().contains("allow_implicit_key_column_in_agg_add_column"),
+                    exception.getMessage());
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = saved;
+        }
+
+        // A type that cannot be a key column keeps its own pre-existing message, because KEY is not
+        // a legal alternative for it and the new message must not suggest one. That rejection runs
+        // ahead of the config check, so it must hold whichever default a branch ships.
+        for (boolean allowImplicitKey : new boolean[] {false, true}) {
+            Config.allow_implicit_key_column_in_agg_add_column = allowImplicitKey;
+            try {
+                AlterTableStmt nonKeyable = (AlterTableStmt) parseAndAnalyzeStmt(
+                        "alter table test.sc_agg add column amb_float float default '0'");
+                DdlException floatException = Assertions.assertThrows(DdlException.class, () ->
+                        new SchemaChangeHandler().process(nonKeyable.getAlterClauseList(), db, tbl));
+                Assertions.assertTrue(floatException.getMessage().contains("type can not be key column"),
+                        "allowImplicitKey=" + allowImplicitKey + ": " + floatException.getMessage());
+            } finally {
+                Config.allow_implicit_key_column_in_agg_add_column = saved;
+            }
+        }
+    }
+
+    @Test
+    public void testAggAddColumnWithoutAggTypeAllowedByConfig() throws Exception {
+        // Own table, so the implicit key column this adds cannot disturb the schema assertions in
+        // the other aggregate tests, which run after this one under MethodName ordering.
+        createTable("CREATE TABLE test.sc_agg_legacy_key (\n"
+                + "user_id LARGEINT NOT NULL,\n"
+                + "dt DATE NOT NULL,\n"
+                + "cost BIGINT SUM DEFAULT '0')\n"
+                + "AGGREGATE KEY(user_id, dt)\n"
+                + "DISTRIBUTED BY HASH(user_id) BUCKETS 1\n"
+                + "PROPERTIES ('replication_num' = '1');");
+
+        boolean saved = Config.allow_implicit_key_column_in_agg_add_column;
+        Config.allow_implicit_key_column_in_agg_add_column = true;
+        try {
+            executeAlterAndWaitDone(
+                    "alter table test.sc_agg_legacy_key add column legacy_k int default '1'");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "sc_agg_legacy_key");
+            Column legacyCol = tbl.getColumn("legacy_k");
+            Assertions.assertNotNull(legacyCol);
+            Assertions.assertTrue(legacyCol.isKey(), "legacy config should restore the implicit key column");
+        } finally {
+            Config.allow_implicit_key_column_in_agg_add_column = saved;
+        }
+    }
+
+    @Test
     public void testAggAddOrDropColumn() throws Exception {
         LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames(new ConnectContext()));
 
@@ -229,7 +305,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         }
 
         //process agg add  key column schema change
-        String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int default '1'";
+        String addKeyColStmtStr = "alter table test.sc_agg add column new_k1 int key default '1'";
         AlterTableStmt addKeyColStmt = (AlterTableStmt) parseAndAnalyzeStmt(addKeyColStmtStr);
         DDLStmtExecutor.execute(addKeyColStmt, connectContext);
 
@@ -1227,6 +1303,136 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
         Assertions.assertEquals(originalComment, table.getColumn(columnName).getComment(), exception.getMessage());
         Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(table.getId()).isEmpty());
         Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    private static final String BITMAP_UNSUPPORTED_SUFFIX = " is not supported in bitmap index. invalid column: ";
+
+    private OlapTable createBitmapIndexedTable(String tableName, boolean fastSchemaEvolution) throws Exception {
+        createTable("CREATE TABLE test." + tableName + " (k BIGINT NOT NULL, x INT, s VARCHAR(16), d DECIMAL(38,9), y INT,"
+                + " INDEX ix_x (x) USING BITMAP, INDEX ix_s (s) USING BITMAP, INDEX ix_d (d) USING BITMAP)"
+                + " DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
+                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = '" + fastSchemaEvolution + "');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        return (OlapTable) db.getTable(tableName);
+    }
+
+    private boolean hasAlterJobOf(SchemaChangeHandler handler, OlapTable table) {
+        return handler.getAlterJobsV2().values().stream().anyMatch(job -> job.getTableId() == table.getId());
+    }
+
+    private void assertBitmapModifyRejected(OlapTable table, String alterClauses, String columnName) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test." + table.getName() + " " + alterClauses);
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(stmt.getAlterClauseList(), db, table), alterClauses);
+        Assertions.assertTrue(e.getMessage().contains(BITMAP_UNSUPPORTED_SUFFIX + columnName), e.getMessage());
+        Assertions.assertFalse(e.getMessage().contains(SchemaChangeHandler.SHADOW_NAME_PREFIX), e.getMessage());
+        Assertions.assertFalse(hasAlterJobOf(handler, table), alterClauses);
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testModifyBitmapIndexedColumnToUnsupportedTypeIsRejected() throws Exception {
+        OlapTable table = createBitmapIndexedTable("bm_mod_reject", true);
+        assertBitmapModifyRejected(table, "MODIFY COLUMN x DOUBLE", "x");
+        assertBitmapModifyRejected(table, "MODIFY COLUMN s DOUBLE", "s");
+        assertBitmapModifyRejected(table, "MODIFY COLUMN d DECIMAL(76,20)", "d");
+        Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
+        Assertions.assertEquals(16, ((ScalarType) table.getColumn("s").getType()).getLength());
+        Assertions.assertEquals(PrimitiveType.DECIMAL128, table.getColumn("d").getPrimitiveType());
+    }
+
+    @Test
+    public void testModifyBitmapIndexedColumnMatchesIndexColumnCaseInsensitively() throws Exception {
+        createTable("CREATE TABLE test.bm_case_reject (k BIGINT NOT NULL, x INT,"
+                + " INDEX ix_x (x) USING BITMAP) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
+                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("bm_case_reject");
+        // An index created before column ids existed may keep the spelling typed in the INDEX clause.
+        table.setIndexes(List.of(new Index("ix_x", List.of(ColumnId.create("X")), IndexDef.IndexType.BITMAP, "")));
+        assertBitmapModifyRejected(table, "MODIFY COLUMN x DOUBLE", "x");
+        Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType());
+    }
+
+    @Test
+    public void testIncompatibleTypeChangeKeepsItsOwnMessageUnderBitmapIndex() throws Exception {
+        createTable("CREATE TABLE test.bm_date_incompat (k BIGINT NOT NULL, dt DATE,"
+                + " INDEX ix_dt (dt) USING BITMAP) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1"
+                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("bm_date_incompat");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test.bm_date_incompat MODIFY COLUMN dt DOUBLE");
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> handler.process(stmt.getAlterClauseList(), db, table));
+        Assertions.assertFalse(e.getMessage().contains(BITMAP_UNSUPPORTED_SUFFIX), e.getMessage());
+        Assertions.assertFalse(hasAlterJobOf(handler, table));
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testAddBitmapIndexAndModifyColumnInOneStatementIsRejected() throws Exception {
+        OlapTable table = createBitmapIndexedTable("bm_add_mod_reject", true);
+        assertBitmapModifyRejected(table, "ADD INDEX ix_y (y) USING BITMAP, MODIFY COLUMN y DOUBLE", "y");
+        assertBitmapModifyRejected(table, "MODIFY COLUMN y DOUBLE, ADD INDEX ix_y (y) USING BITMAP", "y");
+        Assertions.assertEquals(IntegerType.INT, table.getColumn("y").getType());
+    }
+
+    @Test
+    public void testModifyBitmapIndexedColumnToSupportedTypeIsAccepted() throws Exception {
+        OlapTable table = createBitmapIndexedTable("bm_mod_accept", false);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        int jobCount = handler.getAlterJobsV2().size();
+        for (String clauses : new String[] {"DROP INDEX ix_x, MODIFY COLUMN x DOUBLE",
+                "MODIFY COLUMN x DOUBLE, DROP INDEX ix_x", "MODIFY COLUMN x BIGINT", "MODIFY COLUMN x VARCHAR(32)"}) {
+            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt("ALTER TABLE test.bm_mod_accept " + clauses);
+            Assertions.assertNotNull(handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table), clauses);
+            Assertions.assertEquals(jobCount, handler.getAlterJobsV2().size(), clauses);
+            Assertions.assertEquals(IntegerType.INT, table.getColumn("x").getType(), clauses);
+        }
+
+        createTable("CREATE TABLE test.bm_mod_accept_agg (kx INT NOT NULL, kh INT NOT NULL, v BIGINT SUM,"
+                + " INDEX ix_kx (kx) USING BITMAP) AGGREGATE KEY(kx, kh) DISTRIBUTED BY HASH(kh) BUCKETS 1"
+                + " PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'false');");
+        OlapTable aggTable = (OlapTable) db.getTable("bm_mod_accept_agg");
+        AlterTableStmt aggStmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                "ALTER TABLE test.bm_mod_accept_agg MODIFY COLUMN kx BIGINT KEY");
+        Assertions.assertNotNull(handler.analyzeAndCreateJob(aggStmt.getAlterClauseList(), db, aggTable));
+        Assertions.assertEquals(jobCount, handler.getAlterJobsV2().size());
+        Assertions.assertEquals(IntegerType.INT, aggTable.getColumn("kx").getType());
+    }
+
+    @Test
+    public void testWidenBitmapIndexedVarcharColumn() throws Exception {
+        OlapTable table = createBitmapIndexedTable("bm_widen_varchar", true);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Map<Long, AlterJobV2> before = new HashMap<>(handler.getAlterJobsV2());
+        List<AlterJobV2> added = new LinkedList<>();
+        try {
+            AlterTableStmt stmt = (AlterTableStmt) parseAndAnalyzeStmt(
+                    "ALTER TABLE test.bm_widen_varchar MODIFY COLUMN s VARCHAR(32)");
+            handler.process(stmt.getAlterClauseList(), db, table);
+            handler.getAlterJobsV2().forEach((id, job) -> {
+                if (!before.containsKey(id)) {
+                    added.add(job);
+                }
+            });
+            for (AlterJobV2 job : added) {
+                while (!job.getJobState().isFinalState()) {
+                    Thread.sleep(100);
+                }
+                Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+            }
+            Assertions.assertEquals(32, ((ScalarType) table.getColumn("s").getType()).getLength());
+            Assertions.assertTrue(table.getIndexes().stream().anyMatch(index -> index.getIndexName().equals("ix_s")));
+            Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        } finally {
+            added.forEach(job -> handler.getAlterJobsV2().remove(job.getJobId()));
+        }
     }
 
     private void assertSortKey(OlapTable tbl, List<Integer> expectedSortKeyIndexes) {

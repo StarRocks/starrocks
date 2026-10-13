@@ -96,6 +96,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -125,6 +126,31 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         }
         SETTER_MAP = builder.build();
+    }
+
+    /**
+     * How a load may spread one tablet's write across compute nodes.
+     *
+     * <p>AUTO covers the one shape that has no other way to fill the cluster: a table on a
+     * range-bucket distribution whose partition still has fewer tablets than the load is worth
+     * writers -- i.e. pre-split did not run or did not manage to split. Every key type qualifies:
+     * rows sharing a key are routed by a hash of the key columns and so meet in one writer, which
+     * leaves nothing about the result depending on which node wrote which row, and therefore nothing
+     * to put to the user before turning it on.
+     *
+     * <p>A hash-bucket table is left to FORCE -- not because spreading it would be wrong, but
+     * because it can simply be given more buckets to fill the cluster.
+     */
+    public enum MultiNodeTabletWriteMode {
+        OFF,
+        AUTO,
+        FORCE
+    }
+
+    public enum PaimonReaderMode {
+        AUTO,
+        JNI,
+        NATIVE
     }
 
     public enum BinaryEncodingFormat {
@@ -244,6 +270,52 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_EXPLAIN_IN_PROFILE = "enable_explain_in_profile";
     public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
     public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
+
+    /**
+     * Shared-data only. When on, a load writes each row into a delta writer on the compute node its
+     * sink instance already runs on, instead of sending it to the single node the tablet is assigned
+     * to. That both spreads a single tablet's write across the cluster and removes the network hop.
+     * <p>
+     * Only takes effect while a partition has fewer tablets than the width this load is actually
+     * spread over -- the smallest of the size-derived node count, lake_multi_node_write_max_nodes,
+     * and the alive compute nodes (createLocation's spreadsIndex). NOT the warehouse size: a load
+     * worth three writers landing on a five-tablet partition is already spread wider than it asked
+     * for, and above that width bucket-level parallelism already fills the cluster, so writing
+     * locally would give up read-side cache locality (a tablet has one owner and scans are
+     * scheduled to it) for nothing.
+     * <p>
+     * Rows sharing a key are not spread across nodes: an aggregate, unique or primary key table
+     * routes by a hash of the key columns, so all of a key's rows reach one node and resolve against
+     * each other in arrival order exactly as they do on the single-node path. A DUPLICATE KEY table
+     * keeps every row where it was produced, its rowset being the union of its segments.
+     */
+    public static final String LAKE_MULTI_NODE_TABLET_WRITE_MODE = "lake_multi_node_tablet_write_mode";
+
+    /**
+     * Upper bound on how many compute nodes may write ONE tablet. Every node in a tablet's location
+     * opens its own delta writer and produces its own segments, so a very wide warehouse would split
+     * one load into many small segments. Nodes left out still run their sink instance -- their rows
+     * travel, which is the behaviour that existed before this feature -- so the bound costs locality
+     * but never correctness. <= 0 means no bound (every alive compute node).
+     */
+    public static final String LAKE_MULTI_NODE_WRITE_MAX_NODES = "lake_multi_node_write_max_nodes";
+
+    /**
+     * How many bytes of a load one node should be given before another node is added to a tablet's
+     * write set. The node count is the estimated load size divided by this, then capped by
+     * lake_multi_node_write_max_nodes and by the number of alive compute nodes.
+     * <p>
+     * Spreading is not free: every node in a tablet's node list writes its own segments and emits its
+     * own partial txn log, and open/close reach every node in that list whether or not it ends up with
+     * any rows. So a small load spread wide pays one extra segment and one extra log per node and gets
+     * little back -- the measured speedup is ~1.35x at 5 GB against ~3x at 20-50 GB.
+     * <p>
+     * Which is why streaming ingest is refused outright rather than sized (OlapTableSink.
+     * writerNodeCount): stream and routine load set no estimate, so sizing them would fall back to
+     * lake_multi_node_write_max_nodes and hand the widest spread to the smallest, most frequent
+     * writes -- precisely the cost this knob exists to bound.
+     */
+    public static final String LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE = "lake_multi_node_write_bytes_per_node";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -528,6 +600,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+    public static final String CBO_PUSH_DOWN_COUNT_AGGREGATE = "cbo_push_down_count_aggregate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
@@ -764,6 +837,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FILE_PAGECACHE = "enable_file_pagecache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
+    public static final String PAIMON_READER_MODE = "paimon_reader_mode";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -957,6 +1031,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    public static final String MAX_ARRAY_LENGTH = "max_array_length";
+
     // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
     public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
@@ -1059,6 +1135,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+    public static final String ENABLE_AI_TOPN_PUSHDOWN = "enable_ai_topn_pushdown";
+    public static final String AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT = "ai_topn_pushdown_max_global_limit";
+
     public static final String CBO_PUSHDOWN_DISTINCT_LIMIT = "cbo_push_down_distinct_limit";
 
     public static final String ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT = "enable_aggregation_pipeline_share_limit";
@@ -1157,6 +1236,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
     public static final String ENABLE_PREDICATE_EXPR_REUSE = "enable_predicate_expr_reuse";
+    public static final String ENABLE_SHARE_JSON_PARSE = "enable_share_json_parse";
+    public static final String SHARE_JSON_PARSE_MIN_EXTRACTIONS = "share_json_parse_min_extractions";
     public static final String ENABLE_PARQUET_READER_BLOOM_FILTER = "enable_parquet_reader_bloom_filter";
     public static final String ENABLE_PARQUET_READER_PAGE_INDEX = "enable_parquet_reader_page_index";
 
@@ -1379,6 +1460,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = LOAD_MEM_LIMIT)
     private long loadMemLimit = 0L;
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_TABLET_WRITE_MODE)
+    private String lakeMultiNodeTabletWriteMode = "auto";
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_WRITE_MAX_NODES)
+    private int lakeMultiNodeWriteMaxNodes = 6;
+
+    @VariableMgr.VarAttr(name = LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE)
+    private long lakeMultiNodeWriteBytesPerNode = 2147483648L;
 
     @VariableMgr.VarAttr(name = QUERY_MEM_LIMIT)
     private long queryMemLimit = 0L;
@@ -2175,6 +2265,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT, flag = VariableMgr.INVISIBLE)
     private long cboPushDownAggregateOnBroadcastJoinRowCountLimit = 250000;
 
+    @VarAttr(name = CBO_PUSH_DOWN_COUNT_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private boolean cboPushDownCountAggregate = true;
+
     @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
     private boolean cboEnableIntersectAddDistinct = true;
 
@@ -2289,6 +2382,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+    @VarAttr(name = ENABLE_AI_TOPN_PUSHDOWN, flag = VariableMgr.INVISIBLE)
+    private boolean enableAiTopnPushdown = true;
+
+    // Larger limits use per-instance candidates; zero selects the local path for all eligible limits.
+    @VarAttr(name = AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)
+    private long aiTopnPushdownMaxGlobalLimit = 1000;
+
     @VarAttr(name = CBO_PUSHDOWN_DISTINCT_LIMIT)
     private long cboPushDownDistinctLimit = 4096;
 
@@ -2324,6 +2424,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enablePredicateExprReuse = true;
+
+    // Parse a VARCHAR document once when several get_json_xxx calls in one projection read it.
+    @VarAttr(name = ENABLE_SHARE_JSON_PARSE, flag = VariableMgr.INVISIBLE)
+    private boolean enableShareJsonParse = true;
+
+    // Minimum number of distinct get_json_xxx calls on one VARCHAR document before its parse is shared.
+    @VarAttr(name = SHARE_JSON_PARSE_MIN_EXTRACTIONS, flag = VariableMgr.INVISIBLE)
+    private int shareJsonParseMinExtractions = 2;
 
     @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
     private int topnFilterBackPressureMode = 0;
@@ -2619,6 +2727,27 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
+    public boolean isEnableAiTopnPushdown() {
+        return enableAiTopnPushdown;
+    }
+
+    public void setEnableAiTopnPushdown(boolean enableAiTopnPushdown) {
+        this.enableAiTopnPushdown = enableAiTopnPushdown;
+    }
+
+    public long getAiTopnPushdownMaxGlobalLimit() {
+        return aiTopnPushdownMaxGlobalLimit;
+    }
+
+    public void setAiTopnPushdownMaxGlobalLimit(long aiTopnPushdownMaxGlobalLimit) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (aiTopnPushdownMaxGlobalLimit < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, aiTopnPushdownMaxGlobalLimit, "a non-negative integer");
+        }
+        this.aiTopnPushdownMaxGlobalLimit = aiTopnPushdownMaxGlobalLimit;
+    }
+
     public long cboPushDownDistinctLimit() {
         return cboPushDownDistinctLimit;
     }
@@ -2900,6 +3029,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_FORCE_JNI_READER)
     private boolean paimonForceJNIReader = false;
 
+    @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
+    private String paimonReaderMode = PaimonReaderMode.AUTO.name();
+
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3115,6 +3247,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
     private long groupConcatMaxLen = 1024;
+
+    // Maximum number of elements in an array produced by an array function. A query that exceeds it
+    // fails instead of returning an oversized array. 0 or negative means unlimited. This is meant to
+    // cover every array-producing function, but only array_agg enforces it so far.
+    @VariableMgr.VarAttr(name = MAX_ARRAY_LENGTH)
+    private long maxArrayLength = 0;
 
     @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
     private long fullSortMaxBufferedRows = 1 * 1024 * 1024 * 1024;
@@ -3697,6 +3835,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.exprChildrenLimit = exprChildrenLimit;
     }
 
+    public long getMaxArrayLength() {
+        return maxArrayLength;
+    }
+
+    public void setMaxArrayLength(long maxArrayLength) {
+        this.maxArrayLength = maxArrayLength;
+    }
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -3791,6 +3937,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getPaimonForceJNIReader() {
         return paimonForceJNIReader;
+    }
+
+    public PaimonReaderMode getPaimonReaderMode() {
+        // The SET path is validated by PaimonReaderModeConverter, but the raw string can also be
+        // written through non-validated paths (e.g. the reflective setter), so parse defensively
+        // instead of throwing IllegalArgumentException at plan time.
+        try {
+            return PaimonReaderMode.valueOf(paimonReaderMode.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return PaimonReaderMode.AUTO;
+        }
+    }
+
+    public void setPaimonReaderMode(String paimonReaderMode) {
+        this.paimonReaderMode = paimonReaderMode.toUpperCase(Locale.ROOT);
     }
 
     public boolean getAvroUseJNIReader() {
@@ -4078,6 +4239,50 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getLoadMemLimit() {
         return loadMemLimit;
+    }
+
+    public String getLakeMultiNodeTabletWriteMode() {
+        return lakeMultiNodeTabletWriteMode;
+    }
+
+    // Named for the field so VariableMgr's SETTER_MAP picks it up: a bad mode must fail the SET
+    // rather than be stored and quietly read as something else later.
+    public void setLakeMultiNodeTabletWriteMode(String mode) {
+        this.lakeMultiNodeTabletWriteMode = parseMultiNodeTabletWriteMode(mode).name().toLowerCase();
+    }
+
+    public MultiNodeTabletWriteMode getMultiNodeTabletWriteMode() {
+        return parseMultiNodeTabletWriteMode(lakeMultiNodeTabletWriteMode);
+    }
+
+    // Public so a load that planned its sink from a persisted snapshot of this variable resolves the
+    // mode exactly as a SET does, rejection included.
+    public static MultiNodeTabletWriteMode parseMultiNodeTabletWriteMode(String mode) {
+        if (mode != null) {
+            for (MultiNodeTabletWriteMode candidate : MultiNodeTabletWriteMode.values()) {
+                if (candidate.name().equalsIgnoreCase(mode.trim())) {
+                    return candidate;
+                }
+            }
+        }
+        throw new SemanticException("Invalid " + LAKE_MULTI_NODE_TABLET_WRITE_MODE + ": '" + mode
+                + "'. Valid values are off, auto, force.");
+    }
+
+    public int getLakeMultiNodeWriteMaxNodes() {
+        return lakeMultiNodeWriteMaxNodes;
+    }
+
+    public void setLakeMultiNodeWriteMaxNodes(int lakeMultiNodeWriteMaxNodes) {
+        this.lakeMultiNodeWriteMaxNodes = lakeMultiNodeWriteMaxNodes;
+    }
+
+    public long getLakeMultiNodeWriteBytesPerNode() {
+        return lakeMultiNodeWriteBytesPerNode;
+    }
+
+    public void setLakeMultiNodeWriteBytesPerNode(long lakeMultiNodeWriteBytesPerNode) {
+        this.lakeMultiNodeWriteBytesPerNode = lakeMultiNodeWriteBytesPerNode;
     }
 
     public int getQueryTimeoutS() {
@@ -5264,6 +5469,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownAggregateOnBroadcastJoinRowCountLimit = cboPushDownAggregateOnBroadcastJoinRowCountLimit;
     }
 
+    public boolean isCboPushDownCountAggregate() {
+        return cboPushDownCountAggregate;
+    }
+
+    public void setCboPushDownCountAggregate(boolean cboPushDownCountAggregate) {
+        this.cboPushDownCountAggregate = cboPushDownCountAggregate;
+    }
+
     public String getCboPushDownAggregate() {
         return cboPushDownAggregate;
     }
@@ -6278,6 +6491,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enablePredicateExprReuse;
     }
 
+    public void setEnableShareJsonParse(boolean enableShareJsonParse) {
+        this.enableShareJsonParse = enableShareJsonParse;
+    }
+
+    public boolean isEnableShareJsonParse() {
+        return enableShareJsonParse;
+    }
+
+    public void setShareJsonParseMinExtractions(int shareJsonParseMinExtractions) {
+        this.shareJsonParseMinExtractions = shareJsonParseMinExtractions;
+    }
+
+    public int getShareJsonParseMinExtractions() {
+        return shareJsonParseMinExtractions;
+    }
+
     public int getConnectorIncrementalScanRangeNumber() {
         return connectorIncrementalScanRangeSize;
     }
@@ -6691,6 +6920,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setTransmission_encode_level(transmissionEncodeLevel);
         tResult.setGroup_concat_max_len(groupConcatMaxLen);
+        tResult.setMax_array_length(maxArrayLength);
         tResult.setRpc_http_min_size(rpcHttpMinSize);
         tResult.setInterleaving_group_size(interleavingGroupSize);
         tResult.setEnable_predicate_col_late_materialize(enablePredicateColLateMaterialize);

@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 import com.starrocks.sql.optimizer.skew.DataSkew;
@@ -124,6 +125,10 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         if (input.getOp() instanceof LogicalWindowOperator lwo) {
             if (lwo.isOpRuleBitSet(OP_SPLIT_WINDOW_SKEW)) {
+                return false;
+            }
+            OptExpression child = input.inputAt(0);
+            if (child.getOp().accept(new NonDeterministicVisitor(), child, null)) {
                 return false;
             }
 

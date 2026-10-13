@@ -59,8 +59,10 @@ public class BackupRestoreJobCopyForPersistTest {
         setField(job, "localJobInfoFilePath", "/tmp/job");
         setField(job, "backupFunctions", Lists.newArrayList());
         setField(job, "backupCatalogs", Lists.newArrayList());
+        job.setTtl("7 DAY");
 
         BackupJob copy = job.copyForPersist();
+        Assertions.assertEquals(job.getTtl(), copy.getTtl());
         assertFieldsEqual(job, copy,
                 "type",
                 "repoId",

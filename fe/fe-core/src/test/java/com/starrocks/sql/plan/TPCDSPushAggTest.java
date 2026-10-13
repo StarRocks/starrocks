@@ -93,6 +93,61 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 "  |       - filter_id = 3, probe_expr = (191: d_date)");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("testColumnlessPredicateProvider")
+    public void testJoinReorderKeepsColumnlessPredicate(String name, String sql) throws Exception {
+        // logicalJoinReorder runs before aggregate push-down (mode != -1), and the memo reorder runs in every mode.
+        // A predicate that uses no column must survive both, exactly once.
+        int oldMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        try {
+            for (int mode : new int[] {-1, 0, 1}) {
+                connectContext.getSessionVariable().setCboPushDownAggregateMode(mode);
+                String plan = getFragmentPlan(sql);
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"),
+                        "mode: " + mode + "\n" + plan);
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(oldMode);
+        }
+    }
+
+    @Test
+    public void testJoinReorderKeepsNestedColumnlessOnPredicate() throws Exception {
+        // rand() > 0.5 is evaluated once per (item, store) row. Moving it above the join with store_sales would
+        // evaluate it once per store_sales match instead, so the item-store join must not be reordered.
+        String sql = "select i_brand_id, s_store_name, sum(ss_quantity) from item join store on rand() > 0.5 " +
+                "join store_sales on ss_item_sk = i_item_sk and ss_store_sk = s_store_sk " +
+                "group by i_brand_id, s_store_name";
+        int oldMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        try {
+            for (int mode : new int[] {-1, 0, 1}) {
+                connectContext.getSessionVariable().setCboPushDownAggregateMode(mode);
+                String plan = getLogicalFragmentPlan(sql);
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand("), "mode: " + mode + "\n" + plan);
+                // Alone on its join: pulled up, it would be AND-ed with the store_sales join keys.
+                assertContains(plan, "INNER JOIN (join-predicate [rand(1) > 0.5] post-join-predicate [null])");
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(oldMode);
+        }
+    }
+
+    private static Stream<Arguments> testColumnlessPredicateProvider() {
+        return Stream.of(
+                Arguments.of("two tables",
+                        "select i_brand_id, sum(ss_quantity) from store_sales join item on ss_item_sk = i_item_sk " +
+                                "where rand() > 0.5 group by i_brand_id"),
+                Arguments.of("four tables",
+                        "select i_brand_id, s_store_name, sum(ss_quantity) from store_sales " +
+                                "join item on ss_item_sk = i_item_sk " +
+                                "join date_dim on ss_sold_date_sk = d_date_sk " +
+                                "join store on ss_store_sk = s_store_sk " +
+                                "where d_year = 2000 and rand() > 0.5 group by i_brand_id, s_store_name"),
+                Arguments.of("cross join",
+                        "select i_brand_id, s_store_name, count(*) from item, store " +
+                                "where rand() > 0.5 group by i_brand_id, s_store_name"));
+    }
+
     //    @ParameterizedTest(name = "{0}")
     //    @MethodSource("testPushDownProvider")
     public void debugTPCDSPushDownAgg(String sql, int orig, int auto, boolean autoChange, int force, boolean forceChange, int mid,
@@ -158,18 +213,22 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 // This is caused by the CTE. orig: CTE inline, auto~high: CTE
                 Arguments.of("Q04", 12, 12, true, 12, true, 12, true, 12, true),
                 Arguments.of("Q05", 8, 16, true, 16, true, 16, true, 16, true),
-                Arguments.of("Q08", 4, 6, true, 6, true, 6, true, 6, true),
+                Arguments.of("Q06", 6, 6, false, 8, true, 8, true, 8, true),
+                Arguments.of("Q08", 4, 6, true, 8, true, 6, true, 8, true),
                 Arguments.of("Q11", 8, 8, true, 8, true, 8, true, 8, true),
                 Arguments.of("Q12", 2, 2, false, 4, true, 4, true, 4, true),
+                Arguments.of("Q14_1", 16, 22, true, 22, true, 22, true, 22, true),
+                Arguments.of("Q14_2", 12, 16, true, 16, true, 16, true, 16, true),
                 Arguments.of("Q15", 2, 2, false, 4, true, 4, true, 4, true),
                 Arguments.of("Q19", 2, 2, false, 4, true, 2, false, 2, false),
                 Arguments.of("Q20", 2, 2, false, 4, true, 4, true, 4, true),
-                Arguments.of("Q23_1", 10, 13, true, 13, true, 13, true, 13, true),
+                Arguments.of("Q23_1", 10, 15, true, 15, true, 15, true, 15, true),
                 Arguments.of("Q24_1", 6, 6, false, 7, true, 6, false, 6, false),
                 Arguments.of("Q24_2", 6, 6, false, 7, true, 6, false, 6, false),
                 Arguments.of("Q30", 4, 4, false, 6, true, 4, false, 4, false),
                 Arguments.of("Q31", 4, 8, true, 8, true, 8, true, 8, true),
                 Arguments.of("Q33", 8, 8, false, 14, true, 14, true, 14, true),
+                Arguments.of("Q34", 2, 2, false, 4, true, 2, false, 2, false),
                 Arguments.of("Q37", 2, 2, false, 8, true, 6, true, 7, true),
                 Arguments.of("Q38", 8, 14, true, 20, true, 14, true, 17, true),
                 Arguments.of("Q41", 4, 4, false, 6, true, 4, false, 4, false),
@@ -189,10 +248,12 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q59", 2, 4, true, 4, true, 4, true, 4, true),
                 Arguments.of("Q60", 8, 8, false, 14, true, 14, true, 14, true),
                 Arguments.of("Q63", 2, 2, false, 4, true, 4, true, 4, true),
+                Arguments.of("Q64", 4, 4, false, 5, true, 4, false, 4, false),
                 Arguments.of("Q65", 6, 6, false, 10, true, 10, true, 10, true),
                 Arguments.of("Q68", 1, 1, false, 3, true, 1, false, 1, false),
                 Arguments.of("Q70", 4, 6, true, 6, true, 6, true, 6, true),
                 Arguments.of("Q71", 2, 2, false, 8, true, 8, true, 8, true),
+                Arguments.of("Q73", 2, 2, false, 4, true, 2, false, 2, false),
                 Arguments.of("Q74", 8, 8, true, 16, true, 16, true, 16, true),
                 Arguments.of("Q75", 4, 4, false, 16, true, 4, false, 4, false),
                 Arguments.of("Q77", 14, 26, true, 26, true, 26, true, 26, true),
@@ -213,14 +274,13 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
 
     private static Stream<Arguments> testUnPushDownProvider() {
         // orig(-1), auto(0), force(1), mid(2), high(3)
+        // Q10/Q69 gain one aggregate under force(1) only: their EXISTS subqueries become semi joins, and
+        // count() is pushable to a semi join's preserved side (PushDownAggregateUtils#canPushCountToJoinChild).
         Arguments[] cases = new Arguments[] {
-                Arguments.of("Q06", 6, 6, 6, 6, 6),
                 Arguments.of("Q07", 2, 2, 2, 2, 2),
                 Arguments.of("Q09", 30, 30, 30, 30, 30),
-                Arguments.of("Q10", 2, 2, 2, 2, 2),
+                Arguments.of("Q10", 2, 2, 3, 2, 2),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
-                Arguments.of("Q14_1", 16, 16, 16, 16, 16),
-                Arguments.of("Q14_2", 12, 12, 12, 12, 12),
                 Arguments.of("Q16", 4, 4, 4, 4, 4),
                 Arguments.of("Q17", 2, 2, 2, 2, 2),
                 Arguments.of("Q18", 2, 2, 2, 2, 2),
@@ -232,7 +292,6 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q28", 24, 24, 24, 24, 24),
                 Arguments.of("Q29", 2, 2, 2, 2, 2),
                 Arguments.of("Q32", 4, 4, 4, 4, 4),
-                Arguments.of("Q34", 2, 2, 2, 2, 2),
                 Arguments.of("Q35", 2, 2, 2, 2, 2),
                 Arguments.of("Q36", 2, 2, 2, 2, 2),
                 Arguments.of("Q39_1", 2, 2, 2, 2, 2),
@@ -244,12 +303,10 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 Arguments.of("Q50", 2, 2, 2, 2, 2),
                 Arguments.of("Q61", 4, 4, 4, 4, 4),
                 Arguments.of("Q62", 2, 2, 2, 2, 2),
-                Arguments.of("Q64", 4, 4, 4, 4, 4),
                 Arguments.of("Q66", 6, 6, 6, 6, 6),
                 Arguments.of("Q67", 2, 2, 2, 2, 2),
-                Arguments.of("Q69", 2, 2, 2, 2, 2),
+                Arguments.of("Q69", 2, 2, 3, 2, 2),
                 Arguments.of("Q72", 2, 2, 2, 2, 2),
-                Arguments.of("Q73", 2, 2, 2, 2, 2),
                 Arguments.of("Q76", 2, 2, 2, 2, 2),
                 Arguments.of("Q80", 8, 8, 8, 8, 8),
                 Arguments.of("Q84", 0, 0, 0, 0, 0),

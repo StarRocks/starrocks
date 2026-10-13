@@ -58,10 +58,10 @@ class FrameOfReferencePageTest : public testing::Test {
 public:
     template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, StorageCppType<type>* ret) {
-        LogicalType ltype = scalar_field_type_to_logical_type(type);
-        TypeDescriptor index_type(ltype);
-        // TODO(alvinz): To reuse this colum
-        auto column = ColumnHelper::create_column(index_type, false);
+        // Must build a storage-typed column (e.g. TYPE_DATETIME_V1 -> Int64Column) to match
+        // GetStorageContainer<type>, not the query-typed column (e.g. TYPE_DATETIME -> TimestampColumn)
+        // that scalar_field_type_to_logical_type() + ColumnHelper::create_column() would produce.
+        auto column = ChunkFactory::column_from_field_type(type, false);
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);

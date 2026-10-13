@@ -44,6 +44,7 @@ set(RUNTIME_TEST_FILES
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
     serde_core_test.cpp
+    geo_transport_test.cpp
     time_guard_test.cpp
     memory/mem_chunk_allocator_test.cpp
     memory/system_allocator_test.cpp
@@ -51,6 +52,8 @@ set(RUNTIME_TEST_FILES
     memory/counting_allocator_test.cpp
     memory/memory_allocator_test.cpp
     memory/memory_lock_test.cpp
+    memory/jemalloc_conf_updater_test.cpp
+    prof/heap_prof_test.cpp
 )
 
 set(RUNTIME_TEST_LINK_LIBS

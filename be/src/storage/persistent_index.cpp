@@ -55,7 +55,7 @@
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/persistent_index_parallel_publish_context.h"
+#include "storage/parallel_upsert_context.h"
 #include "storage/persistent_index_tablet_loader.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset.h"
@@ -3616,7 +3616,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     // TODO: Refactor the code to remove tmp slice array.
                     Buffer<Slice> keys;
                     TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
-                    if (pkc->is_binary() || pkc->is_large_binary()) {
+                    if (pkc->is_binary()) {
                         ColumnHelper::build_slices(pkc, keys);
                         st = insert(pkc->size(), keys.data(), values.data(), false);
                     } else {
@@ -4089,7 +4089,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat, ParallelPublishContext* ctx) {
+                               IOStat* stat, ParallelUpsertContext* ctx) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;
@@ -4124,6 +4124,12 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     Status st = _flush_advance_or_append_wal(n, keys, values, nullptr);
     if (stat != nullptr) {
         stat->flush_or_wal_cost += watch.elapsed_time();
+    }
+    if (ctx != nullptr) {
+        // old_values is complete by now -- this implementation never defers the lookup -- so the
+        // context is appended to here. See ParallelUpsertContext for why this is the only place that
+        // may do it.
+        ctx->add_replaced(old_values, n);
     }
     return st;
 }

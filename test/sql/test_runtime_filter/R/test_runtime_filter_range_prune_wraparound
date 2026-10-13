@@ -1,0 +1,60 @@
+-- name: test_runtime_filter_range_prune_wraparound
+CREATE TABLE p (a bigint NULL)
+DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO p
+SELECT generate_series FROM TABLE(generate_series(1, 100))
+UNION ALL SELECT -9223372036854775800
+UNION ALL SELECT 9223372036854775800;
+-- result:
+-- !result
+CREATE TABLE b_minus (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO b_minus SELECT generate_series - 4000 FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+CREATE TABLE b_plus (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO b_plus SELECT generate_series + 4000 FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+CREATE TABLE b_mul (k bigint NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO b_mul SELECT generate_series * 2 FROM TABLE(generate_series(1, 100));
+-- result:
+-- !result
+SELECT count(*) FROM (SELECT a - 4000 AS a FROM p) x JOIN [broadcast] b_minus b ON x.a = b.k;
+-- result:
+100
+-- !result
+SELECT count(*) FROM (SELECT a + 4000 AS a FROM p) x JOIN [broadcast] b_plus b ON x.a = b.k;
+-- result:
+100
+-- !result
+SELECT count(*) FROM (SELECT a * 2 AS a FROM p) x JOIN [broadcast] b_mul b ON x.a = b.k;
+-- result:
+101
+-- !result
+SELECT count(*) FROM p JOIN [broadcast] b_minus b ON p.a = b.k + 4000;
+-- result:
+100
+-- !result
+SELECT count(*) FROM p JOIN [broadcast] (SELECT generate_series AS k FROM TABLE(generate_series(1, 100))) b ON p.a = b.k;
+-- result:
+100
+-- !result

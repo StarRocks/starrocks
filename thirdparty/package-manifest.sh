@@ -75,6 +75,7 @@ starrocks_set_default_packages() {
         librdkafka
         pulsar
         s2
+        h3
         bitshuffle
         croaringbitmap
         cctz
@@ -115,10 +116,14 @@ starrocks_set_default_packages() {
         blake3
         pprof
         benchgen
+        paimon_cpp
+        libdeflate
+        libnl
+        nsjail
     )
 
     if [[ "${machine_type}" != "aarch64" ]]; then
-        STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad libdeflate)
+        STARROCKS_THIRDPARTY_ALL_PACKAGES+=(breakpad)
     fi
 
     if [[ "$(uname -s)" == "Darwin" ]]; then

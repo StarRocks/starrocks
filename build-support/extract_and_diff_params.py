@@ -43,6 +43,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -64,16 +65,16 @@ BE_CONFIG_PATH = REPO_ROOT / "be/src/common/config.h"
 # ── Documentation paths ──────────────────────────────────────────────────────
 
 FE_PARAM_DOCS = [
-    REPO_ROOT / "docs/en/administration/management/FE_parameters/log_server_meta.md",
-    REPO_ROOT / "docs/en/administration/management/FE_parameters/user_query_loading.md",
-    REPO_ROOT / "docs/en/administration/management/FE_parameters/stats_storage.md",
-    REPO_ROOT / "docs/en/administration/management/FE_parameters/shared_lake_other.md",
+    REPO_ROOT / "docs/en/administration/configuration/FE_parameters/log_server_meta.md",
+    REPO_ROOT / "docs/en/administration/configuration/FE_parameters/user_query_loading.md",
+    REPO_ROOT / "docs/en/administration/configuration/FE_parameters/stats_storage.md",
+    REPO_ROOT / "docs/en/administration/configuration/FE_parameters/shared_lake_other.md",
 ]
 BE_PARAM_DOCS = [
-    REPO_ROOT / "docs/en/administration/management/BE_parameters/log_server_meta.md",
-    REPO_ROOT / "docs/en/administration/management/BE_parameters/query_loading.md",
-    REPO_ROOT / "docs/en/administration/management/BE_parameters/stats_storage.md",
-    REPO_ROOT / "docs/en/administration/management/BE_parameters/shared_lake_other.md",
+    REPO_ROOT / "docs/en/administration/configuration/BE_parameters/log_server_meta.md",
+    REPO_ROOT / "docs/en/administration/configuration/BE_parameters/query_loading.md",
+    REPO_ROOT / "docs/en/administration/configuration/BE_parameters/stats_storage.md",
+    REPO_ROOT / "docs/en/administration/configuration/BE_parameters/shared_lake_other.md",
 ]
 SESSION_VAR_DOCS = [
     REPO_ROOT / "docs/en/sql-reference/System_variable.md",
@@ -369,7 +370,7 @@ def parse_fe_configs(path: Path) -> dict[str, ParamInfo]:
                 default=default,
                 mutable=bool(re.search(r"mutable\s*=\s*true", ann_text)),
                 description=description,
-                suggested_doc="docs/en/administration/management/FE_parameters/",
+                suggested_doc="docs/en/administration/configuration/FE_parameters/",
             )
 
         i += 1
@@ -417,7 +418,7 @@ def parse_be_configs(path: Path) -> dict[str, ParamInfo]:
                     default=default,
                     mutable=bool(mutable_flag),
                     description=_preceding_comment(lines, idx),
-                    suggested_doc="docs/en/administration/management/BE_parameters/",
+                    suggested_doc="docs/en/administration/configuration/BE_parameters/",
                 )
     return params
 
@@ -567,11 +568,25 @@ _DOC_HEADING_RE = re.compile(r"^#{2,4}\s+[`']?([a-z_][a-z0-9_]*)[`']?")
 
 
 def parse_doc_params(doc_paths: list[Path]) -> set[str]:
-    """Extract documented parameter names from Markdown heading lines."""
+    """
+    Extract documented parameter names from Markdown heading lines.
+
+    A missing path is a hard error rather than a skip. Silently skipping is how
+    this check previously rotted: the parameter reference moved from
+    docs/en/administration/management/ to docs/en/administration/configuration/
+    and every doc path stopped resolving, which emptied the documented-name set
+    and would have reported every parameter as undocumented.
+    """
+    missing = [str(p.relative_to(REPO_ROOT)) for p in doc_paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "documentation path(s) not found: "
+            + ", ".join(missing)
+            + " — update the *_PARAM_DOCS lists in this script if the docs moved"
+        )
+
     names: set[str] = set()
     for path in doc_paths:
-        if not path.exists():
-            continue
         for line in path.read_text().splitlines():
             m = _DOC_HEADING_RE.match(line)
             if m:
@@ -592,17 +607,28 @@ def get_new_param_names_from_diff(
     introduced in the current branch, avoiding noise from the pre-existing backlog.
     Pass --diff-base to override the comparison ref (e.g. origin/branch-4.1 for
     release-branch PRs, or HEAD^1 when running against a merge commit).
+
+    A failed diff raises rather than returning an empty set. An empty set is
+    indistinguishable from "this PR adds no parameters", which would make a
+    broken ref, a missing git binary, or a timeout report a clean bill of health.
     """
+    cmd = ["git", "diff", diff_base, "--"] + [str(p) for p in source_paths]
     try:
         result = subprocess.run(
-            ["git", "diff", diff_base, "--"] + [str(p) for p in source_paths],
+            cmd,
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
             timeout=30,
+            check=True,
         )
-    except (subprocess.SubprocessError, FileNotFoundError):
-        return set()
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(
+            f"'{' '.join(cmd)}' exited {exc.returncode}: "
+            f"{(exc.stderr or '').strip()}"
+        ) from exc
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise RuntimeError(f"could not run '{' '.join(cmd)}': {exc}") from exc
 
     names: set[str] = set()
     for line in result.stdout.splitlines():
@@ -734,7 +760,7 @@ def _fmt_github_comment(
 
     out.append(
         "_Auto-generated by `build-support/extract_and_diff_params.py`. "
-        "See `docs/en/administration/management/` for the doc files to update._"
+        "See `docs/en/administration/configuration/` for the doc files to update._"
     )
     return "\n".join(out)
 
@@ -793,6 +819,16 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--print-doc-paths",
+        action="store_true",
+        help=(
+            "Print the repo-relative documentation paths this script reads, one "
+            "per line, and exit. CI uses this to materialize the same set of doc "
+            "files from the PR head instead of hardcoding a second copy of the "
+            "list in the workflow."
+        ),
+    )
+    ap.add_argument(
         "--fe-config", type=Path, default=FE_CONFIG_PATH,
         help="Path to Config.java",
     )
@@ -828,6 +864,11 @@ def main() -> int:
         help="Only process this single parameter name (useful for testing AI descriptions)",
     )
     args = ap.parse_args()
+
+    if args.print_doc_paths:
+        for path in FE_PARAM_DOCS + BE_PARAM_DOCS + SESSION_VAR_DOCS:
+            print(path.relative_to(REPO_ROOT))
+        return 0
 
     # Extract from source code
     fe_params = parse_fe_configs(args.fe_config)
@@ -946,4 +987,17 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Exit codes are part of this script's contract with
+    # .github/workflows/ci-doc-param-drift.yml:
+    #   0 = no gaps, 1 = gaps found, 2 = the checker itself could not run.
+    # A broken checker must not share an exit code with either verdict, or CI
+    # will mistake it for a result and post a comment built from nothing.
+    # Catch Exception, not just the expected failures: an uncaught exception
+    # would exit 1, which CI reads as "gaps found", and it would then post a
+    # report built from empty stdout. SystemExit derives from BaseException, so
+    # the intentional 0 and 1 returns from main() pass through untouched.
+    try:
+        sys.exit(main())
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(2)

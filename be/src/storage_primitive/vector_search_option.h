@@ -38,7 +38,11 @@ public:
 
     std::map<std::string, std::string> query_params;
 
-    double vector_range;
+    double vector_range = -1;
+
+    // Do not infer this solely from vector_range: cosine similarity and inner product both allow
+    // negative range bounds. Readers still accept the legacy non-negative sentinel convention.
+    bool has_vector_range = false;
 
     int result_order;
 

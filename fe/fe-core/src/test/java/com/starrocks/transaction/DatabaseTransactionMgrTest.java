@@ -68,6 +68,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
@@ -137,6 +138,7 @@ public class DatabaseTransactionMgrTest {
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
         fakeTransactionIDGenerator = new FakeTransactionIDGenerator();
         masterGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
+        masterGlobalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
         slaveGlobalStateMgr = GlobalStateMgrTestUtil.createTestState();
 
         origin_enable_metric_calculator_value = Config.enable_metric_calculator;
@@ -148,6 +150,8 @@ public class DatabaseTransactionMgrTest {
         slaveTransMgr = slaveGlobalStateMgr.getGlobalTransactionMgr();
 
         lableToTxnId = addTransactionToTransactionMgr();
+        // That helper ends on the follower after replaying; the tests below commit on the leader.
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
     }
 
     @AfterEach
@@ -1853,5 +1857,55 @@ public class DatabaseTransactionMgrTest {
         } finally {
             masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, txnId, "cleanup");
         }
+    }
+
+    @Test
+    public void testReplayFinalTransactionStateTwiceEnqueuesOnce() throws AnalysisException {
+        // A follower replays whatever the leader logged. setUp() already replayed txn1 as VISIBLE once;
+        // replaying the same final state again, as a fresh object like a deserialized edit log entry, must
+        // not add a second deque entry, otherwise the label cleaner pops it after the label mapping is gone.
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        // The first replay already advanced the catalog and the lake applier rejects the same version twice;
+        // the subject here is only the bookkeeping of the transaction manager, so the applier is a no-op
+        // (the batch replay path only exists for lake tables).
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+        new MockUp<LakeTableTxnLogApplier>() {
+            @Mock
+            public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+            }
+
+            @Mock
+            public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+            }
+        };
+        DatabaseTransactionMgr slaveDbTransMgr =
+                slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+
+        TransactionState replayedAgain = new TransactionState(fakeEditLog.getTransaction(txnId1));
+        assertEquals(TransactionStatus.VISIBLE, replayedAgain.getTransactionStatus());
+        slaveTransMgr.replayUpsertTransactionState(replayedAgain);
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+        Assertions.assertSame(replayedAgain, slaveDbTransMgr.getTransactionState(txnId1));
+
+        // the batch path records the final state through the same containers
+        TransactionState replayedInBatch = new TransactionState(fakeEditLog.getTransaction(txnId1));
+        slaveTransMgr.replayUpsertTransactionStateBatch(
+                new TransactionStateBatch(Lists.newArrayList(replayedInBatch)));
+        assertEquals(1, slaveDbTransMgr.getFinishedTxnNums());
+        Assertions.assertSame(replayedInBatch, slaveDbTransMgr.getTransactionState(txnId1));
+
+        // the label cleaner drops the single entry together with its label mapping
+        Config.label_keep_max_second = -1;
+        slaveDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertEquals(0, slaveDbTransMgr.getFinishedTxnNums());
+        assertNull(slaveDbTransMgr.getTransactionState(txnId1));
+        assertNull(slaveDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable1));
     }
 }

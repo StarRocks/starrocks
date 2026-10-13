@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <unordered_set>
 
 #include "base/status.h"
 #include "base/status_fmt.hpp"
@@ -80,6 +81,15 @@ Status init_global_dicts_for_scan_node(RuntimeState* state, ObjectPool* pool, co
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             dicts->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
+        } else if (slot->type().type == TYPE_INT && is_string_type(tablet_schema->column(index).type())) {
+            // The plan typed this slot as the dictionary code while storage holds the string, so the
+            // caller is asking to read it dictionary-encoded. Skipping quietly leaves the reader to
+            // return the raw string into an int column, which surfaces far away as a decode failure
+            // against a "key" that is really string bytes, or as an out-of-bounds access.
+            return Status::InternalError(
+                    fmt::format("no global dict for slot {} ({}), which the plan reads as a dictionary code; "
+                                "query_global_dicts carries {} entries",
+                                slot->id(), slot->col_name(), global_dict_map.size()));
         }
     }
     *global_dicts = dicts;
@@ -99,6 +109,19 @@ Status init_read_schema(const TabletSchemaCSPtr& tablet_schema, const std::vecto
     std::sort(scanner_columns.begin(), scanner_columns.end());
     *read_schema = ChunkHelper::convert_schema(tablet_schema, scanner_columns);
     return Status::OK();
+}
+
+// Set up the encoded and output schema of a lookup iterator the way TabletReader does for a scan.
+// Without it, output_schema() still types a global-dict column as the string. The plain dict path
+// gets away with that because it swaps its own code column into the chunk, but the force-encode
+// path builds its global-id column from output_schema() and then writes codes into it as a
+// LowCardDictColumn. A string column there gets its offsets overwritten, and the corruption only
+// surfaces later, e.g. as std::length_error when the fetched chunk is appended.
+Status init_iterator_schema(ChunkIterator* iter, ColumnIdToGlobalDictMap* global_dicts) {
+    static const std::unordered_set<uint32_t> kNoUnusedOutputColumns;
+    DCHECK(global_dicts != nullptr);
+    RETURN_IF_ERROR(iter->init_encoded_schema(*global_dicts));
+    return iter->init_output_schema(kNoUnusedOutputColumns);
 }
 
 } // namespace detail
@@ -263,6 +286,7 @@ auto OlapScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }
@@ -393,6 +417,7 @@ auto LakeScanTabletAdaptor::get_iterator(int64_t rssid, SparseRange<rowid_t> row
     if (iters.size() != 1) {
         return Status::InternalError("unexpected iterators from lake rowset");
     }
+    RETURN_IF_ERROR(detail::init_iterator_schema(iters[0].get(), _global_dicts));
 
     return iters[0];
 }

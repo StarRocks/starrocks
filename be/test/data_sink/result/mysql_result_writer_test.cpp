@@ -18,6 +18,8 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "common/object_pool.h"
@@ -145,6 +147,88 @@ TEST_F(MysqlResultWriterTest, should_set_binary_null_bit_after_fallback_column) 
 
     for (auto* ctx : expr_ctxs) {
         ctx->close(&dummy_state);
+    }
+}
+
+TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
+    // Embedded zero bytes and EMPTY must reach the client unchanged.
+    const std::vector<std::string> payloads = {std::string("\x01\x01\0\0\0\0\0\0\0\0\0\xf0\x3f\0\0\0\0\0\0\0\x40", 21),
+                                               std::string("\x01\x07\0\0\0\0\0\0\0", 9)};
+    GeoColumnDescriptor desc;
+    desc.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
+    desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_SPHERICAL;
+    desc.type.edge_algorithm = GEO_EDGE_ALGORITHM_SPHERICAL;
+    desc.type.crs = "OGC:CRS84";
+    desc.storage.encoding = GEO_ENCODING_WKB;
+    auto geo_type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, desc.type);
+
+    for (bool binary : {false, true}) {
+        // Varying, nullable, constant, and all-NULL physical shapes.
+        for (int shape = 0; shape < 5; ++shape) {
+            auto geo = GeoColumn::create(desc);
+            auto bytes = BinaryColumn::create();
+            for (const auto& payload : payloads) {
+                geo->append_wkb(Slice(payload));
+                bytes->append(Slice(payload));
+            }
+            ColumnPtr geo_col = geo;
+            ColumnPtr bytes_col = bytes;
+            if (shape == 1 || shape == 3) {
+                auto flags = NullColumn::create();
+                flags->append(1);
+                flags->append(shape == 3 ? 1 : 0);
+                geo_col = NullableColumn::create(geo, flags);
+                bytes_col = NullableColumn::create(bytes, flags->clone());
+            } else if (shape == 2) {
+                geo->resize(1);
+                bytes->resize(1);
+                geo_col = ConstColumn::create(geo, 2);
+                bytes_col = ConstColumn::create(bytes, 2);
+            } else if (shape == 4) {
+                geo_col = ColumnHelper::create_const_null_column(2);
+                bytes_col = ColumnHelper::create_const_null_column(2);
+            }
+            auto run = [&](const TypeDescriptor& type, const ColumnPtr& column) {
+                auto ctxs =
+                        make_expr_ctxs({{type, column},
+                                        {TypeDescriptor::from_logical_type(TYPE_BIGINT),
+                                         NullableColumn::create(Int64Column::create(2), NullColumn::create(2, 1))}});
+                Chunk chunk;
+                chunk.append_column(Int32Column::create(2), 0);
+                RuntimeProfile profile("geography_output");
+                RuntimeState state;
+                TUniqueId query_id;
+                BufferControlBlock sinker(query_id, 1024);
+                EXPECT_TRUE(sinker.init().ok());
+                MysqlResultWriter writer(&sinker, ctxs, binary, &profile);
+                EXPECT_TRUE(writer.init(&state).ok());
+                for (auto* ctx : ctxs) {
+                    EXPECT_TRUE(ctx->prepare(&state).ok());
+                    EXPECT_TRUE(ctx->open(&state).ok());
+                }
+                auto result = writer.process_chunk(&chunk);
+                EXPECT_TRUE(result.ok()) << result.status();
+                std::vector<std::string> rows;
+                if (result.ok()) {
+                    for (const auto& batch : result.value()) {
+                        rows.insert(rows.end(), batch->result_batch.rows.begin(), batch->result_batch.rows.end());
+                    }
+                }
+                for (auto* ctx : ctxs) ctx->close(&state);
+                return rows;
+            };
+            const auto actual = run(geo_type, geo_col);
+            EXPECT_EQ(run(TypeDescriptor::from_logical_type(TYPE_VARBINARY), bytes_col), actual);
+            ASSERT_EQ(2, actual.size());
+            if (shape == 0 || shape == 2) {
+                for (size_t row = 0; row < actual.size(); ++row) {
+                    const auto& payload = payloads[shape == 2 ? 0 : row];
+                    EXPECT_NE(std::string::npos, actual[row].find(payload));
+                }
+            }
+            EXPECT_EQ(desc, geo->descriptor());
+            EXPECT_FALSE(geo->has_wkb_cache());
+        }
     }
 }
 

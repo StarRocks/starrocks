@@ -25,7 +25,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -149,6 +148,21 @@ public class MVMetaVersionRepairer {
                         curBasePartitionInfo.getLastRefreshTime());
                 continue;
             }
+            // The repair overwrites BOTH the recorded version and lastRefreshTime, while the check above
+            // only proves the MV was current under isBaseTableChanged's version disjunct. An MV can be
+            // stale purely through the other disjunct (visibleVersionTime > lastRefreshTime), which is
+            // load-bearing for materialized-view base tables whose partitions are overwritten in place and
+            // for tables whose latest physical partition changed. Advancing the watermark in that state
+            // would erase a change the MV never consumed, so a producer that can report the pre-commit
+            // version time must also prove the MV was not behind on it.
+            if (info.getLastVersionTime() >= 0
+                    && curBasePartitionInfo.getLastRefreshTime() < info.getLastVersionTime()) {
+                LOG.info("Base table {} partition {} version time not match, lastRefreshTime {}(mv) < " +
+                                "pre-commit visible version time {}(table), skip to repair",
+                        table.getName(), info.getPartitionName(), curBasePartitionInfo.getLastRefreshTime(),
+                        info.getLastVersionTime());
+                continue;
+            }
             needToUpdatePartitionInfos.add(info);
         }
         return needToUpdatePartitionInfos;
@@ -172,9 +186,18 @@ public class MVMetaVersionRepairer {
      * @param oldBaseTableInfo old base table info
      * @param newTable new table meta data
      * @param updatedPartitionNames updated partition names
+     * @param newPartitionInfos partition metadata of {@code newTable}, resolved by the caller before it
+     *                          took the MV's write lock. It used to be fetched here, inside the loop:
+     *                          once per unchanged partition, each time with the same arguments, and
+     *                          all of it with the lock held -- so the lock's hold time was N connector
+     *                          round trips for what this method otherwise only does in memory. A
+     *                          partition missing from the map keeps its old info, the same degradation
+     *                          the lookup miss below already had.
      */
     public static void repairExternalBaseTableInfo(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-                                                   Table newTable, List<String> updatedPartitionNames) {
+                                                   Table newTable, List<String> updatedPartitionNames,
+                                                   Map<String, com.starrocks.connector.PartitionInfo>
+                                                           newPartitionInfos) {
 
         if (oldBaseTableInfo.isInternalCatalog()) {
             return;
@@ -186,9 +209,6 @@ public class MVMetaVersionRepairer {
             if (updatedPartitionNames.contains(entry.getKey())) {
                 newPartitionInfoMap.put(entry.getKey(), entry.getValue());
             } else {
-                List<String> baseTablePartitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-                Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos =
-                        PartitionUtil.getPartitionNameWithPartitionInfo(newTable, baseTablePartitionNames);
                 if (newPartitionInfos.containsKey(entry.getKey())) {
                     MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
                     com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());

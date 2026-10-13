@@ -237,6 +237,24 @@ order by id;
 1003
 1004
 -- !result
+-- Cross-type predicate correctness: DECIMAL(5,2) 10.50 projects to BIGINT 10.
+-- The virtual predicate must not be delegated as DECIMAL leaf = 10.00.
+set cbo_variant_path_rewrite = false;
+-- result:
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.profile.price') = 10;
+-- result:
+1
+-- !result
+set cbo_variant_path_rewrite = true;
+-- result:
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.profile.price') = 10;
+-- result:
+1
+-- !result
 -- DECIMAL read correctness: all three precision tiers (DECIMAL4/8/16), with virtual-column rewrite
 select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) as price
 from test_variant_virtual_column

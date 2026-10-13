@@ -20,6 +20,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
@@ -574,6 +576,14 @@ public class ColumnTypeConverter {
             return DATETIME;
         }
 
+        public Type visit(org.apache.paimon.types.VariantType variantType) {
+            return VariantType.VARIANT;
+        }
+
+        public Type visit(org.apache.paimon.types.BlobType blobType) {
+            return FileType.FILE;
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -650,6 +660,8 @@ public class ColumnTypeConverter {
                     return DataTypes.CHAR(CharType.MAX_LENGTH);
                 case VARBINARY:
                     return DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH);
+                case VARIANT:
+                    return DataTypes.VARIANT();
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
@@ -928,15 +940,30 @@ public class ColumnTypeConverter {
                 return com.starrocks.type.DateType.TIME;
             case VARIANT:
                 return VariantType.VARIANT;
+            case GEOGRAPHY:
+                Types.GeographyType geography = (Types.GeographyType) icebergType;
+                if ((geography.crs() == null || geography.crs().equals("OGC:CRS84"))
+                        && (geography.algorithm() == null || geography.algorithm().name().equals("SPHERICAL"))) {
+                    return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                    GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+                }
+                return UnknownType.UNKNOWN_TYPE;
             case FIXED:
+            case GEOMETRY:
+                // External geo metadata is transported separately by IcebergApiConverter.
+                // Recognition must not expose WKB as ordinary SQL binary values.
+                return UnknownType.UNKNOWN_TYPE;
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
         return TypeFactory.createType(primitiveType);
     }
 
-    private static ArrayType convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(fromIcebergType(icebergType.asNestedType().asListType().elementType()));
+    private static Type convertToArrayTypeForIceberg(org.apache.iceberg.types.Type icebergType) {
+        Type elementType = fromIcebergType(icebergType.asNestedType().asListType().elementType());
+        return elementType.isUnknown() ? UnknownType.UNKNOWN_TYPE : new ArrayType(elementType);
     }
 
     private static Type convertToMapTypeForIceberg(org.apache.iceberg.types.Type icebergType) {

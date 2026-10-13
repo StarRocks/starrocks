@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 description: "External Catalog 的功能边界和支持版本，包括存储系统、认证和权限等。"
 sidebar_label: "能力边界"
@@ -121,9 +122,9 @@ StarRocks 在查询期间将缓存以下元数据：
 
 | 配置项                                                     | 默认值                              | 描述                                                         |
 | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
-| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
-| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
 
 ### 元数据缓存行为
 
@@ -261,9 +262,9 @@ StarRocks 在查询期间将缓存以下元数据：
 
 | 配置项                                                     | 默认值                              | 描述                                                         |
 | ---------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
-| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
-| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| enable_background_refresh_connector_metadata               | v3.0 中为 `true`<br />v2.5 中为 `false` | 是否启用定期的元数据缓存刷新。启用后，StarRocks 会轮询 metastore，并刷新频繁访问的 external catalog 的缓存元数据，以感知数据变化。`true` 表示启用 Hive 元数据缓存刷新，`false` 表示禁用。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_interval_millis                | `600000`（10 分钟）                 | 两次连续元数据缓存刷新的间隔。单位：毫秒。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400`（24 小时）                  | 元数据缓存刷新任务的过期时间。对于已访问的 external catalog，如果超过指定时间未被访问，StarRocks 将停止刷新其缓存元数据。对于未被访问的 external catalog，StarRocks 不会刷新其缓存元数据。单位：秒。此项是一个 [FE 动态参数](../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令进行修改。 |
 
 ### 元数据缓存行为
 

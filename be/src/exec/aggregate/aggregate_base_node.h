@@ -28,7 +28,6 @@ public:
     ~AggregateBaseNode() override;
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     void close(RuntimeState* state) override;
-    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
     void push_down_tuple_slot_mappings(RuntimeState* state,
                                        const std::vector<TupleSlotMapping>& parent_mappings) override;
 

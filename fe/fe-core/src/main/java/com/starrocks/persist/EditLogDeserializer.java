@@ -31,6 +31,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.ExportJob;
@@ -182,6 +183,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_SET_REPLICA_STATUS, SetReplicaStatusOperationLog.class)
             .put(OperationType.OP_DYNAMIC_PARTITION, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, ModifyTablePropertyOperationLog.class)
+            .put(OperationType.OP_MODIFY_NO_DICT_COLUMNS, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_SET_HAS_DELETE, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_REPLICATION_NUM, ModifyTablePropertyOperationLog.class)
             .put(OperationType.OP_MODIFY_WRITE_QUORUM, ModifyTablePropertyOperationLog.class)
@@ -202,6 +204,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_INSTALL_PLUGIN, PluginInfo.class)
             .put(OperationType.OP_UNINSTALL_PLUGIN, UninstallPluginLog.class)
             .put(OperationType.OP_REMOVE_ALTER_JOB_V2, RemoveAlterJobV2OperationLog.class)
+            .put(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, ReleaseAlterJobHistorySchemaLog.class)
             .put(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, AlterRoutineLoadJobOperationLog.class)
             .put(OperationType.OP_ALTER_LOAD_JOB, AlterLoadJobOperationLog.class)
             .put(OperationType.OP_SWAP_TABLE, SwapTableOperationLog.class)
@@ -266,6 +269,10 @@ public class EditLogDeserializer {
             .put(OperationType.OP_ALTER_WAREHOUSE, Warehouse.class)
             .put(OperationType.OP_DROP_WAREHOUSE, DropWarehouseLog.class)
             .put(OperationType.OP_WAREHOUSE_INTERNAL_OP, WarehouseInternalOpLog.class)
+            .put(OperationType.OP_CREATE_AI_PROVIDER, AIProvider.class)
+            .put(OperationType.OP_ALTER_AI_PROVIDER, AIProvider.class)
+            .put(OperationType.OP_DROP_AI_PROVIDER, DropAIProviderLog.class)
+            .put(OperationType.OP_SET_DEFAULT_AI_PROVIDER, SetDefaultAIProviderLog.class)
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
@@ -276,6 +283,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
+            .put(OperationType.OP_ALTER_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.Info.class)
             .put(OperationType.OP_ENABLE_SPM_BASELINE_LOG, BaselinePlan.Info.class)

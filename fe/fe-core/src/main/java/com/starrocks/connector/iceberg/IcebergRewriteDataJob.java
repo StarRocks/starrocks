@@ -49,7 +49,11 @@ import java.util.stream.Collectors;
 
 public class IcebergRewriteDataJob {
     private static final Logger LOG = LogManager.getLogger(IcebergRewriteDataJob.class);
-    private final String insertSql;
+    // Carries the partition filter, used only to decide which files are rewritten.
+    private final String planningSql;
+    // Same statement without the filter, used to read every live row of the selected files.
+    private final String executionSql;
+    private final boolean hasPartitionFilter;
     private final boolean rewriteAll;
     private final long minFileSizeBytes;
     private final long batchSize;
@@ -60,6 +64,10 @@ public class IcebergRewriteDataJob {
     private ExecPlan execPlan;
     private List<IcebergScanNode> scanNodes;
     private IcebergRewriteData rewriteData;
+    // Snapshot the rewrite planned against, frozen in prepare(). Every batch rewrites the
+    // file set picked there, so this is the snapshot the commit must validate from -- see
+    // the comment on IcebergSinkExtra.baseSnapshotId.
+    private Long baseSnapshotId;
     private long batchParallelism = 1;
     private StatementBase parsedStmt;
     private final ConcurrentLinkedQueue<FinishArgs> collected = new ConcurrentLinkedQueue<>();
@@ -138,7 +146,9 @@ public class IcebergRewriteDataJob {
         }
     }
 
-    public IcebergRewriteDataJob(String insertSql,
+    public IcebergRewriteDataJob(String planningSql,
+                                 String executionSql,
+                                 boolean hasPartitionFilter,
                                  boolean rewriteAll,
                                  long minFileSizeBytes,
                                  long batchSize,
@@ -146,7 +156,9 @@ public class IcebergRewriteDataJob {
                                  boolean writeRowLineage,
                                  ConnectContext context,
                                  AlterTableStmt stmt) {
-        this.insertSql = insertSql;
+        this.planningSql = planningSql;
+        this.executionSql = executionSql;
+        this.hasPartitionFilter = hasPartitionFilter;
         this.rewriteAll = rewriteAll;
         this.minFileSizeBytes = minFileSizeBytes;
         this.batchSize = batchSize;
@@ -158,28 +170,38 @@ public class IcebergRewriteDataJob {
 
     public void prepare() throws Exception {
         this.parsedStmt = com.starrocks.sql.parser.SqlParser
-                .parse(insertSql, context.getSessionVariable())
+                .parse(executionSql, context.getSessionVariable())
+                .get(0);
+        StatementBase planningParsedStmt = com.starrocks.sql.parser.SqlParser
+                .parse(planningSql, context.getSessionVariable())
                 .get(0);
 
-        this.rewriteStmt = new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+        this.rewriteStmt = new IcebergRewriteStmt(
+                (InsertStmt) planningParsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
         this.execPlan = StatementPlanner.plan(rewriteStmt, context);
+        // A merge-on-read plan splits the data scan into DATA_FILE_WITH_EQ_DELETE and DATA_FILE_WITHOUT_EQ_DELETE
+        // branches that carry the same plan node name. Both must contribute candidates, otherwise a whole branch
+        // is silently skipped. The EQ_DELETE branch is excluded on purpose: its queue holds the very same tasks as
+        // the WITH_EQ_DELETE branch, so including it would count those files twice.
         this.scanNodes = execPlan.getFragments().stream()
                 .flatMap(fragment -> fragment.collectScanNodes().values().stream())
                 .filter(scan -> scan instanceof IcebergScanNode && "IcebergScanNode".equals(scan.getPlanNodeName()))
                 .map(scan -> (IcebergScanNode) scan)
                 .collect(Collectors.toList());
 
-        IcebergScanNode targetNode = scanNodes.stream().findFirst().orElse(null);
-        if (targetNode == null) {
+        if (scanNodes.isEmpty()) {
             TableRef tableRef = ((InsertStmt) parsedStmt).getTableRef();
             TableName tableName = TableName.fromTableRef(tableRef);
-            LOG.info("No IcebergScanNode of table " + tableName + 
+            LOG.info("No IcebergScanNode of table " + tableName +
                         " found for rewrite, prepare becomes no-op.");
             return;
         }
 
+        // Every scan node of this plan reads the same table pinned to the same snapshot, so any of
+        // them reports the snapshot the rewrite was planned against.
+        this.baseSnapshotId = scanNodes.get(0).getBaseSnapshotId().orElse(null);
         this.rewriteData = new IcebergRewriteData();
-        this.rewriteData.setSource(targetNode.getSourceRange());
+        scanNodes.forEach(node -> rewriteData.addSource(node.getSourceRange()));
         this.rewriteData.setBatchSize(batchSize);
         this.rewriteData.buildNewScanNodeRange(minFileSizeBytes, rewriteAll);
     }
@@ -239,12 +261,17 @@ public class IcebergRewriteDataJob {
                     ConnectContext subCtx = buildSubConnectContext(context);
                     try (var scope = subCtx.bindScope()) {
                         IcebergRewriteStmt localStmt =
-                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage);
+                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
                         ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
         
+                        // Every iceberg scan node must be narrowed to this task group, including the
+                        // IcebergEqualityDeleteScanNode. rebuildScanRange() routes the task list through
+                        // IcebergRemoteSourceTrigger, so each node picks up only the files of its own MOR branch.
+                        // Leaving the equality-delete scan untouched would keep it at full-table range and apply
+                        // equality keys of other partitions to this group.
                         List<IcebergScanNode> localScanNodes = localPlan.getFragments().stream()
                                 .flatMap(f -> f.collectScanNodes().values().stream())
-                                .filter(s -> s instanceof IcebergScanNode && "IcebergScanNode".equals(s.getPlanNodeName()))
+                                .filter(s -> s instanceof IcebergScanNode)
                                 .map(s -> (IcebergScanNode) s)
                                 .collect(Collectors.toList());
         
@@ -283,6 +310,7 @@ public class IcebergRewriteDataJob {
                 return RewriteMetrics.EMPTY;
             }
             IcebergSinkExtra extra = new IcebergSinkExtra();
+            extra.setBaseSnapshotId(baseSnapshotId);
             List<TSinkCommitInfo> faList = Lists.newArrayList();
             for (FinishArgs fa : collected) {
                 extra.addScannedDataFiles(((IcebergSinkExtra) fa.getExtra()).getScannedDataFiles());

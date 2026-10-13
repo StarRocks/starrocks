@@ -24,6 +24,11 @@ namespace starrocks::lake {
 
 class TabletManager;
 
+// A real MERGE: the output owns its rowsets, delete vectors, DCG/IDG projections and primary-index
+// sstable, and a reshard transaction publishes it.
+//
+// The read-only parent alias an ORDER BY != PK split keeps alive is NOT built here -- see
+// virtual_merge_for_read in tablet_virtual_merge.h.
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,

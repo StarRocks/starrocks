@@ -18,6 +18,7 @@
 #include <ios>
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -198,6 +199,14 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
+    _window_result_ready_function_index.clear();
+
+    // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
+    // index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(analytic_node.analytic_functions[i].nodes[0].fn);
+    }
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
@@ -250,6 +259,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
             _agg_fn_types[i] = {TypeDescriptor(return_type), false, false};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
             // count(*) no input column, we manually resize it to 1 to process count(*)
             // like other agg function.
             _agg_intput_columns[i].resize(1);
@@ -281,22 +291,30 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             } else {
                 _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
             }
+            if (state->query_options().__isset.max_array_length) {
+                _agg_fn_ctxs[i]->set_max_array_length(state->query_options().max_array_length);
+            }
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
             // we should always use nullable aggregate function.
             is_input_nullable = true;
             const AggregateFunction* func = nullptr;
+            const auto& fname = fn.name.function_name;
             std::string real_fn_name = fn.name.function_name;
             if (fn.ignore_nulls) {
-                DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value" ||
-                       fn.name.function_name == "lead" || fn.name.function_name == "lag");
+                DCHECK(fname == "first_value" || fname == "last_value" || fname == "lead" || fname == "lag");
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                _need_partition_materializing = true;
+                // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
+                // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
+                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
+                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
+                if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                    _need_partition_materializing = true;
+                }
             }
-            const auto& fname = fn.name.function_name;
             auto real_arg_type = arg_type.type;
             if (fname == "max_by" || fname == "min_by" || fname == "max_by_v2" || fname == "min_by_v2") {
                 const TypeDescriptor arg1_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
@@ -311,6 +329,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};
+            _agg_fn_types[i].is_result_non_nullable = func->is_result_non_nullable();
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
@@ -328,6 +347,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
         DCHECK(_agg_functions[i] != nullptr);
         _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
+        // Ask once which functions can defer a row, so the per-row streaming loop does not
+        // virtual-dispatch into every other window function.
+        if (_agg_functions[i]->needs_window_result_ready_check()) {
+            _window_result_ready_function_index.emplace_back(i);
+        }
     }
 
     // Compute agg state total size and offsets.
@@ -345,6 +369,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                                      next_state_align_size;
         }
     }
+
+    // Fails prepare after the aggregate FunctionContexts have been created, so that the analytor is
+    // destroyed (and closed) in a half-prepared state.
+    FAIL_POINT_TRIGGER_EXECUTE(analytor_prepare_failed,
+                               { return Status::InternalError("injected failure in Analytor::prepare"); });
 
     RETURN_IF_ERROR(ExprFactory::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
@@ -422,11 +451,6 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     }
     if (_range_end_boundary.expr_ctx != nullptr) {
         RETURN_IF_ERROR(ExprExecutor::prepare(_range_end_boundary.expr_ctx, state));
-    }
-
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
     return _prepare_processing_mode(state, runtime_profile);
@@ -577,8 +601,7 @@ Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
     _remove_unused_rows(state);
 
     // Wrap the whole processing path in a bad-alloc scope so that all allocations inside _add_chunk and the window
-    // computation are checked against the BE memory limit, including the column data copied while upgrading
-    // BinaryColumn to LargeBinaryColumn in upgrade_if_overflow.
+    // computation are checked against the BE memory limit.
     TRY_CATCH_ALLOC_SCOPE_START()
     RETURN_IF_ERROR(_add_chunk(chunk));
     RETURN_IF_ERROR((this->*_process_impl)(state));
@@ -591,7 +614,7 @@ Status Analytor::finish_process(RuntimeState* state) {
     _input_eos = true;
     RETURN_IF_ERROR((this->*_process_impl)(state));
     _is_sink_complete.store(true, std::memory_order_release);
-    return Status::OK();
+    return _check_has_error();
 }
 
 std::string Analytor::debug_string() const {
@@ -861,6 +884,20 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         }
     }
 
+    // Respect per-function look-back watermarks (e.g. `lag ... IGNORE NULLS`, whose oldest needed
+    // row can be earlier than the frame bound when NULLs are skipped).
+    for (size_t i = 0; i < _agg_functions.size(); i++) {
+        const std::optional<int64_t> min_retained_position_opt = _agg_functions[i]->get_min_retained_position(
+                _agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i]);
+
+        // We can not remove any rows that the aggregation still needs.
+        // N.B.: `remove_end_position` is exclusive, so a `<` is appropriate.
+        if (min_retained_position_opt.has_value() &&
+            _get_global_position(min_retained_position_opt.value()) < remove_end_position) {
+            return;
+        }
+    }
+
     const int64_t remove_rows = remove_end_position - _removed_from_buffer_rows;
     COUNTER_ADD(_peak_buffered_rows, -remove_rows);
     COUNTER_UPDATE(_remove_unused_rows_cnt, 1);
@@ -933,13 +970,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
                 _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column);
-
-                // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
-                Column* agg_column = _agg_intput_columns[i][j]->as_mutable_raw_ptr();
-                ASSIGN_OR_RETURN(auto upgrade_col, agg_column->upgrade_if_overflow());
-                if (upgrade_col != nullptr) {
-                    _agg_intput_columns[i][j] = std::move(upgrade_col);
-                }
                 RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
             }
         }
@@ -947,24 +977,12 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             _append_column(chunk_size, _partition_columns[i].get(), column);
-
-            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
-            ASSIGN_OR_RETURN(auto upgrade_col, _partition_columns[i]->upgrade_if_overflow());
-            if (upgrade_col != nullptr) {
-                _partition_columns[i] = std::move(upgrade_col);
-            }
             RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             _append_column(chunk_size, _order_columns[i].get(), column);
-
-            // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
-            ASSIGN_OR_RETURN(auto order_upgrade_col, _order_columns[i]->upgrade_if_overflow());
-            if (order_upgrade_col != nullptr) {
-                _order_columns[i] = std::move(order_upgrade_col);
-            }
             RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
         }
 
@@ -974,10 +992,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             }
             ASSIGN_OR_RETURN(ColumnPtr column, boundary->expr_ctx->evaluate(chunk.get()));
             _append_column(chunk_size, boundary->column.get(), column);
-            ASSIGN_OR_RETURN(auto upgrade_col, boundary->column->upgrade_if_overflow());
-            if (upgrade_col != nullptr) {
-                boundary->column = std::move(upgrade_col);
-            }
             return boundary->column->capacity_limit_reached();
         };
         RETURN_IF_ERROR(append_range_boundary_column(&_range_start_boundary));
@@ -995,6 +1009,13 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& src_column) {
     DCHECK(!(src_column->is_constant() && dst_column->is_constant() && (!dst_column->empty()) &&
              (!src_column->empty()) && (src_column->compare_at(0, 0, *dst_column, 1) != 0)));
+    if (dst_column->empty() && !src_column->only_null()) {
+        // TypeDescriptor does not carry physical storage metadata. Preserve it
+        // from the first evaluated column before buffering values (e.g. GEO XY).
+        auto* dst_data = ColumnHelper::get_data_column(dst_column);
+        auto empty = ColumnHelper::get_data_column(src_column.get())->clone_empty();
+        dst_data->swap_column(*empty);
+    }
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
@@ -1048,6 +1069,10 @@ Status Analytor::_materializing_process(RuntimeState* state) {
 Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* state) {
     PRE_PROCESSING();
 
+    // Local to this invocation: buffer contraction cannot invalidate this bound, and it never
+    // extends beyond the partition in which it was established.
+    int64_t ready_end = _current_row_position;
+
     do {
         if (reached_limit() || state->is_cancelled()) {
             return Status::OK();
@@ -1066,6 +1091,18 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
             // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
             // if the current chunk has not reach the partition boundary, it may need more data.
             if (is_n_following_frame && !_partition.is_real && frame.end > _partition.end) {
+                return Status::OK();
+            }
+
+            // Data-dependent wait (e.g. `lead ... IGNORE NULLS`): the physical N FOLLOWING frame may
+            // already be buffered, but a function can still need more non-nulls ahead. Check every
+            // function before mutating any state; if one is not ready, leave `_current_row_position`
+            // unchanged so the next chunk resumes this row.
+            // A complete partition can never grow, so no function can still be waiting and every row
+            // below resolves to a value or to the default. For incomplete partitions, reuse the
+            // exclusive bound established by the previous successful readiness check.
+            if (!_partition.is_real && _has_window_result_ready_check() && _current_row_position >= ready_end &&
+                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end, ready_end)) {
                 return Status::OK();
             }
 
@@ -1364,6 +1401,26 @@ void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* stat
     }
 }
 
+bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                         int64_t frame_end, int64_t& ready_end) const {
+    int64_t common_ready_end = available_end;
+    for (size_t i : _window_result_ready_function_index) {
+        // Conservative default: only the current row is ready.
+        // frame_end = current_row + _rows_end_offset + 1.
+        int64_t function_ready_end = frame_end - _rows_end_offset;
+        // These functions are always lead/lag, so the frame is not clipped to the partition.
+        if (!_agg_functions[i]->is_window_result_ready(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
+                    _agg_intput_columns[i], partition_start, available_end, frame_start, frame_end, _partition.is_real,
+                    &function_ready_end)) {
+            return false;
+        }
+        common_ready_end = std::min(common_ready_end, function_ready_end);
+    }
+    ready_end = common_ready_end;
+    return true;
+}
+
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
                                     int64_t frame_end) {
     SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
@@ -1465,8 +1522,15 @@ void Analytor::_init_window_result_columns() {
     const auto chunk_size = _current_chunk_size();
     _result_window_columns.resize(_agg_fn_types.size());
     for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        // Materialize the result column with the function's window-result nullability (see
+        // FunctionTypes::is_result_nullable): a frame can be empty, so it is nullable when the input OR the
+        // declared result is nullable, unless the aggregate declares is_result_non_nullable(). An always-non-null
+        // aggregate such as bitmap_union_count() consumes a nullable input yet never emits a NULL, so this builds
+        // a non-null column for it; a downstream GROUP BY/DISTINCT that keys on the column then sees the type the
+        // plan promised. get_values() writes straight into the non-null column (see the non-nullable-dst fast path
+        // in NullableAggregateFunctionBase::get_values).
         _result_window_columns[i] =
-                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].is_result_nullable());
         // Binary column cound't call resize method like Numeric Column,
         // so we only reserve it.
         if (_agg_functions[i]->get_name().ends_with("fused_multi_distinct")) {
@@ -1476,7 +1540,9 @@ void Analytor::_init_window_result_columns() {
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
                    _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOMETRY ||
+                   _agg_fn_types[i].result_type.type == LogicalType::TYPE_GEOGRAPHY) {
             _result_window_columns[i]->reserve(chunk_size);
         } else {
             _result_window_columns[i]->resize(chunk_size);
@@ -1670,4 +1736,7 @@ AnalytorPtr AnalytorFactory::create(int i) {
     }
     return _analytors[i];
 }
+
+DEFINE_FAIL_POINT(analytor_prepare_failed);
+
 } // namespace starrocks

@@ -2130,6 +2130,56 @@ public class CreateTableTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testVirtualColumnNameIsReserved() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+
+        String rowId = "create table tbl_row_id(k1 int, `_row_id_` varchar(20)) duplicate key(k1)" +
+                " distributed by hash(k1) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
+                        " Detail message: Column name [_row_id_] is a system reserved name." +
+                        " Please choose a different one.",
+                () -> starRocksAssert.withTable(rowId));
+
+        // The registry drives the reserved set, so every virtual column is covered, and matching ignores case.
+        String tabletId = "create table tbl_tablet_id(k1 int, `_TABLET_ID_` bigint) duplicate key(k1)" +
+                " distributed by hash(k1) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Column name [_TABLET_ID_] is a system reserved name",
+                () -> starRocksAssert.withTable(tabletId));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.tbl_add_row_id(k1 int) duplicate key(k1)" +
+                        " distributed by hash(k1) properties(\"replication_num\"=\"1\");"));
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Column name [_row_id_] is a system reserved name",
+                () -> alterTableWithNewParser(
+                        "ALTER TABLE test.tbl_add_row_id ADD COLUMN `_row_id_` varchar(20)"));
+
+        // Only native tables expose the virtual columns, so an external schema may keep such a column name.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.tbl_external_row_id (\n" +
+                        "k1 INT,\n" +
+                        "`_row_id_` VARCHAR(20)\n" +
+                        ") ENGINE=mysql\n" +
+                        "PROPERTIES (\n" +
+                        "\"host\" = \"127.0.0.1\",\n" +
+                        "\"port\" = \"3306\",\n" +
+                        "\"user\" = \"mysql_user\",\n" +
+                        "\"password\" = \"mysql_password\",\n" +
+                        "\"database\" = \"test\",\n" +
+                        "\"table\" = \"ods_order\"\n" +
+                        ");"));
+
+        // allow_system_reserved_names is the escape hatch for a table that already carries such a column.
+        Config.allow_system_reserved_names = true;
+        try {
+            ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(rowId));
+        } finally {
+            Config.allow_system_reserved_names = false;
+        }
+    }
+
+    @Test
     public void testDefaultValueHasEscapeString() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");

@@ -19,7 +19,7 @@ VARCHAR STRING_AGG([DISTINCT] expr, delimiter
 
 ## パラメータ
 
-- `expr`: 連結する値で、NULL値は無視されます。VARCHAR に評価される必要があります。出力文字列から重複する値を排除するには、オプションで `DISTINCT` を指定できます。複数の `expr` を直接連結したい場合は、[concat](../string-functions/concat.md) または [concat_ws](../string-functions/concat_ws.md) を使用してフォーマットを指定してください。
+- `expr`: 連結する値で、NULL値は無視されます。VARCHAR に評価される必要があります。出力文字列から重複する値を排除するには、オプションで `DISTINCT` を指定できます。複数の `expr` を直接連結したい場合は、[concat](./concat.md) または [concat_ws](./concat_ws.md) を使用してフォーマットを指定してください。
 - `delimiter`: 異なる行の非NULL値を連結するために使用される**必須**のセパレータです。VARCHAR 型である必要があります。セパレータを排除するには、空の文字列 `''` を指定してください。
 - ORDER BY の項目は、符号なし整数（1から始まる）、列名、または通常の式であることができます。結果はデフォルトで昇順にソートされます。ASC キーワードを明示的に指定することもできます。降順にソートしたい場合は、ソートする列名に DESC キーワードを追加してください。
 

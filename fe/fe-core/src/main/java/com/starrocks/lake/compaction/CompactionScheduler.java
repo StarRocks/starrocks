@@ -16,6 +16,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -61,6 +62,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -330,6 +332,7 @@ public class CompactionScheduler extends Daemon {
     protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
             CompactionWarehouseInfo info) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        boolean unshare = partitionStatisticsSnapshot.getPriority() == PartitionStatistics.CompactionPriority.UNSHARE;
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
@@ -363,8 +366,10 @@ public class CompactionScheduler extends Daemon {
             //     flip replays the shadow tablets' per-version txn vlogs over [alter_version + 1, new_version). A
             //     compaction commits a partition version with no vlog, leaving a gap the flip cannot bridge, which
             //     wedges the publish forever. Only range-distribution rollups take the online-rewrite path (there
-            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets); traditional
-            //     hash rollups build eagerly via BE alter tasks, hold no such dependency, and must keep compacting.
+            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets).
+            // ROLLUP on a hash-distributed table (LakeRollupJob) is not skipped here, although it has the same
+            // dependency: its rollup tablets are built by BE alter tasks, but its final publish also replays their
+            // per-version txn vlogs, so a compaction committed after the watershed wedges that publish as well.
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                     || (table.getState() == OlapTable.OlapTableState.ROLLUP && table.isRangeDistribution()))) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
@@ -373,6 +378,33 @@ public class CompactionScheduler extends Daemon {
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
             if (partition == null) {
                 compactionManager.removePartition(partitionIdentifier);
+                return null;
+            }
+            // Only for the shape whose split drags a full UNSHARE rewrite: that rewrite has to be the
+            // one compaction on the partition, because runCleaningJob cancels and then waits on the
+            // resharded partitions' compactions and a stream of new ones keeps it from settling. Every
+            // other table -- including an ordinary range split -- keeps compacting through its reshard,
+            // as it did before this feature existed; pausing those was collateral, and on a wide table
+            // it meant every partition stopped compacting for the life of one tablet's split.
+            if (!unshare && table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && TabletReshardUtils.splitRewritesEveryShard(table)) {
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
+                return null;
+            }
+            if (unshare && (table.getState() != OlapTable.OlapTableState.TABLET_RESHARD
+                    || !partition.isUnsharing() || !table.isFileBundling())) {
+                // Clear the marker before dropping the request. Priority is otherwise only reset for
+                // partitions that made it into runningCompactions, and this one never will -- while
+                // ScoreSelector admits any non-DEFAULT priority regardless of score or cooldown, so the
+                // partition would be reselected and refused every cycle and its ordinary compaction
+                // would never resume. Reachable across a leader switch: a new leader can retrigger
+                // UNSHARE while the committed transaction is still becoming visible, and the cutover
+                // returns the table to NORMAL before this request is served.
+                compactionManager.resetPriority(partitionIdentifier);
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
+                LOG.warn("Ignore stale UNSHARE compaction request for partition {}", partitionIdentifier);
                 return null;
             }
 
@@ -401,9 +433,10 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
+        boolean allowPartialSuccess = !unshare && Config.lake_compaction_allow_partial_success;
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, allowPartialSuccess,
                                               info.computeResource, info.warehouseName,
-                                              partitionStatisticsSnapshot.getCompactionScore());
+                                              partitionStatisticsSnapshot.getCompactionScore(), unshare);
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
@@ -435,6 +468,14 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
+        // An explicit manual request is an operator override. The forbidden
+        // ranges only limit automatic base compaction.
+        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
+                !CompactionControlScheduler.isBaseCompactionForbidden(
+                        table.getBaseCompactionForbiddenTimeRanges(), new Date());
+    }
+
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
@@ -444,6 +485,7 @@ public class CompactionScheduler extends Daemon {
         // Get parallel compaction configuration from table property
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+        boolean allowBaseCompaction = allowBaseCompaction(table, priority);
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -461,6 +503,8 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction;
+            request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
@@ -507,7 +551,10 @@ public class CompactionScheduler extends Daemon {
             }
             candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
-            nodePB.setHost(node.getHost());
+            // Resolved IP rather than hostname, for the same reason as the aggregate publish path:
+            // the aggregator feeds this straight into LakeServiceBrpcStubCache::get_stub(), which
+            // must resolve before it can even look up its cache. See Utils#createSubRequestForAggregatePublish.
+            nodePB.setHost(node.getIP());
             nodePB.setBrpcPort(node.getBrpcPort());
             nodePB.setId(entry.getKey());
 
@@ -519,7 +566,9 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction(table, priority);
             request.skipWriteTxnlog = true;
+            request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
@@ -550,7 +599,8 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
-        List<MaterializedIndex> visibleIndexes = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        List<MaterializedIndex> visibleIndexes =
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -616,8 +666,8 @@ public class CompactionScheduler extends Daemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
-            if (forceCommit) { // do not write extra info if no need to force commit
-                attachment = new CompactionTxnCommitAttachment(true /* forceCommit */);
+            if (forceCommit || job.isUnshare()) {
+                attachment = new CompactionTxnCommitAttachment(forceCommit, job.isUnshare());
             }
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
@@ -679,17 +729,22 @@ public class CompactionScheduler extends Daemon {
      * compaction before cleaning up.
      *
      * <p>For a compaction on an included physical partition ({@code includePartitionIds}, e.g. the
-     * partitions a reshard job is resharding), only an uncommitted one is aborted (a pre-reshard
-     * compaction is dropped when it is cross-published to the child tablets anyway, so aborting loses
-     * nothing); an already-committed compaction has taken a partition version and must still publish so
-     * its version cross-publishes onto the child tablets, hence it is left running for the
-     * previous-transactions wait to drain.
+     * partitions a reshard job is resharding), an uncommitted pre-reshard compaction is aborted (it is
+     * dropped when it is cross-published to the child tablets anyway, so aborting loses nothing). An
+     * already-committed compaction has taken a partition version and must still publish so its version
+     * cross-publishes onto the child tablets, hence it is left running for the previous-transactions wait
+     * to drain.
      *
      * <p>A compaction on a partition NOT in {@code includePartitionIds} is unaffected by the reshard: it
      * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
      * it from the previous-transactions wait.
      *
-     * <p>For an uncommitted compaction this only requests the abort of the compaction task. The
+     * <p>The UNSHARE compaction started by the current reshard job is never cancelled. Its transaction
+     * can equal {@code endTransactionId} because the reshard job records the next transaction id before
+     * triggering UNSHARE; cancelling that equality case would make a successful UNSHARE appear as a
+     * failed compaction in history. It remains part of the previous-transactions wait until it publishes.
+     *
+     * <p>For any other uncommitted compaction this only requests the abort of the compaction task. The
      * compaction scheduler thread then aborts the transaction: {@link #scheduleNewCompaction} aborts an
      * aborted job's transaction even if its task has not finished (e.g. because the best-effort abort RPC
      * was lost), so the previous-transactions wait drains without blocking on the original long-running
@@ -713,7 +768,7 @@ public class CompactionScheduler extends Daemon {
                 ignoredTxnIds.add(job.getTxnId());
                 continue;
             }
-            if (!job.transactionHasCommitted()) {
+            if (!job.isUnshare() && !job.transactionHasCommitted()) {
                 job.abort();
             }
         }

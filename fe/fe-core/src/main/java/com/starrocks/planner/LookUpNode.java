@@ -66,4 +66,11 @@ public class LookUpNode extends PlanNode {
         output.append(prefix).append("LOOKUP\n");
         return output.toString();
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a lookup operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

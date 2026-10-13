@@ -48,6 +48,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
@@ -92,7 +93,13 @@ public:
 
     void abort() override;
 
-    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
+    // A lake tablet has a single writer, so there is nothing to abort per tablet: the whole channel
+    // goes down. Record `reason` first, so requests rejected afterwards report it instead of a
+    // generic "writer closed" error.
+    void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override {
+        cancel(reason);
+        return abort();
+    }
 
     void update_profile() override;
 
@@ -163,6 +170,32 @@ private:
                 } else {
                     update_status(st);
                 }
+            }
+        }
+
+        // NOT thread-safe
+        // Hands the load coordinator shard infos so it writes each partition's combined txn log without
+        // a starmgr RPC, even when it owns no tablet of the partition. See TabletManager::borrow_shard_info.
+        //
+        // Groups |logs| by partition and adds ONE shard info per partition: that of the first tablet in
+        // the partition this node owns. One is enough only because all tablets of a partition share the
+        // same storage location and access info (the partition directory and its storage volume). The
+        // combined txn log already depends on that: it is one file for the whole partition, written under
+        // the directory of one of its tablets (the coordinator anchors on the tablet handed over here)
+        // and read by publish under the directory of each tablet it publishes.
+        void add_shard_infos(lake::TabletManager* tablet_mgr, const std::vector<TxnLogPtr>& logs) {
+            std::unordered_set<int64_t> partitions;
+            for (const auto& log : logs) {
+                if (partitions.count(log->partition_id()) > 0) {
+                    continue;
+                }
+                // Empty when this node only helped write the tablet (multi-node write) without owning it.
+                auto info = tablet_mgr->export_shard_info(log->tablet_id());
+                if (info.empty()) {
+                    continue;
+                }
+                partitions.insert(log->partition_id());
+                _response->mutable_lake_tablet_data()->add_shard_infos(std::move(info));
             }
         }
 
@@ -242,6 +275,8 @@ private:
     static bool _is_data_file_bundle_enabled(const PTabletWriterOpenRequest& params);
 
     static bool _is_multi_statements_txn(const PTabletWriterOpenRequest& params);
+    // See TOlapTableSink.enable_multi_node_write: this CN receives only part of each tablet's rows.
+    static bool _is_multi_node_write(const PTabletWriterOpenRequest& params);
 
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
@@ -340,6 +375,10 @@ private:
     bool _is_incremental_channel{false};
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
+
+    // Wakes whoever is parked in `_txn_log_collector.wait()` with |reason|, for the paths that
+    // end the load without every sender's eos arriving.
+    void _release_txn_log_waiters(const Status& reason);
 
     // combined_txn_log collection strategy, latched from the open RPC's
     // `lake_tablet_params.enable_per_partition_coordinator` (FE-controlled,
@@ -830,9 +869,15 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
+                    if (config::lake_enable_tablet_location_handoff) {
+                        context->add_shard_infos(_tablet_manager, my_logs);
+                    }
                 } else {
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
+                    if (config::lake_enable_tablet_location_handoff) {
+                        context->add_shard_infos(_tablet_manager, all_logs);
+                    }
                 }
             }
             // else: woke up but post-snap shows I'm not the coordinator;
@@ -910,6 +955,10 @@ bool LakeTabletsChannel::_is_multi_statements_txn(const PTabletWriterOpenRequest
            params.lake_tablet_params().is_multi_statements_txn();
 }
 
+bool LakeTabletsChannel::_is_multi_node_write(const PTabletWriterOpenRequest& params) {
+    return params.has_lake_tablet_params() && params.lake_tablet_params().multi_node_write();
+}
+
 Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental) {
     int64_t schema_id = 0;
     std::vector<SlotDescriptor*>* slots = nullptr;
@@ -947,6 +996,22 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     bool multi_stmt = _is_multi_statements_txn(params);
+    bool multi_node_write = _is_multi_node_write(params);
+    if (multi_node_write) {
+        // Under multi-node write several CNs write the same tablet in one transaction, so each of them
+        // produces a PARTIAL txn log. Two FE-side preconditions make that safe, and both are cheap to
+        // re-check here: without combined txn logs (write_txn_log true means THIS node writes its own
+        // file) every writer would target the same `{tablet}_{txn}.log` path and silently clobber the
+        // others, and without file bundling the folded rowset could mix segments that carry a bundle
+        // offset with segments that do not, which publish rejects. Fail the load rather than write
+        // data that cannot be published -- or, worse, that publishes short.
+        if (params.lake_tablet_params().write_txn_log()) {
+            return Status::NotSupported("multi-node write requires combined txn log");
+        }
+        if (!params.lake_tablet_params().enable_data_file_bundling()) {
+            return Status::NotSupported("multi-node write requires file bundling");
+        }
+    }
     for (const PTabletWithPartition& tablet : params.tablets()) {
         BundleWritableFileContext* bundle_writable_file_context = nullptr;
         // Enable bundle write for both single-statement and multi-statement transactions.
@@ -984,6 +1049,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_bundle_writable_file_context(bundle_writable_file_context)
                                               .set_global_dicts(&_global_dicts)
                                               .set_is_multi_statements_txn(multi_stmt)
+                                              .set_multi_node_write(multi_node_write)
                                               .build());
         mutable_delta_writers()->emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
@@ -1009,6 +1075,7 @@ void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }
+    _release_txn_log_waiters(Status::Cancelled("tablet channel aborted"));
 }
 
 void LakeTabletsChannel::cancel(const std::string& reason) {
@@ -1017,6 +1084,21 @@ void LakeTabletsChannel::cancel(const std::string& reason) {
     for (auto& it : _delta_writers) {
         it.second->cancel(cancel_status);
     }
+    _release_txn_log_waiters(cancel_status);
+}
+
+// In combined-txn-log mode the elected coordinator parks in `_txn_log_collector.wait()` until
+// every sender's eos has been processed, and only that makes `close_channel` -- and with it
+// `notify()` -- happen. A cancelled load has no more eos coming, so without this the coordinator
+// waits out `request.timeout_ms()`, which is `insert_timeout`: four hours by default. It holds
+// the closure of its tablet_writer_add_chunks for all of it, so the connection is never recycled
+// and the BE cannot finish brpc's Server::Join() on exit.
+void LakeTabletsChannel::_release_txn_log_waiters(const Status& reason) {
+    if (_finish_mode != lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+        return;
+    }
+    _txn_log_collector.update_status(reason);
+    _txn_log_collector.notify();
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(

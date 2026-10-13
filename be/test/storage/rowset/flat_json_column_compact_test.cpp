@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/flat_json/json_flat_path.h"
@@ -28,12 +29,14 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_compaction_fwd.h"
 #include "common/config_json_flat_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "storage/chunk_helper.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -282,7 +285,8 @@ protected:
     };
 
     // Write one JSON segment from `jsons`; segment nullability follows jsons[0]->is_nullable().
-    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname) {
+    SegmentHandle write_segment(MutableColumns& jsons, bool need_flat, const std::string& fname,
+                                bool is_compaction = true, bool simulate_legacy_root_footprint = false) {
         SegmentHandle handle;
         handle.fs = std::make_shared<MemoryFileSystem>();
         EXPECT_TRUE(handle.fs->create_dir(TEST_DIR).ok());
@@ -304,7 +308,7 @@ protected:
         writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
         writer_opts.meta->set_is_nullable(jsons[0]->is_nullable());
         writer_opts.need_zone_map = false;
-        writer_opts.is_compaction = true;
+        writer_opts.is_compaction = is_compaction;
 
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
         EXPECT_OK(writer->init());
@@ -317,6 +321,9 @@ protected:
         EXPECT_TRUE(writer->write_ordinal_index().ok());
         EXPECT_TRUE(wfile->close().ok());
 
+        if (simulate_legacy_root_footprint) {
+            handle.meta->set_total_mem_footprint(0);
+        }
         handle.segment->set_num_rows(handle.num_rows);
         auto res = ColumnReader::create(handle.meta.get(), handle.segment.get(), nullptr);
         EXPECT_TRUE(res.ok());
@@ -363,6 +370,51 @@ private:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
 };
+
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonRootTotalMemFootprint) {
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"session_id": "session-1", "messages": [{"content": "first message"}]})", false),
+            normal_json(R"({"session_id": "session-2", "messages": [{"content": "second message"}]})", false),
+    });
+
+    for (bool is_compaction : {false, true}) {
+        auto handle = write_segment(jsons, /*need_flat=*/true,
+                                    is_compaction ? "/compaction_flat_json_total_mem_footprint.data"
+                                                  : "/load_flat_json_total_mem_footprint.data",
+                                    is_compaction);
+        ASSERT_TRUE(handle.meta->json_meta().is_flat());
+        ASSERT_GT(handle.meta->children_columns_size(), 0);
+
+        uint64_t child_mem_footprint = 0;
+        for (const auto& child : handle.meta->children_columns()) {
+            child_mem_footprint += child.total_mem_footprint();
+        }
+        ASSERT_GT(child_mem_footprint, 0);
+        EXPECT_EQ(child_mem_footprint, handle.meta->total_mem_footprint());
+        EXPECT_EQ(handle.meta->total_mem_footprint(), handle.reader->total_mem_footprint());
+    }
+}
+
+TEST_F(FlatJsonColumnCompactTest, testLegacyFlatJsonRootTotalMemFootprintFallback) {
+    MutableColumns jsons = to_mutable_columns({
+            normal_json(R"({"session_id": "session-1", "messages": [{"content": "first message"}]})", false),
+            normal_json(R"({"session_id": "session-2", "messages": [{"content": "second message"}]})", false),
+    });
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/legacy_flat_json_total_mem_footprint.data",
+                                /*is_compaction=*/true, /*simulate_legacy_root_footprint=*/true);
+    ASSERT_TRUE(handle.meta->json_meta().is_flat());
+    ASSERT_EQ(0, handle.meta->total_mem_footprint());
+    ASSERT_TRUE(handle.reader->is_flat_json());
+    ASSERT_NE(nullptr, handle.reader->sub_readers());
+
+    uint64_t child_mem_footprint = 0;
+    for (const auto& child : *handle.reader->sub_readers()) {
+        child_mem_footprint += child->total_mem_footprint();
+    }
+    ASSERT_GT(child_mem_footprint, 0);
+    EXPECT_EQ(child_mem_footprint, handle.reader->total_mem_footprint());
+}
 
 TEST_F(FlatJsonColumnCompactTest, testJsonCompactToJson) {
     // clang-format off
@@ -1405,6 +1457,26 @@ TEST_F(FlatJsonColumnCompactTest, testNullHyperJsonCompactToFlatJson4) {
               JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
 }
 
+// Compaction derives its read layout from the input segments' metadata. With complex types left
+// out of flattening (the default), the scalar sub-columns must still count as base-typed, or no path
+// survives and every flat input is merged back into whole JSON just to be flattened again.
+TEST_F(FlatJsonColumnCompactTest, testCompactPathKeepsScalarSubColumnsWithoutComplexType) {
+    config::enable_json_flat_complex_type = false;
+    // clang-format off
+    MutableColumns jsons = to_mutable_columns({
+            flat_json(R"({"a": 1, "b": "x1", "c": [1, 2]})", false),
+            flat_json(R"({"a": 2, "b": "x2", "c": [3]})", false),
+            flat_json(R"({"a": 3, "b": "x3", "c": []})", false),
+    });
+    // clang-format on
+    JsonPathDeriver deriver;
+    test_compact_path(jsons, &deriver);
+
+    // The array-valued "c" stays in remain, as it does when flattening from data.
+    EXPECT_EQ(R"([a(BIGINT), b(VARCHAR)])",
+              JsonFlatPath::debug_flat_json(deriver.flat_paths(), deriver.flat_types(), deriver.has_remain_json()));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testHyperJsonCompactToFlatJsonRemain) {
     config::json_flat_sparsity_factor = 0.6;
     // clang-format off
@@ -2043,6 +2115,168 @@ TEST_F(FlatJsonColumnCompactTest, CompactJsonNotNullToNullableSchemaEvolutionWit
         EXPECT_NE(std::string::npos, col->debug_item(0).find("a: 1")) << col->debug_item(0);
         EXPECT_NE(std::string::npos, col->debug_item(4).find("a: 5")) << col->debug_item(4);
     }
+}
+
+// Past the streaming threshold a segment whose buffered chunks all share one flat layout stops
+// buffering: it adopts that layout and writes every chunk as it arrives. The output must read back
+// exactly like the buffered path's, with or without a null column.
+TEST_F(FlatJsonColumnCompactTest, testUniformFlatJsonCompactionStreams) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+    // Threshold limit/8 = 1 byte: streaming starts with the first chunk.
+    config::compaction_memory_limit_per_worker = 8;
+
+    for (bool nullable : {false, true}) {
+        _meta.reset(new ColumnMetaPB());
+        // clang-format off
+        MutableColumns jsons = to_mutable_columns({
+                more_flat_json({R"({"a": 1, "b": 21})", R"({"a": 2, "b": 22})"}, nullable),
+                more_flat_json({R"({"a": 3, "b": 23})", R"({"a": 4, "b": 24})"}, nullable),
+                more_flat_json({R"({"a": 6, "b": 26})", R"({"a": 5, "b": 25})"}, nullable),
+        });
+        // clang-format on
+        if (nullable) {
+            // Null the last row after flattening, so every chunk still derives the same layout.
+            auto* last = down_cast<NullableColumn*>(jsons[2].get());
+            last->null_column_data()[1] = 1;
+            last->update_has_null();
+        }
+        const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+
+        MutableColumnPtr read_col = jsons[0]->clone_empty();
+        ColumnWriterOptions writer_opts;
+        writer_opts.need_flat = true;
+        test_json(writer_opts, jsons, read_col);
+
+        EXPECT_EQ(streamed_before + 1, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+        EXPECT_TRUE(_meta->json_meta().is_flat());
+        EXPECT_FALSE(_meta->json_meta().has_remain());
+        EXPECT_FALSE(_meta->json_meta().has_remain_filter());
+        // "nulls" first for a nullable column, then the two paths.
+        ASSERT_EQ(nullable ? 3 : 2, _meta->children_columns_size());
+        EXPECT_EQ("a", _meta->children_columns(nullable ? 1 : 0).name());
+        EXPECT_EQ("b", _meta->children_columns(nullable ? 2 : 1).name());
+
+        ASSERT_EQ(6, read_col->size()) << "nullable=" << nullable;
+        EXPECT_EQ(R"({"a": 1, "b": 21})", read_col->debug_item(0));
+        EXPECT_EQ(R"({"a": 2, "b": 22})", read_col->debug_item(1));
+        EXPECT_EQ(R"({"a": 3, "b": 23})", read_col->debug_item(2));
+        EXPECT_EQ(R"({"a": 4, "b": 24})", read_col->debug_item(3));
+        EXPECT_EQ(R"({"a": 6, "b": 26})", read_col->debug_item(4));
+        EXPECT_EQ(nullable ? "NULL" : R"({"a": 5, "b": 25})", read_col->debug_item(5));
+    }
+}
+
+// Chunks with different layouts are never streamed: below the threshold they are buffered and
+// re-derived as before, and once streaming has started a layout change stops the compaction instead
+// of being written into sub-columns of another path.
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactionStreamingRejectsLayoutChange) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+    config::compaction_memory_limit_per_worker = 8;
+
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(TEST_DIR + "/streaming_layout_change.data"));
+
+    ColumnWriterOptions writer_opts;
+    writer_opts.meta = _meta.get();
+    writer_opts.meta->set_column_id(0);
+    writer_opts.meta->set_unique_id(0);
+    writer_opts.meta->set_type(TYPE_JSON);
+    writer_opts.meta->set_length(0);
+    writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+    writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+    writer_opts.meta->set_is_nullable(false);
+    writer_opts.need_zone_map = false;
+    writer_opts.need_flat = true;
+    writer_opts.is_compaction = true;
+    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+    ASSERT_OK(writer->init());
+
+    ASSERT_OK(writer->append(*more_flat_json({R"({"a": 1, "b": 21})"}, false)));
+    auto st = writer->append(*more_flat_json({R"({"a": 2, "b": 22, "c": 32})"}, false));
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+// A chunk trading a named path for a remain column has as many columns as the streamed layout: [a, b]
+// without remain against [a] with remain. Matching on the column count alone would write that remain
+// JSON into b's sub-column, so the remain column and the named paths are checked separately.
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonCompactionStreamingRejectsPathTradedForRemain) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+    config::compaction_memory_limit_per_worker = 8;
+
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    TabletColumn json_tablet_column = create_with_default_value<TYPE_JSON>("");
+    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(TEST_DIR + "/streaming_path_for_remain.data"));
+
+    ColumnWriterOptions writer_opts;
+    writer_opts.meta = _meta.get();
+    writer_opts.meta->set_column_id(0);
+    writer_opts.meta->set_unique_id(0);
+    writer_opts.meta->set_type(TYPE_JSON);
+    writer_opts.meta->set_length(0);
+    writer_opts.meta->set_encoding(DEFAULT_ENCODING);
+    writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+    writer_opts.meta->set_is_nullable(false);
+    writer_opts.need_zone_map = false;
+    writer_opts.need_flat = true;
+    writer_opts.is_compaction = true;
+    ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &json_tablet_column, wfile.get()));
+    ASSERT_OK(writer->init());
+
+    // Streams with [a, b] and no remain.
+    ASSERT_OK(writer->append(*more_flat_json({R"({"a": 1, "b": 21})"}, false)));
+    // [a] with a remain column: x and y are each in half of the rows, below the 0.9 sparsity factor.
+    auto traded = more_flat_json({R"({"a": 2, "x": 1})", R"({"a": 3, "y": 2})"}, false);
+    const auto* traded_json = down_cast<const JsonColumn*>(traded.get());
+    ASSERT_EQ(std::vector<std::string>{"a"}, traded_json->flat_column_paths());
+    ASSERT_TRUE(traded_json->has_remain());
+
+    auto st = writer->append(*traded);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
+}
+
+// A flat chunk with only a remain column never starts streaming: it is buffered and re-derived, and a
+// segment without any extractable path is written as plain JSON, as without streaming.
+TEST_F(FlatJsonColumnCompactTest, testRemainOnlyFlatJsonCompactionIsNotStreamed) {
+    const int64_t saved_mem_limit = config::compaction_memory_limit_per_worker;
+    DeferOp restore([&]() { config::compaction_memory_limit_per_worker = saved_mem_limit; });
+    config::compaction_memory_limit_per_worker = 8;
+
+    // A flat column whose whole content is in the remain column, without any named path.
+    auto remain = JsonColumn::create();
+    for (const auto* text : {R"({"x": 1})", R"({"y": 2})"}) {
+        ASSIGN_OR_ABORT(auto jv, JsonValue::parse(text));
+        remain->append(&jv);
+    }
+    auto flat = JsonColumn::create();
+    MutableColumns flat_columns;
+    flat_columns.emplace_back(std::move(remain));
+    flat->set_flat_columns({}, {}, std::move(flat_columns));
+    MutableColumns jsons;
+    jsons.emplace_back(std::move(flat));
+    const auto* remain_only = down_cast<const JsonColumn*>(jsons[0].get());
+    ASSERT_TRUE(remain_only->is_flat_json());
+    ASSERT_TRUE(remain_only->flat_column_paths().empty());
+    ASSERT_TRUE(remain_only->has_remain());
+    const int64_t streamed_before = FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value();
+
+    MutableColumnPtr read_col = JsonColumn::create();
+    ColumnWriterOptions writer_opts;
+    writer_opts.need_flat = true;
+    test_json(writer_opts, jsons, read_col);
+
+    EXPECT_EQ(streamed_before, FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.value());
+    EXPECT_FALSE(_meta->json_meta().is_flat());
+    ASSERT_EQ(2, read_col->size());
+    EXPECT_EQ(R"({"x": 1})", read_col->debug_item(0));
+    EXPECT_EQ(R"({"y": 2})", read_col->debug_item(1));
 }
 
 // Inverse mismatch through JsonFlatColumnIterator: nullable flat segment into a

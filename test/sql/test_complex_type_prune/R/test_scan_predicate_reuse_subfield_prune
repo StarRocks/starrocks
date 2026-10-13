@@ -1,0 +1,62 @@
+-- name: test_scan_predicate_reuse_subfield_prune
+drop database if exists test_scan_predicate_reuse_subfield_prune;
+-- result:
+-- !result
+create database test_scan_predicate_reuse_subfield_prune;
+-- result:
+-- !result
+use test_scan_predicate_reuse_subfield_prune;
+-- result:
+-- !result
+create table scs3 (
+  v1 bigint null,
+  str string null,
+  s1 struct<s1 int, s2 array<struct<a int, b int>>, s3 map<int,int>, s4 struct<e int, f int>>
+) duplicate key(v1)
+distributed by hash(v1) buckets 3 properties("replication_num"="1");
+-- result:
+-- !result
+insert into scs3 values
+  (1, 'aa', row(1, [row(1,11), row(2,21)], map{1:101}, row(1,1))),
+  (2, '5',  row(2, [row(5,12), row(6,22)], map{1:102}, row(2,2))),
+  (3, '7',  row(3, [row(7,13), row(8,23)], map{1:103}, row(3,3))),
+  (4, '9',  row(4, [row(9,14), row(0,24)], map{1:104}, row(4,4)));
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2;
+-- result:
+5
+7
+-- !result
+select map_size(s1.s3), s1.s2[1].a, s1.s3[1], s1.s4.f from scs3
+where str in ('aa', (s1.s2[1].a), 'ii', 'cc') order by v1 limit 2;
+-- result:
+1	5	102	2
+1	7	103	3
+-- !result
+select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1;
+-- result:
+5
+7
+9
+-- !result
+select s1.s2[1].a, s1.s2[1].b from scs3 where str = s1.s2[1].a order by v1;
+-- result:
+5	12
+7	13
+9	14
+-- !result
+function: assert_explain_verbose_contains('select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2', 'ColumnAccessPath: [/s1/s2/INDEX/a]')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select s1.s2[1].a from scs3 where str = s1.s2[1].a order by v1 limit 2', '].s2[true]\n')
+-- result:
+None
+-- !result
+drop database test_scan_predicate_reuse_subfield_prune;
+-- result:
+-- !result

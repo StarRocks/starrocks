@@ -174,15 +174,19 @@ private:
     size_t _collect_column_size_recursive(ColumnReader* col_reader);
     int64_t _collect_column_compressed_size_recursive(ColumnReader* col_reader);
     SegmentSharedPtr _segment;
+    // Declared before _column_iterators on purpose: a column iterator can hold raw pointers into the
+    // segment and the file it was built from (a delta column group column reads from a .cols segment
+    // and its own file), and members are destroyed in reverse declaration order, so the iterators must
+    // die first. SegmentIterator gets the same ordering explicitly in close().
+    std::unordered_map<std::string, SegmentSharedPtr> _dcg_segments;
+    std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
+    std::unique_ptr<RandomAccessFile> _read_file;
     std::vector<std::unique_ptr<ColumnIterator>> _column_iterators;
     std::vector<bool> _is_default_value_column_by_cid;
     const SegmentMetaCollecterParams* _params = nullptr;
     int32_t _tablet_id;
     int32_t _rss_id;
-    std::unique_ptr<RandomAccessFile> _read_file;
     OlapReaderStatistics _stats;
-    std::unordered_map<std::string, SegmentSharedPtr> _dcg_segments;
-    std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
     // For delta column group
     DeltaColumnGroupList _dcgs;
 };

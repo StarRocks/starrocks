@@ -1,4 +1,5 @@
 ---
+sidebar_position: 90
 displayed_sidebar: docs
 description: "StarRocks 提供原生 JDBC 驱动，支持任何兼容 JDBC 的客户端、IDE 或应用程序直接连接。"
 ---

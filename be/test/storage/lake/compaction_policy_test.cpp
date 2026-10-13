@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <ctime>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "common/config_compaction_fwd.h"
@@ -25,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/tablet_schema.h"
 #include "test_util.h"
 
 namespace starrocks::lake {
@@ -39,6 +42,20 @@ protected:
     constexpr static const char* const kTestDirectory = "test_lake_compaction_policy";
 
     void SetUp() override {
+        // The whole BE test binary runs in one process, so snapshot every global config this fixture
+        // (or its test bodies) overrides and restore it in TearDown. Leaked values change how later
+        // suites pick compaction inputs -- max_cumulative_compaction_num_singleton_deltas=10 caps
+        // SizeTieredCompactionPolicy::pick_rowsets() at 10 segments instead of the default 500.
+        _saved_tablet_max_versions = config::tablet_max_versions;
+        _saved_min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _saved_max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
+        _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _saved_size_tiered_level_multiple = config::size_tiered_level_multiple;
+        _saved_size_tiered_level_num = config::size_tiered_level_num;
+        _saved_enable_size_tiered = config::enable_size_tiered_compaction_strategy;
+        _saved_base_interval = config::base_compaction_interval_seconds_since_last_operation;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 3;
         config::max_cumulative_compaction_num_singleton_deltas = 10;
@@ -51,7 +68,19 @@ protected:
         CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
     }
 
-    void TearDown() override { remove_test_dir_ignore_error(); }
+    void TearDown() override {
+        config::tablet_max_versions = _saved_tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _saved_min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _saved_max_cumulative_deltas;
+        config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
+        config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
+        config::size_tiered_level_multiple = _saved_size_tiered_level_multiple;
+        config::size_tiered_level_num = _saved_size_tiered_level_num;
+        config::enable_size_tiered_compaction_strategy = _saved_enable_size_tiered;
+        config::base_compaction_interval_seconds_since_last_operation = _saved_base_interval;
+
+        remove_test_dir_ignore_error();
+    }
 
     void add_data_rowset(uint32 id, bool overlap, int64_t level) {
         auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
@@ -81,6 +110,17 @@ protected:
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
+
+    // Config values captured in SetUp and put back in TearDown.
+    int16_t _saved_tablet_max_versions = 0;
+    int64_t _saved_min_cumulative_deltas = 0;
+    int64_t _saved_max_cumulative_deltas = 0;
+    int64_t _saved_min_base_deltas = 0;
+    int64_t _saved_size_tiered_min_level_size = 0;
+    int64_t _saved_size_tiered_level_multiple = 0;
+    int64_t _saved_size_tiered_level_num = 0;
+    bool _saved_enable_size_tiered = false;
+    int64_t _saved_base_interval = 0;
 };
 
 // ------ BaseAndCumulativeCompactionPolicy ------
@@ -149,6 +189,42 @@ TEST_F(LakeCompactionPolicyTest, test_base_by_segment_num) {
     }
 }
 
+TEST_F(LakeCompactionPolicyTest, test_base_respects_window_and_interval) {
+    config::enable_size_tiered_compaction_strategy = false;
+    config::base_compaction_interval_seconds_since_last_operation = 3600;
+    _tablet_metadata->set_cumulative_point(6);
+    for (int i = 1; i <= 10; ++i) {
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_id(i);
+        rowset->add_segment_metas()->set_filename("file");
+    }
+
+    ASSIGN_OR_ABORT(auto forbidden, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false, false, false));
+    ASSIGN_OR_ABORT(auto cumulative, forbidden->pick_rowsets());
+    ASSERT_EQ(4, cumulative.size());
+    EXPECT_EQ(7, cumulative.front()->id());
+    EXPECT_FALSE(forbidden->picked_base_compaction());
+
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    EXPECT_EQ(4, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto cooling, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto cooling_rowsets, cooling->pick_rowsets());
+    ASSERT_EQ(4, cooling_rowsets.size());
+    EXPECT_FALSE(cooling->picked_base_compaction());
+
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr) - 3601);
+    ASSIGN_OR_ABORT(auto ready, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto base, ready->pick_rowsets());
+    ASSERT_EQ(6, base.size());
+    EXPECT_TRUE(ready->picked_base_compaction());
+
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    ASSIGN_OR_ABORT(auto forced, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, true, false, false));
+    ASSIGN_OR_ABORT(auto forced_rowsets, forced->pick_rowsets());
+    ASSERT_EQ(6, forced_rowsets.size());
+    EXPECT_TRUE(forced->picked_base_compaction());
+}
+
 // ------ SizeTieredCompactionPolicy ------
 
 // 1 rowset with 2 overlap segments
@@ -198,6 +274,62 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_max_compaction) {
     for (int i = 0; i < input_rowsets.size(); ++i) {
         EXPECT_EQ(i + 1, input_rowsets[i]->id());
     }
+    EXPECT_FALSE(compaction_policy->picked_base_compaction());
+
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    config::base_compaction_interval_seconds_since_last_operation = 3600;
+    EXPECT_EQ(6, compaction_score(_tablet_mgr.get(), _tablet_metadata));
+    ASSIGN_OR_ABORT(auto cooling, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto cooling_rowsets, cooling->pick_rowsets());
+    ASSERT_EQ(6, cooling_rowsets.size());
+    EXPECT_EQ(1, cooling_rowsets.front()->id());
+    EXPECT_FALSE(cooling->picked_base_compaction());
+
+    _tablet_metadata->clear_last_base_compaction_time();
+    ASSIGN_OR_ABORT(auto forbidden, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false, false, false));
+    ASSIGN_OR_ABORT(auto forbidden_rowsets, forbidden->pick_rowsets());
+    ASSERT_EQ(6, forbidden_rowsets.size());
+    EXPECT_EQ(1, forbidden_rowsets.front()->id());
+    EXPECT_FALSE(forbidden->picked_base_compaction());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_size_tiered_delete_pressure_respects_base_restrictions) {
+    config::enable_size_tiered_compaction_strategy = true;
+    config::tablet_max_versions = 10;
+
+    add_data_rowset(1, false, 4);
+    add_delete_rowset(2);
+    for (int i = 0; i < 4; ++i) {
+        add_data_rowset(i + 3, false, 2);
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ASSIGN_OR_ABORT(auto allowed, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto base_rowsets, allowed->pick_rowsets());
+    ASSERT_FALSE(base_rowsets.empty());
+    EXPECT_EQ(1, base_rowsets.front()->id());
+    EXPECT_TRUE(allowed->picked_base_compaction());
+
+    ASSIGN_OR_ABORT(auto forbidden, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false, false, false));
+    ASSIGN_OR_ABORT(auto cumulative_rowsets, forbidden->pick_rowsets());
+    ASSERT_EQ(4, cumulative_rowsets.size());
+    EXPECT_EQ(3, cumulative_rowsets.front()->id());
+    EXPECT_FALSE(forbidden->picked_base_compaction());
+
+    config::base_compaction_interval_seconds_since_last_operation = 3600;
+    _tablet_metadata->set_last_base_compaction_time(time(nullptr));
+    ASSIGN_OR_ABORT(auto cooling, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, false));
+    ASSIGN_OR_ABORT(auto cooling_rowsets, cooling->pick_rowsets());
+    ASSERT_EQ(4, cooling_rowsets.size());
+    EXPECT_EQ(3, cooling_rowsets.front()->id());
+    EXPECT_FALSE(cooling->picked_base_compaction());
+
+    ASSIGN_OR_ABORT(auto manual, CompactionPolicy::create(_tablet_mgr.get(), _tablet_metadata, true, false, false));
+    ASSIGN_OR_ABORT(auto manual_rowsets, manual->pick_rowsets());
+    ASSERT_FALSE(manual_rowsets.empty());
+    EXPECT_EQ(1, manual_rowsets.front()->id());
+    EXPECT_TRUE(manual->picked_base_compaction());
 }
 
 // 6 rowsets in level 2
@@ -705,6 +837,20 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
                     CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto ratio_rowsets, ratio_policy->pick_rowsets());
     expect_base_pick(ratio_rowsets);
+    EXPECT_TRUE(ratio_policy->picked_base_compaction());
+
+    metadata->set_last_base_compaction_time(time(nullptr));
+    config::base_compaction_interval_seconds_since_last_operation = 3600;
+    ASSIGN_OR_ABORT(auto cooling_policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false));
+    ASSIGN_OR_ABORT(auto cooling_rowsets, cooling_policy->pick_rowsets());
+    EXPECT_TRUE(cooling_rowsets.empty());
+    EXPECT_FALSE(cooling_policy->picked_base_compaction());
+
+    metadata->clear_last_base_compaction_time();
+    ASSIGN_OR_ABORT(auto forbidden_policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, false, false));
+    ASSIGN_OR_ABORT(auto forbidden_rowsets, forbidden_policy->pick_rowsets());
+    EXPECT_TRUE(forbidden_rowsets.empty());
+    EXPECT_FALSE(forbidden_policy->picked_base_compaction());
 
     // Case B: absolute-count trigger (the hot-table case). Aggregate ratio (0.64) < ratio threshold
     // (0.99) so the ratio does NOT trigger, but sum(num_dels)=5.2M >= count threshold (1M) does --
@@ -718,13 +864,17 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
     expect_base_pick(count_rowsets);
 
     // Case C: force_base_compaction (from ALTER ... COMPACT) triggers base even with both
-    // thresholds disabled.
+    // thresholds disabled and the automatic window/interval closed.
     config::lake_pk_compaction_base_delete_ratio_threshold = kDisabledRatio;
     config::lake_pk_compaction_base_delete_rows_threshold = kDisabledRows;
+    metadata->set_last_base_compaction_time(time(nullptr));
     ASSIGN_OR_ABORT(auto forced_policy,
-                    CompactionPolicy::create(_tablet_mgr.get(), metadata, true /* force_base_compaction */));
+                    CompactionPolicy::create(_tablet_mgr.get(), metadata, true /* force_base_compaction */, false,
+                                             false /* allow_base_compaction */));
     ASSIGN_OR_ABORT(auto forced_rowsets, forced_policy->pick_rowsets());
     expect_base_pick(forced_rowsets);
+    EXPECT_TRUE(forced_policy->picked_base_compaction());
+    metadata->clear_last_base_compaction_time();
 
     // Case D: neither trigger met and no force -> cumulative (size-tiered) selection, which does
     // NOT force-pick the delete-heavy rowsets. With only 4 non-overlapped segments
@@ -736,6 +886,159 @@ TEST_F(LakeCompactionPolicyTest, test_pk_base_compaction_triggers) {
                     CompactionPolicy::create(_tablet_mgr.get(), metadata, false /* force_base_compaction */));
     ASSIGN_OR_ABORT(auto cumulative_rowsets, cumulative_policy->pick_rowsets());
     EXPECT_TRUE(cumulative_rowsets.empty());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_picks_complete_shared_rowsets_only) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    metadata->set_version(2);
+    metadata->mutable_range();
+
+    auto add_rowset = [&](uint32_t id, std::initializer_list<bool> shared_segments) {
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(id);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(100);
+        rowset->set_overlapped(shared_segments.size() > 1);
+        for (bool shared : shared_segments) {
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_" +
+                                  std::to_string(rowset->segment_metas_size()));
+            segment->set_shared(shared);
+        }
+    };
+    add_rowset(1, {false});
+    add_rowset(2, {true});
+    add_rowset(3, {false, true, false});
+    add_rowset(4, {false, false});
+
+    ASSIGN_OR_ABORT(auto policy, CompactionPolicy::create(_tablet_mgr.get(), metadata, false, true));
+    ASSIGN_OR_ABORT(auto rowsets, policy->pick_rowsets());
+    ASSERT_EQ(2, rowsets.size());
+    EXPECT_EQ(2, rowsets[0]->id());
+    EXPECT_EQ(3, rowsets[1]->id());
+    // A mixed rowset is selected as one complete Rowset object, never as an
+    // individual shared-segment slice.
+    EXPECT_EQ(3, rowsets[1]->num_segments());
+}
+
+TEST_F(LakeCompactionPolicyTest, test_unshare_rejects_unsupported_metadata) {
+    auto non_pk = generate_simple_tablet_metadata(DUP_KEYS);
+    non_pk->mutable_range();
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), non_pk, false, true).ok());
+
+    auto no_range = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    EXPECT_FALSE(CompactionPolicy::create(_tablet_mgr.get(), no_range, false, true).ok());
+
+    auto dcg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    dcg->mutable_range();
+    (*dcg->mutable_dcg_meta()->mutable_dcgs())[1].add_column_files("dcg.cols");
+    auto dcg_status = CompactionPolicy::create(_tablet_mgr.get(), dcg, false, true);
+    ASSERT_FALSE(dcg_status.ok());
+    EXPECT_TRUE(dcg_status.status().is_not_supported());
+
+    auto idg = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    idg->mutable_range();
+    (*idg->mutable_idg_meta()->mutable_idgs())[1].add_entries()->set_index_file("idg.idx");
+    auto idg_status = CompactionPolicy::create(_tablet_mgr.get(), idg, false, true);
+    ASSERT_FALSE(idg_status.ok());
+    EXPECT_TRUE(idg_status.status().is_not_supported());
+}
+
+// The guard that keeps everyday compaction off a split's inherited files. Without it an ordinary
+// compaction on an ORDER BY != PK child reads the shared segments whole (the tablet range is
+// withheld for that shape and the row filter is only built for UNSHARE), folds the siblings' rows
+// into a private output, and UNSHARE then skips that rowset because it no longer carries a shared
+// segment -- so those rows are served by the wrong child after cutover.
+// Its own on-disk root, not LakeCompactionPolicyTest's. The test binary runs each case in its own
+// process but several at once from the same working directory, and every fixture in that family
+// clears the same RELATIVE directory in SetUp -- so one process's clear_and_init_test_dir() deletes
+// the meta/ another has just created. Adding cases to the shared root widens that window.
+class OrdinaryCompactionSharedWindowTest : public TestBase {
+public:
+    OrdinaryCompactionSharedWindowTest() : TestBase(kOwnTestDirectory) {}
+
+protected:
+    constexpr static const char* const kOwnTestDirectory = "test_ordinary_compaction_shared_window";
+
+    void SetUp() override { clear_and_init_test_dir(); }
+    void TearDown() override { remove_test_dir_ignore_error(); }
+
+    // Delete-bearing rowsets plus force_base_compaction below, so that WITHOUT the guard the picker
+    // is guaranteed to select all of them. Otherwise an empty result would not distinguish "the
+    // guard blocked it" from "the size-tiered policy had nothing worth merging", and the test would
+    // pass for the wrong reason.
+    MutableTabletMetadataPtr make_metadata(bool separate_sort_key, bool shared_segment) {
+        constexpr int64_t kBig = 100 * 1024 * 1024;
+        auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        metadata->set_version(2);
+        metadata->mutable_range();
+        // c0 is the only key column; ORDER BY the value column c1 is what makes the sort key
+        // separate from the primary key -- the shape whose range has no rowid interval.
+        if (separate_sort_key) {
+            metadata->mutable_schema()->add_sort_key_idxes(1);
+        }
+        for (uint32_t id = 1; id <= 2; ++id) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(id);
+            rowset->set_overlapped(false);
+            rowset->set_num_rows(4000000);
+            rowset->set_num_dels(3200000);
+            rowset->set_data_size(kBig);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename("rowset_" + std::to_string(id) + "_segment_0");
+            segment->set_num_rows(4000000);
+            segment->set_shared(shared_segment);
+        }
+        return metadata;
+    }
+
+    std::vector<RowsetPtr> pick(const MutableTabletMetadataPtr& metadata) {
+        auto policy_or = CompactionPolicy::create(_tablet_mgr.get(), metadata, /*force_base_compaction=*/true,
+                                                  /*is_unshare=*/false);
+        CHECK(policy_or.ok()) << policy_or.status();
+        auto rowsets_or = policy_or.value()->pick_rowsets();
+        CHECK(rowsets_or.ok()) << rowsets_or.status();
+        return std::move(rowsets_or.value());
+    }
+};
+
+// The control: nothing shared, so the guard does not apply and the picker takes both rowsets. This
+// is what makes the two assertions below meaningful.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_picks_normally_when_no_segment_is_shared) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/false);
+    ASSERT_TRUE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    EXPECT_EQ(2, pick(metadata).size()) << "the guard must not outlive the shared window";
+}
+
+// The fix itself: ordinary compaction must not touch a split's inherited files, because it would
+// fold the siblings' rows into a private output that the UNSHARE pass then skips.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_blocked_while_shared_segments_await_unshare) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/true);
+    EXPECT_TRUE(pick(metadata).empty()) << "ordinary compaction must wait for UNSHARE";
+}
+
+// A plain split keeps the range in sort-key space, so _apply_tablet_range still narrows to a rowid
+// interval and ordinary compaction is not reading whole shared segments. Blocking here would stall
+// every ranged primary-key table that ever split, for nothing.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_when_the_sort_key_is_the_primary_key) {
+    auto metadata = make_metadata(/*separate_sort_key=*/false, /*shared_segment=*/true);
+    ASSERT_FALSE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    EXPECT_EQ(2, pick(metadata).size()) << "the guard is only for the shape whose range has no rowid interval";
+}
+
+// A tablet merge stamps its range onto every rowset it emits (update_rowset_range at
+// tablet_merger.cpp:454), never marks a segment shared, and nothing under be/src/storage/lake ever
+// clears a rowset's range. So waiting on a rowset's range rather than on its shared segments would
+// stall this tablet's ordinary compaction for good -- and FE schedules an UNSHARE only from a split,
+// so nothing would ever release it.
+TEST_F(OrdinaryCompactionSharedWindowTest, test_does_not_block_on_a_merge_product) {
+    auto metadata = make_metadata(/*separate_sort_key=*/true, /*shared_segment=*/false);
+    for (auto& rowset : *metadata->mutable_rowsets()) {
+        rowset.mutable_range()->CopyFrom(metadata->range());
+    }
+    ASSERT_TRUE(TabletSchema::create(metadata->schema())->has_separate_sort_key());
+    ASSERT_TRUE(metadata->rowsets(0).has_range());
+    EXPECT_EQ(2, pick(metadata).size()) << "a merge product's range must not stall ordinary compaction";
 }
 
 } // namespace starrocks::lake

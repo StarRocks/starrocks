@@ -26,7 +26,9 @@
 #include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "common/config_compaction_fwd.h"
 #include "exprs/hyper_json_transformer.h"
+#include "fmt/format.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/casts.h"
 #include "storage/flat_json_metrics.h"
@@ -35,12 +37,132 @@
 #include "types/constexpr.h"
 
 namespace starrocks {
+
+bool check_is_same_schema(const JsonColumn* one, const JsonColumn* two);
+
+namespace {
+// The JSON data part of a compaction input column, or nullptr when it has none (a const-null column).
+const JsonColumn* json_data_of(const Column& column) {
+    if (column.only_null()) {
+        return nullptr;
+    }
+    if (column.is_nullable()) {
+        return down_cast<const JsonColumn*>(down_cast<const NullableColumn&>(column).data_column_raw_ptr());
+    }
+    return down_cast<const JsonColumn*>(&column);
+}
+
+// Buffered input past which a uniformly laid out flat segment is written as it arrives. Small segments
+// keep the full re-derivation; large ones must not hold their whole input in memory.
+int64_t streaming_threshold_bytes() {
+    const int64_t mem_limit = config::compaction_memory_limit_per_worker;
+    return mem_limit > 0 ? mem_limit / 8 : -1;
+}
+} // namespace
+
 Status FlatJsonColumnCompactor::append(const Column& column) {
+    if (_streaming) {
+        const JsonColumn* json_col = json_data_of(column);
+        if (json_col == nullptr) {
+            return Status::InternalError("flat json compaction input changed layout mid-segment: const-null column");
+        }
+        return _stream_write(column, *json_col);
+    }
+
     // compaction will reuse the column, must copy in there.
     _json_datas.emplace_back(column.clone());
-
     _estimate_size += column.byte_size();
+
+    const JsonColumn* json_col = json_data_of(column);
+    // A flat layout with no named path (only a remain column) is never streamed: the buffered path writes
+    // such a segment as plain JSON, and a flat segment without sub-columns is not a layout readers expect.
+    _uniform_flat_layout = _uniform_flat_layout && json_col != nullptr && json_col->is_flat_json() &&
+                           !json_col->flat_column_paths().empty() &&
+                           check_is_same_schema(json_data_of(*_json_datas.front()), json_col);
+    const int64_t threshold = streaming_threshold_bytes();
+    if (_uniform_flat_layout && threshold > 0 && _estimate_size > static_cast<size_t>(threshold)) {
+        return _start_streaming();
+    }
     return Status::OK();
+}
+
+Status FlatJsonColumnCompactor::_start_streaming() {
+    // Every input segment being flat is what makes the compaction reader transform all of them into
+    // the one layout derived from their metadata (see TabletReader's compaction access paths), so a
+    // segment that is still uniform this far in will stay so: adopt its layout and stop buffering.
+    const JsonColumn* first = json_data_of(*_json_datas.front());
+    FlatJsonMetrics::instance()->flat_json_compaction_total.increment(1);
+    FlatJsonMetrics::instance()->flat_json_compaction_streaming_total.increment(1);
+    VLOG(2) << "FlatJsonColumnCompactor streams flat json after " << _json_datas.size()
+            << " chunks: " << first->debug_flat_paths();
+    _streaming = true;
+    _is_flat = true;
+    _flat_paths = first->flat_column_paths();
+    _flat_types = first->flat_column_types();
+    _has_remain = first->has_remain();
+    // No remain filter: it can only be built from every remain value of the segment. Without one a
+    // reader falls back to reading the remain column, which is always correct.
+    _remain_filter.reset();
+    RETURN_IF_ERROR(_init_flat_writers());
+
+    MutableColumns buffered = std::move(_json_datas);
+    _json_datas.clear();
+    for (auto& col : buffered) {
+        RETURN_IF_ERROR(_stream_write(*col, *json_data_of(*col)));
+        col.reset(); // release as soon as written
+    }
+    return Status::OK();
+}
+
+Status FlatJsonColumnCompactor::_stream_write(const Column& column, const JsonColumn& json_col) {
+    // _init_flat_writers() put a "nulls" writer first for a nullable column and a "remain" writer last.
+    const size_t first_field = _json_meta->is_nullable() ? 1 : 0;
+    const size_t num_named_writers = _flat_writers.size() - first_field - (_has_remain ? 1 : 0);
+    // Check the remain column and the named paths separately: a chunk trading a named path for a remain
+    // column has as many columns as there are writers, and would put its remain JSON into a path's writer.
+    if (!json_col.is_flat_json() || json_col.has_remain() != _has_remain ||
+        json_col.flat_column_paths().size() != num_named_writers) {
+        // The compaction reader gives every chunk of a segment the same layout; anything else would be
+        // silently mis-written, so stop the compaction instead.
+        return Status::InternalError(fmt::format("flat json compaction input changed layout mid-segment: {} -> {}",
+                                                 JsonFlatPath::debug_flat_json(_flat_paths, _flat_types, _has_remain),
+                                                 json_col.debug_flat_paths()));
+    }
+    for (size_t i = 0; i < json_col.flat_column_paths().size(); i++) {
+        if (json_col.flat_column_paths()[i] != _flat_paths[first_field + i] ||
+            json_col.flat_column_types()[i] != _flat_types[first_field + i]) {
+            return Status::InternalError(fmt::format("flat json compaction input changed layout mid-segment at {}",
+                                                     json_col.flat_column_paths()[i]));
+        }
+    }
+
+    if (_json_meta->is_nullable()) {
+        auto nulls = NullColumn::create();
+        if (column.is_nullable()) {
+            const auto* nl = down_cast<const NullableColumn&>(column).null_column_raw_ptr();
+            nulls->append(*nl, 0, nl->size());
+        } else {
+            constexpr uint8_t kNotNull = 0;
+            nulls->append_value_multiple_times(&kNotNull, column.size());
+        }
+        RETURN_IF_ERROR(_flat_writers[0]->append(*nulls));
+    }
+    for (size_t i = first_field; i < _flat_writers.size(); i++) {
+        RETURN_IF_ERROR(_flat_writers[i]->append(*json_col.get_flat_field(static_cast<int>(i - first_field))));
+    }
+    return Status::OK();
+}
+
+uint64_t FlatJsonColumnCompactor::estimate_buffer_size() {
+    if (!_streaming) {
+        return FlatJsonColumnWriter::estimate_buffer_size();
+    }
+    // What is actually held: the sub-column writers' encoded pages.
+    uint64_t size = 0;
+    for (auto& w : _flat_writers) {
+        size += w->estimate_buffer_size();
+    }
+    return size;
 }
 
 Status FlatJsonColumnCompactor::_compact_columns(MutableColumns& json_datas) {
@@ -190,8 +312,10 @@ Status FlatJsonColumnCompactor::_flatten_columns(MutableColumns& json_datas) {
 }
 
 Status FlatJsonColumnCompactor::finish() {
-    RETURN_IF_ERROR(_compact_columns(_json_datas));
-    _json_datas.clear(); // release after write
+    if (!_streaming) {
+        RETURN_IF_ERROR(_compact_columns(_json_datas));
+        _json_datas.clear(); // release after write
+    }
 
     RETURN_IF_ERROR(_json_writer->finish());
 
@@ -207,6 +331,7 @@ Status FlatJsonColumnCompactor::finish() {
         _subcolumn_dict_valid[sub_column_key] = sub_dict_valid;
     }
 
+    _json_meta->set_total_mem_footprint(total_mem_footprint());
     return Status::OK();
 }
 

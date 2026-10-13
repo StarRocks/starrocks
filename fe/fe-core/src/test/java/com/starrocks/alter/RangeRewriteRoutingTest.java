@@ -15,6 +15,7 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -24,6 +25,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -33,7 +39,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,6 +90,15 @@ public class RangeRewriteRoutingTest {
     private static AlterJobV2 createJob(String tableName, String alterSql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
         return handler().analyzeAndCreateJob(stmt.getAlterClauseList(), db(), table(tableName));
+    }
+
+    /**
+     * Run ALTER ... SET (...) the way the executor does. Property guards live in createAlterMetaJob,
+     * which analyzeAndCreateJob never reaches -- driving them through createJob proves nothing.
+     */
+    private static void alterMeta(String tableName, String alterSql) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+        handler().processLakeTableAlterMeta(stmt.getAlterClauseList().get(0), db(), table(tableName));
     }
 
     /** Extract the underlying DdlException from a (possibly wrapped) throwable. */
@@ -392,5 +409,149 @@ public class RangeRewriteRoutingTest {
         assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(
                 table, flipStmt.getAlterClauseList().get(0)),
                 "a cloud-native materialized view must not route to the range-rewrite job");
+    }
+
+    // (l) A range-distributed PRIMARY KEY table's ORDER BY reorder must NOT route to the rewrite job
+    // when it would leave the sort key different from the primary key. A primary-key table routes by
+    // its primary key (MetaUtils#getRangeDistributionColumns), but the rewrite samples the new tablet
+    // boundaries over the NEW sort key -- routing it would store ranges in sort-key space that every
+    // writer and pruner then reads as primary-key space. Such a table has to be created that way, so
+    // its boundaries are sampled in primary-key space from the start.
+    @Test
+    public void testPrimaryKeyReorderSeparatingSortKeyRejectedSynchronously() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sep (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_sep");
+        for (String orderBy : List.of("order by (v1)", "order by (k2, k1)")) {
+            String sql = "alter table t_route_pk_sep " + orderBy;
+            AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(
+                    table, stmt.getAlterClauseList().get(0)),
+                    orderBy + " separates the sort key from the primary key and must not route");
+            // Declining the route lands on processModifySortKeyColumn's existing range rejection.
+            assertThrowsDdlException(() -> createJob("t_route_pk_sep", sql));
+        }
+    }
+
+    // (l') The same reorder spelled as the primary key itself keeps both key spaces identical, so it
+    // stays eligible -- the guard above is about divergence, not about primary-key tables as such.
+    @Test
+    public void testPrimaryKeyReorderMatchingPrimaryKeyStillRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_same (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = table("t_route_pk_same");
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table t_route_pk_same order by (k1, k2)", connectContext);
+        org.junit.jupiter.api.Assertions.assertTrue(SchemaChangeHandler.needsRangeRewriteSchemaChange(
+                table, stmt.getAlterClauseList().get(0)),
+                "a sort key equal to the primary key leaves range routing unchanged");
+    }
+
+
+    /**
+     * (l'') The same divergence, reached through MODIFY COLUMN rather than a reorder.
+     *
+     * <p>The clause is built by hand on purpose. Spelled as SQL, {@code MODIFY COLUMN v2 INT KEY} on a
+     * primary-key table never survives analysis -- the analyzer fills in REPLACE for the column and then
+     * rejects the key/aggregate combination -- so the routing predicate is not reachable that way, and a
+     * SQL-level test would only be testing the analyzer. The guard below is therefore defence in depth:
+     * it keeps the predicate from answering on two different key spaces (ORDER BY names against
+     * primary-key names, which can never be equal) if another caller ever does reach it. Routing this
+     * shape would be worse than the false positive, because createRangeRewriteJob(List&lt;Column&gt;)
+     * passes sortKeyIdxes = null and would rewrite the table without its ORDER BY.
+     */
+    @Test
+    public void testPrimaryKeyKeynessFlipOnSeparateSortKeyIsNotRouted() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sep_flip"
+                + " (k1 int not null, k2 int not null, v1 int, v2 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable table = table("t_route_pk_sep_flip");
+        assertFalse(MetaUtils.getPhysicalSortKeyColumns(table, table.getBaseIndexMetaId()).stream()
+                        .map(Column::getName).collect(Collectors.toList())
+                        .equals(table.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList())),
+                "this table's ORDER BY must differ from its primary key for the case to mean anything");
+
+        // Promote the value column v2 to a key column: the flip the predicate has to answer about.
+        ColumnDef promoted = new ColumnDef("v2", new TypeDef(IntegerType.INT), true, null, null, false,
+                ColumnDef.DefaultValueDef.NOT_SET, "");
+        ModifyColumnClause clause = new ModifyColumnClause(promoted, null, null, Map.of());
+
+        assertFalse(SchemaChangeHandler.needsRangeRewriteSchemaChange(table, clause),
+                "a sort key that differs from the primary key must not route a keyness flip");
+    }
+
+    // (m) ADD INDEX on a range-distributed PRIMARY KEY table whose ORDER BY differs from the primary
+    // key must SUCCEED, but on the regular schema-change path rather than the IDG fast path. The fast
+    // path writes the index as a sidecar keyed to the segment it annotates, and a split hands the
+    // children the parent's segments before UNSHARE compaction rewrites them wholesale -- sidecars are
+    // not carried across, so the index would quietly stop covering its data. The regular path builds
+    // the index into the data itself and survives that rewrite.
+    @Test
+    public void testAddIndexUsesRegularPathOnSeparateSortKeyPrimaryKeyRange() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_sidecar (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        OlapTable table = table("t_route_pk_sidecar");
+        assertFalse(SchemaChangeHandler.isLakeIndexFastPathAdmissible(table),
+                "the IDG fast path must decline a table whose sort key differs from its primary key");
+
+        AlterJobV2 job = createJob("t_route_pk_sidecar",
+                "alter table t_route_pk_sidecar add index idx_v1 (v1) using bitmap");
+        org.junit.jupiter.api.Assertions.assertNotNull(job, "ADD INDEX must still produce a job");
+        org.junit.jupiter.api.Assertions.assertFalse(job instanceof LakeTableAddIndexJob,
+                "ADD INDEX must not take the sidecar fast path here, got " + job.getClass().getSimpleName());
+    }
+
+    // (m') The same table with its sort key equal to the primary key keeps the fast path: the guard is
+    // about the two key spaces diverging, not about primary-key tables as such.
+    @Test
+    public void testAddIndexKeepsFastPathWhenSortKeyIsThePrimaryKey() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_nosidecar (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        org.junit.jupiter.api.Assertions.assertTrue(
+                SchemaChangeHandler.isLakeIndexFastPathAdmissible(table("t_route_pk_nosidecar")),
+                "a sort key equal to the primary key leaves the fast path admissible");
+    }
+
+    // (n) file_bundling is what makes this shape work at all: CompactionScheduler drops an UNSHARE
+    // request for a table that is not file-bundling, so disabling it mid-split would leave the job
+    // waiting on a rewrite that can never be scheduled. Refuse the property change.
+    @Test
+    public void testDisablingFileBundlingRejectedOnSeparateSortKeyPrimaryKeyRange() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_bundle (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(v1)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        DdlException e = assertThrowsDdlException(() -> alterMeta("t_route_pk_bundle",
+                "alter table t_route_pk_bundle set ('file_bundling' = 'false')"));
+        org.junit.jupiter.api.Assertions.assertTrue(
+                e.getMessage().contains("file_bundling cannot be disabled"),
+                "unexpected message: " + e.getMessage());
+    }
+
+    // (n') A range primary-key table whose sort key IS the primary key never needed the UNSHARE
+    // rewrite, so it keeps the property switchable.
+    @Test
+    public void testDisablingFileBundlingAllowedWhenSortKeyIsThePrimaryKey() throws Exception {
+        starRocksAssert.withTable("create table t_route_pk_bundle_ok (k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'file_bundling' = 'true');");
+        try {
+            alterMeta("t_route_pk_bundle_ok", "alter table t_route_pk_bundle_ok set ('file_bundling' = 'false')");
+        } catch (Exception e) {
+            org.junit.jupiter.api.Assertions.assertFalse(
+                    String.valueOf(e.getMessage()).contains("file_bundling cannot be disabled"),
+                    "must not hit the separate-sort-key refusal: " + e.getMessage());
+        }
     }
 }

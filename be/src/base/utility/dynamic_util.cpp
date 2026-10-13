@@ -24,12 +24,19 @@
 namespace starrocks {
 
 Status dynamic_lookup(void* handle, const char* symbol, void** fn_ptr) {
+    // dlerror() reports the last error since it was last called, so a stale
+    // error left by an unrelated dl* call on this thread would be misattributed
+    // to this lookup. Clear it first (the idiom POSIX documents for dlsym).
+    dlerror();
     *(void**)(fn_ptr) = dlsym(handle, symbol);
     char* error = dlerror();
 
-    if (error != nullptr) {
+    // A null address without an error message is possible for data symbols,
+    // but every caller here looks up functions, so treat it as not found rather
+    // than hand back a pointer that will be called.
+    if (error != nullptr || *fn_ptr == nullptr) {
         std::stringstream ss;
-        ss << "Unable to find " << symbol << "\ndlerror: " << error;
+        ss << "Unable to find " << symbol << "\ndlerror: " << (error != nullptr ? error : "symbol resolved to null");
         return Status::InternalError(ss.str());
     }
 

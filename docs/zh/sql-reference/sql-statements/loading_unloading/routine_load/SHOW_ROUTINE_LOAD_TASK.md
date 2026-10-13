@@ -15,7 +15,7 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 
 - <RoutineLoadPrivNote />
 
-- Routine Load 中导入作业和导入任务的关系，参见[使用 Routine Load 导入数据](../../../../loading/RoutineLoad.md#基本原理)。
+- Routine Load 中导入作业和导入任务的关系，参见[使用 Routine Load 导入数据](../../../../loading/kafka/RoutineLoad.md#基本原理)。
 
 :::
 
@@ -51,7 +51,7 @@ WHERE JobName = <job_name>
 | CreateTime           | 该导入任务创建时间。                                         |
 | LastScheduledTime    | 上一次调度该导入任务的时间。                                 |
 | ExecuteStartTime     | 该导入任务执行时间。                                         |
-| Timeout              | 导入任务超时时间，由 FE 参数 [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) 和 Routine Load 导入作业的 [job_properties](./CREATE_ROUTINE_LO../../data-manipulation/CREATE_ROUTINE_LOAD.md参数 `task_timeout_second` 控制。 |
+| Timeout              | 导入任务超时时间，由 FE 参数 [`routine_load_task_timeout_second`](../../../../administration/configuration/FE_parameters/FE_parameters.md#routine_load_task_timeout_second) 和 Routine Load 导入作业的 [job_properties](./CREATE_ROUTINE_LO../../data-manipulation/CREATE_ROUTINE_LOAD.md参数 `task_timeout_second` 控制。 |
 | BeId                 | 执行该导入任务的 BE 节点 ID。                                |
 | DataSourceProperties | 该导入任务消费分区数据的进度。                               |
 | Message              | 导入任务的返回信息，包含任务错误信息。                       |
