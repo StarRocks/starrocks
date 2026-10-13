@@ -18,10 +18,10 @@
 
 #include <filesystem>
 
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "testutil/sync_point.h"
-#include "udf/java/utils.h"
 #include "util/bthreads/util.h"
 #include "util/defer_op.h"
 
@@ -50,10 +50,6 @@ public:
 };
 
 void HdfsFileSystemTest::writable_file_survives_cache_eviction(WriterRelease release) {
-    if (release == WriterRelease::kCloseFromBthread && JavaEnv::GetInstance()->jvm_call_pool() == nullptr) {
-        auto st = JavaEnv::GetInstance()->init();
-        ASSERT_TRUE(st.ok()) << st;
-    }
     const auto old_capacity = config::hdfs_client_max_cache_size;
     DeferOp restore_capacity([&] { config::hdfs_client_max_cache_size = old_capacity; });
     config::hdfs_client_max_cache_size = 1;
