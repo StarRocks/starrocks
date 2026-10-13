@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <climits>
 #include <filesystem>
+#include <regex>
 
 #include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
@@ -430,6 +431,39 @@ std::string ColumnModePartialUpdateHandler::_spill_dir() {
         }
     }
     return std::filesystem::temp_directory_path().string() + "/lake_pcu_spill";
+}
+
+void ColumnModePartialUpdateHandler::sweep_leftover_spill_files() {
+    // Same name layout as _spill_update_rows: pcu_<tablet_id>_<txn_id>_<seq>.spill. Matching the
+    // full pattern, rather than removing the directory, keeps anything else a user placed in a
+    // custom lake_pk_column_mode_spill_dir untouched.
+    static const std::regex kSpillFileName("^pcu_[0-9]+_[0-9]+_[0-9]+\\.spill$");
+    const std::string dir = _spill_dir();
+    if (!fs::path_exist(dir)) {
+        return;
+    }
+    auto* local_fs = FileSystem::Default();
+    size_t removed = 0;
+    auto st = local_fs->iterate_dir(dir, [&](std::string_view name) {
+        const std::string file(name);
+        if (!std::regex_match(file, kSpillFileName)) {
+            LOG(INFO) << "Skip " << dir << "/" << file << ": not a column-mode partial update spill file";
+            return true;
+        }
+        const std::string path = dir + "/" + file;
+        auto del = local_fs->delete_file(path);
+        if (del.ok()) {
+            removed++;
+        } else if (!del.is_not_found()) {
+            LOG(WARNING) << "Fail to delete leftover column-mode partial update spill file " << path << ": " << del;
+        }
+        return true;
+    });
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to sweep column-mode partial update spill dir " << dir << ": " << st;
+        return;
+    }
+    LOG(INFO) << "Removed " << removed << " leftover column-mode partial update spill file(s) from " << dir;
 }
 
 void ColumnModePartialUpdateHandler::_release_spill() {

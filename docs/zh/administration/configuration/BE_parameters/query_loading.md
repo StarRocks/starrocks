@@ -1049,7 +1049,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：String
 - 单位：-
 - 是否动态：否
-- 描述：列模式部分更新写 spill 文件的目录。为空时使用第一个本地存储路径，节点没有本地存储路径时使用系统临时目录。publish 结束后 spill 文件立即删除。
+- 描述：列模式部分更新写 spill 文件的目录。为空时使用第一个本地存储路径，节点没有本地存储路径时使用系统临时目录。publish 结束后 spill 文件立即删除，BE 或 CN 启动时也会清除上一个进程残留在该目录下的 spill 文件。
 - 引入版本：-
 
 ### enable_load_spill_parallel_merge

@@ -51,6 +51,13 @@ public:
     Status execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
                    std::vector<std::vector<uint32_t>>* insert_rowids_by_segment = nullptr);
 
+    // Remove the spill files a previous process left under the spill directory (see _spill_dir). A
+    // CN that dies between _spill_update_rows and _release_spill cannot clean up after itself, and
+    // nothing reads those files once the process is gone. Called once when the storage engine opens,
+    // before any publish can run, so every spill file found there is stale. Files whose name does not
+    // match the spill file pattern are left alone, so a shared lake_pk_column_mode_spill_dir is safe.
+    static void sweep_leftover_spill_files();
+
 private:
     Status _load_update_state(const RowsetUpdateStateParams& params);
     StatusOr<int64_t> _calc_upt_memory_usage_per_row(const TabletSchema& tablet_schema);
