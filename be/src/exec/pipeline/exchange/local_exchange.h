@@ -158,12 +158,14 @@ public:
         _sink_observable.add_observer(state, observer);
     }
 
+    void notify_sink() {
+        if (_memory_manager->full_events_changed() || is_all_sources_finished()) {
+            _sink_observable.notify_sink_observers();
+        }
+    }
+
     auto defer_notify_sink() {
-        return DeferOp([this]() {
-            if (_memory_manager->full_events_changed() || is_all_sources_finished()) {
-                _sink_observable.notify_sink_observers();
-            }
-        });
+        return DeferOp([this]() { notify_sink(); });
     }
 
 protected:

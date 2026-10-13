@@ -16,12 +16,14 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "exprs/ai/ai_function_result.h"
 #include "exprs/expr.h"
+#include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
 
 namespace starrocks {
@@ -38,6 +40,7 @@ struct AIFunctionRowInput {
     AIFunctionRowAction action = AIFunctionRowAction::SQL_NULL;
     std::string model;
     std::string prompt;
+    std::optional<AIMediaInput> media;
 };
 
 struct AIFunctionInputBatch {
@@ -61,8 +64,8 @@ public:
 
     bool is_constant() const override { return false; }
 
-    StatusOr<AIFunctionInputBatch> build_input_batch(ExprContext* context, Chunk* chunk,
-                                                     std::string_view default_model) const;
+    StatusOr<AIFunctionInputBatch> build_input_batch(ExprContext* context, Chunk* chunk, std::string_view default_model,
+                                                     size_t max_input_file_bytes = kDefaultAIMaxInputFileBytes) const;
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override;
 

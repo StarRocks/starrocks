@@ -564,6 +564,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
 
+## `pipe_drivers`
+
+- 单位：计数
+- 描述：BE 准入控制当前预留的逻辑 driver 配额。包含 fragment 实例化 driver 和 operator 期间持有的配额，以及实例化后尚未释放的配额。该值遵循逻辑 DOP 计数规则（包括 colocate 执行组），并非已实例化的 driver 对象数或运行线程数。配额释放时（包括准备失败或 fragment 完成时），该值随之减少。
+
 ## `pipe_poller_block_queue_len`
 
 - 单位：计数

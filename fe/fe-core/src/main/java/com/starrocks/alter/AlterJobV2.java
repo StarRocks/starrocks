@@ -51,6 +51,7 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -141,6 +142,9 @@ public abstract class AlterJobV2 implements Writable {
     protected Span span;
 
     protected Future<Boolean> publishVersionFuture = null;
+
+    // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
+    private transient volatile boolean metaPruned;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -261,12 +265,19 @@ public abstract class AlterJobV2 implements Writable {
     /**
      * Shared expiry rule for {@link #getHistorySchema()}: the retired schemas must stay resolvable until
      * every transaction that can still be bound to them has reached a terminal state, and are released
-     * (payload dropped) as soon as that holds. Returns whether the history schema holds nothing anymore,
-     * which is one of the two conditions for cleaning the job up.
+     * (payload dropped) as soon as that holds and the job is done. The release is journaled, so it runs on
+     * the leader only and throws if the journal write fails. Returns whether the history schema holds
+     * nothing anymore, which is one of the two conditions for cleaning the job up.
      */
     protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
         if (historySchema == null || historySchema.isExpired()) {
             return true;
+        }
+        // A job that holds a history schema but is not done has not durably finished: its FINISHED record is
+        // in flight or failed, and a CANCELLED record journaled after the release could still carry the payload
+        // and bring it back on followers. A done job is never journaled again.
+        if (!isDone()) {
+            return false;
         }
         boolean expired = true;
         try {
@@ -283,11 +294,23 @@ public abstract class AlterJobV2 implements Writable {
             // so could clean the history schema safely
         }
         if (expired) {
-            historySchema.setExpire();
+            // Journaled so that followers and checkpoint images drop the payload too.
+            ReleaseAlterJobHistorySchemaLog log = new ReleaseAlterJobHistorySchemaLog(jobId, dbId, tableId);
+            GlobalStateMgr.getCurrentState().getEditLog().logReleaseAlterJobHistorySchema(log,
+                    wal -> historySchema.setExpire());
             LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
                     jobId, tableName, historySchema.getHistoryTxnIdThreshold());
         }
         return expired;
+    }
+
+    /**
+     * Whether this job's history schema holds nothing anymore: true when the job has no history schema,
+     * or when the job is done and no transaction that can still be bound to it is running. Idempotent, and
+     * releases the payload exactly like {@link #isExpire()} does, but without the age condition.
+     */
+    public boolean isHistorySchemaReleased() {
+        return expireHistorySchema(getHistorySchema().orElse(null));
     }
 
     public boolean isDone() {
@@ -434,45 +457,49 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
 
-        // create connectcontext
-        createConnectContextIfNeeded();
-        // check & acquire resource
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         try {
-            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
-        } catch (Exception e) {
-            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
-            onComputeResourceUnavailable();
-            return;
-        }
-
-        try {
-            while (true) {
-                JobState prevState = jobState;
-                switch (prevState) {
-                    case PENDING:
-                        runPendingJob();
-                        break;
-                    case WAITING_TXN:
-                        runWaitingTxnJob();
-                        break;
-                    case RUNNING:
-                        runRunningJob();
-                        break;
-                    case FINISHED_REWRITING:
-                        runFinishedRewritingJob();
-                        finishHook();
-                        break;
-                    default:
-                        break;
-                }
-                if (jobState == prevState) {
-                    break;
-                } // else: handle the new state
+            // create connectcontext
+            createConnectContextIfNeeded();
+            // check & acquire resource
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+            try {
+                this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            } catch (Exception e) {
+                LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+                onComputeResourceUnavailable();
+                return;
             }
-        } catch (AlterCancelException e) {
-            cancelInternal(e.getMessage());
+
+            try {
+                while (true) {
+                    JobState prevState = jobState;
+                    switch (prevState) {
+                        case PENDING:
+                            runPendingJob();
+                            break;
+                        case WAITING_TXN:
+                            runWaitingTxnJob();
+                            break;
+                        case RUNNING:
+                            runRunningJob();
+                            break;
+                        case FINISHED_REWRITING:
+                            runFinishedRewritingJob();
+                            finishHook();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (jobState == prevState) {
+                        break;
+                    } // else: handle the new state
+                }
+            } catch (AlterCancelException e) {
+                cancelInternal(e.getMessage());
+            }
+        } finally {
+            pruneIfDone();
         }
     }
 
@@ -677,6 +704,7 @@ public abstract class AlterJobV2 implements Writable {
         if (cancelled) {
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
                     "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
+            pruneIfDone();
         }
     }
 
@@ -715,5 +743,32 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public void pruneMeta() {
+    }
+
+    /**
+     * Calls {@link #pruneMeta()} once the job is done: a done job stays in memory only for SHOW ALTER until it
+     * expires. Skipped while the lake publish task may still read the pruned data; the alter handler retries
+     * on every scheduling round.
+     */
+    public void pruneIfDone() {
+        if (metaPruned) {
+            return;
+        }
+        synchronized (this) {
+            if (!metaPruned && jobState.isFinalState()
+                    && (publishVersionFuture == null || publishVersionFuture.isDone())) {
+                pruneMeta();
+                metaPruned = true;
+            }
+        }
+    }
+
+    /**
+     * Like {@link #pruneIfDone()}, but prunes again even if the job was pruned before: replaying a journal
+     * entry may copy the entry's data back into this job.
+     */
+    public synchronized void pruneAfterReplay() {
+        metaPruned = false;
+        pruneIfDone();
     }
 }

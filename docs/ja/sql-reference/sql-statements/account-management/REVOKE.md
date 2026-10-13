@@ -127,7 +127,7 @@ REVOKE
 
 ```SQL
 REVOKE  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...]}  | ALL DATABASES }
@@ -136,6 +136,7 @@ REVOKE
 
 * このコマンドを実行する前に、SET CATALOG を実行する必要があります。
 * db.view を使用してビューを表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるビューのエクスポートはサポートされていません。
 
   ```SQL
   REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
@@ -145,7 +146,7 @@ REVOKE
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [, <database_name>,...] } | ALL [DATABASES] }
@@ -154,6 +155,7 @@ REVOKE
 
 * このコマンドを実行する前に、SET CATALOG を実行する必要があります。
 * db.mv を使用して mv を表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるマテリアライズドビューのエクスポートはサポートされていません。
 
   ```SQL
   REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>}

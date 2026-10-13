@@ -66,8 +66,8 @@ public class AIModelConfigsTest {
     public void testResolvedAIOverloadsIdentifyOnlyExplicitModelArguments() {
         FunctionSet functions = new FunctionSet();
         functions.init();
-        Set<Long> explicitModelIds = Set.of(200102L, 200103L, 200111L, 200113L, 200115L, 200117L,
-                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L);
+        Set<Long> explicitModelIds = Set.of(200102L, 200103L, 200106L, 200107L, 200111L, 200113L, 200115L, 200117L,
+                200119L, 200121L, 200123L, 200125L, 200127L, 200132L, 200133L, 200136L, 200137L);
         Set<Long> observedExplicitModelIds = functions.getBuiltinFunctions().stream()
                 .filter(Function::isAi)
                 .filter(AIModelConfigs::hasExplicitModel)
@@ -106,7 +106,43 @@ public class AIModelConfigsTest {
                 .filter(AIModelConfigs::isTextEmbedding)
                 .map(Function::getFunctionId)
                 .collect(Collectors.toSet());
-        Assertions.assertEquals(Set.of(200130L, 200131L, 200132L, 200133L, 200142L, 200143L), embeddingIds);
+        Assertions.assertEquals(Set.of(200130L, 200131L, 200132L, 200133L, 200134L, 200135L,
+                200136L, 200137L, 200142L, 200143L), embeddingIds);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"CHAT, openai_compatible", "CHAT, qwen_compatible",
+            "TEXT_EMBEDDING, openai_compatible", "TEXT_EMBEDDING, dashscope_multimodal"})
+    public void testSystemProtocolsPreserveImmutableWireSnapshot(String capability, String protocol) {
+        Config.ai_default_chat_provider = protocol;
+        Config.ai_default_embedding_endpoint = "https://models.example.test/v1/inference";
+        Config.ai_default_embedding_model = "embedding-model";
+        Config.ai_default_embedding_provider = protocol;
+        boolean embedding = capability.equals("TEXT_EMBEDDING");
+        AIModelConfigs.ModelConfig snapshot = embedding ? AIModelConfigs.systemEmbeddingSnapshot(REQUIRED)
+                : AIModelConfigs.fromSystemChat(AIModelConfigs.systemChatSnapshot(REQUIRED));
+        Config.ai_default_chat_provider = "changed-provider";
+        Config.ai_default_embedding_provider = "changed-provider";
+        TAIModelConfiguration thrift = snapshot.toThrift();
+        Assertions.assertEquals(protocol, (embedding ? thrift.getEmbedding() : thrift.getChat()).getProvider());
+        Assertions.assertEquals(capability, snapshot.capability());
+        Assertions.assertFalse(thrift.isSetSource());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"CHAT, dashscope_multimodal", "TEXT_EMBEDDING, qwen_compatible", "CHAT, QWEN_COMPATIBLE",
+            "TEXT_EMBEDDING, DASHSCOPE_MULTIMODAL"})
+    public void testSystemProtocolsRejectUnsupportedCapability(String capability, String protocol) {
+        AIModelConfigs.ModelConfig config = new AIModelConfigs.ModelConfig(capability,
+                "https://models.example.test/v1/inference", "model", protocol);
+        if (capability.equals("TEXT_EMBEDDING")) {
+            Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> AIModelConfigs.validateSystemEmbedding(config, REQUIRED));
+        } else {
+            Assertions.assertThrows(StarRocksPlannerException.class,
+                    () -> AIModelConfigs.validateSystemChat(new AIModelConfigs.SystemChatConfig(
+                            config.endpoint(), config.model(), config.provider()), REQUIRED));
+        }
     }
 
     @ParameterizedTest
@@ -365,7 +401,7 @@ public class AIModelConfigsTest {
     }
 
     @Test
-    public void testOnlyOpenAICompatibleProviderIsAccepted() {
+    public void testUnknownSystemProviderIsRejectedWithoutLeakingValue() {
         Config.ai_default_chat_provider = "custom-provider-secret-name";
         StarRocksPlannerException exception = Assertions.assertThrows(StarRocksPlannerException.class,
                 () -> AIModelConfigs.validateSystemChat(REQUIRED));

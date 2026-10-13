@@ -266,11 +266,25 @@ private:
     RuntimeProfile::Counter* _lake_reusable_segment_iter_reused_counter = nullptr;
     RuntimeProfile::Counter* _lake_late_rf_reinit_counter = nullptr;
     RuntimeProfile::Counter* _lake_prepared_seed_timer = nullptr;
+    RuntimeProfile::Counter* _lake_prepared_tablet_timer = nullptr;
+    // TabletPrepareTime breakdown (children of TabletPrepareTime): opening the segments and loading their
+    // short key indexes.
+    RuntimeProfile::Counter* _lake_tablet_prepare_segment_open_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_segments_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_segments_opened_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_count_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_io_count_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_tablet_prepare_bytes_read_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_initial_coarse_counter = nullptr;
     RuntimeProfile::Counter* _lake_refined_counter = nullptr;
     // SeedPrepareTime breakdown (children of SeedPrepareTime): the seed's one-time per-segment prune cost.
     RuntimeProfile::Counter* _lake_seed_io_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_io_count_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_io_remote_timer = nullptr;
+    RuntimeProfile::Counter* _lake_seed_io_count_remote_counter = nullptr;
+    RuntimeProfile::Counter* _lake_seed_bytes_read_remote_counter = nullptr;
     RuntimeProfile::Counter* _lake_seed_segment_init_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_timer = nullptr;
     RuntimeProfile::Counter* _lake_seed_vector_index_load_timer = nullptr;

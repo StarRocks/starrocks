@@ -20,12 +20,30 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.type.IntegerType;
+import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -34,11 +52,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -51,10 +72,30 @@ import static org.mockito.Mockito.when;
 /**
  * Light unit coverage for the Lake ADD/DROP INDEX fast-path Job classes.
  * We test the shape / serialization-friendliness of the classes rather than
- * the full AlterJobV2 lifecycle (which needs a running catalog). The
- * lifecycle is exercised by e2e SQL tests in a separate follow-up.
+ * the full AlterJobV2 lifecycle. The tests at the end run jobs to their final
+ * state on a min shared-data cluster to check what a done job keeps in memory.
  */
 public class LakeTableIndexFastPathJobTest {
+    private static final String DB_NAME = "db_lake_index_fast_path_job_test";
+    private static ConnectContext connectContext;
+
+    @BeforeAll
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        connectContext = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        UtFrameUtils.setUpForPersistTest();
+        CreateDbStmt createDbStmt =
+                (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser("create database " + DB_NAME, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        connectContext.setDatabase(DB_NAME);
+    }
+
+    @BeforeEach
+    public void resetFollowerJournalQueue() throws Exception {
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+    }
 
     @Test
     public void testAddIndexJobConstruction() {
@@ -640,5 +681,274 @@ public class LakeTableIndexFastPathJobTest {
         // capability: it registers shadow meta and iterates the live partition list.
         assertFalse(new SchemaChangeJobV2(1L, 2L, 3L, "t", 60_000L).allowConcurrentPartitionCreation());
         assertFalse(new LakeTableSchemaChangeJob(1L, 2L, 3L, "t", 60_000L).allowConcurrentPartitionCreation());
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedAddIndexJob() throws Exception {
+        OlapTable table = createTable("t_add_index_finished", "c0 INT, c1 INT");
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        long retiredSchemaId = table.getIndexMetaByMetaId(baseIndexMetaId).getSchemaId();
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        assertInstanceOf(LakeTableAddIndexJob.class, job);
+        completeTasksAndPublishOnSend();
+
+        runToFinished(job);
+
+        assertPruned(job);
+        assertFalse(job.commitVersionMap.isEmpty());
+        assertEquals(List.of("idx_c1"), indexNames(table));
+        // The schema the flip retired stays resolvable for loads that were bound to it.
+        assertTrue(job.getHistorySchema().orElseThrow().getSchemaBySchemaId(retiredSchemaId).isPresent());
+        assertJournaledWithTabletData(job.getJobId(), AlterJobV2.JobState.FINISHED);
+    }
+
+    @Test
+    public void testLeaderPrunesFinishedDropIndexJob() throws Exception {
+        OlapTable table = createTable("t_drop_index_finished", "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        assertInstanceOf(LakeTableDropIndexJob.class, job);
+        completeTasksAndPublishOnSend();
+
+        runToFinished(job);
+
+        assertPruned(job);
+        assertFalse(job.commitVersionMap.isEmpty());
+        assertTrue(indexNames(table).isEmpty());
+        assertJournaledWithTabletData(job.getJobId(), AlterJobV2.JobState.FINISHED);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        OlapTable table = createTable("t_add_index_cancelled", "c0 INT, c1 INT");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        // The alter tasks are sent but never finish.
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+            }
+        };
+        job.run();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertHasTabletData(job);
+        assertTrue(job.batchTask.getTaskNum() > 0);
+
+        assertTrue(job.cancel("cancel"));
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertTrue(indexNames(table).isEmpty());
+        assertJournaledWithTabletData(job.getJobId(), AlterJobV2.JobState.CANCELLED);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        OlapTable table = createTable("t_add_index_follower", "c0 INT, c1 INT");
+        // The follower starts from the catalog as it was before the alter.
+        UtFrameUtils.PseudoImage initialImage = saveMetastore();
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        completeTasksAndPublishOnSend();
+        runToFinished(job);
+        List<LakeTableIndexFastPathJobBase> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = loadMetastore(initialImage);
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(DB_NAME, table.getName());
+        assertTrue(indexNames(followerTable).isEmpty());
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        for (LakeTableIndexFastPathJobBase entry : entries) {
+            replayOn(followerMetastore, followerHandler, entry);
+        }
+
+        // The handler keeps the first replayed entry and copies the data of each later one into it.
+        LakeTableIndexFastPathJobBase retained = entries.get(0);
+        assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeTableIndexFastPathJobBase entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        assertEquals(List.of("idx_c1"), indexNames(followerTable));
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        assertEquals(table.getIndexMetaByMetaId(baseIndexMetaId).getSchemaId(),
+                followerTable.getIndexMetaByMetaId(baseIndexMetaId).getSchemaId());
+        assertEquals(job.getHistorySchema().orElseThrow().getHistoryTxnIdThreshold(),
+                retained.getHistorySchema().orElseThrow().getHistoryTxnIdThreshold());
+    }
+
+    @Test
+    public void testLoadPrunesDoneJobFromImage() throws Exception {
+        OlapTable table = createTable("t_add_index_image", "c0 INT, c1 INT");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        completeTasksAndPublishOnSend();
+        runToFinished(job);
+        // Images written by older versions hold the done job with its per-tablet data, as the journal entry does.
+        LakeTableIndexFastPathJobBase doneJob = lastJournaledEntry(job.getJobId());
+        assertEquals(AlterJobV2.JobState.FINISHED, doneJob.getJobState());
+        assertHasTabletData(doneJob);
+        AlterJobMgr alterJobMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
+        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
+        List<List<Comparable>> expectedRows = new ArrayList<>();
+        gsonCopy(doneJob).getInfo(expectedRows);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        alterJobMgr.save(image.getImageWriter());
+        AlterJobMgr restoredMgr = new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(),
+                new SystemHandler());
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        restoredMgr.load(reader);
+        reader.close();
+
+        LakeTableIndexFastPathJobBase restored = (LakeTableIndexFastPathJobBase)
+                restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
+        assertPruned(restored);
+        assertTrue(restored.getHistorySchema().isPresent());
+        List<List<Comparable>> restoredRows = new ArrayList<>();
+        restored.getInfo(restoredRows);
+        assertFalse(expectedRows.isEmpty());
+        assertEquals(expectedRows, restoredRows);
+    }
+
+    private static OlapTable createTable(String tableName, String columns) throws Exception {
+        String sql = "CREATE TABLE " + tableName + " (" + columns + ") DUPLICATE KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 2";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+        return (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(DB_NAME, tableName);
+    }
+
+    /**
+     * Runs the ALTER TABLE statement and returns the index fast-path job it submitted, which the test then drives.
+     */
+    private static LakeTableIndexFastPathJobBase submitAlter(OlapTable table, String alterClause) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " " + alterClause, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        List<AlterJobV2> jobs = handler.getUnfinishedAlterJobV2ByTableId(table.getId());
+        handler.clearJobs();
+        assertEquals(1, jobs.size());
+        return assertInstanceOf(LakeTableIndexFastPathJobBase.class, jobs.get(0));
+    }
+
+    /**
+     * Marks every alter task finished as soon as it is sent, and lets the publish succeed without reaching a node.
+     */
+    private static void completeTasksAndPublishOnSend() {
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        new MockUp<LakeTableIndexFastPathJobBase>() {
+            @Mock
+            public boolean lakePublishVersion() {
+                return true;
+            }
+        };
+    }
+
+    private static void runToFinished(LakeTableIndexFastPathJobBase job) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!job.isDone()) {
+            assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState(), job.errMsg);
+    }
+
+    private static List<String> indexNames(OlapTable table) {
+        return table.getIndexes().stream().map(Index::getIndexName).collect(Collectors.toList());
+    }
+
+    /**
+     * Reads the journal entries of the job, from the one that submitted it to the one of its final state.
+     */
+    private static List<LakeTableIndexFastPathJobBase> readJournaledEntries(long jobId) throws Exception {
+        List<LakeTableIndexFastPathJobBase> entries = new ArrayList<>();
+        AlterJobV2 entry;
+        do {
+            entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            assertEquals(jobId, entry.getJobId());
+            entries.add((LakeTableIndexFastPathJobBase) entry);
+        } while (!entry.isDone());
+        assertEquals(AlterJobV2.JobState.PENDING, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static LakeTableIndexFastPathJobBase lastJournaledEntry(long jobId) throws Exception {
+        List<LakeTableIndexFastPathJobBase> entries = readJournaledEntries(jobId);
+        return entries.get(entries.size() - 1);
+    }
+
+    /**
+     * The journal entries keep the per-tablet data the live job dropped, and SHOW ALTER of the final one does not
+     * depend on it.
+     */
+    private static void assertJournaledWithTabletData(long jobId, AlterJobV2.JobState finalState) throws Exception {
+        List<LakeTableIndexFastPathJobBase> entries = readJournaledEntries(jobId);
+        // The job is journaled once on submission, before it collects the tablets.
+        for (LakeTableIndexFastPathJobBase entry : entries.subList(1, entries.size())) {
+            assertHasTabletData(entry);
+        }
+        LakeTableIndexFastPathJobBase finalEntry = entries.get(entries.size() - 1);
+        assertEquals(finalState, finalEntry.getJobState());
+        List<List<Comparable>> rowsBefore = new ArrayList<>();
+        finalEntry.getInfo(rowsBefore);
+        finalEntry.pruneMeta();
+        assertPruned(finalEntry);
+        List<List<Comparable>> rowsAfter = new ArrayList<>();
+        finalEntry.getInfo(rowsAfter);
+        assertFalse(rowsBefore.isEmpty());
+        assertEquals(rowsBefore, rowsAfter);
+    }
+
+    private static AlterJobV2 gsonCopy(AlterJobV2 job) {
+        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, AlterJobV2.class), AlterJobV2.class);
+    }
+
+    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
+        return image;
+    }
+
+    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
+        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+        metastore.load(reader);
+        reader.close();
+        return metastore;
+    }
+
+    /**
+     * Replays the journal entry into the handler against the given catalog, as a follower does.
+     */
+    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            handler.replayAlterJobV2(entry);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    /**
+     * The job's per-tablet data: the tablets it alters, grouped by partition, and the index of each.
+     */
+    private static void assertHasTabletData(LakeTableIndexFastPathJobBase job) {
+        assertFalse(job.partitionToTablets.isEmpty());
+        assertFalse(job.tabletToIndexMetaId.isEmpty());
+    }
+
+    private static void assertPruned(LakeTableIndexFastPathJobBase job) {
+        assertTrue(job.partitionToTablets.isEmpty());
+        assertTrue(job.tabletToIndexMetaId.isEmpty());
+        assertNull(job.batchTask);
     }
 }

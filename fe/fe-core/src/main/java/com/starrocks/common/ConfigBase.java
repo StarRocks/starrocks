@@ -35,6 +35,7 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.CredentialMask;
@@ -111,16 +112,29 @@ public class ConfigBase {
         return value;
     }
 
+    // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
+    // not masked.
+    public static String maskIfSensitive(String key, String value) {
+        if (sensitiveConfigNames.contains(key) && !Strings.isNullOrEmpty(value)) {
+            return CredentialMask.LONG;
+        }
+        return value;
+    }
+
     protected Properties props;
     private static boolean isPersisted = false;
     private static String configPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
+    // The names and aliases of the sensitive configs, so that maskIfSensitive(String, String) need not scan
+    // configFields: it runs for every parameter of a request uri that is logged, before authentication.
+    private static Set<String> sensitiveConfigNames = ImmutableSet.of();
 
     public void init(String propFile) throws Exception {
         configPath = propFile;
         configFields = this.getClass().getFields();
         initAllMutableConfigs();
+        initSensitiveConfigNames();
         props = new Properties();
         try (FileReader reader = new FileReader(propFile)) {
             props.load(reader);
@@ -148,6 +162,17 @@ public class ConfigBase {
                 allMutableConfigs.put(aliasName, field);
             }
         }
+    }
+
+    private static void initSensitiveConfigNames() {
+        ImmutableSet.Builder<String> names = ImmutableSet.builder();
+        for (Field field : configFields) {
+            ConfField confField = field.getAnnotation(ConfField.class);
+            if (confField != null && confField.sensitive()) {
+                names.add(field.getName()).add(confField.aliases());
+            }
+        }
+        sensitiveConfigNames = names.build();
     }
 
     public static Map<String, Field> getAllMutableConfigs() {
@@ -501,7 +526,8 @@ public class ConfigBase {
             }
 
             try {
-                appendPersistedProperties(key, parsedConfigValue.confVal, userIdentity);
+                appendPersistedProperties(key, field.getAnnotation(ConfField.class), parsedConfigValue.confVal,
+                        userIdentity);
             } catch (IOException e) {
                 throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
             }
@@ -513,10 +539,13 @@ public class ConfigBase {
             throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
-        LOG.info("set config {} to {}", key, value);
+        // The value as it is set and persisted: e.g. a blank one sets an empty credential, which is not masked.
+        LOG.info("set config {} to {}", key,
+                maskIfSensitive(field.getAnnotation(ConfField.class), parsedConfigValue.confVal));
     }
 
-    private static void appendPersistedProperties(String key, String value, String userIdentity) throws IOException {
+    private static void appendPersistedProperties(String key, ConfField anno, String value, String userIdentity)
+            throws IOException {
         Properties props = new Properties();
         Path path = Paths.get(configPath);
         List<String> lines = Files.readAllLines(path);
@@ -525,12 +554,15 @@ public class ConfigBase {
         }
 
         String oldValue = props.getProperty(key);
+        // Only the comment is masked: the key = value line below must keep the real value to be loaded on restart,
+        // but the comments pile up, and would otherwise keep every old credential in the file.
         String comment;
         if (StringUtils.isEmpty(oldValue)) {
-            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, value,
+            comment = String.format("# The user %s added %s=%s at %s", userIdentity, key, maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         } else {
-            comment = String.format("# The user %s changed %s to %s at %s", userIdentity, oldValue, value,
+            comment = String.format("# The user %s changed %s to %s at %s", userIdentity,
+                    maskIfSensitive(anno, oldValue), maskIfSensitive(anno, value),
                     LocalDateTime.now().format(DateUtils.DATE_TIME_FORMATTER_UNIX));
         }
 

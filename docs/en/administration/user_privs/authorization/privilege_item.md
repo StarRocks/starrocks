@@ -109,6 +109,7 @@ SYSTEM functions keep their existing configuration route and do not require a pr
 | Privilege | Description                             |
 | --------- | --------------------------------------- |
 | SELECT    | Queries data in a view.                 |
+| EXPORT    | Only supports granting/revoking EXPORT; EXPORT TABLE is not supported yet. |
 | ALTER     | Modifies the definition of a view.      |
 | DROP      | Deletes a logical view.                 |
 | ALL       | Has all the above privileges on a view. |
@@ -118,6 +119,7 @@ SYSTEM functions keep their existing configuration route and do not require a pr
 | Privilege | Description                                          |
 | --------- | ---------------------------------------------------- |
 | SELECT    | Queries a materialized view to accelerate queries.   |
+| EXPORT    | Only supports granting/revoking EXPORT; EXPORT TABLE is not supported yet. |
 | ALTER     | Changes a materialized view.                         |
 | REFRESH   | Refreshes a materialized view.                       |
 | DROP      | Deletes a materialized view.                         |

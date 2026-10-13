@@ -105,6 +105,7 @@ SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CR
 | 权限   | 用途                         |
 | ------ | ---------------------------- |
 | SELECT | 查询视图 (view) 中的数据。   |
+| EXPORT | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER  | 修改一个视图的定义。         |
 | DROP   | 删除一个逻辑视图。           |
 | ALL    | 拥有对该视图的上述所有权限。 |
@@ -114,6 +115,7 @@ SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CR
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
 | SELECT  | 查询时引用该物化视图 (materialized view) 的数据，以加速查询。 |
+| EXPORT  | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER   | 更改物化视图。                                               |
 | REFRESH | 刷新物化视图。                                               |
 | DROP    | 删除物化视图。                                               |

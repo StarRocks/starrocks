@@ -69,6 +69,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -1042,8 +1043,14 @@ public class FunctionAnalyzer {
                                                         List<Type> newArgumentTypes) {
         Function fn = null;
         String fnName = node.getFunctionName();
-        // throw exception direct
-        if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
+        if (FunctionSet.AI_COMPLETE.equalsIgnoreCase(fnName) && argumentTypes.length == 3
+                && argumentTypes[2].isNull() && !argumentTypes[0].isFileType() && !argumentTypes[1].isFileType()) {
+            // Preserve the legacy options role of an ambiguous third NULL: concrete FILE overloads otherwise
+            // precede polymorphic ANY_MAP overloads. Typed FILE arguments, including typed NULLs, are unchanged.
+            Type[] lookupTypes = argumentTypes.clone();
+            lookupTypes[2] = new MapType(NullType.NULL, NullType.NULL);
+            fn = ExprUtils.getBuiltinFunction(fnName, lookupTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        } else if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
             // For the typeof function, the parameter type of the function is the result of this function.
             // At this time, the parameter type has been obtained. You can directly replace the current
             // function with StringLiteral. However, since the parent node of the current node in ast
