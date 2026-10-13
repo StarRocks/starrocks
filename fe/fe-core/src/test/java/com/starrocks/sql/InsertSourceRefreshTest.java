@@ -16,6 +16,7 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
@@ -33,6 +34,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -167,7 +169,13 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
     }
 
     private static StatementBase analyze(String sql) throws Exception {
-        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        return analyze(UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext));
+    }
+
+    /**
+     * The analysis StatementPlanner.plan runs, sources refreshed and rebound included, without the planning after it.
+     */
+    private static StatementBase analyze(StatementBase stmt) throws Exception {
         PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
             @Override
             public void lock() {
@@ -362,6 +370,90 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
                 "insert into t0 (v1, v2) select (select max(l.l_orderkey) from hive0.tpch.lineitem l), 1");
         Assertions.assertEquals(List.of("lineitem"), metadata.refreshed);
         Assertions.assertSame(metadata.latest("lineitem"), boundSources(stmt).get(0));
+    }
+
+    private interface ResourceMappingBody {
+        void run(ReloadingHiveMetadata metadata, HiveTable declared) throws Exception;
+    }
+
+    /**
+     * Runs {@code body} with test.ex_lineitem, a CREATE EXTERNAL TABLE ... ENGINE=HIVE over tpch.lineitem from a
+     * resource that declares two of its columns. Its catalog hands out the metastore's lineitem, all columns, and a
+     * new object after every refresh.
+     */
+    private static void withResourceMappingLineitem(ResourceMappingBody body) throws Exception {
+        String resourceCatalog = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("hive_res", "hive");
+        ReloadingHiveMetadata metadata = new ReloadingHiveMetadata(false);
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr();
+        metadataMgr.registerMockedMetadata(resourceCatalog, metadata);
+        HiveTable declared = HiveTable.builder()
+                .setId(GlobalStateMgr.getCurrentState().getNextId())
+                .setTableName("ex_lineitem")
+                .setResourceName("hive_res")
+                .setHiveDbName("tpch")
+                .setHiveTableName("lineitem")
+                .setFullSchema(List.of(new Column("l_orderkey", IntegerType.INT, true),
+                        new Column("l_partkey", IntegerType.INT, true)))
+                .setDataColumnNames(List.of("l_orderkey", "l_partkey"))
+                .setPartitionColumnNames(List.of())
+                .build();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        db.registerTableUnlocked(declared);
+        try {
+            body.run(metadata, declared);
+        } finally {
+            db.unRegisterTableUnlocked(declared);
+        }
+    }
+
+    @Test
+    public void testResourceMappingSourceRefreshedButKeepsDeclaredSchema() throws Exception {
+        // Reloaded through its catalog's names it would come back as the metastore's table and fail the statement as
+        // a schema change; it is refreshed through that catalog and keeps its declared schema.
+        withResourceMappingLineitem((metadata, declared) -> {
+            StatementBase stmt = analyze("insert into t0 (v1, v2) select l_orderkey, l_partkey from test.ex_lineitem");
+            Assertions.assertEquals(List.of("lineitem"), metadata.refreshed);
+            Assertions.assertSame(declared, boundSources(stmt).get(0));
+        });
+    }
+
+    @Test
+    public void testResourceMappingSourceOfInsertOverwrite() throws Exception {
+        // INSERT OVERWRITE plans the analyzed statement twice; each plan refreshes it and keeps the declared table.
+        // (Analysis only: scanning a resource's table would need its catalog's connector.)
+        withResourceMappingLineitem((metadata, declared) -> {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                    "insert overwrite t0 (v1, v2) select l_orderkey, l_partkey from test.ex_lineitem", connectContext);
+            for (int i = 0; i < 2; i++) {
+                // What StatementPlanner.plan does when planning ends.
+                connectContext.getPreResolvedState().clear();
+                analyze(stmt);
+                Assertions.assertSame(declared, boundSources(stmt).get(0));
+            }
+            Assertions.assertEquals(List.of("lineitem", "lineitem"), metadata.refreshed);
+        });
+    }
+
+    @Test
+    public void testResourceMappingSourceOfCtas() throws Exception {
+        // CTAS plans the INSERT it carries with every relation already resolved: only the refresh after analysis
+        // sees the source.
+        withResourceMappingLineitem((metadata, declared) -> {
+            CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "create table test.ctas_from_ex_hive distributed by hash(l_orderkey) buckets 1 " +
+                            "properties('replication_num'='1') " +
+                            "as select l_orderkey, l_partkey from test.ex_lineitem", connectContext);
+            Assertions.assertTrue(metadata.refreshed.isEmpty(), "analyzing the CTAS itself does not refresh");
+            try {
+                GlobalStateMgr.getCurrentState().getMetadataMgr().createTable(connectContext,
+                        ctas.getCreateTableStmt());
+                analyze(ctas.getInsertStmt());
+                Assertions.assertEquals(List.of("lineitem"), metadata.refreshed);
+                Assertions.assertSame(declared, boundSources(ctas.getInsertStmt()).get(0));
+            } finally {
+                starRocksAssert.dropTable("ctas_from_ex_hive");
+            }
+        });
     }
 
     @Test

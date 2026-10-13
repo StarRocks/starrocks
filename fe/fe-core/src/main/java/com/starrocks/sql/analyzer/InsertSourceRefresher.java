@@ -21,7 +21,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+<<<<<<< HEAD
 import com.starrocks.server.MetadataMgr;
+=======
+>>>>>>> 22f6ec5 ([BugFix] Keep resource-mapped external tables as declared when refreshing INSERT ... SELECT sources (#80546))
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -68,8 +71,28 @@ public final class InsertSourceRefresher {
         int refreshed = 0;
         for (TableRelation relation : collector.relations) {
             Table bound = relation.getTable();
+<<<<<<< HEAD
             TableName key = keyOf(bound);
             Table reloaded = session.getRefreshedInsertSources().get(key);
+=======
+            Table reloaded = refreshedTable(session, bound);
+            if (!CatalogMgr.isExternalCatalog(bound.getCatalogName())) {
+                // A table of an internal database (CREATE EXTERNAL TABLE ... ENGINE=HIVE from a RESOURCE) is not the
+                // table its own catalog names resolve to: those name the resource's catalog, which hands back the
+                // metastore's table, not the one the DDL declared. Drop what that catalog cached and keep the
+                // declared table.
+                if (reloaded == null) {
+                    if (bound.getCatalogName() != null) {
+                        session.getGlobalStateMgr().getMetadataMgr().invalidateTableForRead(bound.getCatalogName(),
+                                bound.getCatalogDBName(), bound);
+                        Tracers.count(Tracers.Module.EXTERNAL, "InsertSourceRefreshed", 1);
+                        refreshed++;
+                    }
+                    session.getPreResolvedState().put(PreResolvedState.REFRESHED_SOURCE, keyOf(bound), bound);
+                }
+                continue;
+            }
+>>>>>>> 22f6ec5 ([BugFix] Keep resource-mapped external tables as declared when refreshing INSERT ... SELECT sources (#80546))
             if (reloaded == null) {
                 reloaded = refreshAndReload(session, bound);
                 if (reloaded == null) {
