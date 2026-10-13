@@ -68,6 +68,12 @@ public class ArrowFlightSqlSessionManager {
     }
 
     public String initializeSession(String username, String remoteIP, String password) {
+        // reject a missing credential up front instead of failing with an NPE in the password path
+        if (password == null) {
+            throw CallStatus.UNAUTHENTICATED
+                    .withDescription("Access denied for user: " + username)
+                    .toRuntimeException();
+        }
         String token = generateToken();
         ArrowFlightSqlConnectContext ctx = new ArrowFlightSqlConnectContext(token);
         ctx.setRemoteIP(remoteIP);

@@ -531,7 +531,17 @@ public class ArrowFlightSqlSessionManagerTest {
     }
 
     @Test
-    public void testInitializeSession_rejectedJwt_doesNotFallBack() throws Exception {
+    public void testInitializeSession_nullPasswordRejected() {
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+            FlightRuntimeException e = assertThrows(FlightRuntimeException.class,
+                    () -> sessionManager.initializeSession("testUser", "127.0.0.1", null));
+            assertEquals(CallStatus.UNAUTHENTICATED.code(), e.status().code());
+            mockedAuth.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testInitializeSession_rejectedJwt_doesNotFallBack() {
         String jwt = buildUnsignedJwtLikeCredential("{\"sub\":\"testUser\"}");
         try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
                 MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
