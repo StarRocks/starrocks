@@ -53,7 +53,6 @@ import com.starrocks.http.rest.RestBaseResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.cookie.DefaultCookie;
@@ -174,10 +173,22 @@ public class WebBaseAction extends BaseAction {
         }
 
         // cookie is invalid.
-        ActionAuthorizationInfo authInfo;
         try {
+<<<<<<< HEAD
             authInfo = getAuthorizationInfo(request);
             UserIdentity currentUser = checkPassword(authInfo);
+=======
+            // Authenticate onto the context the NODE check below uses, so the roles an LDAP or
+            // security-integration group maps to are present on it. Authenticating onto a throwaway
+            // context and copying only the UserIdentity across would leave that check looking at
+            // user-owned roles alone, and deny a user whose NODE privilege comes from a group.
+            ConnectContext ctx = new ConnectContext(null);
+            ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            ctx.setRemoteIP(request.getHostString());
+            checkCredential(ctx, parseAuthCredentials(request));
+            UserIdentity currentUser = ctx.getCurrentUserIdentity();
+
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             if (needAdmin()) {
                 try {
                     ConnectContext context = new ConnectContext();
@@ -194,6 +205,7 @@ public class WebBaseAction extends BaseAction {
             value.currentUser = currentUser;
             addSession(request, response, value);
 
+<<<<<<< HEAD
             ConnectContext ctx = new ConnectContext(null);
             ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
@@ -202,6 +214,9 @@ public class WebBaseAction extends BaseAction {
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             ctx.setCurrentRoleIds(currentUser);
 
+=======
+            ctx.setQueryId(UUIDUtil.genUUID());
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
             ctx.setThreadLocalInfo();
 
             return true;
@@ -269,7 +284,7 @@ public class WebBaseAction extends BaseAction {
     }
 
     protected void writeAuthResponse(BaseRequest request, BaseResponse response) {
-        response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
+        addAuthChallenges(response);
         writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
     }
 

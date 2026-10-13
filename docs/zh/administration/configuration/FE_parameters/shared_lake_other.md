@@ -954,6 +954,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
 - 引入版本: v4.2.0
 
+### `jwks_cache_ttl_seconds`
+
+- 默认值: 600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 每个 JWKS URL 对应的公钥集（JWK Set）缓存生命期。HTTP Bearer 每个请求都要做一次完整认证，因此缓存公钥集，而不是每次都去 IdP 拉取。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- 默认值: 300
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 在缓存的 JWKS 过期前多少秒于后台提前刷新，以减少缓存未命中。必须小于 `jwks_cache_ttl_seconds`。默认值取的是 TTL 的一半，这样一次刷新失败后还剩半个 TTL 可以重试；注意它是绝对秒数而非比例，调整 TTL 时需要一并调整。
+- 引入版本: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- 默认值: 3600
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: IdP 不可达时，最多继续使用已过期的陈旧 JWKS 多长时间，以便已签发的 token 仍能验签。
+- 引入版本: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- 默认值: 30
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 未知 key ID（`kid`）触发强制刷新 JWKS 的最小时间间隔，用于防止 kid flooding。
+- 引入版本: v4.2
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串

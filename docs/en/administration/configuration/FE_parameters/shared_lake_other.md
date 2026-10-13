@@ -1358,6 +1358,42 @@ This topic introduces the following types of FE configurations:
 - Description: The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 - Introduced in: -
 
+### `jwks_cache_ttl_seconds`
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lifetime of the cached JWKS (JSON Web Key Set) per JWKS URL. Because HTTP Bearer performs a full authentication on every request, the JWK set is cached instead of being fetched from the IdP each time.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_ahead_seconds`
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How many seconds before the cached JWKS expires that StarRocks refreshes it in the background, to reduce cache misses. Must be smaller than `jwks_cache_ttl_seconds`.
+- Introduced in: v4.2
+
+### `jwks_cache_outage_ttl_seconds`
+
+- Default: 3600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: When the IdP is unreachable, the maximum time StarRocks keeps serving the stale (expired) JWKS so that already-issued tokens can still be verified.
+- Introduced in: v4.2
+
+### `jwks_cache_refresh_rate_limit_seconds`
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The lower bound on how often an unknown key ID (`kid`) may trigger a forced JWKS refresh, to guard against key-ID flooding.
+- Introduced in: v4.2
+
 ### `jwt_jwks_url`
 
 - Default: Empty string

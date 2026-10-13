@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -167,10 +168,11 @@ public class LDAPMemberOfGroupResolutionTest {
 
     private static ConnectContext login(String user) throws AuthenticationException {
         ConnectContext context = new ConnectContext();
-        // The auth chain only offers a security integration to a client that negotiated the matching
-        // plugin; for authentication_ldap_simple that is mysql_clear_password.
-        context.setAuthPlugin(AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString());
-        AuthenticationHandler.authenticate(context, user, "127.0.0.1", PASSWORD);
+        // The credential says what the client sent; for authentication_ldap_simple that is the
+        // mysql_clear_password frame, which the entry point reads as a plaintext password.
+        AuthenticationHandler.authenticate(context,
+                MysqlProto.handshakeCredentials(user, PASSWORD, AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString(),
+                        "127.0.0.1"));
         return context;
     }
 

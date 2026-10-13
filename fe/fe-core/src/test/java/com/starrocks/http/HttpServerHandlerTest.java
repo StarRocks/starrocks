@@ -14,15 +14,32 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.InlineScope;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.util.Attribute;
 import io.netty.util.ReferenceCountUtil;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
 import java.nio.charset.StandardCharsets;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -155,6 +172,119 @@ public class HttpServerHandlerTest extends HttpServerTestUtils {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testInlineFirstHandle() throws Exception {
+        String uri = "/test/inline";
+        ActionController controller = new ActionController();
+        MockInlineAction action = new MockInlineAction(controller);
+        controller.registerHandler(HttpMethod.GET, uri, action);
+        MockExecutor executor = new MockExecutor();
+
+        // answered inline: never reaches the worker pool
+        {
+            action.refuse = false;
+            MockChannelHandlerContext context = createChannelHandlerContext();
+            DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+            new HttpServerHandler(controller, executor).channelRead(context, request);
+            assertEquals(List.of(true), action.inlineOnEachRun);
+            assertEquals(0, executor.pendingTaskCount());
+            assertEquals(0, ReferenceCountUtil.refCnt(request));
+            assertFalse(InlineScope.active());
+        }
+
+        // refused inline: run again from the start on the worker pool, outside the scope
+        {
+            action.refuse = true;
+            action.inlineOnEachRun.clear();
+            MockChannelHandlerContext context = createChannelHandlerContext();
+            DefaultFullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri);
+            new HttpServerHandler(controller, executor).channelRead(context, request);
+            assertEquals(List.of(true), action.inlineOnEachRun);
+            assertEquals(1, executor.pendingTaskCount());
+            assertEquals(0, context.numResponses());
+            assertEquals(1, ReferenceCountUtil.refCnt(request));
+            assertFalse(InlineScope.active());
+
+            executor.runOneTask();
+            assertEquals(List.of(true, false), action.inlineOnEachRun);
+            assertEquals(0, executor.pendingTaskCount());
+            assertTrue(context.isFlushed());
+            assertEquals(0, ReferenceCountUtil.refCnt(request));
+        }
+    }
+
+    /**
+     * The SQL actions on a channel share its ConnectContext. Two pipelined requests must not run on it at
+     * once: the second starts only after the first has finished, whatever the executor's parallelism.
+     */
+    @Test
+    public void testSqlRequestsOnOneChannelRunOneAtATime() throws Exception {
+        String uri = "/test/sql";
+        ActionController controller = new ActionController();
+        CountDownLatch firstStarted = new CountDownLatch(1);
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        AtomicInteger running = new AtomicInteger();
+        AtomicInteger overlapped = new AtomicInteger();
+        BaseAction sqlAction = new BaseAction(controller) {
+            @Override
+            public boolean isSqlAction() {
+                return true;
+            }
+
+            @Override
+            public boolean supportAsyncHandler() {
+                return true;
+            }
+
+            @Override
+            public void handleRequest(BaseRequest request) {
+                if (running.incrementAndGet() > 1) {
+                    overlapped.incrementAndGet();
+                }
+                try {
+                    firstStarted.countDown();
+                    releaseFirst.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    running.decrementAndGet();
+                }
+            }
+
+            @Override
+            public void execute(BaseRequest request, BaseResponse response) {
+            }
+        };
+        controller.registerHandler(HttpMethod.GET, uri, sqlAction);
+
+        HttpConnectContext shared = new HttpConnectContext();
+        Attribute<HttpConnectContext> attribute = Mockito.mock(Attribute.class);
+        Mockito.when(attribute.get()).thenReturn(shared);
+        Channel channel = Mockito.mock(Channel.class);
+        Mockito.when(channel.attr(Mockito.same(HttpServerHandler.HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY))).thenReturn(attribute);
+        ChannelHandlerContext context = Mockito.mock(ChannelHandlerContext.class);
+        Mockito.when(context.channel()).thenReturn(channel);
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            HttpServerHandler handler = new HttpServerHandler(controller, pool);
+            handler.channelRead(context, new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri));
+            assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
+            handler.channelRead(context, new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uri));
+            Thread.sleep(300);
+            assertEquals(1, running.get(), "the second request waits for the first");
+            releaseFirst.countDown();
+            pool.shutdown();
+            assertTrue(pool.awaitTermination(5, TimeUnit.SECONDS));
+            assertEquals(0, overlapped.get(), "no two SQL requests of one channel ran at the same time");
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+>>>>>>> bb3f8b2f818... [Enhancement] [FR-19] Authenticate security integration users over HTTP, Arrow Flight SQL and the load RPCs (#63365)
     private void verifyResponse(Object response, HttpResponseStatus expectStatus, String expectContent) {
         assertInstanceOf(DefaultFullHttpResponse.class, response);
         DefaultFullHttpResponse httpResponse = (DefaultFullHttpResponse) response;
