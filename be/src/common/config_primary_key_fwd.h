@@ -37,6 +37,15 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 
 // This config controls max memory that we can use for partial update.
 CONF_mInt64(partial_update_memory_limit_per_worker, "2147483648"); // 2GB
+// Column-mode partial update: partition the update rows by source segment into a local spill file
+// once per column batch, so every update file is read from object storage once instead of once per
+// source segment. false restores the per-segment re-read.
+CONF_mBool(lake_pk_column_mode_spill_update_rows, "true");
+// Memory the partition pass may buffer before flushing to the spill file.
+CONF_mInt64(lake_pk_column_mode_spill_buffer_bytes, "67108864"); // 64MB
+// Directory of the spill files. Empty: the first local storage path, or the system temp directory
+// when the node has no local storage path.
+CONF_String(lake_pk_column_mode_spill_dir, "");
 
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.

@@ -1023,6 +1023,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 部分更新操作におけるワーカー スレッドあたりの最大メモリ。部分更新を処理する際の個々のワーカー スレッドのメモリ使用量を制御します。
 - 導入バージョン: -
 
+### lake_pk_column_mode_spill_update_rows
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データの主キーテーブルでカラムモードの部分更新を行う際、更新行をソースセグメント単位でローカルの spill ファイルに分割してから適用するかどうか。有効にすると、各更新ファイルはカラムバッチごとにオブジェクトストレージから一度だけ読み込まれ、各ソースセグメントは自分の行だけをローカルディスクから読み込みます。無効にすると、各ソースセグメントが関係する更新ファイルをすべて読み直すため、セグメント数の多い tablet では遅くなります。分割処理のメモリは `lake_pk_column_mode_spill_buffer_bytes` で制限されます。
+- 導入バージョン: -
+
+### lake_pk_column_mode_spill_buffer_bytes
+
+- デフォルト: 67108864
+- タイプ: Int
+- 単位: Bytes
+- 変更可能: はい
+- 説明: カラムモード部分更新の分割処理が spill ファイルに書き出す前にバッファできるメモリの上限。`lake_pk_column_mode_spill_update_rows` を参照。
+- 導入バージョン: -
+
+### lake_pk_column_mode_spill_dir
+
+- デフォルト: ""
+- タイプ: String
+- 単位: -
+- 変更可能: いいえ
+- 説明: カラムモード部分更新が spill ファイルを書き込むディレクトリ。空の場合は最初のローカルストレージパスを使用し、ローカルストレージパスがないノードではシステムの一時ディレクトリを使用します。spill ファイルは publish の完了後すぐに削除されます。
+- 導入バージョン: -
+
 ### enable_load_spill_parallel_merge
 
 - デフォルト: true

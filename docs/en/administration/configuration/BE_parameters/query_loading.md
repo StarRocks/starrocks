@@ -1039,6 +1039,33 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
 - Introduced in: -
 
+### lake_pk_column_mode_spill_update_rows
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a column-mode partial update on a shared-data Primary Key table partitions the update rows by source segment into a local spill file before applying them. With this enabled, each update file is read from object storage once per column batch and every source segment reads only its own rows from local disk. When disabled, every source segment re-reads every update file it touches, which is slow on tablets with many segments. Memory used by the partition pass is bounded by `lake_pk_column_mode_spill_buffer_bytes`.
+- Introduced in: -
+
+### lake_pk_column_mode_spill_buffer_bytes
+
+- Default: 67108864
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Maximum memory the partition pass of a column-mode partial update may buffer before flushing rows to the spill file. See `lake_pk_column_mode_spill_update_rows`.
+- Introduced in: -
+
+### lake_pk_column_mode_spill_dir
+
+- Default: ""
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Directory of the spill files written by column-mode partial updates. When empty, the first local storage path is used, or the system temporary directory when the node has no local storage path. Spill files are deleted as soon as the publish finishes.
+- Introduced in: -
+
 ### enable_load_spill_parallel_merge
 
 - Default: true
