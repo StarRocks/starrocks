@@ -87,4 +87,20 @@ public class ScoreSelectorTest {
         Assertions.assertEquals(5, targetList.get(2).getPartition().getPartitionId());
         Assertions.assertEquals(6, targetList.get(3).getPartition().getPartitionId());
     }
+
+    @Test
+    public void testZeroScoreIsSkippedEvenWithZeroThreshold() {
+        double originalThreshold = Config.lake_compaction_score_selector_min_score;
+        Config.lake_compaction_score_selector_min_score = 0;
+        try {
+            PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+            statistics.setCompactionScore(new Quantiles(0, 0, 0));
+            Assertions.assertTrue(selector.select(List.of(statistics), new HashSet<>()).isEmpty());
+
+            statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            Assertions.assertEquals(1, selector.select(List.of(statistics), new HashSet<>()).size());
+        } finally {
+            Config.lake_compaction_score_selector_min_score = originalThreshold;
+        }
+    }
 }
