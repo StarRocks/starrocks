@@ -59,6 +59,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ImageWriter;
@@ -78,6 +79,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.task.DropReplicaTask;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
@@ -664,6 +666,107 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
                 restoredHandler.getHistorySchema(db.getId(), table.getId(), preAlterIndexMeta.getSchemaId()).orElse(null));
     }
 
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        Database db = starRocksAssert.getDb(ctx.getDatabase());
+        starRocksAssert.withTable("CREATE TABLE t_prune_leader_finished(c0 INT, c1 INT) DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db.getFullName(), "t_prune_leader_finished");
+        table.setUseFastSchemaEvolution(false);
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        SchemaChangeJobV2 job = (SchemaChangeJobV2) executeAlterAndWaitFinish(table,
+                "ALTER TABLE t_prune_leader_finished ADD COLUMN c2 BIGINT");
+
+        assertPruned(job);
+        // Every journal entry before the final one carries the per-tablet data; the final one is journaled
+        // already pruned.
+        SchemaChangeJobV2 entry;
+        do {
+            entry = (SchemaChangeJobV2) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            Assertions.assertEquals(job.getJobId(), entry.getJobId());
+            Assertions.assertEquals(entry.isDone(), entry.physicalPartitionIndexMap.isEmpty());
+            Assertions.assertEquals(entry.isDone(), entry.indexMetaIdToSchema.isEmpty());
+        } while (!entry.isDone());
+        Assertions.assertEquals(JobState.FINISHED, entry.getJobState());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = JobState.class, names = {"FINISHED", "CANCELLED"})
+    public void testPruneMetaKeepsShowAlterRow(JobState doneState) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        SchemaChangeJobV2 job = newPopulatedJob(db, table);
+        job.schemaChangeBatchTask.addTask(new DropReplicaTask(1L, 20001L, 0, false));
+        MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(1);
+        latch.addMark(1L, 20001L);
+        Deencapsulation.setField(job, "createReplicaLatch", latch);
+        job.setJobState(doneState);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        List<List<Comparable>> rowBefore = new ArrayList<>();
+        job.getInfo(rowBefore);
+
+        job.pruneMeta();
+
+        assertPruned(job);
+        List<List<Comparable>> rowAfter = new ArrayList<>();
+        job.getInfo(rowAfter);
+        Assertions.assertEquals(rowBefore, rowAfter);
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        Database db = starRocksAssert.getDb(ctx.getDatabase());
+        starRocksAssert.withTable("CREATE TABLE t_prune_follower_replay(c0 INT, c1 INT) DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db.getFullName(), "t_prune_follower_replay");
+        table.setUseFastSchemaEvolution(false);
+
+        // The follower starts from the catalog as it was before the alter.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+
+        AlterJobV2 job = executeAlterAndWaitFinish(table, "ALTER TABLE t_prune_follower_replay ADD COLUMN c2 BIGINT");
+        Assertions.assertInstanceOf(SchemaChangeJobV2.class, job);
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader blockReader = new SRMetaBlockReaderV2(initialImage.getJsonReader());
+        followerMetastore.load(blockReader);
+        blockReader.close();
+
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        SchemaChangeJobV2 firstEntry = null;
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        try {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+            AlterJobV2 entry;
+            do {
+                entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+                Assertions.assertEquals(job.getJobId(), entry.getJobId());
+                if (firstEntry == null) {
+                    firstEntry = (SchemaChangeJobV2) entry;
+                    Assertions.assertEquals(JobState.PENDING, firstEntry.getJobState());
+                    Assertions.assertFalse(firstEntry.physicalPartitionIndexMap.isEmpty());
+                }
+                followerHandler.replayAlterJobV2(entry);
+            } while (!entry.isDone());
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+
+        // The handler keeps the first replayed entry and applies the later ones to it.
+        Assertions.assertSame(firstEntry, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(JobState.FINISHED, firstEntry.getJobState());
+        assertPruned(firstEntry);
+        Database followerDb = followerMetastore.getDb(db.getFullName());
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(followerDb.getFullName(), table.getName());
+        Assertions.assertEquals(OlapTableState.NORMAL, followerTable.getState());
+        Assertions.assertTrue(isSchemaMatch(followerDb, followerTable, Lists.newArrayList("c0", "c1", "c2")));
+    }
+
     @ParameterizedTest
     @EnumSource(value = JobState.class, names = {"FINISHED", "CANCELLED"})
     public void testLoadPrunesDoneSchemaChangeJobFromImage(JobState doneState) throws Exception {
@@ -741,6 +844,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
         Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
         Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
+        Assertions.assertEquals(0, job.schemaChangeBatchTask.getTaskNum());
+        Assertions.assertNull(Deencapsulation.getField(job, "createReplicaLatch"));
     }
 
     private void assertHistorySchemaMatches(OlapTable table, long indexMetaId, MaterializedIndexMeta originMeta,

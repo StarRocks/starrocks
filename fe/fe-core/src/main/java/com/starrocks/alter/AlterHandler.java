@@ -255,6 +255,17 @@ public abstract class AlterHandler extends LeaderDaemon {
 
     @Override
     protected void runAfterLeaseValid() {
+        // The scheduling loops skip done jobs, so a job whose lake publish was still running when it reached
+        // its final state is pruned here once the publish completes.
+        for (AlterJobV2 alterJob : alterJobsV2.values()) {
+            if (alterJob.isDone()) {
+                try {
+                    alterJob.pruneIfDone();
+                } catch (Throwable t) {
+                    LOG.warn("prune done alter job {} failed", alterJob.getJobId(), t);
+                }
+            }
+        }
         clearExpireFinishedOrCancelledAlterJobsV2();
         setInterval(Config.alter_scheduler_interval_millisecond);
     }
@@ -343,6 +354,9 @@ public abstract class AlterHandler extends LeaderDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+        // A replay may copy the entry's data back into a job pruned before, so prune after every replay.
+        AlterJobV2 retainedJob = existingJob == null ? alterJob : existingJob;
+        retainedJob.pruneAfterReplay();
     }
 
     public Map<Long, Long> getRunningAlterJobCount() {
