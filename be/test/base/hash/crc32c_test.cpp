@@ -161,6 +161,8 @@ TEST(CRC32C, TestOverrideCacheInvalidation) {
     uint32_t c1 = Extend(0, buf, sizeof(buf));
     (void)c1;
 
+    bool initial_pmull = HasArmPmull();
+
     // Disabling must take effect immediately
     {
         ScopedPmullOverride disable(true);
@@ -170,10 +172,7 @@ TEST(CRC32C, TestOverrideCacheInvalidation) {
     }
 
     // Re-enabling must restore hardware capability
-#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
-    // On ARM machines with PMULL hardware, it should restore to true
-    // On non-ARM or systems without PMULL, it remains false
-#endif
+    EXPECT_EQ(initial_pmull, HasArmPmull());
 }
 
 TEST(CRC32C, FallbackEquivalence) {
@@ -251,9 +250,12 @@ TEST(CRC32C, EquivalenceAcrossBoundaries) {
         }
     }
 }
-#endif
 
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+// Computes CRC32C using ARMv8 PMULL parallel 64-byte folding.
+// Precondition: len >= 64 && (len % 16 == 0).
+// Buffer must contain at least 64 bytes. Any trailing remainder (< 16 bytes)
+// must be handled by the caller. Exposed under BE_TEST for direct unit testing.
 TEST(CRC32C, DirectArmPmullSimd) {
     if (!HasArmPmull()) {
         GTEST_SKIP() << "ARM PMULL is not supported or is disabled on this host.";
@@ -262,13 +264,24 @@ TEST(CRC32C, DirectArmPmullSimd) {
     for (size_t i = 0; i < buffer.size(); ++i) {
         buffer[i] = static_cast<char>((i * 131) ^ (i >> 3));
     }
+    // Verify valid lengths satisfying precondition: len >= 64 and len % 16 == 0
     const size_t simd_sizes[] = {64, 80, 96, 112, 128, 144, 192, 208, 256, 512, 1024, 2048, 4096};
     for (size_t size : simd_sizes) {
         uint32_t pmull_crc = ~crc32c_pmull_simd(~0U, buffer.data(), size);
         uint32_t fallback_crc = ValueFallback(buffer.data(), size);
         ASSERT_EQ(pmull_crc, fallback_crc) << "Direct PMULL SIMD mismatch at size=" << size;
     }
+
+#if !defined(NDEBUG) && defined(GTEST_HAS_DEATH_TEST)
+    // Contract assertions: verify debug aborts on violating preconditions (len < 64 or len % 16 != 0)
+    ASSERT_DEATH_IF_SUPPORTED(crc32c_pmull_simd(~0U, buffer.data(), 0), "crc32c_pmull_simd requires len >= 64");
+    ASSERT_DEATH_IF_SUPPORTED(crc32c_pmull_simd(~0U, buffer.data(), 63), "crc32c_pmull_simd requires len >= 64");
+    ASSERT_DEATH_IF_SUPPORTED(crc32c_pmull_simd(~0U, buffer.data(), 65), "crc32c_pmull_simd requires len >= 64");
+    ASSERT_DEATH_IF_SUPPORTED(crc32c_pmull_simd(~0U, buffer.data(), 70), "crc32c_pmull_simd requires len >= 64");
+#endif
 }
 #endif
+
+#endif // BE_TEST
 
 } // namespace starrocks::crc32c

@@ -60,10 +60,14 @@ uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);
 inline uint32_t ValueFallback(const char* data, size_t n) {
     return ExtendFallback(0, data, n);
 }
-#endif
 
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+// Computes CRC32C using ARMv8 PMULL parallel 64-byte folding.
+// Precondition: len >= 64 && (len % 16 == 0).
+// Buffer must contain at least 64 bytes. Any trailing remainder (< 16 bytes)
+// must be handled by the caller. Exposed under BE_TEST for direct unit testing.
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
 #endif
 
 static const uint32_t kMaskDelta = 0xa282ead8ul;
