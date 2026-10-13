@@ -34,12 +34,14 @@ import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
@@ -185,6 +187,18 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     // ---------------------------------------------------------------------
     // Hooks for subclasses
     // ---------------------------------------------------------------------
+
+    /**
+     * Resolve the index payload every AlterReplicaTask of this dispatch carries, from the catalog-level definitions
+     * the job persists and the table's current schema. Called once per dispatch, under the table lock, before any
+     * {@link #populateAlterRequest}. The payload itself is never persisted: the journal and image only keep what
+     * Gson can serialize, and a Thrift struct is not that, so an FE that loaded the job (a new leader, a restarted FE)
+     * must rebuild it here exactly as the FE that created the job did.
+     *
+     * @throws AlterCancelException when the definitions no longer resolve against the table, so the job is cancelled
+     *                              instead of sending BE an empty or partial payload
+     */
+    protected abstract void prepareAlterRequests(OlapTable table) throws AlterCancelException;
 
     /**
      * Flag the task with the appropriate fast-path payload. Called once per
@@ -850,6 +864,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
+            prepareAlterRequests(table);
             // Cache one TTabletSchema per index meta id; alterLakeTablet's
             // constructor checkNotNull-s it, and recomputing per tablet would
             // churn protobuf serialization for no reason.
@@ -903,6 +918,21 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (pp != null) {
                 pp.setNextVersion(e.getValue() + 1);
             }
+        }
+    }
+
+    protected static TIndexType toThriftIndexType(IndexDef.IndexType t) {
+        switch (t) {
+            case BITMAP:
+                return TIndexType.BITMAP;
+            case GIN:
+                return TIndexType.GIN;
+            case NGRAMBF:
+                return TIndexType.NGRAMBF;
+            case VECTOR:
+                return TIndexType.VECTOR;
+            default:
+                throw new IllegalArgumentException("unsupported index type: " + t);
         }
     }
 

@@ -15,7 +15,9 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -33,6 +35,7 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -94,9 +97,11 @@ import static org.mockito.Mockito.when;
  */
 public class LakeTableIndexFastPathJobBaseTest {
 
+    /** An ADD INDEX job with one index to build, so a dispatch has a payload to send. */
     private LakeTableAddIndexJob newJob() {
-        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L,
-                new ArrayList<>(), new ArrayList<>());
+        Index index = new Index("idx_c1", List.of(ColumnId.create("c1")), IndexDef.IndexType.BITMAP, "",
+                new HashMap<>());
+        return new LakeTableAddIndexJob(1L, 2L, 3L, "t", 60_000L, List.of(index));
     }
 
     private static void setField(Object o, String name, Object value) throws Exception {
