@@ -385,8 +385,8 @@ public class AuthenticationHandler {
     }
 
     /**
-     * Authenticate using a raw bearer token (e.g. a JWT) presented outside the MySQL wire protocol, such
-     * as by the Arrow Flight SQL service. Only security integrations of type JWT are considered.
+     * Authenticate a raw JWT sent outside the MySQL protocol, e.g. by Arrow Flight SQL. A native JWT user is
+     * checked first, then the JWT security integrations in authentication_chain.
      *
      * @param context    the connection context
      * @param user       username
@@ -404,9 +404,9 @@ public class AuthenticationHandler {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "NO");
         }
 
-        // with auth check disabled, leave the decision to the regular authenticate() path
+        // with auth check disabled, behave exactly like a password login
         if (!Config.enable_auth_check) {
-            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+            return authenticateWithClearPassword(context, user, remoteHost, rawToken);
         }
 
         // native first, same precedence as authenticate()
@@ -433,66 +433,53 @@ public class AuthenticationHandler {
         String unverifiedIssuer = JWTAuthenticationProvider.extractIssuerWithoutVerification(rawToken);
 
         List<Pair<String, AuthenticationException>> exceptions = Lists.newArrayList();
-        AuthenticationResult authenticationResult = null;
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-
-        String[] authChain = Config.authentication_chain;
-        for (String authMechanism : authChain) {
-            if (authenticationResult != null) {
-                break;
-            }
-
+        for (String authMechanism : Config.authentication_chain) {
             SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
-            if (securityIntegration == null) {
+            if (!(securityIntegration instanceof JWTSecurityIntegration)) {
                 continue;
             }
 
-            if (!AuthPlugin.Server.AUTHENTICATION_JWT.name().equalsIgnoreCase(securityIntegration.getType())) {
-                continue;
-            }
-
-            AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-            if (!(provider instanceof JWTAuthenticationProvider)) {
-                continue;
-            }
-
-            JWTAuthenticationProvider jwtProvider = (JWTAuthenticationProvider) provider;
-            if (!jwtProvider.isIssuerAccepted(unverifiedIssuer)) {
+            JWTAuthenticationProvider provider =
+                    (JWTAuthenticationProvider) securityIntegration.getAuthenticationProvider();
+            if (!provider.isIssuerAccepted(unverifiedIssuer)) {
                 continue;
             }
 
             try {
                 authContext.setAuthenticationProvider(provider);
-                jwtProvider.authenticateRawToken(
-                        authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), rawToken);
+                provider.authenticateRawToken(authContext, UserIdentity.createEphemeralUserIdent(user, remoteHost), rawToken);
             } catch (AuthenticationException e) {
                 exceptions.add(new Pair<>(authMechanism, e));
                 continue;
             }
 
-            authenticationResult = new AuthenticationResult(
+            // getGroupProviderName() returns an empty list (never null) when the integration has no group_provider
+            List<String> groupProviderNames = securityIntegration.getGroupProviderName().isEmpty()
+                    ? List.of(Config.group_provider)
+                    : securityIntegration.getGroupProviderName();
+            return new AuthenticationResult(
                     UserIdentity.createEphemeralUserIdent(user, remoteHost),
-                    securityIntegration.getGroupProviderName() == null ?
-                            List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
+                    groupProviderNames,
                     securityIntegration.getGroupAllowedLoginList(),
                     authMechanism);
         }
 
-        if (authenticationResult == null && !exceptions.isEmpty()) {
+        if (!exceptions.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN,
                     Joiner.on(", ").join(exceptions.stream().map(e -> e.first + ": " + e.second.getMessage())
                             .collect(Collectors.toList())));
         }
-
-        return authenticationResult;
+        return null;
     }
 
     private static AuthenticationResult authenticateWithNativeJwtUser(AccessControlContext authContext, String user,
                                                                       String remoteHost, String rawToken)
             throws AuthenticationException {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        // ForLogin refuses an ambiguous name instead of treating it as "no native user"
         Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                authenticationMgr.getBestMatchedUserIdentity(user, remoteHost);
+                authenticationMgr.getBestMatchedUserIdentityForLogin(user, remoteHost);
         if (matchedUserIdentity == null) {
             return null;
         }
@@ -503,15 +490,10 @@ public class AuthenticationHandler {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
         }
 
-        AuthenticationProvider provider = AuthenticationProviderFactory.create(
-                matchedUserIdentity.getValue().getAuthPlugin(), matchedUserIdentity.getValue().getAuthString());
-        if (!(provider instanceof JWTAuthenticationProvider)) {
-            LOG.warn("authentication provider is not a JWT provider for user {}@{}", user, remoteHost);
-            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
-        }
-
+        JWTAuthenticationProvider provider = (JWTAuthenticationProvider) AuthPlugin.Server.AUTHENTICATION_JWT
+                .getProvider(matchedUserIdentity.getValue().getAuthString());
         authContext.setAuthenticationProvider(provider);
-        ((JWTAuthenticationProvider) provider).authenticateRawToken(authContext, matchedUserIdentity.getKey(), rawToken);
+        provider.authenticateRawToken(authContext, matchedUserIdentity.getKey(), rawToken);
         return new AuthenticationResult(matchedUserIdentity.getKey(), List.of(Config.group_provider), null, "native");
     }
 

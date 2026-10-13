@@ -81,6 +81,21 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     }
 
     /**
+     * Returns true if the credential parses as a signed JWT. Used to route a credential without verifying it.
+     */
+    public static boolean isJwt(String credential) {
+        if (credential == null) {
+            return false;
+        }
+        try {
+            SignedJWT.parse(credential);
+            return true;
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+
+    /**
      * Read the iss claim without verifying the signature, to pick the matching integration before a JWKS fetch.
      *
      * @param rawToken the raw JWT string

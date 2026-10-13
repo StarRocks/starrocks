@@ -27,6 +27,7 @@ import com.nimbusds.jwt.SignedJWT;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -58,6 +59,8 @@ public class AuthenticationHandlerTest {
     // field initializers run before each test, like @BeforeEach
     private final RSAKey jwtRsaKey = generateRsaKey();
     private final String[] originalAuthChain = Config.authentication_chain;
+    private final String[] originalGroupProvider = Config.group_provider;
+    private final boolean originalLdapCaseInsensitive = Config.authentication_ldap_case_insensitive;
 
     private static RSAKey generateRsaKey() {
         try {
@@ -160,7 +163,12 @@ public class AuthenticationHandlerTest {
     }
 
     private void setUpJwtSecurityIntegration(AuthenticationMgr authenticationMgr, String name, String issuer) {
-        Map<String, String> props = new HashMap<>();
+        setUpJwtSecurityIntegration(authenticationMgr, name, issuer, Map.of());
+    }
+
+    private void setUpJwtSecurityIntegration(AuthenticationMgr authenticationMgr, String name, String issuer,
+                                             Map<String, String> extraProps) {
+        Map<String, String> props = new HashMap<>(extraProps);
         props.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, AuthPlugin.Server.AUTHENTICATION_JWT.name());
         props.put(JWTAuthenticationProvider.JWT_JWKS_URL, name + "-jwks.json");
         props.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "sub");
@@ -183,6 +191,8 @@ public class AuthenticationHandlerTest {
     @AfterEach
     public void tearDownJwt() {
         Config.authentication_chain = originalAuthChain;
+        Config.group_provider = originalGroupProvider;
+        Config.authentication_ldap_case_insensitive = originalLdapCaseInsensitive;
     }
 
     @Test
@@ -261,12 +271,22 @@ public class AuthenticationHandlerTest {
         setUpJwtSecurityIntegration(authenticationMgr, "jwt_integration", "https://trusted.example.com");
         Config.authentication_chain = new String[] {"jwt_integration"};
 
+        AtomicInteger jwksFetchCount = new AtomicInteger(0);
+        new MockUp<JwkMgr>() {
+            @Mock
+            public JWKSet getJwkSet(String jwksUrl) {
+                jwksFetchCount.incrementAndGet();
+                return new JWKSet();
+            }
+        };
+
         String token = buildJwt("jwt_user", "https://untrusted.example.com",
                 new Date(System.currentTimeMillis() + 60_000));
 
         ConnectContext context = new ConnectContext();
         Assertions.assertThrows(AuthenticationException.class,
                 () -> AuthenticationHandler.authenticateWithToken(context, "jwt_user", "%", token));
+        Assertions.assertEquals(0, jwksFetchCount.get(), "a non-matching issuer must be skipped before the JWKS fetch");
     }
 
     @Test
@@ -358,15 +378,112 @@ public class AuthenticationHandlerTest {
     }
 
     @Test
-    public void testAuthenticateWithToken_authCheckDisabled() {
+    public void testAuthenticateWithToken_authCheckDisabled() throws Exception {
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
         boolean originalAuthCheck = Config.enable_auth_check;
         Config.enable_auth_check = false;
         try {
-            ConnectContext context = new ConnectContext();
+            // same as a password login: a known user gets in, an unknown one does not
+            Assertions.assertEquals("root", AuthenticationHandler.authenticateWithToken(
+                    new ConnectContext(), "root", "127.0.0.1", "a.b.c").getUser());
             Assertions.assertThrows(AuthenticationException.class,
-                    () -> AuthenticationHandler.authenticateWithToken(context, "jwt_user", "%", "a.b.c"));
+                    () -> AuthenticationHandler.authenticateWithToken(new ConnectContext(), "jwt_user", "%", "a.b.c"));
         } finally {
             Config.enable_auth_check = originalAuthCheck;
         }
+    }
+
+    @Test
+    public void testAuthenticateWithToken_ambiguousNativeUserRefused() throws Exception {
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+        setUpJwtSecurityIntegration(authenticationMgr, "jwt_integration", "https://issuer.example.com");
+        Config.authentication_chain = new String[] {"jwt_integration"};
+
+        Config.authentication_ldap_case_insensitive = false;
+        for (String name : new String[] {"Allen", "allen"}) {
+            authenticationMgr.createUser(new CreateUserStmt(
+                    new UserRef(name, "%", false, NodePosition.ZERO),
+                    true,
+                    new UserAuthOption(AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name(),
+                            "uid=" + name + ",ou=people,dc=example,dc=com", false, NodePosition.ZERO),
+                    List.of(), Map.of(), NodePosition.ZERO));
+        }
+        Config.authentication_ldap_case_insensitive = true;
+
+        AtomicInteger jwksFetchCount = new AtomicInteger(0);
+        JWKSet jwkSet = new JWKSet(jwtRsaKey.toPublicJWK());
+        new MockUp<JwkMgr>() {
+            @Mock
+            public JWKSet getJwkSet(String jwksUrl) {
+                jwksFetchCount.incrementAndGet();
+                return jwkSet;
+            }
+        };
+
+        String token = buildJwt("ALLEN", "https://issuer.example.com", new Date(System.currentTimeMillis() + 60_000));
+        AuthenticationException e = Assertions.assertThrows(AuthenticationException.class,
+                () -> AuthenticationHandler.authenticateWithToken(new ConnectContext(), "ALLEN", "%", token));
+        Assertions.assertEquals(ErrorCode.ERR_AMBIGUOUS_LDAP_USER, e.getErrorCode());
+        Assertions.assertEquals(0, jwksFetchCount.get(), "an ambiguous name must not reach the JWT integration");
+    }
+
+    @Test
+    public void testAuthenticateWithToken_integrationWithoutGroupProviderUsesDefault() throws Exception {
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        Map<String, String> groupProviderProps = new HashMap<>();
+        groupProviderProps.put(GroupProvider.GROUP_PROVIDER_PROPERTY_TYPE_KEY, "ldap");
+        groupProviderProps.put(LDAPGroupProvider.LDAP_USER_SEARCH_ATTR, "uid");
+        authenticationMgr.replayCreateGroupProvider("default_group_provider", groupProviderProps);
+        ((LDAPGroupProvider) authenticationMgr.getGroupProvider("default_group_provider"))
+                .setUserToGroupCache(new HashMap<>(Map.of("jwt_user", Set.of("analysts"))));
+        Config.group_provider = new String[] {"default_group_provider"};
+
+        setUpJwtSecurityIntegration(authenticationMgr, "jwt_integration", "https://issuer.example.com",
+                Map.of(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "analysts"));
+        Config.authentication_chain = new String[] {"jwt_integration"};
+
+        JWKSet jwkSet = new JWKSet(jwtRsaKey.toPublicJWK());
+        new MockUp<JwkMgr>() {
+            @Mock
+            public JWKSet getJwkSet(String jwksUrl) {
+                return jwkSet;
+            }
+        };
+
+        String token = buildJwt("jwt_user", "https://issuer.example.com", new Date(System.currentTimeMillis() + 60_000));
+        ConnectContext context = new ConnectContext();
+        AuthenticationHandler.authenticateWithToken(context, "jwt_user", "%", token);
+
+        Assertions.assertEquals(Set.of("analysts"), context.getGroups());
+    }
+
+    @Test
+    public void testAuthenticateWithToken_skipsNonJwtIntegrations() throws Exception {
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+        Map<String, String> ldapProps = new HashMap<>();
+        ldapProps.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
+        ldapProps.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        ldapProps.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        authenticationMgr.replayCreateSecurityIntegration("ldap_integration", ldapProps);
+        setUpJwtSecurityIntegration(authenticationMgr, "jwt_integration", "https://issuer.example.com");
+        Config.authentication_chain = new String[] {"ldap_integration", "jwt_integration"};
+
+        JWKSet jwkSet = new JWKSet(jwtRsaKey.toPublicJWK());
+        new MockUp<JwkMgr>() {
+            @Mock
+            public JWKSet getJwkSet(String jwksUrl) {
+                return jwkSet;
+            }
+        };
+
+        // the LDAP integration comes first in the chain but must never see the token
+        String token = buildJwt("jwt_user", "https://issuer.example.com", new Date(System.currentTimeMillis() + 60_000));
+        Assertions.assertEquals("jwt_user",
+                AuthenticationHandler.authenticateWithToken(new ConnectContext(), "jwt_user", "%", token).getUser());
     }
 }

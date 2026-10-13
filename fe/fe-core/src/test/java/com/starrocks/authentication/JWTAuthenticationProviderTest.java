@@ -183,4 +183,22 @@ public class JWTAuthenticationProviderTest {
         Assertions.assertThrows(AuthenticationException.class,
                 () -> JWTAuthenticationProvider.extractExpirationTimeWithoutVerification("not-a-jwt"));
     }
+
+    @Test
+    public void testAuthenticate_malformedMysqlFrame() {
+        AccessControlContext authContext = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        Assertions.assertThrows(AuthenticationException.class,
+                () -> defaultProvider().authenticate(authContext, user, new byte[0]));
+    }
+
+    @Test
+    public void testIsJwt() throws Exception {
+        String token = buildToken("alice", "https://issuer.example.com", "starrocks",
+                new Date(System.currentTimeMillis() + 60_000));
+        Assertions.assertTrue(JWTAuthenticationProvider.isJwt(token));
+        Assertions.assertFalse(JWTAuthenticationProvider.isJwt("abc.def.ghi"));
+        Assertions.assertFalse(JWTAuthenticationProvider.isJwt("plainOldPassword"));
+        Assertions.assertFalse(JWTAuthenticationProvider.isJwt(null));
+    }
 }

@@ -36,19 +36,12 @@ import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 public class ArrowFlightSqlSessionManager {
-
-    private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlSessionManager.class);
-
-    private static final Pattern JWT_SHAPE = Pattern.compile("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$");
 
     private final LoadingCache<String, ArrowFlightSqlTokenInfo> tokenCache;
 
@@ -81,17 +74,11 @@ public class ArrowFlightSqlSessionManager {
 
         long jwtExpireTimeMs = 0L;
         try {
-            if (looksLikeJwt(password)) {
-                try {
-                    AuthenticationHandler.authenticateWithToken(ctx, username, remoteIP, password);
-                    Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
-                    jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
-                } catch (AuthenticationException jwtException) {
-                    LOG.debug("JWT authentication failed for user {}, falling back to regular authentication: {}",
-                            username, jwtException.getMessage());
-                    // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
-                    AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
-                }
+            // no fallback for a real JWT: a rejected token must not be retried as an LDAP password
+            if (JWTAuthenticationProvider.isJwt(password)) {
+                AuthenticationHandler.authenticateWithToken(ctx, username, remoteIP, password);
+                Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
+                jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
             } else {
                 // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
                 AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
@@ -231,9 +218,5 @@ public class ArrowFlightSqlSessionManager {
             return selfHost + "|" + uuid;
         }
         return uuid;
-    }
-
-    private static boolean looksLikeJwt(String credential) {
-        return credential != null && JWT_SHAPE.matcher(credential).matches();
     }
 }

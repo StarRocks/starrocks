@@ -498,15 +498,13 @@ public class ArrowFlightSqlSessionManagerTest {
     }
 
     @Test
-    public void testInitializeSession_jwtShapedPassword_fallsBackToClearPasswordAuthentication() throws Exception {
+    public void testInitializeSession_jwtShapedPassword_usesClearPasswordAuthentication() throws Exception {
         try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
                 MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
                 MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
                 MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
 
             mockAuthentication(mockedAuth);
-            mockedAuth.when(() -> AuthenticationHandler.authenticateWithToken(any(), any(), any(), any()))
-                    .thenThrow(new AuthenticationException("not a valid JWT"));
 
             ExecuteEnv mockEnv = mock(ExecuteEnv.class);
             mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
@@ -524,9 +522,32 @@ public class ArrowFlightSqlSessionManagerTest {
             assertNotNull(token);
 
             mockedAuth.verify(() -> AuthenticationHandler.authenticateWithToken(
-                    any(), any(), any(), any()));
+                    any(), any(), any(), any()), never());
             mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(
                     any(), any(), any(), any()));
+        }
+    }
+
+    @Test
+    public void testInitializeSession_rejectedJwt_doesNotFallBack() throws Exception {
+        String jwt = buildUnsignedJwtLikeCredential("{\"sub\":\"testUser\"}");
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithToken(any(), any(), any(), any()))
+                    .thenThrow(new AuthenticationException("JWT expired"));
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockGlobalStateMgr(mockedGlobalState);
+
+            assertThrows(FlightRuntimeException.class,
+                    () -> sessionManager.initializeSession("testUser", "127.0.0.1", jwt));
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(
+                    any(), any(), any(), any()), never());
         }
     }
 
