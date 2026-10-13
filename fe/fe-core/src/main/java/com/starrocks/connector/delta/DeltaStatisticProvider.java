@@ -26,9 +26,12 @@ import io.delta.kernel.types.StructType;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public class DeltaStatisticProvider {
-    private final Map<PredicateSearchKey, DeltaLakeFileStats> deltaLakeFileStatsMap = new HashMap<>();
+    private final ConcurrentMap<PredicateSearchKey, DeltaLakeFileStats> deltaLakeFileStatsMap =
+            new ConcurrentHashMap<>();
 
     public DeltaStatisticProvider() {}
 
@@ -56,15 +59,16 @@ public class DeltaStatisticProvider {
                                 Set<String> partitionPrimitiveColumns) {
         StructType schema = table.getDeltaMetadata().getSchema();
 
-        DeltaLakeFileStats fileStats;
-        if (deltaLakeFileStatsMap.containsKey(key)) {
-            fileStats = deltaLakeFileStatsMap.get(key);
+        // Delta metadata preparation can enumerate independent tables concurrently. Keep creation and updates for
+        // one predicate key atomic so duplicate logical scans neither lose nor double-count a file's statistics.
+        deltaLakeFileStatsMap.compute(key, (ignored, fileStats) -> {
+            if (fileStats == null) {
+                return new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, partitionPrimitiveColumns,
+                        fileStatsSerDe, file.getPartitionValues(), file.getRecords(), file.getFileSize());
+            }
             fileStats.update(fileStatsSerDe, file.getPartitionValues(), file.getRecords(), file.getFileSize());
-        } else {
-            fileStats = new DeltaLakeFileStats(schema, nonPartitionPrimitiveColumn, partitionPrimitiveColumns,
-                    fileStatsSerDe, file.getPartitionValues(), file.getRecords(), file.getFileSize());
-            deltaLakeFileStatsMap.put(key, fileStats);
-        }
+            return fileStats;
+        });
     }
 
     public Statistics getTableStatistics(StructType schema,

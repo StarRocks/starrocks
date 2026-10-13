@@ -30,10 +30,12 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionCastPredicatePruner;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -65,6 +67,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -77,7 +81,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final HdfsEnvironment hdfsEnvironment;
     private final DeltaLakeCacheUpdateProcessor cacheUpdateProcessor;
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
-    private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
+    private final Set<PredicateSearchKey> scannedTables = ConcurrentHashMap.newKeySet();
+    // A query-level Delta metadata instance is shared by the optimizer's preparation tasks and the coordinator.
+    // One future per key prevents duplicate log replay when a table appears in multiple logical scan operators.
+    private final Map<PredicateSearchKey, CompletableFuture<Void>> scanTaskFutures = new ConcurrentHashMap<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
     private final ConnectorProperties properties;
 
@@ -141,7 +148,39 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        PredicateSearchKey key = PredicateSearchKey.of(deltaLakeTable.getCatalogDBName(),
+                deltaLakeTable.getCatalogTableName(), params);
+        List<FileScanTask> preparedTasks = getPreparedScanTasks(key);
+        if (preparedTasks != null) {
+            return new RemoteFileInfoDefaultSource(preparedTasks.stream()
+                    .map(DeltaRemoteFileInfo::new).collect(Collectors.toList()));
+        }
         return buildRemoteInfoSource(table, params);
+    }
+
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
+        if (!(item.getTable() instanceof DeltaLakeTable) || item.getVersion() == null || item.getVersion().end().isEmpty()) {
+            return true;
+        }
+
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) item.getTable();
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(item.getVersion())
+                .setPredicate(item.getPredicate())
+                .setLimit(item.getLimit())
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of(deltaLakeTable.getCatalogDBName(),
+                deltaLakeTable.getCatalogTableName(), params);
+        List<String> fieldNames = deltaLakeTable.getColumns().stream().map(Column::getName).collect(Collectors.toList());
+        tracers = tracers == null ? Tracers.get() : tracers;
+        connectContext = connectContext == null ? ConnectContext.get() : connectContext;
+        try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "DELTA_LAKE.prepareMetadata")) {
+            triggerDeltaLakePlanFilesIfNeeded(key, deltaLakeTable, item.getPredicate(), connectContext, fieldNames,
+                    tracers);
+        }
+        return true;
     }
 
     @Override
@@ -188,22 +227,76 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
                                                    ScalarOperator operator, Map<ColumnRefOperator, Column> columns) {
-        if (!scannedTables.contains(key)) {
-            try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
-                List<String> fieldNames = columns.keySet().stream()
-                        .map(ColumnRefOperator::getName).collect(Collectors.toList());
-                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
-            }
-        }
+        List<String> fieldNames = columns.keySet().stream()
+                .map(ColumnRefOperator::getName).collect(Collectors.toList());
+        triggerDeltaLakePlanFilesIfNeeded(key, table, operator, ConnectContext.get(), fieldNames, Tracers.get());
     }
 
     private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
                                                    ScalarOperator operator, List<String> fieldNames) {
-        if (!scannedTables.contains(key)) {
-            try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
-                collectDeltaLakePlanFiles(key, table, operator, ConnectContext.get(), fieldNames);
+        triggerDeltaLakePlanFilesIfNeeded(key, table, operator, ConnectContext.get(), fieldNames, Tracers.get());
+    }
+
+    private void triggerDeltaLakePlanFilesIfNeeded(PredicateSearchKey key, Table table,
+                                                   ScalarOperator operator, ConnectContext connectContext,
+                                                   List<String> fieldNames, Tracers tracers) {
+        if (scannedTables.contains(key)) {
+            return;
+        }
+
+        CompletableFuture<Void> newFuture = new CompletableFuture<>();
+        CompletableFuture<Void> existingFuture = scanTaskFutures.putIfAbsent(key, newFuture);
+        if (existingFuture != null) {
+            try {
+                existingFuture.join();
+            } catch (CompletionException e) {
+                // The other caller's collection attempt failed; the caller here (getRemoteFiles /
+                // getTableStatistics) will see splitTasks.get(key) == null and surface the usual
+                // "Missing deltalake split task" error instead of a raw CompletionException.
+                LOG.warn("Delta Lake metadata collection failed for {} on a concurrent caller", key, e);
+            }
+            return;
+        }
+
+        // The previous collector may have finished after the check above but before it removed its
+        // completed future. Do not replay the log (and merge its file statistics a second time) when
+        // that happens. Complete our future so callers that raced with this check can proceed too.
+        if (scannedTables.contains(key)) {
+            newFuture.complete(null);
+            scanTaskFutures.remove(key, newFuture);
+            return;
+        }
+
+        try {
+            try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
+                collectDeltaLakePlanFiles(key, table, operator, connectContext, fieldNames, tracers);
+            }
+            newFuture.complete(null);
+        } catch (RuntimeException | Error e) {
+            newFuture.completeExceptionally(e);
+            throw e;
+        } finally {
+            // Drop the entry once the future is resolved (success or failure) so it doesn't linger
+            // for the rest of the query; getPreparedScanTasks falls back to splitTasks/resync below.
+            scanTaskFutures.remove(key, newFuture);
+        }
+    }
+
+    private List<FileScanTask> getPreparedScanTasks(PredicateSearchKey key) {
+        CompletableFuture<Void> future = scanTaskFutures.get(key);
+        if (future != null) {
+            try {
+                future.join();
+            } catch (CompletionException e) {
+                // The pre-collection attempt for this key failed (already logged by the caller that
+                // ran it); treat it as not-prepared so getRemoteFilesAsync falls back to collecting
+                // synchronously instead of propagating a wrapped CompletionException.
+                LOG.warn("Delta Lake metadata pre-collection failed for {}, falling back to synchronous collection",
+                        key, e);
+                return null;
             }
         }
+        return splitTasks.get(key);
     }
 
     private CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
@@ -393,7 +486,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
-                                           ConnectContext connectContext, List<String> fieldNames) {
+                                           ConnectContext connectContext, List<String> fieldNames, Tracers tracers) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
         StructType schema = metadata.getSchema();
@@ -429,7 +522,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             while (iterator.hasNext()) {
                 Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
                 files.add(pair.first);
-                try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+                try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, traceLabel)) {
                     statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
                             nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
                 }

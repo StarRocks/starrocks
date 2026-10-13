@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -448,11 +449,12 @@ public class ExternalResourceCleanupTest {
             PredicateSearchKey key = PredicateSearchKey.of("db", "tbl", params);
 
             Method collectMethod = DeltaLakeMetadata.class.getDeclaredMethod(
-                    "collectDeltaLakePlanFiles", PredicateSearchKey.class, com.starrocks.catalog.Table.class,
+                    "collectDeltaLakePlanFiles", PredicateSearchKey.class, Table.class,
                     com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.class,
-                    com.starrocks.qe.ConnectContext.class, List.class);
+                    com.starrocks.qe.ConnectContext.class, List.class, Tracers.class);
             collectMethod.setAccessible(true);
-            collectMethod.invoke(metadata, key, table, ConstantOperator.TRUE, null, List.of("c1"));
+            collectMethod.invoke(metadata, key, table, ConstantOperator.TRUE, null, List.of("c1"),
+                    Tracers.get());
 
             Field splitField = DeltaLakeMetadata.class.getDeclaredField("splitTasks");
             splitField.setAccessible(true);
@@ -888,7 +890,7 @@ public class ExternalResourceCleanupTest {
         Method collectMethod = DeltaLakeMetadata.class.getDeclaredMethod(
                 "collectDeltaLakePlanFiles", PredicateSearchKey.class, com.starrocks.catalog.Table.class,
                 com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.class,
-                com.starrocks.qe.ConnectContext.class, List.class);
+                com.starrocks.qe.ConnectContext.class, List.class, Tracers.class);
         collectMethod.setAccessible(true);
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(ConstantOperator.TRUE)
@@ -898,7 +900,8 @@ public class ExternalResourceCleanupTest {
 
         java.lang.reflect.InvocationTargetException ex = Assertions.assertThrows(
                 java.lang.reflect.InvocationTargetException.class,
-                () -> collectMethod.invoke(metadata, key, table, ConstantOperator.TRUE, null, List.of("c1")));
+                () -> collectMethod.invoke(metadata, key, table, ConstantOperator.TRUE, null, List.of("c1"),
+                        Tracers.get()));
         Assertions.assertInstanceOf(StarRocksConnectorException.class, ex.getCause());
         Assertions.assertTrue(ex.getCause().getMessage().contains("Failed to get delta lake scan files"));
     }

@@ -20,13 +20,19 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PredicateSearchKey;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
@@ -63,6 +69,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public class DeltaLakeMetadataTest {
@@ -227,6 +234,11 @@ public class DeltaLakeMetadataTest {
     }
 
     @Test
+    public void testDeltaTableSupportsParallelMetadataPreparation() {
+        Assertions.assertTrue(newTable().supportPreCollectMetadata());
+    }
+
+    @Test
     public void testGetTableWithSemanticRootCause(@Mocked DeltaMetastoreOperations deltaOps) throws Exception {
         new Expectations() {
             {
@@ -265,6 +277,24 @@ public class DeltaLakeMetadataTest {
     }
 
     @Test
+    public void testGetRemoteFilesAsyncUsesPreparedSplitTasks() {
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setTableVersionRange(TvrTableSnapshot.of(7L))
+                .build();
+        PredicateSearchKey key = PredicateSearchKey.of("db1", "table1", params);
+        FileScanTask task = new FileScanTask(null, 0L, Map.of(), null);
+        Deencapsulation.<Map<PredicateSearchKey, List<FileScanTask>>>getField(deltaLakeMetadata, "splitTasks")
+                .put(key, List.of(task));
+
+        RemoteFileInfoSource source = deltaLakeMetadata.getRemoteFilesAsync(newTable(), params);
+
+        Assertions.assertTrue(source.hasMoreOutput());
+        RemoteFileInfo file = source.getOutput();
+        Assertions.assertSame(task, ((DeltaRemoteFileInfo) file).getFileScanTask());
+        Assertions.assertFalse(source.hasMoreOutput());
+    }
+
+    @Test
     public void testIdentityStringPartitionColumns() {
         // Only string-typed partition columns are identity string partition columns: a non-string partition column
         // and a string non-partition column are both excluded. (Delta partitioning is always identity.)
@@ -279,5 +309,10 @@ public class DeltaLakeMetadataTest {
 
         Assertions.assertEquals(Sets.newHashSet("c2"),
                 DeltaLakeMetadata.identityStringPartitionColumns(table, Sets.newHashSet("c2", "c3")));
+    }
+
+    private static DeltaLakeTable newTable() {
+        return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(), Lists.newArrayList(),
+                null, null, new MetastoreTable("db1", "table1", "path/to/table", 123));
     }
 }
