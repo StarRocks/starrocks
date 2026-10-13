@@ -256,6 +256,9 @@ struct TExprNode {
 
   // lambda function contain non-deterministic sub-exprs
   58: optional bool is_nondeterministic
+
+  // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
+  59: optional bool cast_char_truncate
 }
 
 struct TPartitionLiteral {
