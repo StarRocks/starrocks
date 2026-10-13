@@ -131,7 +131,8 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
-        String url = request.getRequest().uri();
+        // Logged when the uri cannot be sanitized; the query may hold a credential.
+        String url = WebUtils.hideHttpReqQuery(request.getRequest().uri());
         try {
             url = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
             execute(request, response);
