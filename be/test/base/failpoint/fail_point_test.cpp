@@ -29,6 +29,7 @@
 
 #include "base/concurrency/await.h"
 #include "base/utility/defer_op.h"
+#include "gen_cpp/internal_service.pb.h"
 
 namespace starrocks {
 

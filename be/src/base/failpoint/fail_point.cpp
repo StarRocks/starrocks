@@ -24,6 +24,7 @@
 
 #include "base/utility/defer_op.h"
 #include "fmt/format.h"
+#include "gen_cpp/internal_service.pb.h"
 #include "simdjson.h"
 
 namespace starrocks::failpoint {

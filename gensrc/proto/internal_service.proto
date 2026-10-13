@@ -44,6 +44,7 @@ import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
 import "lake_types.proto";
+import "failpoint.proto";
 
 option cc_generic_services = true;
 
@@ -689,24 +690,6 @@ message ExecuteCommandResultPB {
     optional StatusPB status = 1;
     optional string result = 2;
 };
-
-enum FailPointTriggerModeType {
-    ENABLE = 1;
-    DISABLE = 2;
-    PROBABILITY_ENABLE = 3;
-    ENABLE_N_TIMES = 4;
-}
-
-message PFailPointTriggerMode {
-    optional FailPointTriggerModeType mode = 1;
-    optional double probability = 2;
-    optional int32 n_times = 3;
-    // STORED/REPORTED pause state, lifted out of PUpdateFailPointStatusRequest by
-    // trigger_mode_from_request (or set by the conf-file parser). A client never sets these on a
-    // request -- see the request message below for why.
-    optional bool pause = 4;
-    optional int32 pause_timeout_second = 5;
-}
 
 message PUpdateFailPointStatusRequest {
     optional string fail_point_name = 1;
