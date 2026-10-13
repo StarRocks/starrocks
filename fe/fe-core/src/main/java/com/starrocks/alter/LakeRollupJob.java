@@ -338,31 +338,28 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             addRollupIndexToCatalog(table);
         }
 
-        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
-        // transaction A begins between these operations. This is safe as long as A gets the tablet
-        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
-        // writes to it. All current import transactions do this (beginTransaction first), so even
-        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
-        // is just a convention not a requirement. If violated, transactions with IDs greater than
-        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
-        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        // Getting the `watershedTxnId` and adding the rollup index are not atomic, and the id generator is
+        // shared by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+        // check here: a writer that begins its transaction before resolving tablets does so under the table
+        // READ lock, which the WRITE lock above excludes, so any such transaction with an id above the
+        // watershed sees the rollup index and writes it. A writer that resolves tablets first (replication,
+        // a bypass-write client with cached metadata) is rejected at commit by
+        // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses the rollup index and commits before
+        // this job makes the index NORMAL.
+        // The next id is kept only as a breadcrumb for the log line below.
         long nextTxnId = peekNextTransactionId();
-        if (nextTxnId != watershedTxnId + 1) {
-            throw new AlterCancelException(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-        }
 
         if (span != null) {
             span.setAttribute("watershedTxnId", this.watershedTxnId);
             span.addEvent("setWaitingTxn");
         }
 
-        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
-        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        // The rollup index is added to the catalog above rather than in the applier; replay re-adds it from
+        // the journaled state, so it's ok to re-add if Leader transferred.
         persistStateChange(this, JobState.WAITING_TXN);
 
-        LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
-                watershedTxnId);
+        LOG.info("transfer roll up job {} state to {}, watershed txn_id: {}, next txn_id after adding rollup"
+                + " index: {}", jobId, this.jobState, watershedTxnId, nextTxnId);
     }
 
     @Override
@@ -691,6 +688,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 MaterializedIndex rollupIndex = this.physicalPartitionIdToRollupIndex.get(partitionId);
                 Preconditions.checkNotNull(rollupIndex);
                 Preconditions.checkState(rollupIndex.getState() == MaterializedIndex.IndexState.SHADOW, rollupIndex.getState());
+                // The rollup index stays visible to every transaction (visibleTxnId is left at 0), but a
+                // transaction drawn after the watershed must still write it; record that for the commit check.
+                rollupIndex.setShadowWatershedTxnId(watershedTxnId);
                 physicalPartition.createRollupIndex(rollupIndex);
             }
         }

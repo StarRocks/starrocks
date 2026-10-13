@@ -91,8 +91,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1351,8 +1349,13 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals("c1", table.getBaseSchema().get(1).getName());
     }
 
+    /**
+     * Ids drawn by other transactions between the watershed and the shadow index exposure no longer cancel
+     * the job: the id generator is cluster-wide, and a writer that misses the shadow index is rejected at
+     * commit instead (LakeTableTxnStateListener). The exposed shadow index carries the watershed for that check.
+     */
     @Test
-    public void testTransactionRaceCondition() throws Exception {
+    public void testConcurrentTxnIdDoesNotCancelJob() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
@@ -1367,27 +1370,22 @@ public class LakeTableSchemaChangeJobTest {
 
             @Mock
             public long peekNextTransactionId() {
-                return 10103L; // !!!! <-------- 10103 != 10101 + 1
-            }
-
-            @Mock
-            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-                return true;
+                return 10103L; // another id (10102) was drawn after the watershed
             }
         };
 
-        Exception exception = Assertions.assertThrows(AlterCancelException.class, () ->
-                drivePendingJob(schemaChangeJob));
-        Assertions.assertTrue(exception.getMessage().contains(
-                "concurrent transaction detected while adding shadow index, please re-run the alter table command"),
-                () -> {
-                    StringWriter sw = new java.io.StringWriter();
-                    PrintWriter pw = new java.io.PrintWriter(sw);
-                    exception.printStackTrace(pw);
-                    return sw.toString();
-                });
-        Assertions.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        // Runs only the PENDING phase, so the job stops at WAITING_TXN with the shadow index exposed.
+        drivePendingJob(schemaChangeJob);
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            List<MaterializedIndex> shadowIndexes = partition.getLatestMaterializedIndices(IndexExtState.SHADOW);
+            Assertions.assertFalse(shadowIndexes.isEmpty());
+            for (MaterializedIndex shadowIndex : shadowIndexes) {
+                Assertions.assertEquals(10101L, shadowIndex.getShadowWatershedTxnId());
+            }
+        }
 
         schemaChangeJob.cancel("test");
         Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());

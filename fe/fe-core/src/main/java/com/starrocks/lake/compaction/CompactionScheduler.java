@@ -366,8 +366,10 @@ public class CompactionScheduler extends Daemon {
             //     flip replays the shadow tablets' per-version txn vlogs over [alter_version + 1, new_version). A
             //     compaction commits a partition version with no vlog, leaving a gap the flip cannot bridge, which
             //     wedges the publish forever. Only range-distribution rollups take the online-rewrite path (there
-            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets); traditional
-            //     hash rollups build eagerly via BE alter tasks, hold no such dependency, and must keep compacting.
+            //     the sort key IS the distribution, so a new sort key redistributes rows across tablets).
+            // ROLLUP on a hash-distributed table (LakeRollupJob) is not skipped here, although it has the same
+            // dependency: its rollup tablets are built by BE alter tasks, but its final publish also replays their
+            // per-version txn vlogs, so a compaction committed after the watershed wedges that publish as well.
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                     || (table.getState() == OlapTable.OlapTableState.ROLLUP && table.isRangeDistribution()))) {
                 compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
