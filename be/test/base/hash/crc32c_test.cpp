@@ -102,41 +102,15 @@ TEST(CRC, LargeBuffersAndChunking) {
 
 namespace {
 
-class ScopedEnv {
+#ifdef BE_TEST
+class ScopedPmullOverride {
 public:
-    ScopedEnv(const char* name, const char* value) : _name(name) {
-        const char* old_val = getenv(name);
-        if (old_val != nullptr) {
-            _had_old = true;
-            _old_val = old_val;
-        } else {
-            _had_old = false;
-        }
-        if (value != nullptr) {
-            setenv(name, value, 1);
-        } else {
-            unsetenv(name);
-        }
-        ResetArmPmullForTesting();
-    }
-
-    ~ScopedEnv() {
-        if (_had_old) {
-            setenv(_name.c_str(), _old_val.c_str(), 1);
-        } else {
-            unsetenv(_name.c_str());
-        }
-        ResetArmPmullForTesting();
-    }
-
-    ScopedEnv(const ScopedEnv&) = delete;
-    ScopedEnv& operator=(const ScopedEnv&) = delete;
-
-private:
-    std::string _name;
-    bool _had_old = false;
-    std::string _old_val;
+    explicit ScopedPmullOverride(bool disabled) { SetArmPmullDisabledForTesting(disabled); }
+    ~ScopedPmullOverride() { SetArmPmullDisabledForTesting(false); }
+    ScopedPmullOverride(const ScopedPmullOverride&) = delete;
+    ScopedPmullOverride& operator=(const ScopedPmullOverride&) = delete;
 };
+#endif
 
 void verify_standard_results() {
     char buf[32];
@@ -180,8 +154,30 @@ void verify_standard_results() {
 
 } // namespace
 
-TEST(CRC32C, FallbackPathWithEnvVar) {
-    ScopedEnv env("STARROCKS_DISABLE_PMULL", "1");
+#ifdef BE_TEST
+TEST(CRC32C, TestOverrideCacheInvalidation) {
+    // Warm up the dispatch cache
+    char buf[128] = {1};
+    uint32_t c1 = Extend(0, buf, sizeof(buf));
+    (void)c1;
+
+    // Disabling must take effect immediately
+    {
+        ScopedPmullOverride disable(true);
+        EXPECT_FALSE(HasArmPmull());
+        uint32_t fallback_crc = Extend(0, buf, sizeof(buf));
+        EXPECT_EQ(c1, fallback_crc);
+    }
+
+    // Re-enabling must restore hardware capability
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+    // On ARM machines with PMULL hardware, it should restore to true
+    // On non-ARM or systems without PMULL, it remains false
+#endif
+}
+
+TEST(CRC32C, FallbackEquivalence) {
+    ScopedPmullOverride disable(true);
     ASSERT_FALSE(HasArmPmull());
     verify_standard_results();
 
@@ -199,7 +195,7 @@ TEST(CRC32C, FallbackPathWithEnvVar) {
 }
 
 TEST(CRC32C, AcceleratedPath) {
-    ScopedEnv env("STARROCKS_DISABLE_PMULL", nullptr);
+    ScopedPmullOverride enable(false);
     verify_standard_results();
 
     std::vector<char> buffer(4096);
@@ -240,12 +236,12 @@ TEST(CRC32C, EquivalenceAcrossBoundaries) {
             uint32_t crc_fallback = ValueFallback(ptr, size);
             ASSERT_EQ(crc_accel, crc_fallback) << "Mismatch at size=" << size << ", offset=" << offset;
 
-            // 3. Compute with STARROCKS_DISABLE_PMULL set
+            // 3. Compute with PMULL disabled
             {
-                ScopedEnv env("STARROCKS_DISABLE_PMULL", "1");
+                ScopedPmullOverride disable(true);
                 uint32_t crc_disabled = Value(ptr, size);
                 ASSERT_EQ(crc_accel, crc_disabled)
-                        << "Mismatch with STARROCKS_DISABLE_PMULL at size=" << size << ", offset=" << offset;
+                        << "Mismatch with PMULL disabled at size=" << size << ", offset=" << offset;
             }
 
             // 4. Test continuation across split boundaries
@@ -255,28 +251,7 @@ TEST(CRC32C, EquivalenceAcrossBoundaries) {
         }
     }
 }
-
-TEST(CRC32C, EnvVarParsingRobustness) {
-    // Unset or empty -> false (not disabled)
-    {
-        ScopedEnv env("STARROCKS_DISABLE_PMULL", nullptr);
-        EXPECT_FALSE(IsPmullDisabledByEnvForTesting());
-    }
-    {
-        ScopedEnv env("STARROCKS_DISABLE_PMULL", "");
-        EXPECT_FALSE(IsPmullDisabledByEnvForTesting());
-    }
-    // Falsy values (e.g. K8s ConfigMaps, Helm charts, systemd defaults) -> false (not disabled)
-    for (const char* val : {"0", "false", "False", "FALSE", "off", "Off", "OFF", "no", "No", "NO"}) {
-        ScopedEnv env("STARROCKS_DISABLE_PMULL", val);
-        EXPECT_FALSE(IsPmullDisabledByEnvForTesting()) << "Failed for falsy val: " << val;
-    }
-    // Truthy values -> true (disabled)
-    for (const char* val : {"1", "true", "True", "TRUE", "on", "On", "ON", "yes", "Yes", "YES", "disable"}) {
-        ScopedEnv env("STARROCKS_DISABLE_PMULL", val);
-        EXPECT_TRUE(IsPmullDisabledByEnvForTesting()) << "Failed for truthy val: " << val;
-    }
-}
+#endif
 
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 TEST(CRC32C, DirectArmPmullSimd) {

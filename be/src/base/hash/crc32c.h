@@ -51,26 +51,16 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
     return crc;
 }
 
-// Returns true if ARM PMULL hardware acceleration is available and enabled.
-// Returns false on non-ARM platforms, when USE_ARM_PMULL is disabled, when
-// hardware lacks HWCAP_PMULL, or when STARROCKS_DISABLE_PMULL is set.
-bool HasArmPmull();
-
-// Resets cached ARM PMULL availability status for testing purposes.
-// On non-ARM platforms or when USE_ARM_PMULL is not defined, this is a no-op.
+#ifdef BE_TEST
+// Test-only controls to simulate fallback paths in CI/UT without environment variables.
+void SetArmPmullDisabledForTesting(bool disabled);
 void ResetArmPmullForTesting();
-
-// Returns true if STARROCKS_DISABLE_PMULL is set to a truthy value ("1", "true", etc.),
-// or false if unset, empty, or set to a falsy value ("0", "false", "off", "no").
-bool IsPmullDisabledByEnvForTesting();
-
-// Return the crc32c using the fallback implementation (ExtendImpl<Fast_CRC32>),
-// bypassing SIMD acceleration paths. Used for verification and equivalence testing.
+bool HasArmPmull();
 uint32_t ExtendFallback(uint32_t init_crc, const char* data, size_t n);
-
 inline uint32_t ValueFallback(const char* data, size_t n) {
     return ExtendFallback(0, data, n);
 }
+#endif
 
 #if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
 uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
