@@ -20,6 +20,8 @@
 #include <paimon/table/source/split.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <thread>
@@ -32,8 +34,74 @@
 #include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
+
+namespace {
+struct MemoryOwnershipObservations {
+    MemTracker* opened = nullptr;
+    MemTracker* read = nullptr;
+    MemTracker* sized = nullptr;
+    MemTracker* destroyed = nullptr;
+};
+
+class OwnershipRecordingStream final : public io::SeekableInputStream {
+public:
+    explicit OwnershipRecordingStream(MemoryOwnershipObservations* observations) : _observations(observations) {}
+    ~OwnershipRecordingStream() override { _observations->destroyed = CurrentThread::mem_tracker(); }
+
+    StatusOr<int64_t> read(void* data, int64_t size) override {
+        _observations->read = CurrentThread::mem_tracker();
+        if (size > 16) {
+            return Status::IOError("injected SDK worker read failure with a retained error message");
+        }
+        // Model a read buffer that is allocated by one SDK thread and freed by another.
+        _buffer.resize(4096);
+        std::memset(data, 'x', size);
+        _position += size;
+        return size;
+    }
+    Status seek(int64_t position) override {
+        _position = position;
+        return Status::OK();
+    }
+    StatusOr<int64_t> position() override { return _position; }
+    StatusOr<int64_t> get_size() override {
+        _observations->sized = CurrentThread::mem_tracker();
+        return 16;
+    }
+
+private:
+    MemoryOwnershipObservations* _observations;
+    int64_t _position = 0;
+    std::vector<char> _buffer;
+};
+
+class OwnershipRecordingFileSystem final : public MemoryFileSystem {
+public:
+    explicit OwnershipRecordingFileSystem(MemoryOwnershipObservations* observations) : _observations(observations) {}
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions&,
+                                                                       const std::string& path) override {
+        _observations->opened = CurrentThread::mem_tracker();
+        if (path == "/missing") {
+            return Status::NotFound("injected SDK worker open failure with a retained error message");
+        }
+        return std::make_unique<RandomAccessFile>(std::make_shared<OwnershipRecordingStream>(_observations), path);
+    }
+
+private:
+    MemoryOwnershipObservations* _observations;
+};
+
+std::shared_ptr<PaimonFileSystem> tracked_file_system(FileSystem* file_system, const std::shared_ptr<MemTracker>& owner,
+                                                      const DataCacheOptions& options = {},
+                                                      const PaimonFileSystem::QueryStateCheck& check = {}) {
+    return std::allocate_shared<PaimonFileSystem>(PaimonQueryAllocator<PaimonFileSystem>(owner), file_system, options,
+                                                  check, owner);
+}
+} // namespace
 
 class PaimonFileSystemTest : public ::testing::Test {
 protected:
@@ -160,6 +228,74 @@ TEST_F(PaimonFileSystemTest, OpenReadSeekAndReadAsync) {
     auto missing_result = file_system.Open("/missing.bin");
     EXPECT_FALSE(missing_result.ok());
     EXPECT_TRUE(missing_result.status().IsIOError()) << missing_result.status().ToString();
+}
+
+TEST_F(PaimonFileSystemTest, CancellationStopsReadsAndMetadataOperations) {
+    MemoryFileSystem memory_fs;
+    ASSERT_OK(memory_fs.append_file("/cancelled.bin", _content));
+    std::atomic<bool> cancelled{false};
+    auto check = [&] {
+        return cancelled.load() ? paimon::Status::Cancelled("test query cancelled") : paimon::Status::OK();
+    };
+    for (bool use_cache : {false, true}) {
+#ifndef WITH_STARCACHE
+        if (use_cache) {
+            continue;
+        }
+#endif
+        cancelled.store(false);
+        PaimonFileSystem file_system(
+                &memory_fs, DataCacheOptions{.enable_datacache = use_cache, .enable_populate_datacache = use_cache},
+                check);
+        auto opened = file_system.Open("/cancelled.bin");
+        ASSERT_TRUE(opened.ok()) << opened.status().ToString();
+        auto input = std::move(opened).value();
+        std::string buffer(_content.size(), '\0');
+        ASSERT_TRUE(input->Read(buffer.data(), buffer.size(), 0).ok());
+        const auto before = file_system.get_stats();
+        cancelled.store(true);
+        EXPECT_TRUE(input->Read(buffer.data(), buffer.size()).status().IsCancelled());
+        EXPECT_TRUE(input->Read(buffer.data(), buffer.size(), 0).status().IsCancelled());
+        int callbacks = 0;
+        input->ReadAsync(buffer.data(), buffer.size(), 0, [&](paimon::Status status) {
+            ++callbacks;
+            EXPECT_TRUE(status.IsCancelled());
+        });
+        EXPECT_EQ(1, callbacks);
+        EXPECT_TRUE(input->Length().status().IsCancelled());
+        EXPECT_TRUE(file_system.Open("/cancelled.bin").status().IsCancelled());
+        EXPECT_TRUE(file_system.Exists("/cancelled.bin").status().IsCancelled());
+        EXPECT_TRUE(file_system.GetFileStatus("/cancelled.bin").status().IsCancelled());
+        std::vector<std::unique_ptr<paimon::BasicFileStatus>> basic;
+        std::vector<std::unique_ptr<paimon::FileStatus>> detailed;
+        EXPECT_TRUE(file_system.ListDir("/", &basic).IsCancelled());
+        EXPECT_TRUE(file_system.ListFileStatus("/", &detailed).IsCancelled());
+        EXPECT_EQ(before.app_io_count(), file_system.get_stats().app_io_count());
+        EXPECT_EQ(before.fs_io_count, file_system.get_stats().fs_io_count);
+        // Cleanup must remain possible after cancellation, including cached stream statistics.
+        EXPECT_TRUE(input->Close().ok());
+        EXPECT_TRUE(input->Close().ok());
+    }
+}
+
+TEST_F(PaimonFileSystemTest, CancellationAfterReadKeepsIoStatistics) {
+    MemoryFileSystem memory_fs;
+    ASSERT_OK(memory_fs.append_file("/data.bin", _content));
+    int checks = 0;
+    PaimonFileSystem file_system(&memory_fs, DataCacheOptions{}, [&] {
+        return ++checks == 4 ? paimon::Status::Cancelled("cancelled after I/O") : paimon::Status::OK();
+    });
+    auto opened = file_system.Open("/data.bin");
+    ASSERT_TRUE(opened.ok());
+    auto input = std::move(opened).value();
+    std::string buffer(_content.size(), '\0');
+    // Two open checks, then pre-read and post-read; completed I/O is still accounted once.
+    EXPECT_TRUE(input->Read(buffer.data(), buffer.size(), 0).status().IsCancelled());
+    const auto stats = file_system.get_stats();
+    EXPECT_EQ(1, stats.app_io_count());
+    EXPECT_EQ(_content.size(), stats.app_io_bytes());
+    EXPECT_EQ(1, stats.fs_io_count);
+    EXPECT_EQ(_content.size(), stats.fs_io_bytes);
 }
 
 TEST_F(PaimonFileSystemTest, ReadsThroughDataCache) {
@@ -306,6 +442,166 @@ TEST_F(PaimonFileSystemTest, RejectsWrites) {
     EXPECT_TRUE(file_system.Mkdirs(_root + "/new-directory").IsNotImplemented());
     EXPECT_TRUE(file_system.Rename(_data_path, _root + "/renamed-file").IsNotImplemented());
     EXPECT_TRUE(file_system.Delete(_data_path, false).IsNotImplemented());
+}
+
+TEST_F(PaimonFileSystemTest, MemoryOwnershipAcrossSdkWorkers) {
+    for (bool use_cache : {false, true}) {
+#ifndef WITH_STARCACHE
+        if (use_cache) {
+            continue;
+        }
+#endif
+        SCOPED_TRACE(use_cache);
+        auto owner = std::make_shared<MemTracker>();
+        auto caller = std::make_shared<MemTracker>();
+        MemoryOwnershipObservations observations;
+        OwnershipRecordingFileSystem source(&observations);
+        auto file_system = tracked_file_system(
+                &source, owner, DataCacheOptions{.enable_datacache = use_cache, .enable_populate_datacache = false});
+        std::unique_ptr<paimon::InputStream> input;
+        std::thread opener([&] {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+            auto opened = file_system->Open("/ownership-read");
+            ASSERT_TRUE(opened.ok()) << opened.status().ToString();
+            input = std::move(opened).value();
+            EXPECT_EQ(owner.get(), observations.opened);
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        });
+        opener.join();
+        ASSERT_NE(nullptr, input);
+        std::thread reader([&] {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+            char buffer[4];
+            EXPECT_TRUE(input->Read(buffer, sizeof(buffer)).ok());
+            EXPECT_EQ(owner.get(), observations.read);
+            EXPECT_TRUE(input->Length().ok());
+            EXPECT_EQ(owner.get(), observations.sized);
+            EXPECT_TRUE(input->Seek(0, paimon::FS_SEEK_SET).ok());
+            int callbacks = 0;
+            input->ReadAsync(buffer, sizeof(buffer), 0, [&](paimon::Status status) {
+                ++callbacks;
+                EXPECT_TRUE(status.ok());
+                EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+                // Reentry must not inherit the previous read's tracker.
+                EXPECT_TRUE(input->Read(buffer, sizeof(buffer), 0).ok());
+                EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+                EXPECT_TRUE(input->Close().ok());
+                EXPECT_EQ(owner.get(), observations.destroyed);
+            });
+            EXPECT_EQ(1, callbacks);
+            EXPECT_EQ('x', buffer[0]);
+            EXPECT_TRUE(input->Close().ok());
+            input.reset();
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        });
+        reader.join();
+        const auto stats = file_system->get_stats();
+        EXPECT_EQ(1, stats.sequential_read_count);
+        EXPECT_EQ(1, stats.positional_read_count);
+        EXPECT_EQ(1, stats.async_read_count);
+        EXPECT_EQ(12, stats.app_io_bytes());
+    }
+}
+
+TEST_F(PaimonFileSystemTest, MemoryOwnershipErrorsAndCancellationRestoreCaller) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    MemoryOwnershipObservations observations;
+    OwnershipRecordingFileSystem source(&observations);
+    bool cancelled = false;
+    auto file_system = tracked_file_system(&source, owner, {}, [&] {
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        return cancelled ? paimon::Status::Cancelled("injected query cancellation with a retained error message")
+                         : paimon::Status::OK();
+    });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+    EXPECT_TRUE(file_system->Open("/missing").status().IsIOError());
+    auto opened = file_system->Open("/ownership-errors");
+    ASSERT_TRUE(opened.ok());
+    auto input = std::move(opened).value();
+    char buffer[32];
+    EXPECT_TRUE(input->Read(buffer, sizeof(buffer)).status().IsIOError());
+    EXPECT_EQ(owner.get(), observations.read);
+    int callbacks = 0;
+    for (int64_t size : {-1, 32}) {
+        input->ReadAsync(buffer, size, 0, [&](paimon::Status status) {
+            ++callbacks;
+            EXPECT_FALSE(status.ok());
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        });
+    }
+    cancelled = true;
+    input->ReadAsync(buffer, 4, 0, [&](paimon::Status status) {
+        ++callbacks;
+        EXPECT_TRUE(status.IsCancelled());
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    });
+    EXPECT_EQ(3, callbacks);
+    EXPECT_TRUE(input->Close().ok());
+    EXPECT_EQ(owner.get(), observations.destroyed);
+    EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+}
+
+TEST_F(PaimonFileSystemTest, LastStreamReleaseRetainsOwnerAfterFileSystemCloses) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    std::weak_ptr<MemTracker> weak_owner = owner;
+    auto* owner_address = owner.get();
+    MemoryOwnershipObservations observations;
+    OwnershipRecordingFileSystem source(&observations);
+    auto file_system = tracked_file_system(&source, owner);
+    auto opened = file_system->Open("/ownership-release");
+    ASSERT_TRUE(opened.ok());
+    auto input = std::move(opened).value();
+    char buffer[4];
+    ASSERT_TRUE(input->Read(buffer, sizeof(buffer), 0).ok());
+    file_system.reset();
+    owner.reset();
+    ASSERT_FALSE(weak_owner.expired());
+    std::thread closer([&] {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+        input.reset();
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    });
+    closer.join();
+    EXPECT_EQ(owner_address, observations.destroyed);
+    EXPECT_TRUE(weak_owner.expired());
+}
+
+TEST_F(PaimonFileSystemTest, WeakFileSystemReferenceRetainsControlBlockOwner) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    std::weak_ptr<MemTracker> weak_owner = owner;
+    auto file_system = tracked_file_system(_local_fs, owner);
+    std::weak_ptr<PaimonFileSystem> weak_file_system = file_system;
+    file_system.reset();
+    owner.reset();
+    ASSERT_TRUE(weak_file_system.expired());
+    ASSERT_FALSE(weak_owner.expired());
+    std::thread closer([&] {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+        weak_file_system.reset();
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    });
+    closer.join();
+    EXPECT_TRUE(weak_owner.expired());
+}
+
+TEST_F(PaimonFileSystemTest, CancelledOpenReleasesStreamUnderOwner) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    MemoryOwnershipObservations observations;
+    OwnershipRecordingFileSystem source(&observations);
+    int checks = 0;
+    auto file_system = tracked_file_system(&source, owner, {}, [&] {
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        return ++checks == 2 ? paimon::Status::Cancelled("cancelled after opening the stream") : paimon::Status::OK();
+    });
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+    EXPECT_TRUE(file_system->Open("/ownership-cancelled-open").status().IsCancelled());
+    EXPECT_EQ(owner.get(), observations.opened);
+    EXPECT_EQ(owner.get(), observations.destroyed);
+    EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
 }
 
 TEST(PaimonFileSystemStatsTest, ConcurrentUpdates) {

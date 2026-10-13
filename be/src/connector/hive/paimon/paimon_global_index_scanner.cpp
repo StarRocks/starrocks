@@ -27,6 +27,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "connector/hive/paimon/paimon_file_system.h"
@@ -82,6 +83,7 @@ Status PaimonGlobalIndexScanner::do_init(RuntimeState*, const HdfsScannerContext
 
 Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     const int64_t start_ns = monotonic_nanos();
+    DeferOp record_time([&] { _open_ns += monotonic_nanos() - start_ns; });
     RETURN_IF_ERROR(check_query_state(runtime_state));
     RETURN_IF_ERROR(_parse_request());
     if (_scanner_ctx->fs == nullptr) {
@@ -89,7 +91,14 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     }
 
     _memory_pool = std::make_shared<TrackedPaimonMemoryPool>(runtime_state->query_mem_tracker_ptr().get());
-    _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
+    const auto query_tracker = runtime_state->query_mem_tracker_ptr();
+    _paimon_file_system = std::allocate_shared<PaimonFileSystem>(
+            PaimonQueryAllocator<PaimonFileSystem>(query_tracker), _scanner_ctx->fs, _scanner_ctx->datacache_options,
+            [runtime_state] {
+                auto status = check_query_state(runtime_state);
+                return status.ok() ? paimon::Status::OK() : paimon::Status::Cancelled(status.to_string());
+            },
+            query_tracker);
 
     const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
     auto schema_guard = std::make_shared<PaimonGlobalIndexSchemaGuard>(_paimon_file_system, scan_range.table_path,
@@ -108,6 +117,7 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
                                                 std::map<std::string, std::string>(), schema_guard,
                                                 paimon::GetGlobalDefaultExecutor(), _memory_pool);
 #endif
+    RETURN_IF_ERROR(check_query_state(runtime_state));
     if (!scan.ok()) {
         return paimon_error("scan creation", scan.status());
     }
@@ -119,7 +129,6 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
         return Status::InternalError("Paimon Global Index did not validate its schema");
     }
     _global_index_scan = std::move(scan).value();
-    _open_ns = monotonic_nanos() - start_ns;
     return Status::OK();
 }
 
@@ -129,17 +138,22 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
     }
 
     const int64_t evaluate_start_ns = monotonic_nanos();
-    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, _evaluate(runtime_state));
+    auto evaluated = _evaluate(runtime_state);
     _evaluate_ns = monotonic_nanos() - evaluate_start_ns;
+    RETURN_IF_ERROR(check_query_state(runtime_state));
+    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, std::move(evaluated));
 
+    // Serialize materializes the lazy bitmap. The file-system callback stops subsequent I/O;
+    // SDK CPU-only traversal remains cooperative only at these serialization boundaries.
     const int64_t serialize_start_ns = monotonic_nanos();
     auto serialized = paimon::GlobalIndexResult::Serialize(result, _memory_pool);
+    _serialize_ns = monotonic_nanos() - serialize_start_ns;
+    RETURN_IF_ERROR(check_query_state(runtime_state));
     if (!serialized.ok()) {
         return paimon_error("result serialization", serialized.status());
     }
     auto bytes = std::move(serialized).value();
     _serialized_bytes = static_cast<int64_t>(bytes->size());
-    _serialize_ns = monotonic_nanos() - serialize_start_ns;
 
     const std::string& query_json = _scanner_ctx->scan_range->paimon_global_index_scan_range.query_json;
     for (const SlotDescriptor* slot : _scanner_ctx->materialize_slots) {
@@ -257,7 +271,9 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_
                     fmt::format("No validated Paimon Global Index selected for column '{}'", column_name));
         }
         const int32_t field_id = member->value["fieldId"].GetInt();
+        RETURN_IF_ERROR(check_query_state(runtime_state));
         auto readers = _global_index_scan->CreateReaders(field_id, row_range_index);
+        RETURN_IF_ERROR(check_query_state(runtime_state));
         if (!readers.ok()) {
             return paimon_error(fmt::format("reader creation for field {}", field_id), readers.status());
         }
@@ -272,8 +288,9 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_
     };
 
     PaimonGlobalIndexEvaluator evaluator(std::move(reader_getter));
-    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, evaluator.evaluate(_request["predicate"]));
+    auto evaluated = evaluator.evaluate(_request["predicate"]);
     RETURN_IF_ERROR(check_query_state(runtime_state));
+    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, std::move(evaluated));
     if (result == nullptr) {
         return Status::InternalError("Paimon Global Index evaluator returned a null result");
     }
