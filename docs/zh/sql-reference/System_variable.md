@@ -622,7 +622,7 @@ FROM test;
 
 ### enable_gather_fragment_child_affinity
 
-* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，开启后 Gather Fragment 会保持在被扫描数据所在的标签范围内。该保证仅在 `choose_execute_instances_mode` 为 `LOCALITY`（默认值）且 `prefer_compute_node` 为 `false`（默认值）时成立；否则，中间 Fragment 可能被调度到标签范围外的 BE 或 CN 上。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
+* 描述：是否将 Gather Fragment（`DataPartition = UNPARTITIONED` 的单实例结果 Fragment）调度到其子 Fragment 已使用的 BE 上，而不是通过全局轮询（round-robin）从所有 BE 中选择。在使用 `labels.location` 的存算一体集群中，仅当查询的其他所有 Fragment 也都位于该标签范围内时，Gather Fragment 才会保持在该标签范围内。即查询只扫描设置了 location 标签的 OLAP 表，且 `choose_execute_instances_mode` 为 `LOCALITY`（默认值）、`prefer_compute_node` 为 `false`（默认值）。扫描外部 Catalog 表（如 Hive 或 Iceberg），或这两个变量使用非默认值时，Fragment 可能被调度到标签范围外的 BE 或 CN 上。如果 Gather Fragment 没有子 Fragment 实例，则回退到轮询方式。
 * 默认值：false
 * 引入版本：v4.2
 

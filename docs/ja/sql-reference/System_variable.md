@@ -613,7 +613,7 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### enable_gather_fragment_child_affinity
 
-* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment はスキャン対象データのラベル範囲内に保たれます。この保証は `choose_execute_instances_mode` が `LOCALITY`（デフォルト）かつ `prefer_compute_node` が `false`（デフォルト）の場合にのみ成立します。それ以外の場合、中間 Fragment がラベル範囲外の BE または CN にスケジュールされる可能性があります。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
+* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、クエリの他のすべての Fragment もそのラベル範囲内にある場合にのみ、Gather Fragment はラベル範囲内に保たれます。これは、クエリが location ラベル付きの OLAP テーブルのみをスキャンし、`choose_execute_instances_mode` が `LOCALITY`（デフォルト）、`prefer_compute_node` が `false`（デフォルト）の場合です。外部カタログテーブル（Hive や Iceberg など）のスキャン、またはこれら 2 つの変数がデフォルト以外の値の場合、Fragment がラベル範囲外の BE または CN にスケジュールされる可能性があります。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
 * **デフォルト**: false
 * **導入バージョン**: v4.2
 

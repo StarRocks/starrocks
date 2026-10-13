@@ -732,7 +732,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### enable_gather_fragment_child_affinity
 
-* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this keeps the gather fragment within the labels of the scanned data. The guarantee holds only when `choose_execute_instances_mode` is `LOCALITY` (default) and `prefer_compute_node` is `false` (default). Otherwise, intermediate fragments may be scheduled on BEs or CNs outside the label. If the gather fragment has no child instances, it falls back to round-robin.
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this keeps the gather fragment within the label only when all of the query's other fragments are also confined to it. That is the case for queries that scan only location-labeled OLAP tables, with `choose_execute_instances_mode` set to `LOCALITY` (default) and `prefer_compute_node` set to `false` (default). Scans of external catalog tables (such as Hive or Iceberg) and non-default values of these two variables can schedule fragments on BEs or CNs outside the label. If the gather fragment has no child instances, it falls back to round-robin.
 * **Default**: false
 * **Introduced in**: v4.2
 
