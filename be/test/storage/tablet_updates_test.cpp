@@ -4040,8 +4040,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     ASSERT_EQ(5, rowsets.size());
     size_t remaining_original_empty_rowsets = 0;
     for (const auto& rowset : rowsets) {
-        remaining_original_empty_rowsets +=
-                original_empty_rowset_ids.count(rowset->rowset_meta()->get_rowset_seg_id());
+        remaining_original_empty_rowsets += original_empty_rowset_ids.count(rowset->rowset_meta()->get_rowset_seg_id());
     }
     ASSERT_EQ(1, remaining_original_empty_rowsets);
     ASSERT_EQ(10 + N * 2, read_tablet(_tablet, version - 1));
