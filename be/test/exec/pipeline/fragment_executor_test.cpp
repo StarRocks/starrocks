@@ -15,22 +15,22 @@
 #include "exec/pipeline/fragment_executor.h"
 
 #include <gtest/gtest.h>
+
 #include <stdexcept>
 #include <thread>
+
+#include "common/config.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/empty_set_operator.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/fragment_execution_params.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
-
-#include "common/config.h"
-#include "exec/pipeline/query_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -172,12 +172,6 @@ TEST(FragmentExecutorFinalSinkTest, connector_backed_sink_types_are_final_sinks)
 
 namespace {
 
-class DriverLimitSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
-public:
-    bool should_yield(const workgroup::WorkGroup*) const override { return false; }
-    size_t num_workgroups() const override { return 1; }
-};
-
 class DriverLimitSourceFactory final : public pipeline::SourceOperatorFactory {
 public:
     DriverLimitSourceFactory(pipeline::DriverLimiter* limiter, int id, int dop)
@@ -230,13 +224,13 @@ private:
     pipeline::DriverLimiter* _limiter;
 };
 
-class DriverLimitPlanNode final : public PipelineNode {
+class DriverLimitPlanNode final : public ExecNode {
 public:
     DriverLimitPlanNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& desc,
                         std::vector<std::shared_ptr<DriverLimitSourceFactory>> sources, bool colocate)
-            : PipelineNode(pool, node, desc), _sources(std::move(sources)), _colocate(colocate) {}
+            : ExecNode(pool, node, desc), _sources(std::move(sources)), _colocate(colocate) {}
 
-    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override {
+    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override {
         pipeline::ExecutionGroupPtr group;
         if (_colocate) {
             group = std::make_shared<pipeline::ColocateExecutionGroup>(1);
@@ -290,15 +284,13 @@ TEST_F(FragmentExecutorPartitionTest, DriverAdmissionPrecedesInstantiation) {
     for (const auto& scenario : scenarios) {
         SCOPED_TRACE(scenario.name);
         const int expected_dop = scenario.dop * (scenario.colocate ? 1 : scenario.num_pipelines);
-        ComputeEnv compute_env;
-        compute_env._driver_limiter = std::make_unique<pipeline::DriverLimiter>(scenario.limit);
-        auto* limiter = compute_env.driver_limiter();
+        pipeline::DriverLimiter driver_limiter(scenario.limit);
+        auto* limiter = &driver_limiter;
         ExecEnv exec_env;
-        exec_env.set_compute_env(&compute_env);
+        exec_env._driver_limiter = limiter;
         auto query_ctx = std::make_shared<QueryContext>();
         workgroup::PipelineExecutorSetConfig executor_config{1, 1, 1, 1, {}, false, false, nullptr};
-        DriverLimitSchedulePolicy schedule_policy;
-        workgroup::PipelineExecutorSet executors(executor_config, "driver_limit_test", {}, {}, schedule_policy);
+        workgroup::PipelineExecutorSet executors(executor_config, "driver_limit_test", {}, {});
         auto wg = std::make_shared<workgroup::WorkGroup>("driver_limit_test", 1, 0, 1, 1.0, 0, 1.0,
                                                          TWorkGroupType::WG_NORMAL, "");
         wg->set_shared_executors(&executors);
@@ -328,7 +320,7 @@ TEST_F(FragmentExecutorPartitionTest, DriverAdmissionPrecedesInstantiation) {
             auto state = _make_runtime_state(query_ctx.get(), nullptr);
             executor._fragment_ctx->set_runtime_state(std::move(state));
             auto* runtime_state = executor._fragment_ctx->runtime_state();
-            executor._fragment_ctx->attach_to_runtime_state(runtime_state);
+            runtime_state->set_fragment_ctx(executor._fragment_ctx.get());
             DescriptorTbl desc;
             TPlanNode node;
             node.__set_node_id(0);
