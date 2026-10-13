@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
+#include "exec/aggregate/agg_consec_keys_cache.h"
 #include "exec/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
@@ -155,8 +156,18 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
     using FieldType = RunTimeCppType<logical_type>;
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
+    // Consecutive keys cache - optimization for sorted/clustered data.
+    // CachedValue is `bool last_found` so probe-only mode (compute_and_allocate=false)
+    // can replay (last_key absent -> not_founds=1) without misclassifying repeated
+    // absent keys as found.  Allocate mode stores `true` after every emplace.
+    ConsecutiveKeyCache<FieldType, bool> _consecutive_key_cache;
+
     template <class... Args>
     AggHashSetOfOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -169,6 +180,7 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
+        _consecutive_key_cache.on_chunk_start();
 
         if constexpr (is_no_prefetch_set<HashSet>) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
@@ -185,12 +197,34 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
         const auto* column = down_cast<const ColumnType*>(key_columns[0].get());
         const auto keys = column->immutable_data();
 
+        // Direct-array sets (is_no_prefetch_set, e.g. SmallFixedSizeHashSet)
+        // already do an O(1) array index per probe, so the cache is pure
+        // overhead -- skip it.
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_set<HashSet> && _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(keys[i], cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.emplace(keys[i]);
+                found = true;
             } else {
-                (*not_founds)[i] = !this->hash_set.contains(keys[i]);
+                found = this->hash_set.contains(keys[i]);
+                (*not_founds)[i] = !found;
             }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(keys[i], found);
+            }
+
             FAIL_POINT_TRIGGER_EXECUTE(agg_hash_set_bad_alloc, {
                 if (i > 0) throw std::bad_alloc();
             });
@@ -204,12 +238,34 @@ struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumb
         const auto keys = column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_set<HashSet> && _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_HASH_SET_PREFETCH_HASH_VAL();
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(keys[i], cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    // Allocate mode: cached_found is always true (we inserted
+                    // on the original miss), so the cache hit equals "key is
+                    // already present" - nothing to do.
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.emplace_with_hash(this->hashes[i], keys[i]);
+                found = true;
             } else {
-                (*not_founds)[i] = this->hash_set.find(keys[i], this->hashes[i]) == this->hash_set.end();
+                found = this->hash_set.find(keys[i], this->hashes[i]) != this->hash_set.end();
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(keys[i], found);
             }
         }
     }
@@ -237,8 +293,16 @@ struct AggHashSetOfOneNullableNumberKey
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
+    // Cache for non-null-fast path; see AggHashSetOfOneNumberKey for the
+    // CachedValue=bool rationale.
+    ConsecutiveKeyCache<FieldType, bool> _consecutive_key_cache;
+
     template <class... Args>
     AggHashSetOfOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -252,6 +316,7 @@ struct AggHashSetOfOneNullableNumberKey
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
+        _consecutive_key_cache.on_chunk_start();
         if (key_columns[0]->only_null()) {
             has_null_key = true;
         } else {
@@ -276,24 +341,55 @@ struct AggHashSetOfOneNullableNumberKey
         const auto& null_data = nullable_column->null_column_data();
         const auto keys = data_column->immutable_data();
 
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_set<HashSet> && _consecutive_key_cache.is_enabled();
         if (nullable_column->has_null()) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (null_data[i]) {
                     has_null_key = true;
                 } else {
+                    if (use_cache) {
+                        bool cached_found;
+                        if (_consecutive_key_cache.try_get(keys[i], cached_found)) {
+                            if constexpr (!compute_and_allocate) {
+                                (*not_founds)[i] = !cached_found;
+                            }
+                            continue;
+                        }
+                    }
+                    bool found;
                     if constexpr (compute_and_allocate) {
                         this->hash_set.emplace(keys[i]);
+                        found = true;
                     } else {
-                        (*not_founds)[i] = !this->hash_set.contains(keys[i]);
+                        found = this->hash_set.contains(keys[i]);
+                        (*not_founds)[i] = !found;
+                    }
+                    if (use_cache) {
+                        _consecutive_key_cache.update(keys[i], found);
                     }
                 }
             }
         } else {
             for (size_t i = 0; i < chunk_size; ++i) {
+                if (use_cache) {
+                    bool cached_found;
+                    if (_consecutive_key_cache.try_get(keys[i], cached_found)) {
+                        if constexpr (!compute_and_allocate) {
+                            (*not_founds)[i] = !cached_found;
+                        }
+                        continue;
+                    }
+                }
+                bool found;
                 if constexpr (compute_and_allocate) {
                     this->hash_set.emplace(keys[i]);
+                    found = true;
                 } else {
-                    (*not_founds)[i] = !this->hash_set.contains(keys[i]);
+                    found = this->hash_set.contains(keys[i]);
+                    (*not_founds)[i] = !found;
+                }
+                if (use_cache) {
+                    _consecutive_key_cache.update(keys[i], found);
                 }
             }
         }
@@ -307,12 +403,31 @@ struct AggHashSetOfOneNullableNumberKey
         const auto keys = data_column->immutable_data();
 
         AGG_HASH_SET_PRECOMPUTE_HASH_VALS();
+        [[maybe_unused]] const bool use_cache = !is_no_prefetch_set<HashSet> && _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_HASH_SET_PREFETCH_HASH_VAL();
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(keys[i], cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.emplace_with_hash(this->hashes[i], keys[i]);
+                found = true;
             } else {
-                (*not_founds)[i] = this->hash_set.find(keys[i], hashes[i]) == this->hash_set.end();
+                found = this->hash_set.find(keys[i], hashes[i]) != this->hash_set.end();
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(keys[i], found);
             }
         }
     }
@@ -337,8 +452,17 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     using KeyType = typename HashSet::key_type;
     using ResultVector = Buffer<Slice>;
 
+    // Consecutive keys cache - mirrors the Map-side specialization for Slice
+    // keys. The Slice points into the column buffer, which outlives the cache
+    // within a chunk, so no copy is needed.
+    ConsecutiveKeyCache<Slice, bool> _consecutive_key_cache;
+
     template <class... Args>
     AggHashSetOfOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -351,6 +475,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
+        _consecutive_key_cache.on_chunk_start();
 
         if (!agg_should_prefetch_table(this->hash_set)) {
             this->template build_set_noprefetch<compute_and_allocate>(chunk_size, key_columns, pool, not_founds);
@@ -363,8 +488,21 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
         auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             auto tmp = column->get_slice(i);
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(tmp, cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 KeyType key(tmp);
                 this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
@@ -373,8 +511,14 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
+                found = true;
             } else {
-                (*not_founds)[i] = !this->hash_set.contains(tmp);
+                found = this->hash_set.contains(tmp);
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(tmp, found);
             }
         }
     }
@@ -389,9 +533,23 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
+
+            if (use_cache) {
+                bool cached_found;
+                // TSliceWithHash inherits from Slice; cache compares on bytes only.
+                if (_consecutive_key_cache.try_get(static_cast<const Slice&>(key), cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
                     // we must persist the slice before insert
@@ -399,8 +557,14 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
+                found = true;
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                found = this->hash_set.find(key, key.hash) != this->hash_set.end();
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(static_cast<const Slice&>(key), found);
             }
         }
     }
@@ -424,8 +588,15 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     using KeyType = typename HashSet::key_type;
     using ResultVector = Buffer<Slice>;
 
+    // Cache for non-null-fast path; see AggHashSetOfOneStringKey for rationale.
+    ConsecutiveKeyCache<Slice, bool> _consecutive_key_cache;
+
     template <class... Args>
     AggHashSetOfOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -438,6 +609,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
+        _consecutive_key_cache.on_chunk_start();
         if (key_columns[0]->only_null()) {
             has_null_key = true;
         } else {
@@ -456,25 +628,45 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
 
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
+        auto process_row = [&](size_t row) {
+            const Slice tmp = data_column->get_slice(row);
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(tmp, cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[row] = !cached_found;
+                    }
+                    return;
+                }
+            }
+
+            bool found;
+            if constexpr (compute_and_allocate) {
+                _handle_data_key_column(data_column, row, pool, not_founds);
+                found = true;
+            } else {
+                _handle_data_key_column(data_column, row, not_founds);
+                found = !(*not_founds)[row];
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(tmp, found);
+            }
+        };
+
         if (nullable_column->has_null()) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (null_data[i]) {
                     has_null_key = true;
                 } else {
-                    if constexpr (compute_and_allocate) {
-                        _handle_data_key_column(data_column, i, pool, not_founds);
-                    } else {
-                        _handle_data_key_column(data_column, i, not_founds);
-                    }
+                    process_row(i);
                 }
             }
         } else {
             for (size_t i = 0; i < chunk_size; ++i) {
-                if constexpr (compute_and_allocate) {
-                    _handle_data_key_column(data_column, i, pool, not_founds);
-                } else {
-                    _handle_data_key_column(data_column, i, not_founds);
-                }
+                process_row(i);
             }
         }
     }
@@ -490,17 +682,36 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
             cache[i] = KeyType(data_column->get_slice(i));
         }
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(static_cast<const Slice&>(key), cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
                     uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
+                found = true;
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                found = this->hash_set.find(key, key.hash) != this->hash_set.end();
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(static_cast<const Slice&>(key), found);
             }
         }
     }
@@ -543,12 +754,20 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
     using ResultVector = Buffer<Slice>;
     using KeyType = typename HashSet::key_type;
 
+    // Owned-buffer cache: the serialization buffer is reused between rows
+    // and chunks, so we copy the bytes into the cache on update.
+    ConsecutiveSerializedKeyCache<bool> _consecutive_key_cache;
+
     template <class... Args>
     AggHashSetOfSerializedKey(int32_t chunk_size, Args&&... args)
             : Base(chunk_size, std::forward<Args>(args)...),
               _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING)),
               _chunk_size(chunk_size) {}
+
+    size_t get_cache_hits() const { return _consecutive_key_cache.get_hits(); }
+    size_t get_cache_misses() const { return _consecutive_key_cache.get_misses(); }
+    bool is_cache_enabled() const { return _consecutive_key_cache.is_enabled(); }
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -561,6 +780,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
+        _consecutive_key_cache.on_chunk_start();
 
         max_one_row_size = get_max_serialize_size(key_columns);
         size_t new_buffer_size = max_one_row_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
@@ -584,8 +804,21 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             Slice tmp = {_buffer + i * max_one_row_size, slice_sizes[i]};
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(tmp, cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 KeyType key(tmp);
                 this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
@@ -594,8 +827,14 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
+                found = true;
             } else {
-                (*not_founds)[i] = !this->hash_set.contains(tmp);
+                found = this->hash_set.contains(tmp);
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(tmp, found);
             }
         }
     }
@@ -608,9 +847,25 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+        [[maybe_unused]] const bool use_cache = _consecutive_key_cache.is_enabled();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
+            // Serialization buffer is reused; pass the Slice view, the
+            // SerializedKey cache copies the bytes on update.
+            Slice key_view(key.data, key.size);
+
+            if (use_cache) {
+                bool cached_found;
+                if (_consecutive_key_cache.try_get(key_view, cached_found)) {
+                    if constexpr (!compute_and_allocate) {
+                        (*not_founds)[i] = !cached_found;
+                    }
+                    continue;
+                }
+            }
+
+            bool found;
             if constexpr (compute_and_allocate) {
                 this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
                     // we must persist the slice before insert
@@ -618,8 +873,14 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
+                found = true;
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                found = this->hash_set.find(key, key.hash) != this->hash_set.end();
+                (*not_founds)[i] = !found;
+            }
+
+            if (use_cache) {
+                _consecutive_key_cache.update(key_view, found);
             }
         }
     }
