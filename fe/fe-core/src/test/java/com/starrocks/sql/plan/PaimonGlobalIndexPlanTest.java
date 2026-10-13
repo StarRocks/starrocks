@@ -33,20 +33,37 @@ import com.starrocks.connector.index.VectorIndexMetric;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.PaimonGlobalIndexService;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.VarcharType;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.paimon.globalindex.GlobalIndexResult;
+import org.apache.paimon.globalindex.GlobalIndexResultSerializer;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -216,9 +233,50 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
-            String plan = getFragmentPlan("SELECT to_base64(index_result) FROM "
-                    + "`unpartitioned_table$global_index` WHERE args = '" + request.toTransportString() + "'");
-            assertContains(plan, "TABLE: unpartitioned_table$global_index", "SNAPSHOT: " + snapshotId, "SHARDS: 2");
+            // COUNT and args-only projections prune index_result, exercising the scan-predicate
+            // getter/setter used by PruneHDFSScanColumnRule rather than only the two-column path.
+            for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
+                String plan = getFragmentPlan("SELECT " + projection + " FROM "
+                        + "`unpartitioned_table$global_index` WHERE args = '" + request.toTransportString() + "'");
+                assertContains(plan, "TABLE: unpartitioned_table$global_index", "SNAPSHOT: " + snapshotId, "SHARDS: 2");
+            }
+
+            SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+            long globalLimit = defaults.getSqlSelectLimit();
+            long callerLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+            String emptyBitmap = Base64.getEncoder().encodeToString(new GlobalIndexResultSerializer()
+                    .serialize(GlobalIndexResult.create(new RoaringNavigableMap64())));
+            new MockUp<SimpleExecutor>() {
+                @Mock
+                public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                    Assertions.assertSame(connectContext, context.getParent());
+                    ExecPlan plan = StatementPlanner.plan(SqlParser.parseOneWithStarRocksDialect(sql,
+                            context.getSessionVariable()), context, TResultSinkType.HTTP_PROTOCAL);
+                    String explain = plan.getExplainString(TExplainLevel.NORMAL);
+                    assertContains(explain, "TABLE: unpartitioned_table$global_index", "SHARDS: 2");
+                    Assertions.assertFalse(explain.contains("limit:"), explain);
+                    TResultBatch batch = new TResultBatch();
+                    batch.addToRows(ByteBuffer.wrap(("{\"data\":[\"" + emptyBitmap + "\"]}")
+                            .getBytes(StandardCharsets.UTF_8)));
+                    return List.of(batch);
+                }
+            };
+            try {
+                defaults.setSqlSelectLimit(1);
+                for (long limit : List.of(0L, 1L)) {
+                    connectContext.getSessionVariable().setSqlSelectLimit(limit);
+                    // Exercise the production service's explicit complete-result policy, not a
+                    // separately constructed executor that could hide a missing call-site override.
+                    Assertions.assertEquals(0L, new PaimonGlobalIndexService(table, request)
+                            .evaluate().getResult().results().getLongCardinality());
+                    Assertions.assertEquals(limit, connectContext.getSessionVariable().getSqlSelectLimit());
+                    Assertions.assertEquals(1, defaults.getSqlSelectLimit());
+                }
+            } finally {
+                defaults.setSqlSelectLimit(globalLimit);
+                connectContext.getSessionVariable().setSqlSelectLimit(callerLimit);
+                connectContext.setThreadLocalInfo();
+            }
         } finally {
             org.mockito.Mockito.doCallRealMethod().when(indexedMetadata)
                     .getIndexShards(any(Table.class), anyLong(), anyMap());

@@ -521,6 +521,37 @@ TEST(PaimonGlobalIndexScannerTest, EmitsSerializedResultAndStopsAfterOneRow) {
     EXPECT_TRUE(scanner.do_get_next(&runtime_state, &chunk).is_end_of_file());
 }
 
+TEST(PaimonGlobalIndexScannerTest, PreservesCancellationDuringLazyMaterialization) {
+    for (bool fail_materialization : {false, true}) {
+        RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+        runtime_state.init_mem_trackers(TUniqueId());
+        MemoryFileSystem file_system;
+        HdfsScannerContext scanner_ctx;
+        THdfsScanRange scan_range = valid_hdfs_scan_range();
+        PaimonGlobalIndexScanner scanner;
+        ASSERT_TRUE(init_scanner(&scanner, &runtime_state, &scanner_ctx, &scan_range, &file_system).ok());
+        ASSERT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse_request(&scanner).ok());
+        bool materialized = false;
+        auto result =
+                std::make_shared<paimon::BitmapGlobalIndexResult>([&]() -> paimon::Result<paimon::RoaringBitmap64> {
+                    materialized = true;
+                    runtime_state.set_is_cancelled(true);
+                    if (fail_materialization) {
+                        return paimon::Status::Cancelled("cancelled in SDK I/O");
+                    }
+                    return paimon::RoaringBitmap64();
+                });
+        auto reader = std::make_shared<FakeGlobalIndexReader>(result);
+        PaimonGlobalIndexScannerTestAccessor::set_scan(&scanner, std::make_unique<FakeGlobalIndexScan>(reader));
+        PaimonGlobalIndexScannerTestAccessor::set_memory_pool(&scanner, paimon::GetDefaultPool());
+        ChunkPtr chunk = std::make_shared<Chunk>();
+        auto status = scanner.do_get_next(&runtime_state, &chunk);
+        EXPECT_TRUE(materialized);
+        EXPECT_TRUE(status.is_cancelled()) << status.to_string();
+        EXPECT_EQ(0, chunk->num_rows());
+    }
+}
+
 TEST(PaimonGlobalIndexScannerTest, PropagatesSerializationFailureAndReportsInjectedPeakMemory) {
     RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
     runtime_state.init_mem_trackers(TUniqueId());

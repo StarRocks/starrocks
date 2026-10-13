@@ -20,6 +20,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.index.IndexTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
@@ -27,6 +28,8 @@ import java.util.Map;
 
 /** Logical scan over a virtual connector index table. */
 public class LogicalIndexScanOperator extends LogicalScanOperator {
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+
     public LogicalIndexScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -46,11 +49,28 @@ public class LogicalIndexScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalIndexScan(this, context);
     }
 
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return predicates;
+    }
+
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalIndexScanOperator, LogicalIndexScanOperator.Builder> {
         @Override
         protected LogicalIndexScanOperator newInstance() {
             return new LogicalIndexScanOperator();
+        }
+
+        @Override
+        public Builder withOperator(LogicalIndexScanOperator scanOperator) {
+            super.withOperator(scanOperator);
+            builder.predicates = scanOperator.predicates.clone();
+            return this;
         }
     }
 }

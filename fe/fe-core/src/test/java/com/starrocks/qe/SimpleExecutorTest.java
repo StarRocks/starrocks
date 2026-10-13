@@ -321,6 +321,31 @@ public class SimpleExecutorTest {
     }
 
     @Test
+    public void testCompleteResultsOverrideOnlyChildSelectLimit() {
+        ConnectContext caller = UtFrameUtils.createDefaultCtx();
+        caller.getSessionVariable().setSqlSelectLimit(0);
+        ConnectContext previous = UtFrameUtils.createDefaultCtx();
+        previous.setThreadLocalInfo();
+        SimpleExecutor executor = new SimpleExecutor("testExecutor", TResultSinkType.HTTP_PROTOCAL) {
+            @Override
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                assertSame(caller, context.getParent());
+                assertSame(context, ConnectContext.get());
+                assertEquals(SessionVariable.DEFAULT_SELECT_LIMIT, context.getSessionVariable().getSqlSelectLimit());
+                throw new SemanticException("test failure");
+            }
+        };
+        try {
+            assertThrows(SemanticException.class, () -> executor.executeDQLAsCaller(
+                    "select 1", 30, caller, SessionVariable.DEFAULT_SELECT_LIMIT));
+            assertSame(previous, ConnectContext.get());
+            assertEquals(0, caller.getSessionVariable().getSqlSelectLimit());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
     public void testCallerRemainingBudgetCapsExplicitTimeout() {
         ConnectContext caller = UtFrameUtils.createDefaultCtx();
         caller.getSessionVariable().setQueryTimeoutS(300);
