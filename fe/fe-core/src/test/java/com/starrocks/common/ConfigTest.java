@@ -378,6 +378,35 @@ public class ConfigTest {
     }
 
     @Test
+    public void testMaskIfSensitiveByKey() throws Exception {
+        Assertions.assertEquals(CredentialMask.LONG,
+                ConfigBase.maskIfSensitive("authentication_ldap_simple_bind_root_pwd", "FakeLdapPwd"));
+        // Any credential config is masked, mutable or not.
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("aws_s3_secret_key", "FakeS3Secret"));
+        Assertions.assertEquals("", ConfigBase.maskIfSensitive("aws_s3_secret_key", ""));
+        Assertions.assertEquals("97", ConfigBase.maskIfSensitive("adaptive_choose_instances_threshold", "97"));
+        Assertions.assertEquals("v", ConfigBase.maskIfSensitive("no_such_config", "v"));
+    }
+
+    private static class ConfigForSensitiveAlias extends ConfigBase {
+        @ConfField(sensitive = true, aliases = {"old_prop_secret"})
+        public static String prop_secret = "";
+    }
+
+    @Test
+    public void testMaskIfSensitiveByAlias() throws Exception {
+        ConfigForSensitiveAlias configForSensitiveAlias = new ConfigForSensitiveAlias();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
+        configForSensitiveAlias.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        // A credential config is found by its alias as well as by its name.
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("old_prop_secret", "FakeSecret"));
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("prop_secret", "FakeSecret"));
+        Assertions.assertEquals("", ConfigBase.maskIfSensitive("old_prop_secret", ""));
+    }
+
+    @Test
     public void testCredentialConfigsAreSensitive() throws Exception {
         String[] credentials = {
                 "authentication_ldap_simple_ssl_conn_trust_store_pwd",
