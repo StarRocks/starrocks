@@ -3591,6 +3591,9 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaChangeJob.setWatershedTxnId(txnId);
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
+            // This job is only a history record: SHOW ALTER reads none of the per-job schema maps,
+            // and the history schema already keeps the pre-change schema.
+            schemaChangeJob.pruneMeta();
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
