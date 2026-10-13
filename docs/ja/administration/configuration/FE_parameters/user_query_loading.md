@@ -1176,7 +1176,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `history_job_keep_max_num`
 
-- デフォルト：1000
+- デフォルト：10000
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes

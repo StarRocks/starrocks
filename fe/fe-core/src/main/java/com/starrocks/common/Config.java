@@ -692,7 +692,7 @@ public class Config extends ConfigBase {
      * A value <= 0 disables the limit.
      */
     @ConfField(mutable = true)
-    public static int history_job_keep_max_num = 1000;
+    public static int history_job_keep_max_num = 10000;
 
     /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted

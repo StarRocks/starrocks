@@ -350,6 +350,22 @@ public class AlterHandlerEditLogTest {
     }
 
     @Test
+    public void testDefaultCapKeepsTenThousandJobs() throws Exception {
+        mockSharedNothingMode();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        long now = System.currentTimeMillis();
+        for (int i = 1; i <= 10001; i++) {
+            addDoneJob(schemaChangeHandler, 30000L + i, AlterJobV2.JobState.FINISHED, now - 20000 + i);
+        }
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(10000, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertFalse(schemaChangeHandler.getAlterJobsV2().containsKey(30001L));
+        Assertions.assertEquals(Set.of(30001L), removedJobIds(1));
+    }
+
+    @Test
     public void testCapAndAgeTogether() {
         mockSharedNothingMode();
         Config.history_job_keep_max_num = 2;

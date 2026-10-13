@@ -1194,7 +1194,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `history_job_keep_max_num`
 
-- 默认值: 1000
+- 默认值: 10000
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
