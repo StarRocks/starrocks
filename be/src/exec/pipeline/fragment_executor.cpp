@@ -810,6 +810,10 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         }
     });
 
+    // Pipeline preparation determines total_dop. Reserve the budget before allocating drivers and operators.
+    ASSIGN_OR_RETURN(auto driver_token,
+                     exec_env->compute_env()->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+
     // collect unready pipeline groups and instantiate ready drivers
     PipelineGroupMap unready_pipeline_groups;
     _fragment_ctx->iterate_pipeline([&unready_pipeline_groups, runtime_state](Pipeline* pipeline) {
@@ -826,10 +830,13 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         create_adaptive_group_initialize_events(runtime_state, _wg.get(), std::move(unready_pipeline_groups));
     }
 
+<<<<<<< HEAD:be/src/exec/pipeline/fragment_executor.cpp
     // Acquire driver token to avoid overload
     ASSIGN_OR_RETURN(auto driver_token, exec_env->driver_limiter()->try_acquire(_fragment_ctx->total_dop()));
+=======
+    // Keep the reservation local during instantiation so cancellation cannot release it prematurely.
+>>>>>>> ebdc5e2 ([BugFix] Reserve driver capacity before instantiation (#80495)):be/src/orchestration/fragment_executor.cpp
     _fragment_ctx->set_driver_token(std::move(driver_token));
-
     return Status::OK();
 }
 
