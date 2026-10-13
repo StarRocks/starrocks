@@ -1,0 +1,163 @@
+-- name: test_range_prune
+CREATE DATABASE test_range_prune_${uuid0};
+-- result:
+-- !result
+USE test_range_prune_${uuid0};
+-- result:
+-- !result
+SET time_zone = '+00:00';
+-- result:
+-- !result
+CREATE TABLE ts (
+    ts INT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY date_trunc('month', str_to_date(CAST(ts AS STRING), '%Y%m%d'))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ts VALUES (20200201, 1, 'cd'), (20200101, 1, 'cd'), (20200301, 1, 'cd'), (20200401, 1, 'cd');
+-- result:
+-- !result
+-- A numeric-to-string cast does not preserve order over its full domain; keep every date partition.
+EXPLAIN SELECT * FROM ts WHERE ts > 20200201;
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result
+[ORDER]SELECT ts FROM ts WHERE ts > 20200201 ORDER BY ts;
+-- result:
+20200301
+20200401
+-- !result
+CREATE TABLE safe_time (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts, '%Y%m%d')
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO safe_time VALUES (1727224687, 1, 'cd'), (1737234687, 1, 'cd'), (1747244687, 1, 'cd'), (1757254687, 1, 'cd');
+-- result:
+-- !result
+-- Control: the ordered time expression still supports range pruning in UTC.
+EXPLAIN SELECT * FROM safe_time WHERE ts > 1737234687;
+-- result:
+[REGEX].*partitions=3/4.*
+-- !result
+[ORDER]SELECT ts FROM safe_time WHERE ts > 1737234687 ORDER BY ts;
+-- result:
+1747244687
+1757254687
+-- !result
+CREATE TABLE multi (
+    ts INT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY id, date_trunc('month', str_to_date(CAST(ts AS STRING), '%Y%m%d'))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO multi VALUES (20200201, 1, 'cd'), (20200101, 1, 'cd'), (20200301, 1, 'cd'), (20200401, 1, 'cd'),
+                         (20200201, 2, 'cd'), (20200101, 2, 'cd'), (20200301, 3, 'cd'), (20200401, 3, 'cd');
+-- result:
+-- !result
+EXPLAIN SELECT * FROM multi WHERE ts > 20200201;
+-- result:
+[REGEX].*partitions=8/8.*
+-- !result
+[ORDER]SELECT ts, id FROM multi WHERE ts > 20200201 ORDER BY ts, id;
+-- result:
+20200301	1
+20200301	3
+20200401	1
+20200401	3
+-- !result
+-- Control: direct predicates on the other partition key must still prune.
+EXPLAIN SELECT * FROM multi WHERE id > 1;
+-- result:
+[REGEX].*partitions=4/8.*
+-- !result
+[ORDER]SELECT ts, id FROM multi WHERE id > 1 ORDER BY ts, id;
+-- result:
+20200101	2
+20200201	2
+20200301	3
+20200401	3
+-- !result
+EXPLAIN SELECT * FROM multi WHERE id > 1 AND ts > 20200201;
+-- result:
+[REGEX].*partitions=4/8.*
+-- !result
+[ORDER]SELECT ts, id FROM multi WHERE id > 1 AND ts > 20200201 ORDER BY ts, id;
+-- result:
+20200301	3
+20200401	3
+-- !result
+DROP DATABASE test_range_prune_${uuid0};
+-- result:
+-- !result
+
+-- name: test_prune_cast
+CREATE DATABASE test_prune_cast_${uuid0};
+-- result:
+-- !result
+USE test_prune_cast_${uuid0};
+-- result:
+-- !result
+SET time_zone = '+00:00';
+-- result:
+-- !result
+CREATE TABLE o (
+    ts STRING NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(CAST(ts AS INT) - 3600)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO o VALUES ('1741592007', 1, 'cd'), ('1742592007', 1, 'cd'), ('1740592007', 1, 'cd');
+-- result:
+-- !result
+-- Equal-width test values do not prove that string-to-integer casts preserve order.
+EXPLAIN SELECT * FROM o WHERE ts > CAST(1741892007 AS STRING);
+-- result:
+[REGEX].*partitions=3/3.*
+-- !result
+[ORDER]SELECT ts FROM o WHERE ts > CAST(1741892007 AS STRING) ORDER BY ts;
+-- result:
+1742592007
+-- !result
+-- This value is larger as text but smaller as an integer; its earlier time partition must be retained.
+INSERT INTO o VALUES ('999999999', 1, 'cd');
+-- result:
+-- !result
+EXPLAIN SELECT * FROM o WHERE ts > CAST(1741892007 AS STRING);
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result
+[ORDER]SELECT ts FROM o WHERE ts > CAST(1741892007 AS STRING) ORDER BY ts;
+-- result:
+1742592007
+999999999
+-- !result
+-- Equality deduction does not require order preservation and should still prune.
+EXPLAIN SELECT * FROM o WHERE ts = '999999999';
+-- result:
+[REGEX].*partitions=1/4.*
+-- !result
+[ORDER]SELECT ts FROM o WHERE ts = '999999999' ORDER BY ts;
+-- result:
+999999999
+-- !result
+DROP DATABASE test_prune_cast_${uuid0};
+-- result:
+-- !result
