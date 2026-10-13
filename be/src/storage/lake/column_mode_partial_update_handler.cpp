@@ -552,11 +552,15 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                                                         .length = length});
             _spill.size += length;
             TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
-            buffer.chunk->reset();
-            buffer.rowids->reset_column();
         }
+        // Drop the buffers rather than reset them: a reset chunk keeps its capacity, and with the
+        // buffers living for the whole partition pass that would pin about one buffer limit per
+        // segment that ever took a large share of a flush, while the tracker reports zero.
+        buffers.clear();
         _tracker->release(buffered_bytes);
         buffered_bytes = 0;
+        size_t live_buffers = buffers.size();
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", &live_buffers);
         return Status::OK();
     };
 
@@ -607,7 +611,6 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
             if (start < pos) {
                 RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*chunk, "column mode partial update upt chunk",
                                                                      _rowset_ptr->tablet_id(), _txn_id));
-                const int64_t row_bytes = static_cast<int64_t>(chunk->bytes_usage()) / n + sizeof(uint32_t);
                 // Group this chunk's rows by segment; the stable sort keeps upt rowid order inside a group.
                 std::stable_sort(entries.begin() + start, entries.begin() + pos,
                                  [](const Entry& a, const Entry& b) { return a.rssid < b.rssid; });
@@ -625,9 +628,14 @@ Status ColumnModePartialUpdateHandler::_spill_update_rows(
                         buffer.chunk = ChunkFactory::new_chunk(partial_schema, 0);
                         buffer.rowids = UInt32Column::create();
                     }
+                    // Charge what the selection actually appended. An average row width over the whole
+                    // chunk undercounts when the routed rows are wider than the rows left out (inserts
+                    // in COLUMN_UPSERT_MODE), letting the buffers outgrow the limit before a flush.
+                    const int64_t before = static_cast<int64_t>(buffer.chunk->bytes_usage());
                     TRY_CATCH_BAD_ALLOC(buffer.chunk->append_selective(*chunk, indexes.data(), 0, indexes.size()));
                     buffer.rowids->append_numbers(src_rowids.data(), src_rowids.size() * sizeof(uint32_t));
-                    const int64_t bytes = row_bytes * static_cast<int64_t>(indexes.size());
+                    const int64_t bytes = static_cast<int64_t>(buffer.chunk->bytes_usage()) - before +
+                                          static_cast<int64_t>(src_rowids.size() * sizeof(uint32_t));
                     _tracker->consume(bytes);
                     buffered_bytes += bytes;
                 }
@@ -674,6 +682,14 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids.get()));
         RETURN_ERROR_IF_FALSE(upt_chunk->num_rows() == rec.num_rows && rowids->size() == rec.num_rows,
                               "column-mode partial update spill record is corrupted");
+        // Charge the record's copies (serialized payload, decoded chunk, rowids) for as long as they
+        // live, as the whole-file path charges its update chunk: segment tasks run concurrently and a
+        // skewed flush can make one record most of a buffer limit.
+        int64_t rec_bytes = static_cast<int64_t>(payload.size()) + static_cast<int64_t>(upt_chunk->memory_usage()) +
+                            static_cast<int64_t>(rowids->memory_usage());
+        _tracker->consume(rec_bytes);
+        DeferOp release_rec([&]() { _tracker->release(rec_bytes); });
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged", &rec_bytes);
 
         // Keep only the rows of this streamed source range, ordered by source rowid like the
         // whole-file path does.
@@ -724,6 +740,9 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t 
         auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        const int64_t tmp_bytes = static_cast<int64_t>(tmp_chunk->memory_usage());
+        _tracker->consume(tmp_bytes);
+        DeferOp release_tmp([&]() { _tracker->release(tmp_bytes); });
         RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
         RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
                                                              "column mode partial update merged source chunk",

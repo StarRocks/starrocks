@@ -646,9 +646,28 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     std::atomic<int> upt_reads{0};
     SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read",
                                           [&](void*) { upt_reads++; });
+    // A flush must drop its per-segment buffers, not just clear them: a reset chunk keeps its capacity
+    // for the rest of the partition pass while the tracker already says the bytes are gone.
+    std::atomic<int> flushes{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed", [&](void* arg) {
+        flushes++;
+        EXPECT_EQ(0, *static_cast<size_t*>(arg)) << "flushed buffers retained after the flush";
+    });
+    // Every spill record a segment task reads back is charged to the update tracker while it is alive.
+    std::atomic<int> charged_reads{0};
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged",
+                                          [&](void* arg) {
+                                              charged_reads++;
+                                              const int64_t bytes = *static_cast<int64_t*>(arg);
+                                              EXPECT_GT(bytes, 0);
+                                              EXPECT_GE(_update_mgr->mem_tracker()->consumption(), bytes);
+                                          });
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp sync_point_guard([&]() {
         SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read");
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_spill_update_rows:flushed");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_update_source_chunk_from_spill:charged");
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
@@ -681,14 +700,22 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     };
 
     // Spill on: each update file is read exactly once, whatever the number of source segments.
+    const int64_t tracker_before_spill = _update_mgr->mem_tracker()->consumption();
     run_update(5);
     EXPECT_EQ(kSourceSegments, upt_reads.load());
+    EXPECT_GT(flushes.load(), 0);
+    EXPECT_GT(charged_reads.load(), 0);
     // Flushing on every chunk splits a segment's rows of one update file over several records.
     {
         ConfigResetGuard<int64_t> buffer_guard(&config::lake_pk_column_mode_spill_buffer_bytes, 1);
+        flushes = 0;
         run_update(7);
         EXPECT_EQ(kSourceSegments, upt_reads.load());
+        EXPECT_GT(flushes.load(), kSourceSegments);
     }
+    // Everything the spill charged (buffers, records read back) was released again; other caches
+    // may legitimately keep bytes on this tracker, so compare against the pre-spill baseline.
+    EXPECT_EQ(tracker_before_spill, _update_mgr->mem_tracker()->consumption());
     // The spill files are removed with the handler.
     std::set<std::string> leftovers;
     if (fs::path_exist(spill_dir)) {
