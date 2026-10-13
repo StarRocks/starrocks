@@ -2318,21 +2318,10 @@ TEST_F(geographyFunctionsTest, h3ArraySizeLimits) {
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
     auto k1 = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
     auto res4 = ColumnHelper::create_const_column<TYPE_INT>(4, 1);
-    std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_INT)},
-                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
-    context->set_max_array_length(6);
-    auto disk = GeoFunctions::h3_grid_disk(context.get(), {cell, k1});
-    ASSERT_FALSE(disk.ok());
-    EXPECT_EQ("max_array_length exceeded by H3 result", disk.status().message());
-    auto children = GeoFunctions::h3_to_children(context.get(), {cell, res4});
-    ASSERT_FALSE(children.ok());
-    EXPECT_EQ("max_array_length exceeded by H3 result", children.status().message());
-    context->set_max_array_length(7);
-    auto accepted_disk = GeoFunctions::h3_grid_disk(context.get(), {cell, k1});
+    auto accepted_disk = GeoFunctions::h3_grid_disk(nullptr, {cell, k1});
     ASSERT_TRUE(accepted_disk.ok()) << accepted_disk.status();
     EXPECT_EQ(7, (*accepted_disk)->get(0).get_array().size());
-    auto accepted_children = GeoFunctions::h3_to_children(context.get(), {cell, res4});
+    auto accepted_children = GeoFunctions::h3_to_children(nullptr, {cell, res4});
     ASSERT_TRUE(accepted_children.ok()) << accepted_children.status();
     EXPECT_EQ(7, (*accepted_children)->get(0).get_array().size());
 
@@ -2344,16 +2333,6 @@ TEST_F(geographyFunctionsTest, h3ArraySizeLimits) {
             GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(15, 1)});
     ASSERT_FALSE(huge_children.ok());
     EXPECT_EQ("H3 array offset limit exceeded", huge_children.status().message());
-
-    std::unique_ptr<FunctionContext> polygon_context(
-            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)},
-                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
-    polygon_context->set_max_array_length(1);
-    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
-    auto limited_polygon = GeoFunctions::h3_polygon_to_cells(
-            polygon_context.get(), {polygon, ColumnHelper::create_const_column<TYPE_INT>(3, 1)});
-    ASSERT_FALSE(limited_polygon.ok());
-    EXPECT_EQ("max_array_length exceeded by H3 result", limited_polygon.status().message());
 }
 
 TEST_F(geographyFunctionsTest, h3SeamPolarAndPentagon) {

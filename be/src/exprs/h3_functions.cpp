@@ -39,6 +39,7 @@
 #include "column/nullable_column.h"
 #include "geo/geo_measurements.h"
 #include "geo/wkb.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "types/geo_wkb.h"
 
@@ -109,12 +110,9 @@ Status validate_h3_resolution(int value) {
     return Status::OK();
 }
 
-Status h3_array_size_check(int64_t count, FunctionContext* context) {
+Status h3_array_size_check(int64_t count) {
     if (count < 0 || count > static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
         return Status::InvalidArgument("H3 array offset limit exceeded");
-    }
-    if (context != nullptr && context->get_max_array_length() > 0 && count > context->get_max_array_length()) {
-        return Status::InvalidArgument("max_array_length exceeded by H3 result");
     }
     return Status::OK();
 }
@@ -197,6 +195,8 @@ struct H3ArrayBuilder {
         if (cells.size() > std::numeric_limits<uint32_t>::max() - values->size()) {
             return Status::InvalidArgument("H3 array offset limit exceeded");
         }
+        // H3 C calls must stay outside allocation-catching scopes to avoid unwinding C code.
+        TRY_CATCH_BAD_ALLOC(values->reserve(values->size() + cells.size()));
         for (size_t i = 0; i < cells.size(); ++i) {
             if ((i & 1023) == 0) RETURN_IF_ERROR(h3_checkpoint(context));
             values->append(static_cast<int64_t>(cells[i]));
@@ -378,10 +378,14 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext* context, const C
         const int k = ks.value(row);
         if (k < 0) return Status::InvalidArgument("H3_GridDisk requires non-negative k");
         int64_t count = 0;
+        RETURN_IF_ERROR(h3_checkpoint(context));
         const H3Error size_error = maxGridDiskSize(k, &count);
+        RETURN_IF_ERROR(h3_checkpoint(context));
         if (size_error != E_SUCCESS) return h3_error("H3_GridDisk", size_error);
-        RETURN_IF_ERROR(h3_array_size_check(count, context));
-        std::vector<H3Index> cells(static_cast<size_t>(count), 0);
+        RETURN_IF_ERROR(h3_array_size_check(count));
+        std::vector<H3Index> cells;
+        TRY_CATCH_BAD_ALLOC(cells.assign(static_cast<size_t>(count), 0));
+        RETURN_IF_ERROR(h3_checkpoint(context));
         const H3Error error = gridDisk(cell, k, cells.data());
         RETURN_IF_ERROR(h3_checkpoint(context));
         if (error != E_SUCCESS) return h3_error("H3_GridDisk", error);
@@ -413,10 +417,14 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext* context, const
         if (resolution < getResolution(cell))
             return Status::InvalidArgument("H3_ToChildren resolution is below cell resolution");
         int64_t count = 0;
+        RETURN_IF_ERROR(h3_checkpoint(context));
         const H3Error size_error = cellToChildrenSize(cell, resolution, &count);
+        RETURN_IF_ERROR(h3_checkpoint(context));
         if (size_error != E_SUCCESS) return h3_error("H3_ToChildren", size_error);
-        RETURN_IF_ERROR(h3_array_size_check(count, context));
-        std::vector<H3Index> cells(static_cast<size_t>(count), 0);
+        RETURN_IF_ERROR(h3_array_size_check(count));
+        std::vector<H3Index> cells;
+        TRY_CATCH_BAD_ALLOC(cells.assign(static_cast<size_t>(count), 0));
+        RETURN_IF_ERROR(h3_checkpoint(context));
         const H3Error error = cellToChildren(cell, resolution, cells.data());
         RETURN_IF_ERROR(h3_checkpoint(context));
         if (error != E_SUCCESS) return h3_error("H3_ToChildren", error);
@@ -544,22 +552,27 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
             const auto& poly = geometry->type == WkbGeometryType::POLYGON ? *geometry : geometry->children[i];
             if (poly.empty) continue;
             ASSIGN_OR_RETURN(auto component, h3_component(poly));
+            RETURN_IF_ERROR(h3_checkpoint(context));
             const H3Error error = maxPolygonToCellsSize(&component->polygon, res, 0, &component->slots);
+            RETURN_IF_ERROR(h3_checkpoint(context));
             if (error != E_SUCCESS) return h3_error("H3_PolygonToCells size", error);
             if (component->slots < 0 ||
                 component->slots > static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) - slots) {
                 return Status::InvalidArgument("H3 array offset limit exceeded");
             }
             slots += component->slots;
-            RETURN_IF_ERROR(h3_array_size_check(slots, context));
+            RETURN_IF_ERROR(h3_array_size_check(slots));
             components.push_back(std::move(component));
         }
         std::vector<H3Index> cells;
-        cells.reserve(static_cast<size_t>(slots));
+        TRY_CATCH_BAD_ALLOC(cells.reserve(static_cast<size_t>(slots)));
         for (const auto& component : components) {
             RETURN_IF_ERROR(h3_checkpoint(context));
-            std::vector<H3Index> scratch(static_cast<size_t>(component->slots), 0);
+            std::vector<H3Index> scratch;
+            TRY_CATCH_BAD_ALLOC(scratch.assign(static_cast<size_t>(component->slots), 0));
+            RETURN_IF_ERROR(h3_checkpoint(context));
             const H3Error error = polygonToCells(&component->polygon, res, 0, scratch.data());
+            RETURN_IF_ERROR(h3_checkpoint(context));
             if (error != E_SUCCESS) return h3_error("H3_PolygonToCells", error);
             for (H3Index cell : scratch) {
                 if (cell == H3_NULL) continue;
