@@ -1192,6 +1192,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 完成事务期间获取数据库和表锁的默认超时。
 - 引入版本: v4.0.0, v3.5.8
 
+### `history_job_keep_max_num`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 内存中保留的已完成或已取消 ALTER 作业的最大数量，这些作业可通过 SHOW ALTER TABLE 查看。schema 变更作业与优化作业共用一个上限，rollup 作业单独计数。超出上限时，按完成时间从早到晚删除作业，即使作业尚未超过 `history_job_keep_max_second` 设定的保留时长。以下两种情况下作业会继续保留，作业数因此可能暂时超过上限：一是正在进行的导入可能还在使用该作业变更前的 schema；二是存算分离集群中仍有集群快照依赖该作业。设为 `0` 或负数表示不限制。
+- 引入版本: -
+
 ### `history_job_keep_max_second`
 
 - 默认值: 7 * 24 * 3600

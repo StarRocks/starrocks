@@ -36,7 +36,8 @@ public class ScoreSelector implements Selector {
                 .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getPartitionId()))
                 // When manual compaction is triggered, we just skip min score and time check
                 .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
-                        || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() >= minScore)))
+                        || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() > 0
+                        && p.getCompactionScore().getMax() >= minScore)))
                 .map(p -> {
                     return p.getSnapshot(); })
                 .collect(Collectors.toList());

@@ -194,6 +194,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+
 ## `starrocks_be_flat_json_compaction_total`
 
 - Unit: Count
@@ -353,7 +359,7 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Type: Cumulative
-- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window.
+- Description: Shared-data only. Total number of actual starmgr RPCs (`g_starlet->get_shard_info()`) that the BE's StarOSWorker had to issue because the requested shard info was not in the local cache (i.e. the FE had not pushed the shard to this BE before a query/compaction/lake operation referenced it). Only counted when the starlet readiness check passes and the RPC is actually dispatched; starlet-not-ready timeouts are not included. Should normally be near zero. A sustained or rising rate is a strong signal that FE-side task or node selection is scheduling work on a BE that does not yet have the shard, or that shard push propagation from FE is lagging. Recommended alert: high per-BE rate over a 5-minute window. On the nodes that coordinate loads into tables with `file_bundling` enabled, most of these RPCs are avoided by the tablet location handoff, counted in `lake_tablet_location_handoff_hits_total`; the share answered by the handoff is `hits / (hits + fallback)`.
 
 ## `starrocks_be_staros_shard_info_fallback_failed_total`
 

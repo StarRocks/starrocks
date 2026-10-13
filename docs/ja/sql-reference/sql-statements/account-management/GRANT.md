@@ -126,7 +126,7 @@ GRANT
 
 ```SQL
 GRANT  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -136,6 +136,7 @@ GRANT
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<view_name>` を使用してビューを表すこともできます。
 * External Catalog 内のテーブルに対しては、Hive テーブルビューにのみ SELECT 権限を付与できます (v3.1以降)。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるビューのエクスポートはサポートされていません。
 
   ```SQL
   GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
@@ -145,7 +146,7 @@ GRANT
 
 ```SQL
 GRANT
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> } | ALL DATABASES }
@@ -154,10 +155,17 @@ GRANT
 
 * このコマンドを実行する前に SET CATALOG を実行する必要があります。
 * `<db_name>.<mv_name>` を使用して mv を表すこともできます。
+* EXPORT 権限については、付与および取り消しのみ対応しています。EXPORT TABLE によるマテリアライズドビューのエクスポートはサポートされていません。
 
   ```SQL
   GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> }
   ```
+
+:::caution
+
+`ALL PRIVILEGES` はビューおよびマテリアライズドビューで `EXPORT` を含むようになりました。アップグレード前に `ALL ... WITH GRANT OPTION` を付与され、かつシステムレベルの `GRANT` 権限を持たないユーザーは、管理者が追加で `EXPORT ... WITH GRANT OPTION` を付与しない限り、当該オブジェクトに対して `GRANT` / `REVOKE ALL PRIVILEGES` を実行できなくなります。
+
+:::
 
 #### 関数
 

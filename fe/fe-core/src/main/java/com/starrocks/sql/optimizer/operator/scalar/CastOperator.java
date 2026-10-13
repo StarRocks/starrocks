@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 
 import java.util.Objects;
@@ -39,6 +40,10 @@ public class CastOperator extends CallOperator {
 
     public boolean isImplicit() {
         return isImplicit;
+    }
+
+    public boolean isTruncatingCharCast() {
+        return !isImplicit && getType().isChar() && ((ScalarType) getType()).getLength() >= 0;
     }
 
     @Override

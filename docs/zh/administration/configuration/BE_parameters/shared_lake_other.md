@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_enable_tablet_location_handoff
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，写入导入数据的节点是否把所持有 tablet 的存储位置交给负责该导入的协调节点。对于开启了 `file_bundling` 的表，协调节点会为每个分区写一个 combined txn log，而它通常不持有大多数分区的 tablet。设为 `true` 时，持有 tablet 的节点在回传事务日志时，每个分区附带一个 tablet 的存储位置，协调节点据此写 combined txn log，无需向 StarMgr 查询；省掉的查询计入 `lake_tablet_location_handoff_hits_total`。设为 `false` 时，每次导入中协调节点没有 tablet 的分区都要向 StarMgr 查询一次存储位置，这些查询计入 `starrocks_be_staros_shard_info_fallback_total`。回传的存储位置包含存储卷的访问凭证。
+- 引入版本：-
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500

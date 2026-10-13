@@ -55,6 +55,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.concurrent.Executor;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
@@ -88,18 +89,29 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
             this.request = (HttpRequest) msg;
             if (LOG.isDebugEnabled()) {
-                LOG.debug("request: url:[{}]", request.uri());
+                LOG.debug("request: url:[{}]", WebUtils.sanitizeHttpReqUriForLog(request.uri()));
             }
             try {
                 validateRequest(ctx, request);
             } catch (Exception e) {
-                LOG.warn("accept bad request: {}, error: {}", request.uri(), e.getMessage(), e);
+                LOG.warn("accept bad request: {}, error: {}", WebUtils.sanitizeHttpReqUriForLog(request.uri()),
+                        e.getMessage(), e);
                 writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
                 return;
             }
 
             BaseRequest req = new BaseRequest(ctx, request);
-            action = getAction(req);
+            try {
+                action = getAction(req);
+            } catch (IllegalArgumentException e) {
+                // A uri that cannot be parsed or decoded, e.g. with a malformed escape like %ZZ. The message of
+                // the exception quotes the whole uri, whose query may hold a credential, so neither the message
+                // nor the exception is logged or sent back.
+                LOG.warn("accept bad request uri: {}, error: {}", WebUtils.sanitizeHttpReqUriForLog(request.uri()),
+                        uriErrorReason(e));
+                writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> Invalid request uri.");
+                return;
+            }
             if (action.isSqlAction()) {
                 req.setConnectContext(ctx.channel().attr(HTTP_SQL_CONNECT_CONTEXT_ATTRIBUTE_KEY).get());
             } else {
@@ -158,7 +170,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private void handleException(BaseRequest request, Exception exception) {
         writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
                 String.format("failed to handle request, error: %s:%s ", exception.getClass(), exception.getMessage()));
-        LOG.debug("Failed to handle request: {}", request.getRequest().uri(), exception);
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Failed to handle request: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    exception);
+        }
     }
 
     @Override
@@ -213,6 +228,14 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         ctx.close();
     }
 
+    // Why the uri could not be parsed, without quoting it.
+    private static String uriErrorReason(IllegalArgumentException e) {
+        if (e.getCause() instanceof URISyntaxException) {
+            return ((URISyntaxException) e.getCause()).getReason();
+        }
+        return e.getClass().getSimpleName();
+    }
+
     private BaseAction getAction(BaseRequest request) {
         String uri = request.getRequest().uri();
         String baseUri = URI.create(uri).getPath();
@@ -254,14 +277,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
             HttpServerHandlerMetrics.getInstance().handlingRequestsNum.increase(-1L);
             HttpServerHandlerMetrics.getInstance().requestHandleLatencyMs.update(latency);
             if (latency >= Config.http_slow_request_threshold_ms) {
-                String uri;
-                try {
-                    uri = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
-                } catch (Exception e) {
-                    uri = "failed to sanitize uri, error=" + e.getMessage();
-                }
                 LOG.warn("receive slow http request. uri: {}, startTime: {}, latency: {} ms",
-                        uri, startTime, latency);
+                        WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()), startTime, latency);
             }
             if (asyncHandling) {
                 ReferenceCountUtil.release(request.getRequest());

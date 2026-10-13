@@ -291,6 +291,18 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_tablet_location_handoff_entries`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Shared-data only. Number of tablet storage locations this BE holds for tablets it does not own, as handed over by their owners for writing combined transaction logs (see the BE configuration item `lake_enable_tablet_location_handoff`). They are kept in an LRU cache of 16 MiB: an entry is used for five minutes after its last refresh and is evicted when the cache needs room, so the value reflects cache occupancy rather than whether the handoff is in use.
+
+## `lake_tablet_location_handoff_hits_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times this BE resolved the storage location of a tablet it does not own from a location handed over by the tablet's owner instead of requesting it from StarMgr. Each increment is one StarMgr GetShard RPC avoided. It rises on the nodes that coordinate loads into tables with `file_bundling` enabled. Together with `staros_shard_info_fallback_total`, the share answered by the handoff is `hits / (hits + fallback)`.
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - Unit: Count (files per batch)

@@ -58,6 +58,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -443,11 +444,13 @@ public class SchemaChangeHandlerEditLogTest {
         }
         List<Index> newIndexes = table.getCopiedIndexes();
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long baseSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
 
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         handler.applyFastSchemaEvolutionMetaChange(db, table, indexSchemaMap, newIndexes, jobId, indexToNewSchemaId);
 
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertHistoryOnlyJobPruned(handler, jobId, db.getId(), table.getId(), baseSchemaId);
 
         TableColumnAlterInfo replayInfo = (TableColumnAlterInfo) UtFrameUtils.PseudoJournalReplayer
                 .replayNextJournal(OperationType.OP_FAST_ALTER_TABLE_COLUMNS);
@@ -468,9 +471,30 @@ public class SchemaChangeHandlerEditLogTest {
             SchemaChangeHandler followerHandler = new SchemaChangeHandler();
             followerHandler.replayFastSchemaEvolutionMetaChange(replayInfo);
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+            assertHistoryOnlyJobPruned(followerHandler, jobId, DB_ID, TABLE_ID, baseSchemaId);
         } finally {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }
+    }
+
+    private static void assertHistoryOnlyJobPruned(SchemaChangeHandler handler, long jobId, long dbId, long tableId,
+                                                   long preAlterSchemaId) {
+        SchemaChangeJobV2 job = (SchemaChangeJobV2) handler.getAlterJobsV2().get(jobId);
+        Assertions.assertNotNull(job);
+        Assertions.assertTrue(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
+
+        // SHOW ALTER TABLE COLUMN still has its row
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertFalse(infos.isEmpty());
+
+        // the pre-alter schema stays resolvable for transactions that still carry it
+        Assertions.assertTrue(job.getHistorySchema().isPresent());
+        Assertions.assertFalse(job.getHistorySchema().get().isExpired());
+        Assertions.assertTrue(handler.getHistorySchema(dbId, tableId, preAlterSchemaId).isPresent());
     }
 
     @Test

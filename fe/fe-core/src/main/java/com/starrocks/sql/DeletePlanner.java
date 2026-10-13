@@ -277,6 +277,7 @@ public class DeletePlanner {
                 .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
         try {
             olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.setEstimatedWriteBytes(DmlWriteEstimates.fromExecPlan(execPlan));
             olapTableSink.complete();
         } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
