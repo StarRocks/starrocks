@@ -143,6 +143,9 @@ public abstract class AlterJobV2 implements Writable {
 
     protected Future<Boolean> publishVersionFuture = null;
 
+    // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
+    private transient volatile boolean metaPruned;
+
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
         this.type = jobType;
@@ -454,45 +457,49 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
 
-        // create connectcontext
-        createConnectContextIfNeeded();
-        // check & acquire resource
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         try {
-            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
-        } catch (Exception e) {
-            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
-            onComputeResourceUnavailable();
-            return;
-        }
-
-        try {
-            while (true) {
-                JobState prevState = jobState;
-                switch (prevState) {
-                    case PENDING:
-                        runPendingJob();
-                        break;
-                    case WAITING_TXN:
-                        runWaitingTxnJob();
-                        break;
-                    case RUNNING:
-                        runRunningJob();
-                        break;
-                    case FINISHED_REWRITING:
-                        runFinishedRewritingJob();
-                        finishHook();
-                        break;
-                    default:
-                        break;
-                }
-                if (jobState == prevState) {
-                    break;
-                } // else: handle the new state
+            // create connectcontext
+            createConnectContextIfNeeded();
+            // check & acquire resource
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+            try {
+                this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            } catch (Exception e) {
+                LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+                onComputeResourceUnavailable();
+                return;
             }
-        } catch (AlterCancelException e) {
-            cancelInternal(e.getMessage());
+
+            try {
+                while (true) {
+                    JobState prevState = jobState;
+                    switch (prevState) {
+                        case PENDING:
+                            runPendingJob();
+                            break;
+                        case WAITING_TXN:
+                            runWaitingTxnJob();
+                            break;
+                        case RUNNING:
+                            runRunningJob();
+                            break;
+                        case FINISHED_REWRITING:
+                            runFinishedRewritingJob();
+                            finishHook();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (jobState == prevState) {
+                        break;
+                    } // else: handle the new state
+                }
+            } catch (AlterCancelException e) {
+                cancelInternal(e.getMessage());
+            }
+        } finally {
+            pruneIfDone();
         }
     }
 
@@ -697,6 +704,7 @@ public abstract class AlterJobV2 implements Writable {
         if (cancelled) {
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
                     "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
+            pruneIfDone();
         }
     }
 
@@ -735,5 +743,32 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public void pruneMeta() {
+    }
+
+    /**
+     * Calls {@link #pruneMeta()} once the job is done: a done job stays in memory only for SHOW ALTER until it
+     * expires. Skipped while the lake publish task may still read the pruned data; the alter handler retries
+     * on every scheduling round.
+     */
+    public void pruneIfDone() {
+        if (metaPruned) {
+            return;
+        }
+        synchronized (this) {
+            if (!metaPruned && jobState.isFinalState()
+                    && (publishVersionFuture == null || publishVersionFuture.isDone())) {
+                pruneMeta();
+                metaPruned = true;
+            }
+        }
+    }
+
+    /**
+     * Like {@link #pruneIfDone()}, but prunes again even if the job was pruned before: replaying a journal
+     * entry may copy the entry's data back into this job.
+     */
+    public synchronized void pruneAfterReplay() {
+        metaPruned = false;
+        pruneIfDone();
     }
 }

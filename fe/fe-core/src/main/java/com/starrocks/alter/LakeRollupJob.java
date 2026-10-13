@@ -567,9 +567,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
-        // progress
-        if (jobState == JobState.RUNNING && rollupBatchTask.getTaskNum() > 0) {
-            info.add(rollupBatchTask.getFinishedTaskNum() + "/" + rollupBatchTask.getTaskNum());
+        // progress. Read once: this runs without the job lock, and pruning the done job replaces the batch.
+        AgentBatchTask batchTask = rollupBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            info.add(batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum());
         } else {
             info.add(FeConstants.NULL_STRING);
         }
@@ -881,6 +882,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     @Override
     public AlterJobV2 copyForPersist() {
         return new LakeRollupJob(this);
+    }
+
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: replay shares them with the journal entry they came from.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIdToRollupIndex = Maps.newHashMap();
+        physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+        rollupBatchTask = new AgentBatchTask();
     }
 
     public String getRollupIndexName() {

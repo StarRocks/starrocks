@@ -1056,7 +1056,10 @@ public abstract class LakeOnlineRewriteJobBase
      * shadow and the real rewrite is re-issued under a fresh id.
      */
     protected RewriteStatus classifyRewrite(long physicalPartitionId) {
-        PartitionRewriteState partitionState = partitionStates.get(physicalPartitionId);
+        return classifyRewrite(partitionStates.get(physicalPartitionId));
+    }
+
+    private RewriteStatus classifyRewrite(PartitionRewriteState partitionState) {
         Long txnId = (partitionState == null) ? null : partitionState.rewriteTxnId;
         if (txnId == null) {
             return RewriteStatus.NEEDS_RUN;
@@ -1955,18 +1958,30 @@ public abstract class LakeOnlineRewriteJobBase
 
     // ---- SHOW / replay ---------------------------------------------------------------------------
 
+    /**
+     * Drops the per-partition rewrite state of a done job, which stays in memory only for SHOW ALTER. Each state
+     * holds a shadow index with its tablets; getInfo reads none of them once the job is done. The map is replaced,
+     * not cleared: replay shares it with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        partitionStates = Maps.newHashMap();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // Progress: partitions whose rewrite has published / total. Only meaningful while RUNNING.
+        // Read once: this runs without the job lock, and pruning the done job replaces the map.
+        Map<Long, PartitionRewriteState> states = partitionStates;
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && !partitionStates.isEmpty()) {
+        if (jobState == JobState.RUNNING && !states.isEmpty()) {
             int published = 0;
-            for (long physicalPartitionId : partitionStates.keySet()) {
-                if (classifyRewrite(physicalPartitionId) == RewriteStatus.DONE) {
+            for (PartitionRewriteState state : states.values()) {
+                if (classifyRewrite(state) == RewriteStatus.DONE) {
                     published++;
                 }
             }
-            progress = published + "/" + partitionStates.size();
+            progress = published + "/" + states.size();
         }
 
         // One display row for the single shadow index this job builds.
