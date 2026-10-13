@@ -1792,7 +1792,7 @@ TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence
     EXPECT_EQ(0, phy_rowsets);
 }
 
-TEST_F(LakeTabletReaderSpit, test_prepared_split_first_surviving_segment_owner) {
+TEST_F(LakeTabletReaderSpit, test_prepared_split_seed_statistics_and_eager_coarse_reads) {
     ConfigResetGuard<bool> metadata_filter(&config::enable_lake_segment_metadata_filter, false);
     std::vector<int> keys(22);
     std::vector<int> vals(22);
@@ -1840,14 +1840,16 @@ TEST_F(LakeTabletReaderSpit, test_prepared_split_first_surviving_segment_owner) 
         }
     };
 
-    for (int mode = 0; mode < 4; ++mode) {
+    for (int mode = 0; mode < 5; ++mode) {
+        SCOPED_TRACE(mode);
         // 0: seed is cut away, sibling survives. 1: seed survives. 2: the
         // non-key predicate removes the entire segment. 3: seed is cut away
-        // and the first refined task owns the segment without a coarse sibling.
+        // without a coarse sibling. 4: coarse siblings cover all surviving rows,
+        // leaving no refined tasks. In every nonempty case the seed owns statistics.
         std::unique_ptr<ColumnPredicate> pred;
         auto make_params = [&] {
             auto params = generate_tablet_reader_params(&scan_range);
-            if (mode == 0 || mode == 3) {
+            if (mode == 0 || mode == 3 || mode == 4) {
                 params.range = TabletReaderParams::RangeStartOperation::GE;
                 params.end_range = TabletReaderParams::RangeEndOperation::LE;
                 params.start_key = {OlapTuple({"5"})};
@@ -1884,17 +1886,19 @@ TEST_F(LakeTabletReaderSpit, test_prepared_split_first_surviving_segment_owner) 
         const auto& rowset = seed_ctx->prepared_tablet_read_state->rowsets[0];
         const auto& segment = seed_ctx->prepared_tablet_read_state->rowset_segments[0][0];
 
-        // Model a coarse sibling already issued by LakePreparedPhysicalSplitMorselQueue.
-        SparseRange<> sibling_range;
+        // Model coarse siblings already issued by LakePreparedPhysicalSplitMorselQueue.
+        std::vector<RowidRangeOptionPtr> sibling_options;
         if (mode != 3) {
             std::lock_guard<std::mutex> guard(state->coarse_range_lock);
-            state->coarse_scan_range_iter.next_range(4, &sibling_range);
-            state->allocated_coarse_ranges |= sibling_range;
-            ASSERT_GT(sibling_range.span_size(), 0);
-        }
-        auto sibling_option = std::make_shared<RowidRangeOption>();
-        if (mode != 3) {
-            sibling_option->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(sibling_range), false);
+            for (int i = 0; i < (mode == 4 ? 2 : 1); ++i) {
+                SparseRange<> sibling_range;
+                state->coarse_scan_range_iter.next_range(i == 0 ? 4 : 22, &sibling_range);
+                state->allocated_coarse_ranges |= sibling_range;
+                ASSERT_GT(sibling_range.span_size(), 0);
+                auto option = std::make_shared<RowidRangeOption>();
+                option->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(sibling_range), false);
+                sibling_options.push_back(std::move(option));
+            }
         }
 
         auto open_child = [&](const RowidRangeOptionPtr& range, bool refine, std::shared_ptr<TabletReader>* child) {
@@ -1902,35 +1906,79 @@ TEST_F(LakeTabletReaderSpit, test_prepared_split_first_surviving_segment_owner) 
                                                     /*need_split=*/false, /*could_split_physically=*/true);
             auto params = make_params();
             params.rowid_range_option = range;
-            params.prepared_tablet_read_state = seed_ctx->prepared_tablet_read_state;
-            params.prepared_segment_read_state = state;
-            params.prepared_rowset_index = 0;
-            params.prepared_segment_index = 0;
+            // Match LakeDataSource: early coarse siblings scan independently until
+            // the seed has published reusable bounds, while refined children reuse them.
+            if (refine || state->has_rowid_bounds_cache()) {
+                params.prepared_tablet_read_state = seed_ctx->prepared_tablet_read_state;
+                params.prepared_segment_read_state = state;
+                params.prepared_rowset_index = 0;
+                params.prepared_segment_index = 0;
+            }
             params.refine_initial_coarse_split_and_append_refined_tasks = refine;
             RETURN_IF_ERROR((*child)->prepare());
             return (*child)->open(params);
         };
 
         std::shared_ptr<TabletReader> seed_child;
-        std::shared_ptr<TabletReader> sibling_child;
-        std::future<Status> sibling_open;
-        if (mode == 0) {
-            sibling_open =
-                    std::async(std::launch::async, [&] { return open_child(sibling_option, false, &sibling_child); });
-            EXPECT_EQ(std::future_status::timeout, sibling_open.wait_for(std::chrono::milliseconds(20)));
-        }
-        ASSERT_OK(open_child(seed_ctx->rowid_range, true, &seed_child));
-        if (mode == 0) {
-            ASSERT_OK(sibling_open.get());
-        } else if (mode != 3) {
-            ASSERT_OK(open_child(sibling_option, false, &sibling_child));
+        std::vector<std::shared_ptr<TabletReader>> siblings(sibling_options.size());
+        std::vector<std::multiset<int>> sibling_results(siblings.size());
+        const bool scan_siblings_early = mode == 0 || mode == 2 || mode == 4;
+        if (scan_siblings_early) {
+            // Pause seed page pruning. Spare coarse siblings must open and read to EOF
+            // before it resumes, including when all surviving rows are already allocated.
+            std::promise<void> seed_started;
+            auto seed_started_future = seed_started.get_future();
+            std::promise<void> resume_seed;
+            auto resume_seed_future = resume_seed.get_future();
+            auto* sync_point = SyncPoint::GetInstance();
+            sync_point->SetCallBack("TabletReader::refine_initial_coarse_split::before_pruning", [&](void*) {
+                seed_started.set_value();
+                resume_seed_future.wait();
+            });
+            sync_point->EnableProcessing();
+            DeferOp clear_sync_point([&] {
+                sync_point->ClearAllCallBacks();
+                sync_point->DisableProcessing();
+            });
+            auto seed_open = std::async(std::launch::async,
+                                        [&] { return open_child(seed_ctx->rowid_range, true, &seed_child); });
+            EXPECT_EQ(std::future_status::ready, seed_started_future.wait_for(std::chrono::seconds(5)));
+            std::vector<std::future<Status>> sibling_scans;
+            for (size_t i = 0; i < siblings.size(); ++i) {
+                sibling_scans.emplace_back(std::async(std::launch::async, [&, i]() -> Status {
+                    RETURN_IF_ERROR(open_child(sibling_options[i], false, &siblings[i]));
+                    collect(siblings[i].get(), &sibling_results[i]);
+                    return Status::OK();
+                }));
+            }
+            for (auto& scan : sibling_scans) {
+                EXPECT_EQ(std::future_status::ready, scan.wait_for(std::chrono::seconds(5)));
+            }
+            // Release the seed before fatal assertions, so a regressed waiter cannot
+            // deadlock the test while its async future is destroyed.
+            resume_seed.set_value();
+            ASSERT_OK(seed_open.get());
+            for (auto& scan : sibling_scans) {
+                ASSERT_OK(scan.get());
+            }
+        } else {
+            ASSERT_OK(open_child(seed_ctx->rowid_range, true, &seed_child));
+            for (size_t i = 0; i < siblings.size(); ++i) {
+                ASSERT_OK(open_child(sibling_options[i], false, &siblings[i]));
+                collect(siblings[i].get(), &sibling_results[i]);
+            }
         }
 
         std::multiset<int> actual;
         collect(seed_child.get(), &actual);
-        if (sibling_child != nullptr) collect(sibling_child.get(), &actual);
         int64_t phy_segments = seed_child->stats().phy_segments_count;
-        if (sibling_child != nullptr) phy_segments += sibling_child->stats().phy_segments_count;
+        int64_t key_range_filtered = seed_child->stats().rows_key_range_filtered;
+        for (size_t i = 0; i < siblings.size(); ++i) {
+            actual.insert(sibling_results[i].begin(), sibling_results[i].end());
+            phy_segments += siblings[i]->stats().phy_segments_count;
+            key_range_filtered += siblings[i]->stats().rows_key_range_filtered;
+            EXPECT_EQ(0, siblings[i]->stats().phy_segments_count);
+        }
         std::vector<pipeline::ScanSplitContextPtr> refined;
         seed_child->get_split_tasks(&refined);
         for (const auto& task : refined) {
@@ -1939,22 +1987,23 @@ TEST_F(LakeTabletReaderSpit, test_prepared_split_first_surviving_segment_owner) 
             ASSERT_OK(open_child(ctx->rowid_range, false, &child));
             collect(child.get(), &actual);
             phy_segments += child->stats().phy_segments_count;
+            key_range_filtered += child->stats().rows_key_range_filtered;
+            EXPECT_EQ(0, child->stats().phy_segments_count);
             child->close();
         }
         EXPECT_EQ(expected, actual);
         EXPECT_EQ(mode == 2 ? 0 : 1, phy_segments);
-        if (mode == 0) {
-            EXPECT_EQ(0, seed_child->stats().phy_segments_count);
-            EXPECT_EQ(1, sibling_child->stats().phy_segments_count);
-        } else if (mode == 1) {
-            EXPECT_EQ(1, seed_child->stats().phy_segments_count);
-            EXPECT_EQ(0, sibling_child->stats().phy_segments_count);
-        } else if (mode == 3) {
-            EXPECT_EQ(0, seed_child->stats().phy_segments_count);
-            EXPECT_GT(refined.size(), 0u);
+        EXPECT_EQ(mode == 2 ? 0 : 1, seed_child->stats().phy_segments_count);
+        if (mode != 2) {
+            EXPECT_EQ(baseline->stats().rows_key_range_filtered, key_range_filtered);
+        }
+        if (mode == 3) {
+            EXPECT_FALSE(refined.empty());
+        } else if (mode == 4) {
+            EXPECT_TRUE(refined.empty());
         }
         seed_child->close();
-        if (sibling_child != nullptr) sibling_child->close();
+        for (auto& sibling : siblings) sibling->close();
         planner->close();
     }
 }
