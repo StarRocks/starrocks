@@ -17,7 +17,6 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -138,8 +137,7 @@ public class SlotEstimatorFactory {
     }
 
     private static int estimateScanWorkUnits(QueryQueueOptions opts, PlanNode sourceNode) {
-        // Lance eagerly creates its whole-dataset ranges during planning, so its range count is known.
-        if (sourceNode instanceof OlapScanNode || sourceNode instanceof LanceScanNode) {
+        if (sourceNode instanceof OlapScanNode) {
             List<TScanRangeLocations> locations = ((ScanNode) sourceNode).getScanRangeLocations(0);
             if (locations != null && !locations.isEmpty()) {
                 return locations.size();
