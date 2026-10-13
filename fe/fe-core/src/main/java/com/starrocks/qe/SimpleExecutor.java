@@ -147,9 +147,15 @@ public class SimpleExecutor {
      * so they never outlive the outer user query.
      */
     public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+        return executeDQL(sql, queryTimeoutSeconds, null);
+    }
+
+    /** Runs a serving-path query whose cancellation follows the explicit parent query. */
+    public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds, ConnectContext parent) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
+            context.setParentConnectContext(parent);
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
             context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
             return executeDQL(sql, context);
@@ -223,11 +229,18 @@ public class SimpleExecutor {
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
         try {
+            if (context.isStatementCancelled()) {
+                throw new SemanticException(name + " query was cancelled");
+            }
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             sql = formatSQL(sql, parsedStmt);
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, queryResultProtocol);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
+            ConnectContext parent = context.getParent();
+            if (parent != null && parent.getExecutor() != null) {
+                parent.getExecutor().registerSubStmtExecutor(executor);
+            }
             context.setQueryId(UUIDUtil.genUUID());
             context.getSessionVariable().setPipelineDop(dop);
             AuditLog.getInternalAudit()

@@ -1,0 +1,339 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.plan;
+
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.CatalogConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.index.ConnectorIndexDescriptor;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.Coverage;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.index.VectorIndexMetric;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.VarcharType;
+import org.apache.paimon.table.FileStoreTable;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+
+public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
+    private static PaimonMetadata indexedMetadata;
+    private static AtomicInteger indexMetadataLoads;
+
+    @BeforeAll
+    public static void installIndexMetadataWrapper() {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) GlobalStateMgr.getCurrentState().getMetadataMgr();
+        PaimonMetadata paimonMetadata = (PaimonMetadata) metadataMgr
+                .getOptionalMetadata(MOCK_PAIMON_CATALOG_NAME).orElseThrow();
+        indexedMetadata = spy(paimonMetadata);
+        indexMetadataLoads = new AtomicInteger();
+        doAnswer(invocation -> {
+            indexMetadataLoads.incrementAndGet();
+            Table table = invocation.getArgument(0);
+            TvrVersionRange versionRange = invocation.getArgument(1);
+            long snapshotId = versionRange == null ? ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID
+                    : versionRange.end().orElse(ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID);
+            if ("vector_table".equals(table.getName())) {
+                ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
+                        IndexType.VECTOR, "lumina", 1, "embedding", false, false,
+                        Map.of(ConnectorIndexDescriptor.OPTION_METRIC, VectorIndexMetric.L2.name(),
+                                ConnectorIndexDescriptor.OPTION_DIMENSION, "2"),
+                        Set.of(Operation.VECTOR_TOP_N), Coverage.UNKNOWN);
+                return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
+                        List.of(descriptor), Map.of("pk", 0, "embedding", 1), Set.of());
+            }
+            ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
+                    IndexType.BITMAP, "bitmap", 0, "pk", Map.of(),
+                    Set.of(Operation.EQUAL), Coverage.UNKNOWN);
+            return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
+                    List.of(descriptor));
+        }).when(indexedMetadata).getIndexMetadata(any(Table.class), any(TvrVersionRange.class));
+
+        // Match the production connector path: MetadataMgr returns CatalogConnectorMetadata,
+        // which must delegate index metadata to the Paimon provider selected for the table.
+        metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, new CatalogConnectorMetadata(
+                indexedMetadata,
+                new InformationSchemaMetadata(MOCK_PAIMON_CATALOG_NAME),
+                new TableMetaMetadata(MOCK_PAIMON_CATALOG_NAME, "paimon")));
+        try {
+            connectContext.changeCatalogDb(MOCK_PAIMON_CATALOG_NAME + ".pmn_db1");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @BeforeEach
+    public void resetIndexMetadataTracking() {
+        clearInvocations(indexedMetadata);
+        indexMetadataLoads.set(0);
+        connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+    }
+
+    @Test
+    public void testStageZeroSkipsIndexDiscovery() throws Exception {
+        connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(0);
+        try {
+            String plan = getLogicalFragmentPlan("SELECT pk FROM unpartitioned_table WHERE pk = '1'");
+            Assertions.assertFalse(plan.contains("index["));
+            Assertions.assertEquals(0, indexMetadataLoads.get());
+        } finally {
+            connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+        }
+    }
+
+    @Test
+    public void testJoinStatisticsRespectGlobalIndexScanStage() throws Exception {
+        AtomicBoolean computingStatistics = new AtomicBoolean();
+        List<Boolean> statisticsIndexDisabled = new ArrayList<>();
+        boolean columnStatistics = connectContext.getSessionVariable().enablePaimonColumnStatistics();
+        doAnswer(invocation -> {
+            computingStatistics.set(true);
+            try {
+                return invocation.callRealMethod();
+            } finally {
+                computingStatistics.set(false);
+            }
+        }).when(indexedMetadata).getTableStatistics(any(), any(), anyMap(), any(), any(), anyLong(), any());
+        doAnswer(invocation -> {
+            if (computingStatistics.get()) {
+                GetRemoteFilesParams params = invocation.getArgument(1);
+                statisticsIndexDisabled.add(params.isDisableGlobalIndex());
+            }
+            return invocation.callRealMethod();
+        }).when(indexedMetadata).getRemoteFiles(any(), any());
+        try {
+            connectContext.getSessionVariable().setEnablePaimonColumnStatistics(false);
+            for (int stage : List.of(0, 1, 2)) {
+                statisticsIndexDisabled.clear();
+                connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
+                getFragmentPlan("SELECT a.pk, b.d FROM unpartitioned_table a "
+                        + "JOIN partitioned_table b ON a.pk = b.pk WHERE a.pk = '1'");
+                Assertions.assertTrue(statisticsIndexDisabled.size() >= 2,
+                        "both join inputs must go through MetadataMgr statistics planning");
+                Assertions.assertTrue(statisticsIndexDisabled.stream().allMatch(disabled -> disabled == (stage != 1)));
+            }
+        } finally {
+            doCallRealMethod().when(indexedMetadata)
+                    .getTableStatistics(any(), any(), anyMap(), any(), any(), anyLong(), any());
+            doCallRealMethod().when(indexedMetadata).getRemoteFiles(any(), any());
+            connectContext.getSessionVariable().setEnablePaimonColumnStatistics(columnStatistics);
+            connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+        }
+    }
+
+    @Test
+    public void testScalarExecutionContractThroughMetadataMgr() throws Exception {
+        connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(2);
+        AtomicInteger evaluations = new AtomicInteger();
+        doAnswer(invocation -> {
+            com.starrocks.connector.index.IndexCondition condition = invocation.getArgument(1);
+            Assertions.assertFalse(condition.getFieldIds().isEmpty());
+            Assertions.assertTrue(condition.getFieldIds().containsValue(0));
+            evaluations.incrementAndGet();
+            return java.util.Optional.empty();
+        }).when(indexedMetadata).evaluateIndex(any(Table.class),
+                any(com.starrocks.connector.index.IndexCondition.class), any(TvrVersionRange.class));
+        try {
+            String plan = getFragmentPlan("SELECT pk FROM unpartitioned_table WHERE pk = '1'");
+            assertContains(plan, "PREDICATES:");
+            Assertions.assertEquals(1, evaluations.get());
+        } finally {
+            connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+        }
+    }
+
+    @Test
+    public void testPredicateIndexPlanningThroughMetadataMgr() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM unpartitioned_table WHERE pk = '1'");
+
+        assertContains(plan, "index[");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    }
+
+    @Test
+    public void testVirtualIndexSqlPlansDistributedShards() throws Exception {
+        PaimonTable table = (PaimonTable) indexedMetadata.getTable(
+                connectContext, "pmn_db1", "unpartitioned_table");
+        FileStoreTable nativeTable = (FileStoreTable) table.getNativeTable();
+        long snapshotId = nativeTable.latestSnapshot().orElseThrow().id();
+        ColumnRefOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "pk", true);
+        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
+                BinaryType.EQ, column, ConstantOperator.createVarchar("1")), Map.of(1, 0));
+        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(
+                nativeTable.location().toString(), "main", snapshotId,
+                nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
+        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
+                .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
+        try {
+            String plan = getFragmentPlan("SELECT to_base64(index_result) FROM "
+                    + "`unpartitioned_table$global_index` WHERE args = '" + request.toTransportString() + "'");
+            assertContains(plan, "TABLE: unpartitioned_table$global_index", "SNAPSHOT: " + snapshotId, "SHARDS: 2");
+        } finally {
+            org.mockito.Mockito.doCallRealMethod().when(indexedMetadata)
+                    .getIndexShards(any(Table.class), anyLong(), anyMap());
+        }
+    }
+
+    @Test
+    public void testUnsupportedPredicateSkipsMetadataIo() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM unpartitioned_table WHERE length(pk) = 1");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertEquals(0, indexMetadataLoads.get());
+    }
+
+    @Test
+    public void testPartitionOnlyPredicateSkipsMetadataIo() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM partitioned_table WHERE pt >= DATE '2000-01-01'");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertEquals(0, indexMetadataLoads.get());
+    }
+
+    @Test
+    public void testPartitionAndScalarPredicateStillLoadsMetadata() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM partitioned_table WHERE pt >= DATE '2000-01-01' AND pk = '1'");
+
+        assertContains(plan, "index[");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    }
+
+    @Test
+    public void testVectorTopNPlanningThroughMetadataMgr() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk, approx_l2_distance([1.0, 2.0], embedding) AS score "
+                        + "FROM vector_table ORDER BY score ASC LIMIT 10");
+
+        assertContains(plan, "index[");
+        assertContains(plan, "metric=L2");
+        assertContains(plan, "k=10");
+        assertContains(plan, "nullsFirst=true");
+        assertContains(plan, "score=approx_l2_distance");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    }
+
+    @Test
+    public void testBoundVectorCastPlanningThroughMetadataMgr() throws Exception {
+        // This is the SQL expression shape after binding a prepared vector parameter.
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk, approx_l2_distance(CAST('[ 1e0, 2.0 ]' AS ARRAY<FLOAT>), embedding) AS score "
+                        + "FROM vector_table ORDER BY score ASC LIMIT 10");
+
+        assertContains(plan, "index[");
+        assertContains(plan, "metric=L2");
+        assertContains(plan, "k=10");
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+    }
+
+    @Test
+    public void testValueChangingVectorCastIsNotAnnotated() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk, approx_l2_distance("
+                        + "CAST(CAST(CAST('[1.9,2.9]' AS ARRAY<FLOAT>) AS ARRAY<INT>) AS ARRAY<FLOAT>), "
+                        + "embedding) AS score FROM vector_table ORDER BY score ASC LIMIT 10");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+    }
+
+    @Test
+    public void testJavaOnlyVectorNumbersAreNotAnnotated() throws Exception {
+        for (String literal : List.of("[1f,2f]", "[1d,2d]", "[0x1p0,0x1p1]")) {
+            String plan = getLogicalFragmentPlan(
+                    "SELECT pk, approx_l2_distance(CAST('" + literal + "' AS ARRAY<FLOAT>), embedding) AS score "
+                            + "FROM vector_table ORDER BY score ASC LIMIT 10");
+            Assertions.assertFalse(plan.contains("index["), literal);
+        }
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+    }
+
+    @Test
+    public void testVectorRankWindowIsNotAnnotated() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk FROM (SELECT pk, RANK() OVER (ORDER BY "
+                        + "approx_l2_distance([1.0, 2.0], embedding)) AS ranking "
+                        + "FROM vector_table) ranked WHERE ranking <= 10");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, never()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertEquals(0, indexMetadataLoads.get());
+    }
+
+    @Test
+    public void testVectorMetricMismatchIsNotAnnotated() throws Exception {
+        String plan = getLogicalFragmentPlan(
+                "SELECT pk, approx_cosine_similarity([1.0, 2.0], embedding) AS score "
+                        + "FROM vector_table ORDER BY score DESC LIMIT 10");
+
+        Assertions.assertFalse(plan.contains("index["));
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                any(Table.class), any(TvrVersionRange.class));
+        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    }
+}

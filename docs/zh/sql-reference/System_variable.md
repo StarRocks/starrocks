@@ -1361,6 +1361,17 @@ FROM test;
 * 类型：String
 * 引入版本：v4.2
 
+### paimon_global_index_scan_stage
+
+当前分布式阶段要求每个参与字段只有 BTree 一种全局索引；同一字段存在多种索引时，使用 SDK 规划。
+
+分布式计算还要求参与字段在 Schema 历史中的键编码始终兼容。字段发生改变键编码的类型变更或缺失 Schema 历史时，即使已重建索引，也使用 SDK 规划；仅改名或调整可空性不影响资格。BE 打开索引时如果发现 Schema 已变化，也会回退到 SDK，但回退不保证 SDK 支持该类型演进。阶段 `0` 在统计信息规划时同样关闭 SDK 索引计算，阶段 `2` 将索引计算推迟至执行计划构建。取消外层查询会取消其内部索引查询，不再启动回退工作。
+
+* 描述：控制 Paimon Global Index 的计算方式。`0` 对当前查询关闭索引发现和 SDK 全局索引计算。`1`（默认值）使用 Paimon Java SDK 规划 Split。`2` 对 main 分支上的 data-evolution 表启用 BE 分布式标量 BTree 索引计算，要求所有参与索引完整覆盖查询绑定的快照。主键表、增量扫描、覆盖不完整的快照、不支持的谓词及计算失败场景均使用 SDK Split 规划。原始 SQL 过滤条件始终保留。本变量不启用 Vector/TopN 执行。通过 `SET` 修改，无需重启。
+* 默认值：1
+* 类型：Integer
+* 引入版本：v4.2
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。
