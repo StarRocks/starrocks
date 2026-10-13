@@ -3983,6 +3983,51 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     ASSERT_EQ(3, rowsets.size());
 }
 
+TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
+    const int64_t old_columns_per_group = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp restore([&]() {
+        config::vertical_compaction_max_columns_per_group = old_columns_per_group;
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:input_rowset_count");
+        SyncPoint::GetInstance()->ClearCallBack("TabletUpdates::_do_compaction:algorithm");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    for (size_t count : {size_t{32767}, size_t{32768}, size_t{34173}, size_t{65536}}) {
+        _tablet = create_tablet(rand(), rand());
+        _tablet->updates()->stop_compaction(true);
+        const std::vector<int64_t> keys = {1, 2, 3};
+        auto empty = create_rowset(_tablet, keys, nullptr, true);
+        ASSERT_EQ(0, empty->num_segments());
+        ASSERT_TRUE(_tablet->rowset_commit(2, empty).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+        ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        std::vector<RowsetSharedPtr> rowsets;
+        ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(4, &rowsets).ok());
+        std::vector<uint32_t> inputs;
+        for (const auto& rowset : rowsets) {
+            inputs.emplace_back(rowset->rowset_meta()->get_rowset_seg_id());
+        }
+        bool algorithm_checked = false;
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:input_rowset_count",
+                                              [&](void* arg) { *static_cast<size_t*>(arg) = count; });
+        SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_compaction:algorithm", [&](void* arg) {
+            EXPECT_EQ(count <= 32767 ? VERTICAL_COMPACTION : HORIZONTAL_COMPACTION,
+                      *static_cast<CompactionAlgorithm*>(arg));
+            algorithm_checked = true;
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        _tablet->updates()->stop_compaction(false);
+        auto st = _tablet->updates()->compaction(_compaction_mem_tracker.get(), inputs);
+        ASSERT_TRUE(st.ok()) << st;
+        ASSERT_TRUE(algorithm_checked);
+        ASSERT_EQ(keys.size(), read_tablet(_tablet, 4));
+        ASSERT_EQ(4, _tablet->updates()->max_version());
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
+}
+
 TEST_F(TabletUpdatesTest, test_apply_concurrent_with_on_rowset_finish) {
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(true);
