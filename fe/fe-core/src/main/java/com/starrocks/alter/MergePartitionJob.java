@@ -649,6 +649,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             if (status.getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
+            } else if (status.getState() == Constants.TaskRunState.SUCCESS) {
+                // Remember the success: the job may then wait for the rewrite to be published, and the task run
+                // history can be archived in the meantime.
+                rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
             }
             progressAcc += 100.0 / taskCount;
         }
@@ -662,11 +666,28 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         this.progress = 99;
 
+        // A rewrite can be committed without being published yet: the insert stops waiting for its publish
+        // when enable_sync_publish is off or the insert timeout runs out, and the task still succeeds. Swapping
+        // such a temp partition in would expose a partition that misses rows until the publish lands, and
+        // dropping it would throw away a rewrite that succeeded, so wait for the publish instead. The job
+        // timeout bounds this wait, see AlterJobV2#run.
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
+            if (hasUnpublishedRewrite(tbl)) {
+                return;
+            }
+        }
+
         LOG.info("all insert overwrite tasks finished, merge partition job: {}", jobId);
 
         // replace partition
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+            // Only the rewrite tasks write to the temp partitions and they have all finished, so the check above
+            // should still hold. Check again under the write lock that the replacement runs under anyway.
+            if (hasUnpublishedRewrite(tbl)) {
+                return;
+            }
             onFinished(db, tbl);
         }
 
@@ -699,6 +720,29 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
      */
     protected boolean hasCommittedNotVisibleTxn(Partition partition) {
         return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
+    }
+
+    /**
+     * Whether the rewritten data of some temp partition is committed but not published yet, in which case the
+     * replacement has to wait for it. Must be called while holding the table lock.
+     */
+    private boolean hasUnpublishedRewrite(OlapTable tbl) {
+        List<String> unpublishedTempPartitionNames = Lists.newArrayList();
+        for (OptimizeTask rewriteTask : rewriteTasks) {
+            if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
+                continue;
+            }
+            Partition tempPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+            if (tempPartition != null && hasCommittedNotVisibleTxn(tempPartition)) {
+                unpublishedTempPartitionNames.add(rewriteTask.getTempPartitionName());
+            }
+        }
+        if (unpublishedTempPartitionNames.isEmpty()) {
+            return false;
+        }
+        LOG.info("merge partitions job {} waits rewritten data of temp partitions {} to be visible",
+                jobId, unpublishedTempPartitionNames);
+        return true;
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -764,27 +808,14 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                 }
             }
 
+            // Rewrites that are committed but not published yet never get here, runRunningJob waits for them
+            // under this same write lock.
             for (String tempPartitionName : Lists.newArrayList(tempPartitionNameToSourcePartitionNames.keySet())) {
-                Partition tempPartition = targetTable.getPartition(tempPartitionName, true);
-                if (tempPartition == null) {
+                if (targetTable.getPartition(tempPartitionName, true) == null) {
                     LOG.warn("merge partitions job {} temp partition {} missing before replace", jobId, tempPartitionName);
                     tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
                     hasFailedTask = true;
                     errMsg += tempPartitionName + " temp partition missing, ";
-                    continue;
-                }
-                if (hasCommittedNotVisibleTxn(tempPartition)) {
-                    LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
-                            jobId, tempPartitionName);
-                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
-                    targetTable.dropTempPartition(tempPartitionName, true);
-                    hasFailedTask = true;
-                    errMsg += tempPartitionName + " rewrite task not visible, ";
-                    for (OptimizeTask task : rewriteTasks) {
-                        if (tempPartitionName.equals(task.getTempPartitionName())) {
-                            task.setOptimizeTaskState(Constants.TaskRunState.FAILED);
-                        }
-                    }
                 }
             }
 
