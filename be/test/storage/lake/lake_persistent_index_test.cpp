@@ -2655,12 +2655,12 @@ TEST_F(LakePersistentIndexTest, test_parallel_get_matches_get_across_index_layer
     {
         ADOPT_TRACE(memtable_trace.get());
         ParallelTaskRunner runner(nullptr);
-        std::vector<std::vector<bool>> batches;
-        ASSERT_OK(index->parallel_get(&runner, keys.size(), slices.data(), 0, &batches));
+        LakePersistentIndex::DelFilter words;
+        ASSERT_OK(index->parallel_get(&runner, keys.size(), slices.data(), 0, &words));
         ASSERT_OK(runner.join());
-        std::vector<bool> got;
-        for (const auto& batch : batches) {
-            got.insert(got.end(), batch.begin(), batch.end());
+        std::vector<bool> got(keys.size());
+        for (size_t i = 0; i < keys.size(); ++i) {
+            got[i] = (words[i / 64].load() & (uint64_t{1} << (i % 64))) != 0;
         }
         EXPECT_EQ((std::vector<bool>{true, true, true, true, true, true, false}), got);
     }
@@ -2692,16 +2692,16 @@ TEST_F(LakePersistentIndexTest, test_parallel_get_matches_get_across_index_layer
             scoped_refptr<Trace> trace(new Trace);
             auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                     ThreadPool::ExecutionMode::CONCURRENT);
-            std::vector<std::vector<bool>> batches;
+            LakePersistentIndex::DelFilter words;
             {
                 ADOPT_TRACE(trace.get());
                 ParallelTaskRunner runner(token.get());
-                ASSERT_OK(index->parallel_get(&runner, n, slices.data(), too_old, &batches));
+                ASSERT_OK(index->parallel_get(&runner, n, slices.data(), too_old, &words));
                 ASSERT_OK(runner.join());
             }
-            std::vector<bool> parallel;
-            for (const auto& batch : batches) {
-                parallel.insert(parallel.end(), batch.begin(), batch.end());
+            std::vector<bool> parallel(n);
+            for (size_t i = 0; i < n; ++i) {
+                parallel[i] = (words[i / 64].load() & (uint64_t{1} << (i % 64))) != 0;
             }
             ASSERT_EQ(n, parallel.size());
             int64_t tasks = 0;
@@ -2752,7 +2752,7 @@ TEST_F(LakePersistentIndexTest, test_parallel_get_retains_compact_filters_for_ma
         SyncPoint::GetInstance()->DisableProcessing();
     });
 
-    std::vector<std::vector<std::vector<bool>>> filters(num_files);
+    std::vector<LakePersistentIndex::DelFilter> filters(num_files);
     auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
     ParallelTaskRunner runner(token.get());
@@ -2765,18 +2765,64 @@ TEST_F(LakePersistentIndexTest, test_parallel_get_retains_compact_filters_for_ma
     EXPECT_EQ(num_files * ((rows_per_file + rows_per_batch - 1) / rows_per_batch), lookups.load());
     size_t retained_bits = 0;
     for (const auto& file : filters) {
-        size_t row = 0;
-        for (const auto& batch : file) {
-            retained_bits += batch.capacity();
-            for (bool skip : batch) {
-                EXPECT_EQ(row % 2 != 0, skip) << "row " << row;
-                ++row;
-            }
+        ASSERT_EQ((rows_per_file + 63) / 64, file.size());
+        retained_bits += file.capacity() * 64;
+        for (size_t row = 0; row < rows_per_file; ++row) {
+            const bool skip = (file[row / 64].load() & (uint64_t{1} << (row % 64))) != 0;
+            EXPECT_EQ(row % 2 != 0, skip) << "row " << row;
         }
-        EXPECT_EQ(rows_per_file, row);
     }
     // Allow bitmap word rounding, but not one byte (let alone an IndexValue) per retained key.
     EXPECT_LT(retained_bits, num_files * rows_per_file * 2);
+}
+
+TEST_F(LakePersistentIndexTest, test_parallel_get_tiny_batches_share_compact_bitmap_words) {
+    constexpr size_t n = 131; // Includes two word boundaries and a partial final word.
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), _tablet_metadata->id());
+    ASSERT_OK(index->init(_tablet_metadata));
+    std::vector<uint64_t> keys(n);
+    std::vector<Slice> slices(n);
+    std::vector<IndexValue> values(n);
+    for (size_t i = 0; i < n; ++i) {
+        keys[i] = i;
+        slices[i] = Slice(reinterpret_cast<const char*>(&keys[i]), sizeof(keys[i]));
+        values[i] = IndexValue((uint64_t{i % 3 ? 50U : 5U} << 32) | i);
+    }
+    ASSERT_OK(index->insert(n - 1, slices.data(), values.data(), 1)); // Last key is absent.
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("del_filter_test").set_min_threads(4).set_max_threads(4).build(&pool));
+    auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    // One-row batches concurrently merge bits into the same word. Retained output must remain
+    // one bitmap per file, independent of batch size, without dropping any concurrent bit writes.
+    for (int repeat = 0; repeat < 10; ++repeat) {
+        for (int64_t rows_per_batch : {1, 2, 3, 63, 64, 65, 257}) {
+            ConfigResetGuard<int64_t> guard(&config::pk_index_parallel_execution_min_rows, rows_per_batch);
+            scoped_refptr<Trace> trace(new Trace);
+            LakePersistentIndex::DelFilter words;
+            {
+                ADOPT_TRACE(trace.get());
+                ParallelTaskRunner runner(token.get());
+                ASSERT_OK(index->parallel_get(&runner, n, slices.data(), 20, &words));
+                ASSERT_OK(runner.join());
+            }
+            ASSERT_EQ((n + 63) / 64, words.size());
+            EXPECT_LT(words.capacity() * sizeof(words[0]), n); // Much less than one byte per key.
+            int64_t tasks = 0;
+            for (const auto& [name, value] : trace->metrics()->Get()) {
+                if (std::string(name) == "rebuild_index_del_get_cnt") {
+                    tasks = value;
+                }
+            }
+            EXPECT_EQ(n > rows_per_batch ? (n + rows_per_batch - 1) / rows_per_batch : 0, tasks);
+            for (size_t i = 0; i < n; ++i) {
+                const bool skip = (words[i / 64].load() & (uint64_t{1} << (i % 64))) != 0;
+                EXPECT_EQ(i < n - 1 && i % 3 != 0, skip) << "row " << i << ", batch " << rows_per_batch;
+            }
+            EXPECT_EQ(0, words.back().load() >> (n % 64)); // Unused tail bits stay zero.
+        }
+    }
 }
 
 TEST_F(LakePersistentIndexTest, test_load_dels_parallel_get_propagates_sst_error_before_replay) {

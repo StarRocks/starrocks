@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <ostream>
@@ -386,11 +387,15 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
-    // Submit disjoint filter lookups without waiting. Keep only packed per-batch skip flags;
+    using DelFilter = std::vector<std::atomic<uint64_t>>;
+    static constexpr size_t kDelFilterBitsPerWord = 64;
+
+    // Submit disjoint filter lookups without waiting. Keep one packed bitmap per file; atomic
+    // words allow batches to share boundary words without allocating a bitmap per tiny batch.
     // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
-    // and filter_batches until runner joins, after all producers sharing its pool have finished.
+    // and filter_words until runner joins, after all producers sharing its pool have finished.
     Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
-                        std::vector<std::vector<bool>>* filter_batches);
+                        DelFilter* filter_words);
 
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);

@@ -426,16 +426,18 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
-                                         std::vector<std::vector<bool>>* filter_batches) {
+                                         DelFilter* filter_words) {
     const size_t rows_per_task = get_pk_index_parallel_execution_min_rows();
     const bool parallel = n > rows_per_task && (!_sstable_filesets.empty() || !_inactive_memtables.empty());
-    const size_t num_batches = n / rows_per_task + (n % rows_per_task != 0);
-    // Size the outer vector before submitting: each task owns one separate packed bitmap, so
-    // batches cannot race on a shared vector<bool> word, even when boundaries are unaligned.
-    filter_batches->resize(num_batches);
-    for (size_t batch = 0, offset = 0; offset < n; ++batch) {
+    // One contiguous bitmap, independent of the number of batches. In particular, a one-row
+    // granularity must not retain one vector object and a word-rounded allocation per key.
+    *filter_words = DelFilter(n / kDelFilterBitsPerWord + (n % kDelFilterBitsPerWord != 0));
+    for (auto& word : *filter_words) {
+        word.store(0, std::memory_order_relaxed);
+    }
+    for (size_t offset = 0; offset < n;) {
         const size_t count = std::min(rows_per_task, n - offset);
-        auto lookup = [this, keys, filter_batches, too_old, batch, offset, count]() -> Status {
+        auto lookup = [this, keys, filter_words, too_old, offset, count]() -> Status {
             // Allocate only when a worker starts, never when queuing a file's lookups. Release
             // these 8-byte values when this task finishes, rather than keeping all files' results
             // until both runners join. Queued/completed tasks retain only one bit per key.
@@ -443,10 +445,20 @@ Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, c
             TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::parallel_get:values", &values);
             // Preserve newest-to-oldest lookup order, including tombstones and missing keys.
             RETURN_IF_ERROR(get(count, keys + offset, values.data()));
-            auto& filter = (*filter_batches)[batch];
-            filter.assign(count, false);
+            uint64_t mask = 0;
             for (size_t i = 0; i < count; ++i) {
-                filter[i] = values[i] != IndexValue(NullIndexValue) && values[i].get_rssid() > too_old;
+                const size_t key_idx = offset + i;
+                if (values[i] != IndexValue(NullIndexValue) && values[i].get_rssid() > too_old) {
+                    mask |= uint64_t{1} << (key_idx % kDelFilterBitsPerWord);
+                }
+                if (key_idx % kDelFilterBitsPerWord == kDelFilterBitsPerWord - 1 || i + 1 == count) {
+                    if (mask != 0) {
+                        // Unaligned batches may share a word. Merge once per touched word, not
+                        // once per key. The runner join completes all writers before replay reads.
+                        (*filter_words)[key_idx / kDelFilterBitsPerWord].fetch_or(mask, std::memory_order_relaxed);
+                    }
+                    mask = 0;
+                }
             }
             return Status::OK();
         };
@@ -1004,7 +1016,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         MutableColumnPtr pkc; // owns the key bytes; keys borrow from it
         Buffer<Slice> keys;   // Slices into pkc
         std::vector<bool> filter;
-        std::vector<std::vector<bool>> filter_batches; // independent packed skip flags until replay
+        DelFilter filter_words; // one contiguous packed bitmap until replay
     };
 
     auto get_token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
@@ -1066,21 +1078,24 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             // newer (upserted by a later segment, or a newer rowset) are skipped.
             const uint32_t too_old = del.origin_rowset_id() + op_offset;
             // Never join here: load_one and these lookups share the PK execution pool.
-            return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_batches);
+            return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_words);
         }
         return Status::OK();
     };
 
-    // Flatten the independent batch bitmaps only after every lookup finishes, immediately before
+    // Convert the bitmap only after every lookup finishes, immediately before
     // replaying this file. No IndexValue arrays survive completed lookup tasks.
     auto filter_one = [](DecodedDel* d) {
         d->filter.assign(d->keys.size(), false);
-        size_t offset = 0;
-        for (const auto& batch : d->filter_batches) {
-            std::copy(batch.begin(), batch.end(), d->filter.begin() + offset);
-            offset += batch.size();
+        for (size_t w = 0; w < d->filter_words.size(); ++w) {
+            const uint64_t word = d->filter_words[w].load(std::memory_order_relaxed);
+            const size_t offset = w * kDelFilterBitsPerWord;
+            const size_t count = std::min(kDelFilterBitsPerWord, d->keys.size() - offset);
+            for (size_t bit = 0; bit < count; ++bit) {
+                d->filter[offset + bit] = (word & (uint64_t{1} << bit)) != 0;
+            }
         }
-        std::vector<std::vector<bool>>().swap(d->filter_batches);
+        DelFilter().swap(d->filter_words);
     };
 
     // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
