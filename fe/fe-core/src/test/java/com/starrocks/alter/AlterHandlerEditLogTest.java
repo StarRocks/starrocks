@@ -18,13 +18,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.extension.ExtensionManager;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
->>>>>>> 0ef9a71f0d2... [Enhancement][RB-357] Journal the release of an alter job's history schema (#65086)
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.EditLogException;
