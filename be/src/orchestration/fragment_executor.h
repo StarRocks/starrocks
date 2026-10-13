@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -69,6 +70,13 @@ public:
     // Exposed here so unit tests can pin the contract; the production caller is
     // _prepare_pipeline_driver.
     static bool is_final_sink_type(TDataSinkType::type type);
+
+    // Apply re-vended cloud credentials (scan-node-id -> config) to the matching connector scan
+    // providers so subsequent file opens use the fresh token. Exposed for unit testing; production
+    // callers reach it through append_incremental_scan_ranges.
+    static void apply_refreshed_cloud_configurations(
+            pipeline::FragmentContext* fragment_ctx,
+            const std::map<TPlanNodeId, TCloudConfiguration>& node_to_cloud_configuration);
 
     Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
