@@ -51,6 +51,7 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -261,12 +262,19 @@ public abstract class AlterJobV2 implements Writable {
     /**
      * Shared expiry rule for {@link #getHistorySchema()}: the retired schemas must stay resolvable until
      * every transaction that can still be bound to them has reached a terminal state, and are released
-     * (payload dropped) as soon as that holds. Returns whether the history schema holds nothing anymore,
-     * which is one of the two conditions for cleaning the job up.
+     * (payload dropped) as soon as that holds and the job is done. The release is journaled, so it runs on
+     * the leader only and throws if the journal write fails. Returns whether the history schema holds
+     * nothing anymore, which is one of the two conditions for cleaning the job up.
      */
     protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
         if (historySchema == null || historySchema.isExpired()) {
             return true;
+        }
+        // A job that holds a history schema but is not done has not durably finished: its FINISHED record is
+        // in flight or failed, and a CANCELLED record journaled after the release could still carry the payload
+        // and bring it back on followers. A done job is never journaled again.
+        if (!isDone()) {
+            return false;
         }
         boolean expired = true;
         try {
@@ -283,7 +291,10 @@ public abstract class AlterJobV2 implements Writable {
             // so could clean the history schema safely
         }
         if (expired) {
-            historySchema.setExpire();
+            // Journaled so that followers and checkpoint images drop the payload too.
+            ReleaseAlterJobHistorySchemaLog log = new ReleaseAlterJobHistorySchemaLog(jobId, dbId, tableId);
+            GlobalStateMgr.getCurrentState().getEditLog().logReleaseAlterJobHistorySchema(log,
+                    wal -> historySchema.setExpire());
             LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
                     jobId, tableName, historySchema.getHistoryTxnIdThreshold());
         }
@@ -292,8 +303,8 @@ public abstract class AlterJobV2 implements Writable {
 
     /**
      * Whether this job's history schema holds nothing anymore: true when the job has no history schema,
-     * or when no transaction that can still be bound to it is running. Idempotent, and releases the
-     * payload exactly like {@link #isExpire()} does, but without the age condition.
+     * or when the job is done and no transaction that can still be bound to it is running. Idempotent, and
+     * releases the payload exactly like {@link #isExpire()} does, but without the age condition.
      */
     public boolean isHistorySchemaReleased() {
         return expireHistorySchema(getHistorySchema().orElse(null));
