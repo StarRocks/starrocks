@@ -181,7 +181,7 @@ public class WebUtils {
      * The query is parsed the same way as {@link BaseRequest} parses it for the actions, and rebuilt from the parsed
      * parameters: a value an action reads as a sanitized parameter is always masked, however the query is written
      * (e.g. with ';' as a separator, or an escaped '&' in a value), and what is not parsed as a parameter is left
-     * out. If the URI has no query, it is returned as is.
+     * out. If the URI has no query, it is returned as is, except that anything after a '?' is hidden.
      *
      * @param uri The input URI to be sanitized.
      * @return The sanitized URI with the values of certain query parameters replaced with "*".
@@ -190,7 +190,9 @@ public class WebUtils {
     public static String sanitizeHttpReqUri(String uri) throws URISyntaxException {
         URI inputUri = new URI(uri);
         if (inputUri.getRawQuery() == null) {
-            return uri;
+            // What follows a '?' may still not be a query to java.net.URI, e.g. in an opaque uri (http:foo?...) or a
+            // fragment (/api#frag?...), but it would be logged as is: hide it.
+            return uri.indexOf('?') < 0 ? uri : hideHttpReqQuery(uri);
         }
 
         QueryStringDecoder decoder = BaseRequest.newQueryStringDecoder(uri);
@@ -208,5 +210,24 @@ public class WebUtils {
             }
         }
         return sanitized.toString();
+    }
+
+    /**
+     * {@link #sanitizeHttpReqUri(String)} for a log line. If the uri cannot be parsed, only its path is returned,
+     * since the query may hold a credential.
+     */
+    public static String sanitizeHttpReqUriForLog(String uri) {
+        try {
+            return sanitizeHttpReqUri(uri);
+        } catch (URISyntaxException e) {
+            // Not e.getMessage(): it quotes the whole input.
+            return hideHttpReqQuery(uri) + " (failed to sanitize uri: " + e.getReason() + ")";
+        }
+    }
+
+    // The uri with its query, if any, replaced, for when it cannot be sanitized.
+    public static String hideHttpReqQuery(String uri) {
+        int queryStart = uri.indexOf('?');
+        return queryStart < 0 ? uri : uri.substring(0, queryStart) + "?<query not shown>";
     }
 }
