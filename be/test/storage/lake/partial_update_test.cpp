@@ -708,6 +708,40 @@ TEST_P(LakePartialUpdateTest, test_column_mode_spills_update_rows) {
     EXPECT_EQ(0, _update_mgr->update_state_mem_tracker()->consumption());
 }
 
+TEST_P(LakePartialUpdateTest, test_column_mode_sweeps_leftover_spill_files) {
+    // A CN that dies between writing a spill file and releasing it leaves the file behind, and
+    // nothing reads it once the process is gone. The sweep run at startup removes exactly those
+    // files and leaves everything else in the directory alone.
+    const std::string spill_dir = std::string(kTestDirectory) + "/pcu_spill_leftover";
+    const std::string old_spill_dir = config::lake_pk_column_mode_spill_dir;
+    config::lake_pk_column_mode_spill_dir = spill_dir;
+    DeferOp restore_dir([&]() { config::lake_pk_column_mode_spill_dir = old_spill_dir; });
+
+    // No directory yet: nothing to do, and nothing gets created.
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+    EXPECT_FALSE(fs::path_exist(spill_dir));
+
+    ASSERT_OK(FileSystem::Default()->create_dir_recursive(spill_dir));
+    auto touch = [&](const std::string& name) {
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(spill_dir + "/" + name));
+        ASSERT_OK(file->append("x"));
+        ASSERT_OK(file->close());
+    };
+    touch("pcu_10_20_0.spill");
+    touch("pcu_10_21_3.spill");
+    touch("keep.txt");
+    touch("pcu_notes.spill");
+
+    ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
+
+    std::set<std::string> left;
+    ASSERT_OK(FileSystem::Default()->iterate_dir(spill_dir, [&](std::string_view name) {
+        left.insert(std::string(name));
+        return true;
+    }));
+    EXPECT_EQ((std::set<std::string>{"keep.txt", "pcu_notes.spill"}), left);
+}
+
 TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
     // Column mode orphans the partial-column update segment via a different path; this test targets
     // the row-mode rewrite orphan path.

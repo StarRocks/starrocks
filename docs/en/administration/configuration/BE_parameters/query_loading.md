@@ -1063,7 +1063,7 @@ This topic introduces the following types of BE configurations:
 - Type: String
 - Unit: -
 - Is mutable: No
-- Description: Directory of the spill files written by column-mode partial updates. When empty, the first local storage path is used, or the system temporary directory when the node has no local storage path. Spill files are deleted as soon as the publish finishes.
+- Description: Directory of the spill files written by column-mode partial updates. When empty, the first local storage path is used, or the system temporary directory when the node has no local storage path. Spill files are deleted as soon as the publish finishes, and any spill files a previous process left in this directory are removed when the BE or CN starts.
 - Introduced in: -
 
 ### enable_load_spill_parallel_merge
