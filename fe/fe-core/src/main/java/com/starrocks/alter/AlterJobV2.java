@@ -188,6 +188,83 @@ public abstract class AlterJobV2 implements Writable {
         return isDone() && (System.currentTimeMillis() - finishedTimeMs) / 1000 > Config.history_job_keep_max_second;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The pre-alter schemas this job retired from the catalog, kept resolvable so that a load which
+     * was already bound to one of them when the alter finished can still resolve it at publish time
+     * (see {@code TableSchemaService}). Empty for jobs that retire no schema.
+     */
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.empty();
+    }
+
+    /**
+     * Snapshot the current schemas of {@code indexMetaIds} as a history schema, tagged with a freshly
+     * allocated transaction id as its threshold.
+     * <p>
+     * The caller must already hold the table WRITE lock it is about to flip the catalog under, and must
+     * call this BEFORE {@code persistStateChange} so {@code copyForPersist} journals the result: a load
+     * can only be bound to a retired schema if it finished planning its sink (under the table READ lock)
+     * before that WRITE lock was taken, so every such transaction id is below the threshold.
+     */
+    protected static OlapTableHistorySchema buildHistorySchema(OlapTable table, Collection<Long> indexMetaIds) {
+        OlapTableHistorySchema.Builder builder = OlapTableHistorySchema.newBuilder();
+        for (long indexMetaId : indexMetaIds) {
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+            if (indexMeta == null) {
+                continue;
+            }
+            builder.addIndexSchema(new IndexSchemaInfo(indexMetaId, table.getIndexNameByMetaId(indexMetaId),
+                    SchemaInfo.fromMaterializedIndex(table, indexMetaId, indexMeta)));
+        }
+        builder.setHistoryTxnIdThreshold(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId());
+        return builder.build();
+    }
+
+    /**
+     * Shared expiry rule for {@link #getHistorySchema()}: the retired schemas must stay resolvable until
+     * every transaction that can still be bound to them has reached a terminal state, and are released
+     * (payload dropped) as soon as that holds. Returns whether the history schema holds nothing anymore,
+     * which is one of the two conditions for cleaning the job up.
+     */
+    protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
+        if (historySchema == null || historySchema.isExpired()) {
+            return true;
+        }
+        boolean expired = true;
+        try {
+            GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            // isPreviousTransactionsFinished scans only DatabaseTransactionMgr.idToRunningTransactionState.
+            // A multi-statement Stream Load is missing from it while its first sub-task runs, yet that
+            // sub-task's sink is already bound to a schema id -- releasing the payload here would strand its
+            // publish exactly like StarRocksTest#12167. Hold the snapshot until it is registered too.
+            expired = txnMgr.isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId,
+                            Lists.newArrayList(tableId))
+                    && !txnMgr.hasRunningExplicitTransactionBefore(historySchema.getHistoryTxnIdThreshold(), dbId);
+        } catch (Exception e) {
+            // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
+            // so could clean the history schema safely
+        }
+        if (expired) {
+            historySchema.setExpire();
+            LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
+                    jobId, tableName, historySchema.getHistoryTxnIdThreshold());
+        }
+        return expired;
+    }
+
+    /**
+     * Whether this job's history schema holds nothing anymore: true when the job has no history schema,
+     * or when no transaction that can still be bound to it is running. Idempotent, and releases the
+     * payload exactly like {@link #isExpire()} does, but without the age condition.
+     */
+    public boolean isHistorySchemaReleased() {
+        return expireHistorySchema(getHistorySchema().orElse(null));
+    }
+
+>>>>>>> 2fff41f ([BugFix] Bound the alter job history kept in FE memory (#80465))
     public boolean isDone() {
         return jobState.isFinalState();
     }

@@ -587,6 +587,17 @@ public class Config extends ConfigBase {
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
 
     /**
+     * The max number of finished or cancelled alter jobs kept per alter handler (schema change and
+     * optimize jobs share one budget, rollup jobs have another). Beyond it, the jobs that finished
+     * earliest are removed first, regardless of {@link #history_job_keep_max_second}. A job is kept
+     * while a running transaction may still be bound to its history schema or, in shared-data mode,
+     * while a cluster snapshot still needs it, so the count can temporarily exceed this limit.
+     * A value <= 0 disables the limit.
+     */
+    @ConfField(mutable = true)
+    public static int history_job_keep_max_num = 1000;
+
+    /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted
      * we should make this interval as short as possible and each clean cycle as soon as possible
      */

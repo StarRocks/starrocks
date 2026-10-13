@@ -31,7 +31,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -43,6 +46,8 @@ public class AlterHandlerEditLogTest {
     private static final long JOB_ID_2 = 20002L;
     private static final long DB_ID = 20003L;
     private static final long TABLE_ID = 20004L;
+    private final int savedHistoryJobKeepMaxNum = Config.history_job_keep_max_num;
+    private final int savedMaxCapRemovalsPerRound = AlterHandler.maxCapRemovalsPerRound;
 
     @BeforeEach
     public void setUp() throws Exception {
@@ -53,6 +58,8 @@ public class AlterHandlerEditLogTest {
 
     @AfterEach
     public void tearDown() {
+        Config.history_job_keep_max_num = savedHistoryJobKeepMaxNum;
+        AlterHandler.maxCapRemovalsPerRound = savedMaxCapRemovalsPerRound;
         UtFrameUtils.tearDownForPersisTest();
     }
 
@@ -180,6 +187,208 @@ public class AlterHandlerEditLogTest {
         Assertions.assertTrue(schemaChangeHandler.getAlterJobsV2().containsKey(JOB_ID_1));
     }
 
+    private MockAlterJobV2 addDoneJob(SchemaChangeHandler handler, long jobId, AlterJobV2.JobState state,
+                                      long finishedTimeMs) {
+        MockAlterJobV2 job = new MockAlterJobV2(jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
+                DB_ID, TABLE_ID, "test_table", 10000L);
+        job.setJobState(state);
+        job.setFinishedTimeMs(finishedTimeMs);
+        handler.addAlterJobV2(job);
+        return job;
+    }
+
+    private static Set<Long> removedJobIds(int count) throws Exception {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (int i = 0; i < count; i++) {
+            RemoveAlterJobV2OperationLog log = (RemoveAlterJobV2OperationLog) UtFrameUtils
+                    .PseudoJournalReplayer.replayNextJournal(OperationType.OP_REMOVE_ALTER_JOB_V2);
+            Assertions.assertNotNull(log);
+            ids.add(log.getJobId());
+        }
+        return ids;
+    }
+
+    @Test
+    public void testCapRemovesOldestFinishedJobsBeyondLimit() throws Exception {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 2;
+        long now = System.currentTimeMillis();
+
+        // the oldest finished job has the largest job id, so ordering by id alone would be wrong
+        addDoneJob(schemaChangeHandler, 30004L, AlterJobV2.JobState.FINISHED, now - 4000);
+        addDoneJob(schemaChangeHandler, 30003L, AlterJobV2.JobState.CANCELLED, now - 3000);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.CANCELLED, now - 1000);
+        MockAlterJobV2 running = new MockAlterJobV2(10001L, AlterJobV2.JobType.SCHEMA_CHANGE,
+                DB_ID, TABLE_ID, "test_table", 10000L);
+        running.setJobState(AlterJobV2.JobState.RUNNING);
+        schemaChangeHandler.addAlterJobV2(running);
+        MockAlterJobV2 rewriting = new MockAlterJobV2(10002L, AlterJobV2.JobType.SCHEMA_CHANGE,
+                DB_ID, TABLE_ID, "test_table", 10000L);
+        rewriting.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        schemaChangeHandler.addAlterJobV2(rewriting);
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(Set.of(30002L, 30001L, 10001L, 10002L), schemaChangeHandler.getAlterJobsV2().keySet());
+
+        // removals are journaled oldest first and replay to the same set on a follower
+        Assertions.assertEquals(List.of(30004L, 30003L), new ArrayList<>(removedJobIds(2)));
+        SchemaChangeHandler follower = new SchemaChangeHandler();
+        addDoneJob(follower, 30004L, AlterJobV2.JobState.FINISHED, now - 4000);
+        addDoneJob(follower, 30003L, AlterJobV2.JobState.CANCELLED, now - 3000);
+        addDoneJob(follower, 30002L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(follower, 30001L, AlterJobV2.JobState.CANCELLED, now - 1000);
+        follower.replayRemoveAlterJobV2(new RemoveAlterJobV2OperationLog(30004L, AlterJobV2.JobType.SCHEMA_CHANGE));
+        follower.replayRemoveAlterJobV2(new RemoveAlterJobV2OperationLog(30003L, AlterJobV2.JobType.SCHEMA_CHANGE));
+        Assertions.assertEquals(Set.of(30002L, 30001L), follower.getAlterJobsV2().keySet());
+    }
+
+    @Test
+    public void testCapBreaksFinishTimeTiesByJobId() {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 1;
+        long finishedTime = System.currentTimeMillis() - 1000;
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, finishedTime);
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.FINISHED, finishedTime);
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(Set.of(30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+    }
+
+    @Test
+    public void testCapKeepsProtectedOlderJob() {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 1;
+        long now = System.currentTimeMillis();
+        ProtectableMockAlterJobV2 older = new ProtectableMockAlterJobV2(30001L);
+        older.setJobState(AlterJobV2.JobState.FINISHED);
+        older.setFinishedTimeMs(now - 2000);
+        older.historySchemaInUse = true;
+        schemaChangeHandler.addAlterJobV2(older);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        // the older job is protected and the newer one is inside the newest-1 window: nothing goes
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(Set.of(30001L, 30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+
+        older.historySchemaInUse = false;
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(Set.of(30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+    }
+
+    @Test
+    public void testCapSkipsProtectedJobAndRemovesNewerCandidates() throws Exception {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 1;
+        long now = System.currentTimeMillis();
+        ProtectableMockAlterJobV2 protectedJob = new ProtectableMockAlterJobV2(30001L);
+        protectedJob.setJobState(AlterJobV2.JobState.FINISHED);
+        protectedJob.setFinishedTimeMs(now - 3000);
+        protectedJob.historySchemaInUse = true;
+        schemaChangeHandler.addAlterJobV2(protectedJob);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30003L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        // the oldest candidate is protected, yet the next older one must still be removed
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(Set.of(30001L, 30003L), schemaChangeHandler.getAlterJobsV2().keySet());
+        Assertions.assertEquals(List.of(30002L), new ArrayList<>(removedJobIds(1)));
+    }
+
+    @Test
+    public void testCapRespectsSnapshotDeletionGateInSharedData() {
+        mockSharedDataMode();
+        Config.history_job_keep_max_num = 1;
+        long now = System.currentTimeMillis();
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        mockClusterSnapshotMgr(false);
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(Set.of(30001L, 30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+
+        mockClusterSnapshotMgr(true);
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(Set.of(30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+    }
+
+    @Test
+    public void testCapDisabledWhenNonPositive() {
+        mockSharedNothingMode();
+        long now = System.currentTimeMillis();
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.FINISHED, now - 3000);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30003L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        for (int limit : new int[] {0, -1}) {
+            Config.history_job_keep_max_num = limit;
+            schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+            Assertions.assertEquals(3, schemaChangeHandler.getAlterJobsV2().size(), "limit " + limit);
+        }
+    }
+
+    @Test
+    public void testCapAndAgeTogether() {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 2;
+        long now = System.currentTimeMillis();
+        addDoneJob(schemaChangeHandler, 30000L, AlterJobV2.JobState.FINISHED,
+                now - (Config.history_job_keep_max_second + 100) * 1000L);
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.FINISHED, now - 3000);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30003L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(Set.of(30002L, 30003L), schemaChangeHandler.getAlterJobsV2().keySet());
+    }
+
+    @Test
+    public void testCapRemovesAtMostBudgetPerRound() throws Exception {
+        mockSharedNothingMode();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        AlterHandler.maxCapRemovalsPerRound = 3;
+        Config.history_job_keep_max_num = 1;
+        long now = System.currentTimeMillis();
+        for (int i = 1; i <= 8; i++) {
+            addDoneJob(schemaChangeHandler, 30000L + i, AlterJobV2.JobState.FINISHED, now - 10000 + i * 100L);
+        }
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(5, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertEquals(Set.of(30001L, 30002L, 30003L), removedJobIds(3));
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(2, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertEquals(Set.of(30004L, 30005L, 30006L), removedJobIds(3));
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertEquals(Set.of(30008L), schemaChangeHandler.getAlterJobsV2().keySet());
+        Assertions.assertEquals(Set.of(30007L), removedJobIds(1));
+    }
+
+    @Test
+    public void testCapEditLogExceptionKeepsJob() {
+        mockSharedNothingMode();
+        Config.history_job_keep_max_num = 1;
+        long now = System.currentTimeMillis();
+        addDoneJob(schemaChangeHandler, 30001L, AlterJobV2.JobState.FINISHED, now - 2000);
+        addDoneJob(schemaChangeHandler, 30002L, AlterJobV2.JobState.FINISHED, now - 1000);
+
+        EditLog spyEditLog = spy(new EditLog(null));
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logRemoveExpiredAlterJobV2(any(RemoveAlterJobV2OperationLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                () -> schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2());
+        Assertions.assertTrue(exception.getMessage().contains("EditLog write failed"));
+        Assertions.assertEquals(Set.of(30001L, 30002L), schemaChangeHandler.getAlterJobsV2().keySet());
+    }
+
     private static void mockSharedNothingMode() {
         new MockUp<RunMode>() {
             @Mock
@@ -223,6 +432,20 @@ public class AlterHandlerEditLogTest {
                 .isDeletionSafeToExecute(org.mockito.ArgumentMatchers.anyLong());
         mockClusterSnapshotMgr(clusterSnapshotMgr);
         return clusterSnapshotMgr;
+    }
+
+    // A mock job whose history schema can be switched between "still bound by a running load" and released.
+    private static class ProtectableMockAlterJobV2 extends MockAlterJobV2 {
+        private volatile boolean historySchemaInUse;
+
+        ProtectableMockAlterJobV2(long jobId) {
+            super(jobId, JobType.SCHEMA_CHANGE, DB_ID, TABLE_ID, "test_table", 10000L);
+        }
+
+        @Override
+        protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
+            return !historySchemaInUse;
+        }
     }
 
     // Mock AlterJobV2 for testing
