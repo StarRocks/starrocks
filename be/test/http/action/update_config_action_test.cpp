@@ -29,6 +29,7 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "common/config_agent_fwd.h"
 #include "common/config_cache_fwd.h"
+#include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_staros_worker_fwd.h"
@@ -266,6 +267,46 @@ TEST_F(ConfigUpdateHooksTest, test_update_storage_cleanup_worker_count) {
     CHECK_OK(st);
     ASSERT_EQ(2, drop_pool->max_threads());
     ASSERT_EQ(4, storage_cleanup_pool->max_threads());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_reset_pk_index_execution_threads_to_auto) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    for (int cores : {8, 1, 0}) {
+        SCOPED_TRACE(cores);
+        SCOPED_UPDATE(int, CpuInfo::num_cores_, cores);
+        for (int automatic_value : {0, -1}) {
+            SCOPED_TRACE(automatic_value);
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+            EXPECT_EQ(7, thread_pool->max_threads());
+            ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads",
+                                              std::to_string(automatic_value)));
+            EXPECT_EQ(std::max(1, cores), thread_pool->max_threads());
+            EXPECT_EQ(automatic_value, config::pk_index_parallel_execution_threadpool_max_threads);
+        }
+    }
+}
+
+TEST_F(ConfigUpdateHooksTest, test_invalid_pk_index_execution_threads_preserve_pool) {
+    auto* thread_pool = _runtime_env->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    auto* registry = ConfigUpdateRegistry::instance();
+
+    ASSERT_OK(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+    EXPECT_TRUE(registry->update_config("pk_index_parallel_execution_threadpool_max_threads", "invalid")
+                        .is_invalid_argument());
+    EXPECT_EQ(7, thread_pool->max_threads());
+    EXPECT_EQ(7, config::pk_index_parallel_execution_threadpool_max_threads);
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_fetch_thread_count) {
