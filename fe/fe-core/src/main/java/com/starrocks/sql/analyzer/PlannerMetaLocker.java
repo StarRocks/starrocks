@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Pair;
@@ -251,6 +252,7 @@ public class PlannerMetaLocker implements AutoCloseable {
             unlock();
         }
     }
+
     /**
      * Collect tables that need to be protected by the PlannerMetaLock
      */
@@ -317,6 +319,32 @@ public class PlannerMetaLocker implements AutoCloseable {
         }
 
         return new Pair<>(db, table);
+    }
+
+    private static Pair<Database, Table> resolveSyncMV(ConnectContext session, TableName tableName) {
+        String dbName = tableName.getDb();
+        String tbName = tableName.getTbl();
+
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = session.getDatabase();
+        }
+        if (Strings.isNullOrEmpty(dbName) || Strings.isNullOrEmpty(tbName)) {
+            return null;
+        }
+
+        Pair<Table, MaterializedIndexMeta> mvIndex =
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getMaterializedViewIndex(dbName, tbName);
+        if (mvIndex == null) {
+            return null;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            return null;
+        }
+
+        return new Pair<>(db, mvIndex.first);
     }
 
     private static class TableCollector extends AstTraverser<Void, Void> {
@@ -412,7 +440,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterTableStatement(statement, context);
@@ -420,7 +448,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getTableRef()));
             put(dbAndTable);
             return super.visitAlterViewStatement(statement, context);
@@ -428,7 +456,7 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, 
+            Pair<Database, Table> dbAndTable = resolveTable(session,
                     com.starrocks.catalog.TableName.fromTableRef(statement.getMvTableRef()));
             put(dbAndTable);
             return super.visitAlterMaterializedViewStatement(statement, context);
@@ -437,6 +465,9 @@ public class PlannerMetaLocker implements AutoCloseable {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
+            if (dbAndTable == null && node.isSyncMVQuery()) {
+                dbAndTable = resolveSyncMV(session, node.getName());
+            }
             put(dbAndTable);
             return null;
         }
