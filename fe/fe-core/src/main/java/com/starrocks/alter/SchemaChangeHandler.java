@@ -535,7 +535,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
                 boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
                 fastSchemaEvolution &= !isKey;
-                boolean hasReplaceColumn = baseSchema.stream().filter(c -> !c.isGeneratedPartitionColumn())
+                boolean hasReplaceColumn = baseSchema.stream().filter(c -> !c.isInternalGeneratedPartitionColumn())
                         .map(Column::getAggregationType)
                         .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {
@@ -547,7 +547,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 List<Column> targetIndexSchema = indexMetaIdToSchema.get(targetIndexMetaId);
                 boolean isKey = targetIndexSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
                 fastSchemaEvolution &= !isKey;
-                boolean hasReplaceColumn = targetIndexSchema.stream().filter(c -> !c.isGeneratedPartitionColumn())
+                boolean hasReplaceColumn = targetIndexSchema.stream().filter(c -> !c.isInternalGeneratedPartitionColumn())
                         .map(Column::getAggregationType)
                         .anyMatch(agg -> agg == AggregateType.REPLACE || agg == AggregateType.REPLACE_IF_NOT_NULL);
                 if (isKey && hasReplaceColumn) {

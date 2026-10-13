@@ -14,6 +14,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -570,11 +571,7 @@ public class PartitionDescAnalyzer {
         // it never merges into a single row.
         if (desc.getPartitionExprs() != null) {
             for (Expr partitionExpr : desc.getPartitionExprs()) {
-                Pair<Boolean, String> nonDeterministic = AnalyzerUtils.containsNonDeterministicFunction(partitionExpr);
-                if (nonDeterministic.first) {
-                    throw new AnalysisException("The partition expr should be deterministic, but got "
-                            + nonDeterministic.second);
-                }
+                checkPartitionExprDeterminism(partitionExpr);
             }
         }
 
@@ -596,6 +593,9 @@ public class PartitionDescAnalyzer {
                 continue;
             }
             if (partitionColumnDef.isGeneratedColumn()) {
+                // Identifier-only partitioning has no inline partition expr. Check the actual generated
+                // expression too, including ordinary user-defined generated columns used for partitioning.
+                checkPartitionExprDeterminism(partitionColumnDef.getGeneratedColumnExpr());
                 slotRefs.addAll(ExprUtils.collectAllSlotRefs(partitionColumnDef.getGeneratedColumnExpr())
                         .stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
             } else {
@@ -620,6 +620,30 @@ public class PartitionDescAnalyzer {
                 if (!keyColumnNames.contains(slotRef)) {
                     throw new AnalysisException("The partition expr should base on key column");
                 }
+            }
+        }
+    }
+
+    private static void checkPartitionExprDeterminism(Expr expr) throws AnalysisException {
+        Pair<Boolean, String> nonDeterministic = AnalyzerUtils.containsNonDeterministicFunction(expr);
+        if (nonDeterministic.first) {
+            throw new AnalysisException("The partition expr should be deterministic, but got "
+                    + nonDeterministic.second);
+        }
+
+        // These overloads are functions of the session/load time zone, not just the row. Keep this
+        // partition-specific: ordinary calls and from_unixtime's explicit-time-zone overload stay valid.
+        List<FunctionCallExpr> functions = new ArrayList<>();
+        expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, functions);
+        for (FunctionCallExpr function : functions) {
+            String name = function.getFunctionName();
+            int argumentCount = function.getChildren().size();
+            boolean sessionTimezoneDependent =
+                    (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
+                            || (FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(name) && argumentCount == 1);
+            if (sessionTimezoneDependent) {
+                throw new AnalysisException("The partition expr should not depend on the session time zone, but got "
+                        + ExprToSql.toSql(function) + ". Use from_unixtime with an explicit time zone argument");
             }
         }
     }

@@ -315,25 +315,6 @@ public class CreateTableAnalyzer {
         statement.setColumns(columns);
     }
 
-    /**
-     * The hidden column that materializes a complex partition expression. The name prefix alone is not
-     * proof: with allow_system_reserved_names a user column may carry it, so the column must also be a
-     * partition column of this statement. A user defined generated column used for partitioning does
-     * not qualify either, it has no such prefix.
-     */
-    private static boolean isInternalPartitionColumn(CreateTableStmt stmt, String columnName) {
-        if (!columnName.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
-            return false;
-        }
-        PartitionDesc partitionDesc = stmt.getPartitionDesc();
-        if (!(partitionDesc instanceof ListPartitionDesc)) {
-            return false;
-        }
-        List<String> partitionColumnNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
-        return partitionColumnNames != null
-                && partitionColumnNames.stream().anyMatch(name -> name.equalsIgnoreCase(columnName));
-    }
-
     private static void analyzeKeysDesc(CreateTableStmt stmt) {
         KeysDesc keysDesc = stmt.getKeysDesc();
         if (!stmt.isOlapEngine()) {
@@ -413,7 +394,7 @@ public class CreateTableAnalyzer {
             // earlier, when the column is generated.
             columnDefs.stream()
                     .filter(c -> c.isGeneratedColumn() && c.getAggregateType() == null
-                            && isInternalPartitionColumn(stmt, c.getName()))
+                            && c.isInternalGeneratedPartitionColumn())
                     .forEach(c -> c.setAggregateType(AggregateType.REPLACE));
         }
 
@@ -716,9 +697,8 @@ public class CreateTableAnalyzer {
                 // which runs after the keys type is known: it may still be inferred from the value
                 // columns at this point.
                 // generated column expression should be saved in unanalyzed way in meta
-                ColumnDef generatedPartitionColumn = new ColumnDef(
-                        columnName, typeDef, null, false, null, null, true,
-                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
+                ColumnDef generatedPartitionColumn = ColumnDef.newInternalGeneratedPartitionColumn(
+                        columnName, typeDef, (FunctionCallExpr) partitionExpr);
                 columnDefs.add(generatedPartitionColumn);
                 partitionExprs.add((FunctionCallExpr) partitionExpr);
             }
@@ -914,7 +894,7 @@ public class CreateTableAnalyzer {
             // may only reference key columns, so it is well defined and allowed.
             boolean allGeneratedColumnsArePartitionColumns = stmt.getColumns().stream()
                     .filter(Column::isGeneratedColumn)
-                    .allMatch(c -> isInternalPartitionColumn(stmt, c.getName()));
+                    .allMatch(Column::isInternalGeneratedPartitionColumn);
             if (!allGeneratedColumnsArePartitionColumns) {
                 throw new SemanticException("Generated Column does not support AGG table");
             }

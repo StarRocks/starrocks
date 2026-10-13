@@ -156,7 +156,7 @@ public class CreateTableAnalyzerTest {
                 "  `v1` int\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`id`)\n" +
-                "PARTITION BY from_unixtime(transaction_time)\n" +
+                "PARTITION BY from_unixtime(transaction_time, '%Y-%m-%d %H:%i:%s', 'UTC')\n" +
                 "DISTRIBUTED BY HASH(`id`)\n" +
                 "PROPERTIES(\"replication_num\" = \"1\")";
         analyzeFail(nonKeyPartitionExprSourceSql,
@@ -167,7 +167,7 @@ public class CreateTableAnalyzerTest {
                 "  `v1` int\n" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`id`)\n" +
-                "PARTITION BY from_unixtime(id)\n" +
+                "PARTITION BY from_unixtime(id, '%Y-%m-%d %H:%i:%s', 'UTC')\n" +
                 "DISTRIBUTED BY HASH(`id`)\n" +
                 "PROPERTIES(\"replication_num\" = \"1\")";
         analyzeSuccess(keyPartitionExprSourceSql);

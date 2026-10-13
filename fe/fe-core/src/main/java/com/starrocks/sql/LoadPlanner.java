@@ -414,6 +414,7 @@ public class LoadPlanner {
 
     private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
+        boolean isAggregateKey = ((OlapTable) destTable).getKeysType() == KeysType.AGG_KEYS;
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
@@ -421,7 +422,8 @@ public class LoadPlanner {
             slotDesc.setType(col.getType());
             slotDesc.setColumn(col);
             slotDesc.setIsNullable(col.isAllowNull());
-            if (routimeStreamLoadNegative && !col.isKey() && col.getAggregationType() != AggregateType.SUM) {
+            if (routimeStreamLoadNegative && !col.isKey() && col.getAggregationType() != AggregateType.SUM
+                    && !(isAggregateKey && col.isInternalGeneratedPartitionColumn())) {
                 throw new DdlException("Column is not SUM AggreateType. column:" + col.getName());
             }
 
@@ -642,7 +644,7 @@ public class LoadPlanner {
                     // The generated partition column is REPLACE on aggregate tables but is functionally
                     // determined by the key columns, so replicas cannot diverge on it and it does not
                     // require a shuffle.
-                    if (column.isGeneratedPartitionColumn()) {
+                    if (column.isInternalGeneratedPartitionColumn()) {
                         continue;
                     }
                     if (column.getAggregationType() == AggregateType.REPLACE

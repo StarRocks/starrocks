@@ -161,6 +161,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     @SerializedName(value = "materializedColumnExpr")
     private ExpressionSerializedObject generatedColumnExprSerialized;
     private ColumnIdExpr generatedColumnExpr;
+    // Missing in legacy metadata: do not infer trusted origin from a user-controlled name.
+    @SerializedName("internalGeneratedPartitionColumn")
+    private boolean internalGeneratedPartitionColumn = false;
     // Whether this column is a hidden column, hidden columns are used to store some internal data(eg: _ROW_ID).
     @SerializedName(value = "isHidden")
     private boolean isHidden = false;
@@ -228,6 +231,14 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
                   boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
                   String physicalName) {
+        this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment,
+                columnUniqId, physicalName, false);
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
+                  String physicalName, boolean internalGeneratedPartitionColumn) {
+        this.internalGeneratedPartitionColumn = internalGeneratedPartitionColumn;
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -303,6 +314,7 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
         this.uniqueId = column.getUniqueId();
         this.generatedColumnExpr = column.generatedColumnExpr;
+        this.internalGeneratedPartitionColumn = column.internalGeneratedPartitionColumn;
         this.isHidden = column.isHidden;
         this.createdTime = column.createdTime;
     }
@@ -326,10 +338,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 defaultValueDef = new ColumnDef.DefaultValueDef(false, null);
             }
         }
-        return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, aggStateDesc, isAllowNull,
+        return ColumnDef.fromColumn(name, new TypeDef(type), isKey, aggregationType, aggStateDesc, isAllowNull,
                 defaultValueDef, isAutoIncrement,
                 generatedColumnExpr != null ? generatedColumnExpr.convertToColumnNameExpr(table.getIdToColumn()) : null,
-                comment);
+                comment, isInternalGeneratedPartitionColumn());
     }
 
     public void setName(String newName) {
@@ -352,18 +364,20 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     /**
-     * True for the hidden column that materializes a complex partition expression
-     * (__generated_partition_column_*). Such a column is invisible to users and its value is always
-     * functionally determined by the key columns, because the analyzer rejects partition expressions
-     * that reference an aggregated column.
-     * <p>
-     * The name prefix is enough to identify it here, as everywhere else in the code base: with
-     * allow_system_reserved_names a user column may carry the prefix, but CreateTableAnalyzer only
-     * treats a generated column as internal when it is also a partition column of the statement, so
-     * an aggregate table cannot end up holding a user column that merely borrows the name.
+     * Structural classification for existing callers and display compatibility. A reserved name
+     * does not establish trusted provenance; permission checks must use
+     * {@link #isInternalGeneratedPartitionColumn()}.
      */
     public boolean isGeneratedPartitionColumn() {
         return isGeneratedColumn() && isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX);
+    }
+
+    /**
+     * A generated partition column created by the partition-expression materializer. User columns
+     * and legacy metadata without this persisted provenance cannot acquire internal privileges.
+     */
+    public boolean isInternalGeneratedPartitionColumn() {
+        return internalGeneratedPartitionColumn && isGeneratedColumn();
     }
 
     public void setIsKey(boolean isKey) {
@@ -942,6 +956,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.getType().equals(other.getType())) {
             return false;
         }
+        if (this.internalGeneratedPartitionColumn != other.internalGeneratedPartitionColumn) {
+            return false;
+        }
         if (this.aggregationType != other.getAggregationType()) {
             return false;
         }
@@ -993,6 +1010,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.getType().equals(other.getType())) {
             return false;
         }
+        if (this.internalGeneratedPartitionColumn != other.internalGeneratedPartitionColumn) {
+            return false;
+        }
         if (!(this.aggregationType == other.aggregationType ||
                 (AggregateType.isNullOrNone(this.aggregationType) &&
                         AggregateType.isNullOrNone(other.getAggregationType())))) {
@@ -1042,6 +1062,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.isKey != other.isKey) {
             return false;
         }
+        if (this.internalGeneratedPartitionColumn != other.internalGeneratedPartitionColumn) {
+            return false;
+        }
         if (!(this.aggregationType == other.aggregationType ||
                 (AggregateType.isNullOrNone(this.aggregationType) &&
                         AggregateType.isNullOrNone(other.getAggregationType())))) {
@@ -1074,6 +1097,9 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             return false;
         }
         if (!this.getType().equals(other.getType())) {
+            return false;
+        }
+        if (this.internalGeneratedPartitionColumn != other.internalGeneratedPartitionColumn) {
             return false;
         }
         if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&

@@ -1649,7 +1649,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 // the same value and merging a cached snapshot with delta rowsets stays correct.
                 return columns.stream().noneMatch(
                         c -> c.isAggregated() && c.getAggregationType().isReplaceFamily()
-                                && !c.isGeneratedPartitionColumn());
+                                && !c.isInternalGeneratedPartitionColumn());
             }
         }
         return false;
