@@ -4029,7 +4029,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
 
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
-    ASSERT_EQ(4, rowsets.size());
+    ASSERT_EQ(5, rowsets.size());
     size_t remaining_empty_rowsets = 0;
     for (const auto& rowset : rowsets) {
         remaining_empty_rowsets += rowset->num_rows() == 0;
