@@ -27,14 +27,14 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class DmlWriteEstimatesTest {
+class DmlWriteEstimatesTest {
     private final ColumnRefOperator key = new ColumnRefOperator(1, IntegerType.BIGINT, "k", false);
     private final ColumnRefOperator value = new ColumnRefOperator(2, IntegerType.BIGINT, "v", true);
     private final ColumnRefOperator untouched = new ColumnRefOperator(3, IntegerType.BIGINT, "pad", true);
     private final ColumnRefOperator op = new ColumnRefOperator(4, IntegerType.TINYINT, "__op", false);
 
     @Test
-    public void testSizesOnlyFinalOutputRowsAndColumns() {
+    void testSizesOnlyFinalOutputRowsAndColumns() {
         Statistics statistics = statistics(10)
                 .addColumnStatistic(key, width(8))
                 .addColumnStatistic(value, width(8))
@@ -46,7 +46,7 @@ public class DmlWriteEstimatesTest {
     }
 
     @Test
-    public void testIgnoresUnknownColumnsOutsideOutput() {
+    void testIgnoresUnknownColumnsOutsideOutput() {
         Statistics statistics = statistics(100)
                 .addColumnStatistic(key, width(8))
                 .addColumnStatistic(op, width(1))
@@ -55,14 +55,14 @@ public class DmlWriteEstimatesTest {
     }
 
     @Test
-    public void testUnreportedRowCountIsUnknownEvenWithKnownOutputWidths() {
+    void testUnreportedRowCountIsUnknownEvenWithKnownOutputWidths() {
         Statistics statistics = statistics(0).setTableRowCountMayInaccurate(true)
                 .addColumnStatistic(key, width(8)).build();
         assertEquals(-1, estimate(statistics, key));
     }
 
     @Test
-    public void testUnknownRowStatisticsRemainUnknown() {
+    void testUnknownRowStatisticsRemainUnknown() {
         assertEquals(-1, estimate(null, key));
         assertEquals(-1, estimate(statistics(100).setTableRowCountMayInaccurate(true)
                 .addColumnStatistic(key, ColumnStatistic.unknown()).build(), key));
@@ -71,7 +71,7 @@ public class DmlWriteEstimatesTest {
     }
 
     @Test
-    public void testReliableRowsUseTypeWidthsForMissingOrUnknownColumnStatistics() {
+    void testReliableRowsUseTypeWidthsForMissingOrUnknownColumnStatistics() {
         assertEquals(800, estimate(statistics(100).build(), key));
         assertEquals(900, estimate(statistics(100)
                 .addColumnStatistic(key, ColumnStatistic.unknown()).build(), key, op));
@@ -80,7 +80,7 @@ public class DmlWriteEstimatesTest {
     }
 
     @Test
-    public void testInvalidStatisticsRemainUnknown() {
+    void testInvalidStatisticsRemainUnknown() {
         assertEquals(-1, estimate(statistics(Double.NaN).addColumnStatistic(key, width(8)).build(), key));
         for (double width : new double[] {Double.NaN, Double.POSITIVE_INFINITY, -1, 0}) {
             assertEquals(-1, estimate(statistics(100).addColumnStatistic(key, width(width)).build(), key));
@@ -88,7 +88,7 @@ public class DmlWriteEstimatesTest {
     }
 
     @Test
-    public void testRoundsUpAndSaturatesInsteadOfOverflowing() {
+    void testRoundsUpAndSaturatesInsteadOfOverflowing() {
         assertEquals(9, estimate(statistics(1.1).addColumnStatistic(key, width(8)).build(), key));
         assertEquals(Long.MAX_VALUE,
                 estimate(statistics(1_000_000).addColumnStatistic(key, width(1e20)).build(), key));

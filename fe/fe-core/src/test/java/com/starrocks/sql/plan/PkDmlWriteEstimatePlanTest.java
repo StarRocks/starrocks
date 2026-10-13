@@ -43,16 +43,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 
-public class PkDmlWriteEstimatePlanTest extends PlanTestBase {
+class PkDmlWriteEstimatePlanTest extends PlanTestBase {
     @BeforeAll
-    public static void beforeClass() throws Exception {
-        PlanTestBase.beforeClass();
+    static void setUpDmlWriteEstimateTable() throws Exception {
+        // The inherited @BeforeAll initializes PlanTestBase before this table is created.
         starRocksAssert.withTable("CREATE TABLE dml_write_estimate (k bigint, v bigint, pad varchar(4096)) " +
                 "PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1')");
     }
 
     @Test
-    public void testEstimatesReachSinkBeforeComplete() throws Exception {
+    void testEstimatesReachSinkBeforeComplete() throws Exception {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         StatisticStorage originalStorage = state.getStatisticStorage();
         String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
@@ -81,6 +81,7 @@ public class PkDmlWriteEstimatePlanTest extends PlanTestBase {
 
                 @Override
                 public void addColumnStatistic(Table table, String column, ColumnStatistic statistic) {
+                    // This read-only stub returns fixed statistics without caching updates.
                 }
             });
             long[] expected = {4_112_000};
@@ -111,7 +112,7 @@ public class PkDmlWriteEstimatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnreportedRowCountKeepsUnknownEstimate() throws Exception {
+    void testUnreportedRowCountKeepsUnknownEstimate() throws Exception {
         for (String sql : List.of("update dml_write_estimate set v = 2 where k = 1",
                 "delete from dml_write_estimate where k = 1")) {
             OlapTableSink sink = (OlapTableSink) plan(sql).getTopFragment().getSink();
@@ -121,7 +122,7 @@ public class PkDmlWriteEstimatePlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testReliableRowCountWithUnknownColumnWidthsReachesSink() throws Exception {
+    void testReliableRowCountWithUnknownColumnWidthsReachesSink() throws Exception {
         OlapTable table = (OlapTable) starRocksAssert.getTable("test", "dml_write_estimate");
         String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
         setTableStatistics(table, 1000);
