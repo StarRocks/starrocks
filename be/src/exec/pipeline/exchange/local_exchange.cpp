@@ -18,8 +18,6 @@
 #include <memory>
 #include <unordered_map>
 
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -59,28 +57,6 @@ Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partition
 Status Partitioner::send_chunk(const ChunkPtr& chunk,
                                const std::shared_ptr<std::vector<uint32_t>>& partition_row_indexes) {
     size_t num_partitions = _source->get_sources().size();
-<<<<<<< HEAD
-=======
-    // If every shard is consumed before we return, dropping our `memory_entry` reference below performs the
-    // last refund on this sink thread. Notify sinks after that, otherwise parked sink drivers may never be woken.
-    // Declared before `memory_entry` so it runs after the entry is released.
-    DeferOp notify([this]() {
-        if (auto* exchanger = _source->exchanger(); exchanger != nullptr) {
-            exchanger->notify_sink();
-        }
-    });
-    // Unpack const columns now (instead of inside each per-source add_chunk) so the
-    // accounted memory reflects the materialized post-unpack footprint. For const
-    // columns the pre-unpack memory is O(1) while the buffered, unpacked memory is
-    // O(num_rows); accounting before the unpack would let the manager undercount by
-    // orders of magnitude and weaken is_full() back-pressure.
-    chunk->unpack_and_duplicate_const_columns();
-    // Account this chunk against the shared memory manager exactly once. The entry is
-    // shared by every partition shard via shared_ptr, so the record is only released
-    // when the last shard is consumed across all source operators.
-    auto memory_entry = std::make_shared<ChunkBufferMemoryEntry>(_source->memory_manager(), chunk->memory_usage(),
-                                                                 chunk->num_rows());
->>>>>>> b38e0ed ([BugFix][POST-1950] Fix lost sink wake-up in local exchange with event scheduler (#80547))
     for (size_t i = 0; i < num_partitions; ++i) {
         size_t from = partition_begin_offset(i);
         size_t size = partition_end_offset(i) - from;
@@ -92,7 +68,6 @@ Status Partitioner::send_chunk(const ChunkPtr& chunk,
         RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
                                                              partition_memory_usage(i)));
     }
-    TEST_SYNC_POINT("Partitioner::send_chunk::after_add_chunks");
     return Status::OK();
 }
 
