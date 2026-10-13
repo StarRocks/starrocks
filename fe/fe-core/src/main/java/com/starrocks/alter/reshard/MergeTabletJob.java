@@ -324,11 +324,6 @@ public class MergeTabletJob extends TabletReshardJob {
                     // partition-shared object, so tell the BE where to look, exactly as a normal load does.
                     boolean preferSharedInitialMetadata =
                             Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
-<<<<<<< HEAD
-                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
-=======
-                    PublishProperty publishProperty = olapTable.getPublishProperty();
                     // Checked inside the future so a rejected result fails this publish attempt: it is
                     // then retried with backoff and reported like any failed publish, and nothing of it
                     // is installed.
@@ -336,11 +331,10 @@ public class MergeTabletJob extends TabletReshardJob {
                             reshardingPhysicalPartition);
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> {
                         Map<Long, TabletRange> tabletRanges = publishVersion(tablets, commitVersion,
-                                useAggregatePublish, computeResource, preferSharedInitialMetadata, publishProperty);
+                                useAggregatePublish, computeResource, preferSharedInitialMetadata);
                         checkMergeTabletRanges(expectedMerges, tabletRanges);
                         return tabletRanges;
                     });
->>>>>>> 4996ad7a36e... [BugFix][RB-96] Reject tablet merge results whose ranges disagree with FE (#65003)
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
