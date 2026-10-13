@@ -66,6 +66,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
@@ -73,6 +74,14 @@
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
+=======
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/row_source_mask.h"
+#include "storage_primitive/tablet_basic_info.h"
+#include "storage_primitive/union_iterator.h"
+>>>>>>> 540afac ([BugFix] Prevent row source overflow in PK compaction (#80472))
 
 namespace starrocks {
 
@@ -2086,6 +2095,15 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
     auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(all_rowsets)->schema();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, num_segments);
+    size_t input_rowset_count = input_rowsets.size();
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_compaction:input_rowset_count", &input_rowset_count);
+    if (input_rowset_count > RowSourceMask::MAX_SOURCES && algorithm == VERTICAL_COMPACTION) {
+        algorithm = HORIZONTAL_COMPACTION;
+        LOG(INFO) << strings::Substitute(
+                "Fall back to horizontal update compaction: tablet:$0 rowsets:$1 segments:$2 source_limit:$3",
+                _tablet.tablet_id(), input_rowsets.size(), num_segments, RowSourceMask::MAX_SOURCES);
+    }
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_compaction:algorithm", &algorithm);
 
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
