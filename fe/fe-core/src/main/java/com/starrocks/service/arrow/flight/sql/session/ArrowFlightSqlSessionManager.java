@@ -77,8 +77,11 @@ public class ArrowFlightSqlSessionManager {
             // no fallback for a real JWT: a rejected token must not be retried as an LDAP password
             if (JWTAuthenticationProvider.isJwt(password)) {
                 AuthenticationHandler.authenticateWithToken(ctx, username, remoteIP, password);
-                Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
-                jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
+                // the auth token is set only after a successful verify; with enable_auth_check off it stays a password
+                if (password.equals(ctx.getAuthToken())) {
+                    Date expirationTime = JWTAuthenticationProvider.extractExpirationTimeWithoutVerification(password);
+                    jwtExpireTimeMs = expirationTime == null ? 0L : expirationTime.getTime();
+                }
             } else {
                 // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
                 AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
