@@ -26,6 +26,8 @@ import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -83,6 +85,23 @@ public class IvmRefreshDefinitionTest extends MVIVMIcebergTestBase {
         String msg = ex.getMessage().toLowerCase();
         assertTrue(msg.contains("strategy") || msg.contains("drop"),
                 "error must mention the strategy gate / drop-recreate, got: " + ex.getMessage());
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = MaterializedView.RefreshMode.class, names = {"INCREMENTAL", "AUTO"})
+    public void testDeriveReportsWhyTheDefinitionIsNoLongerRewritable(MaterializedView.RefreshMode mode) {
+        MaterializedView mv = Mockito.mock(MaterializedView.class);
+        Mockito.when(mv.getName()).thenReturn("mv_not_rewritable");
+        Mockito.when(mv.getViewDefineSql()).thenReturn(
+                "SELECT id, row_number() OVER (ORDER BY id) AS rn FROM `iceberg0`.`unpartitioned_db`.`t0`");
+        Mockito.when(mv.getCurrentRefreshMode()).thenReturn(mode);
+        Mockito.when(mv.getEncodeRowIdVersion()).thenReturn(0);
+        Mockito.when(mv.getRowIdStrategy()).thenReturn(RowIdStrategy.AUTO_INCREMENT);
+
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> IvmRefreshDefinition.deriveRewrittenQuery(connectContext, mv));
+        assertTrue(ex.getMessage().contains("definition is not an IVM query at refresh"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("does not support window functions"), ex.getMessage());
     }
 
     /** Pins the load-bearing assumption: derive() output re-parses + re-serializes to itself. */
