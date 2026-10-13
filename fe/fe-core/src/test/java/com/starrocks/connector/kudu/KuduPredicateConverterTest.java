@@ -15,6 +15,7 @@
 package com.starrocks.connector.kudu;
 
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -25,13 +26,6 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.CharType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
 import org.junit.jupiter.api.Assertions;
@@ -94,7 +88,7 @@ public class KuduPredicateConverterTest {
     @Test
     public void testTruncatingCharCastIsNotPushedDown() {
         ConstantOperator value = ConstantOperator.createVarchar("hello");
-        CastOperator explicitCast = new CastOperator(new CharType(5), F1);
+        CastOperator explicitCast = new CastOperator(ScalarType.createCharType(5), F1);
         ScalarOperator equality = new BinaryPredicateOperator(BinaryType.EQ, explicitCast, value);
         Assertions.assertTrue(CONVERTER.convert(equality).isEmpty());
         Assertions.assertTrue(CONVERTER.convert(new InPredicateOperator(false, explicitCast, value)).isEmpty());
@@ -105,7 +99,7 @@ public class KuduPredicateConverterTest {
                 equality, safeEquality);
         Assertions.assertEquals("`f0` = 5", CONVERTER.convert(conjunction).get(0).toString());
 
-        CastOperator implicitCast = new CastOperator(new CharType(5), F1, true);
+        CastOperator implicitCast = new CastOperator(ScalarType.createCharType(5), F1, true);
         ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ, implicitCast, value);
         Assertions.assertEquals("`f1` = \"hello\"", CONVERTER.convert(implicitEquality).get(0).toString());
     }

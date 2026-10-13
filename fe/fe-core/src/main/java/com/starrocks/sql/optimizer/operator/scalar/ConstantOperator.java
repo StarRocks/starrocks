@@ -32,11 +32,13 @@ import org.apache.commons.lang3.StringUtils;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -510,6 +512,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Optional.empty();
         }
 
+        if (type.getPrimitiveType().isBinaryType()) {
+            return castBinaryTo(desc);
+        }
+
         String childString = toString();
         if (getType().isBoolean()) {
             childString = getBoolean() ? "1" : "0";
@@ -601,13 +607,9 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
 
             } else if (desc.isChar() || desc.isVarchar()) {
-<<<<<<< HEAD
-                res =  ConstantOperator.createChar(childString, desc);
-=======
                 res = ConstantOperator.createChar(childString, desc);
             } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
                 res = ConstantOperator.createBinary(childString.getBytes(), desc);
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
             }
         } catch (Exception e) {
             return Optional.empty();
@@ -616,8 +618,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return Optional.ofNullable(res);
     }
 
-<<<<<<< HEAD
-=======
     /**
      * Fold a cast whose source is a BINARY/VARBINARY constant.
      * <p>
@@ -688,7 +688,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return value.substring(0, endIndex);
     }
 
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
     public Optional<ConstantOperator> successor() {
         return computeValue(1);
     }

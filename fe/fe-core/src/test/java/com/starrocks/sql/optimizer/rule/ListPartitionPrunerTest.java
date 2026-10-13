@@ -26,6 +26,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.Utils;
@@ -42,17 +43,6 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.OptExternalPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.CharType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.PrimitiveType;
-import com.starrocks.type.StringType;
-import com.starrocks.type.TypeFactory;
-import com.starrocks.type.VarcharType;
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -123,8 +113,8 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testTruncatingCharPredicatesRemainForExecution() throws AnalysisException {
-        stringColumn = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
-        CastOperator cast = new CastOperator(new CharType(5), stringColumn);
+        stringColumn = new ColumnRefOperator(3, Type.VARCHAR, "s", true);
+        CastOperator cast = new CastOperator(ScalarType.createCharType(5), stringColumn);
         List<ScalarOperator> predicates = Lists.newArrayList();
         for (BinaryType type : List.of(BinaryType.EQ, BinaryType.EQ_FOR_NULL, BinaryType.NE,
                 BinaryType.LT, BinaryType.LE, BinaryType.GT, BinaryType.GE)) {
@@ -134,7 +124,7 @@ public class ListPartitionPrunerTest {
         predicates.add(new InPredicateOperator(true, cast, ConstantOperator.createVarchar("hello")));
         predicates.add(new IsNullPredicateOperator(cast));
         predicates.add(new BinaryPredicateOperator(BinaryType.EQ, stringColumn,
-                new CastOperator(new CharType(5), ConstantOperator.createVarchar("hello world"))));
+                new CastOperator(ScalarType.createCharType(5), ConstantOperator.createVarchar("hello world"))));
         for (ScalarOperator predicate : predicates) {
             ListPartitionPruner charPruner = charPruner(predicate);
             Assertions.assertNull(charPruner.prune(), predicate.toString());
@@ -145,9 +135,9 @@ public class ListPartitionPrunerTest {
 
     @Test
     public void testCharCastFallbackComposesWithAndOr() throws AnalysisException {
-        stringColumn = new ColumnRefOperator(3, VarcharType.VARCHAR, "s", true);
+        stringColumn = new ColumnRefOperator(3, Type.VARCHAR, "s", true);
         ScalarOperator truncating = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(new CharType(5), stringColumn), ConstantOperator.createVarchar("hello"));
+                new CastOperator(ScalarType.createCharType(5), stringColumn), ConstantOperator.createVarchar("hello"));
         ScalarOperator plain = new BinaryPredicateOperator(BinaryType.EQ, stringColumn,
                 ConstantOperator.createVarchar("hello world"));
         ScalarOperator and = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, truncating, plain);
@@ -160,10 +150,11 @@ public class ListPartitionPrunerTest {
         Assertions.assertEquals(List.of(or), orPruner.getNoEvalConjuncts());
 
         ScalarOperator implicit = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(new CharType(5), stringColumn, true), ConstantOperator.createVarchar("hello world"));
+                new CastOperator(ScalarType.createCharType(5), stringColumn, true),
+                ConstantOperator.createVarchar("hello world"));
         Assertions.assertEquals(List.of(1L), charPruner(implicit).prune());
         ScalarOperator wildcard = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(CharType.CHAR, stringColumn), ConstantOperator.createVarchar("hello world"));
+                new CastOperator(Type.CHAR, stringColumn), ConstantOperator.createVarchar("hello world"));
         Assertions.assertEquals(List.of(1L), charPruner(wildcard).prune());
     }
 

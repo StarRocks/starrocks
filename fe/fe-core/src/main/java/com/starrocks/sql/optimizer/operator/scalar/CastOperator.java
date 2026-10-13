@@ -16,12 +16,8 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-=======
-import com.starrocks.type.ScalarType;
-import com.starrocks.type.Type;
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
 
 import java.util.Objects;
 

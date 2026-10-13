@@ -20,11 +20,8 @@
 #include <limits>
 
 #include "butil/time.h"
-<<<<<<< HEAD
-=======
-#include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_viewer.h"
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
