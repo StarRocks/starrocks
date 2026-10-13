@@ -36,6 +36,7 @@ package com.starrocks.http;
 
 import com.google.common.base.Charsets;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.path.PathTrie;
 import io.netty.handler.codec.http.QueryStringDecoder;
 
@@ -53,6 +54,10 @@ public class WebUtils {
 
     private static final Set<String> SANITIZED_HTTP_PARAMS =
             ImmutableSet.of("file_id", "cluster_id", "token");
+
+    // The query parameters of this path are config names and values; credential ones are masked as in
+    // ConfigBase.maskIfSensitive.
+    private static final String SET_CONFIG_PATH = "/api/_set_config";
 
     /**
      * Decodes a bit of an URL encoded by a browser.
@@ -176,7 +181,8 @@ public class WebUtils {
 
     /**
      * This method sanitizes the input URI by replacing the values of certain query parameters with "*".
-     * The parameters to be sanitized are listed in `SANITIZED_HTTP_PARAMS`.
+     * The parameters to be sanitized are listed in `SANITIZED_HTTP_PARAMS`. For /api/_set_config, the values of
+     * credential configs are also replaced, with {@link ConfigBase#maskIfSensitive(String, String)}.
      * <p>
      * The query is parsed the same way as {@link BaseRequest} parses it for the actions, and rebuilt from the parsed
      * parameters: a value an action reads as a sanitized parameter is always masked, however the query is written
@@ -184,7 +190,7 @@ public class WebUtils {
      * out. If the URI has no query, it is returned as is, except that anything after a '?' is hidden.
      *
      * @param uri The input URI to be sanitized.
-     * @return The sanitized URI with the values of certain query parameters replaced with "*".
+     * @return The sanitized URI with the values of certain query parameters replaced.
      * @throws URISyntaxException If the input string can't be parsed as a URI reference.
      */
     public static String sanitizeHttpReqUri(String uri) throws URISyntaxException {
@@ -194,6 +200,7 @@ public class WebUtils {
             // fragment (/api#frag?...), but it would be logged as is: hide it.
             return uri.indexOf('?') < 0 ? uri : hideHttpReqQuery(uri);
         }
+        boolean isSetConfig = SET_CONFIG_PATH.equals(inputUri.getPath());
 
         QueryStringDecoder decoder = BaseRequest.newQueryStringDecoder(uri);
         StringBuilder sanitized = new StringBuilder(decoder.rawPath());
@@ -203,6 +210,8 @@ public class WebUtils {
             for (String value : param.getValue()) {
                 if (SANITIZED_HTTP_PARAMS.contains(key)) {
                     value = "*";
+                } else if (isSetConfig) {
+                    value = ConfigBase.maskIfSensitive(key, value);
                 }
                 sanitized.append(separator).append(URLEncoder.encode(key, StandardCharsets.UTF_8))
                         .append('=').append(URLEncoder.encode(value, StandardCharsets.UTF_8));

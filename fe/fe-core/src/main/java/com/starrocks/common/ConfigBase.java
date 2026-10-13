@@ -111,6 +111,21 @@ public class ConfigBase {
         return value;
     }
 
+    // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
+    // not masked.
+    public static String maskIfSensitive(String key, String value) {
+        if (configFields == null || Strings.isNullOrEmpty(value)) {
+            return value;
+        }
+        for (Field f : configFields) {
+            ConfField anno = f.getAnnotation(ConfField.class);
+            if (anno != null && (f.getName().equals(key) || Arrays.asList(anno.aliases()).contains(key))) {
+                return maskIfSensitive(anno, value);
+            }
+        }
+        return value;
+    }
+
     protected Properties props;
     private static boolean isPersisted = false;
     private static String configPath;
