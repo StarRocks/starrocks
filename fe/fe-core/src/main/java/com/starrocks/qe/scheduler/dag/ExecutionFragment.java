@@ -33,6 +33,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.scheduler.ExplainBuilder;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
@@ -48,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstance.ABSENT_DRIVER_SEQUENCE;
@@ -74,6 +76,11 @@ public class ExecutionFragment {
 
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
+
+    // Re-vended cloud credentials (scan-node-id -> config) computed per incremental deploy round;
+    // null when nothing needs refreshing.
+    private final AtomicReference<Map<Integer, TCloudConfiguration>> refreshedNodeCloudConfigs =
+            new AtomicReference<>();
 
     public static class BucketSeqAssignment {
         public List<Integer> bucketSeqToInstance;
@@ -130,6 +137,14 @@ public class ExecutionFragment {
 
     public PlanFragmentId getFragmentId() {
         return planFragment.getFragmentId();
+    }
+
+    public void setRefreshedNodeCloudConfigs(Map<Integer, TCloudConfiguration> refreshedNodeCloudConfigs) {
+        this.refreshedNodeCloudConfigs.set(refreshedNodeCloudConfigs);
+    }
+
+    public Map<Integer, TCloudConfiguration> getRefreshedNodeCloudConfigs() {
+        return refreshedNodeCloudConfigs.get();
     }
 
     public Collection<ScanNode> getScanNodes() {
