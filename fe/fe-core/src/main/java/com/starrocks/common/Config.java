@@ -3827,6 +3827,25 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ranger_user_ugi = false;
 
+    /**
+     * Default for the catalog property `ranger.plugin.hive.catalog_prefix.enabled` on external catalogs
+     * that use a Ranger hive service (`ranger.plugin.hive.service.name`). When true, the `database`
+     * resource sent to Ranger is `<catalog><ranger_hive_catalog_prefix_separator><schema>` instead of
+     * the bare schema name, so catalogs sharing one Ranger service do not collide on same-named schemas.
+     * A catalog-level property, when set, overrides this value.
+     */
+    @ConfField(mutable = true, comment = "Default of catalog property ranger.plugin.hive.catalog_prefix.enabled: " +
+            "prefix the Ranger hive `database` resource with the catalog name")
+    public static boolean ranger_hive_catalog_prefix_enabled = false;
+
+    /**
+     * Separator between catalog name and schema name when ranger_hive_catalog_prefix_enabled applies.
+     * Must be identical for every catalog that shares one Ranger service, hence global only.
+     */
+    @ConfField(mutable = true, comment = "Separator between catalog and schema in the Ranger hive `database` " +
+            "resource when the catalog prefix is enabled")
+    public static String ranger_hive_catalog_prefix_separator = "_";
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 

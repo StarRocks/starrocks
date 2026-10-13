@@ -89,6 +89,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーが持つことができるロールの最大数。
 - 導入時期：v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- デフォルト：false
+- タイプ：Boolean
+- Unit: -
+- 変更可能：Yes
+- 説明：Ranger Hive Service (`ranger.plugin.hive.service.name`) を使用する External Catalog のプロパティ `ranger.plugin.hive.catalog_prefix.enabled` のデフォルト値。有効値が `true` の場合、StarRocks は Ranger に送る `database` リソースとして素のデータベース名ではなく `<catalog_name><separator><database_name>` を使用し、1 つの Ranger Hive Service を共有する複数の Catalog が同名のデータベースで衝突しないようにします。Catalog 側でこのプロパティを明示的に設定した場合はそちらが優先されます。変更は、それを受け取ったすべての FE で即時に有効になります。
+- 導入時期：v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- デフォルト：_
+- タイプ：String
+- Unit: -
+- 変更可能：Yes
+- 説明：`ranger_hive_catalog_prefix_enabled` (または Catalog プロパティ `ranger.plugin.hive.catalog_prefix.enabled`) が `true` の場合に、Catalog 名とデータベース名の間に挿入する区切り文字。1 つの Ranger Hive Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+- 導入時期：v4.2
+
 ## クエリエンジン
 
 ### `brpc_send_plan_fragment_timeout_ms`

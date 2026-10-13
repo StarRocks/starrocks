@@ -89,6 +89,24 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of roles a user can have.
 - Introduced in: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Default value of the External Catalog property `ranger.plugin.hive.catalog_prefix.enabled` for catalogs that use a Ranger Hive Service (`ranger.plugin.hive.service.name`). When the effective value is `true`, StarRocks sends `<catalog_name><separator><database_name>` instead of the bare database name as the `database` resource to Ranger, so catalogs that share one Ranger Hive Service do not collide on same-named databases. A catalog that sets the property explicitly overrides this item. Changes take effect immediately on all FEs that receive them.
+- Introduced in: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- Default: _
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The separator placed between the catalog name and the database name when `ranger_hive_catalog_prefix_enabled` (or the catalog property `ranger.plugin.hive.catalog_prefix.enabled`) is `true`. Every catalog that shares one Ranger Hive Service must use the same separator, so this item is global only.
+- Introduced in: v4.2
+
 ## Query engine
 
 ### `brpc_send_plan_fragment_timeout_ms`

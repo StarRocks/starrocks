@@ -89,6 +89,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用户可以拥有的最大角色数量。
 - 引入版本: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 使用 Ranger Hive Service（即设置了 `ranger.plugin.hive.service.name`）的 External Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled` 的默认值。生效值为 `true` 时，StarRocks 向 Ranger 发送的 `database` 资源为 `<catalog_name><separator><database_name>` 而不是裸库名，避免共用同一个 Ranger Hive Service 的多个 Catalog 在同名库上互相命中。Catalog 显式设置了该属性时以属性为准。修改后对收到该修改的所有 FE 立即生效。
+- 引入版本: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- 默认值: _
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: `ranger_hive_catalog_prefix_enabled`（或 Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled`）为 `true` 时，拼接在 Catalog 名与库名之间的分隔符。共用同一个 Ranger Hive Service 的所有 Catalog 必须使用相同的分隔符，因此该项只在全局配置。
+- 引入版本: v4.2
+
 ## 查询引擎
 
 ### `brpc_send_plan_fragment_timeout_ms`
