@@ -30,11 +30,11 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TStatisticData;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 public class StatisticExecutorTest extends PlanTestBase {
     @Test
