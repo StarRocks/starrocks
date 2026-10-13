@@ -75,9 +75,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OriginStatement;
@@ -518,11 +516,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         Expr newExpr = ExprSubstitutionVisitor.rewrite(defineExpr, smap);
         newExpr = newExpr.accept(visitor, null);
         newExpr = ExprUtils.analyzeAndCastFold(newExpr);
-        try {
-            CreateSyncMVStmtAnalyzer.verifyNoAIFunctions(newExpr);
-        } catch (SemanticException e) {
-            throw new AlterCancelException(e.getMessage());
-        }
         Type newType = newExpr.getType();
         if (!type.isFullyCompatible(newType)) {
             newExpr = new CastExpr(type, newExpr);

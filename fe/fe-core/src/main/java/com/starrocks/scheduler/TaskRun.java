@@ -42,7 +42,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -289,7 +288,6 @@ public class TaskRun implements Comparable<TaskRun> {
     public ConnectContext buildTaskRunConnectContext() {
         // Create a new ConnectContext for this task run
         final ConnectContext context = new ConnectContext(null);
-        context.setQuerySource(QueryDetail.QuerySource.TASK);
 
         if (parentRunCtx != null) {
             context.setParentConnectContext(parentRunCtx);
@@ -324,14 +322,9 @@ public class TaskRun implements Comparable<TaskRun> {
 
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        ConnectContext previousContext = ConnectContext.exchangeThreadLocalInfo(context);
-        try {
-            // NOTE: The switchUser might depend on the thread-local context if it's LDAP user.
-            switchUser(context);
-        } catch (RuntimeException e) {
-            ConnectContext.exchangeThreadLocalInfo(previousContext);
-            throw e;
-        }
+        context.setThreadLocalInfo();
+        // NOTE: The switchUser might depend on the thread-local context if it's LDAP user
+        switchUser(context);
         return context;
     }
 
@@ -342,11 +335,6 @@ public class TaskRun implements Comparable<TaskRun> {
      * - It's suitable for LDAP-based authorization system, which lacks a proper user for authorization
      */
     private void switchUser(ConnectContext context) {
-        if (task.getExecutionIdentity() != null) {
-            // User-submitted AI tasks must never inherit the MV root-mode compatibility policy.
-            task.getExecutionIdentity().restore(context);
-            return;
-        }
         if (!Config.mv_use_creator_based_authorization) {
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);

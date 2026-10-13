@@ -14,10 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessController;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
@@ -27,7 +27,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.PrepareStmtContext;
-import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
@@ -38,8 +37,10 @@ import com.starrocks.sql.PrepareStmtPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
@@ -85,10 +86,6 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         starRocksAssert.withView("CREATE VIEW ai_invoker SECURITY INVOKER AS "
                 + "SELECT ai_complete(prompt) AS answer FROM prompts");
         starRocksAssert.withView("CREATE VIEW ai_nested SECURITY NONE AS SELECT answer FROM ai_invoker");
-        starRocksAssert.withView("CREATE VIEW legacy_ai_none SECURITY NONE AS "
-                + "SELECT ai_query(prompt, parse_json('{}')) AS answer FROM prompts");
-        starRocksAssert.withView("CREATE VIEW legacy_ai_invoker SECURITY INVOKER AS "
-                + "SELECT ai_query(prompt, parse_json('{}')) AS answer FROM prompts");
         GlobalStateMgr.getCurrentState().getAIProviderMgr().createProvider("ai_rbac_provider", AIProviderType.CHAT,
                 Map.of("endpoint", "https://models.example.test/v1/chat/completions", "model", "provider-model",
                         "api_key", "private-rbac-test-key"), "");
@@ -127,65 +124,26 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         assertDenied("SELECT ai_complete('prompt')");
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {
-            "SELECT ai_query(prompt, parse_json('{}')) FROM prompts",
-            "SELECT answer FROM legacy_ai_none",
-            "SELECT answer FROM legacy_ai_invoker",
-            "SELECT 1 FROM (SELECT ai_query(prompt, parse_json('{}')) AS unused FROM prompts) answers",
-            "INSERT INTO prompts SELECT id, ai_query(prompt, parse_json('{}')) FROM prompts"
-    })
-    public void testLegacyQueryRequiresCallerUsage(String sql) throws Exception {
-        assertDenied(sql);
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'");
-        authorize(sql);
-        executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM '" + user + "'");
-        assertDenied(sql);
-    }
-
-    @Test
-    public void testLegacyQueryWildcardUsage() throws Exception {
-        executeAsRoot("GRANT USAGE ON ALL AI FUNCTIONS TO '" + user + "'");
-        authorize("SELECT ai_query(prompt, parse_json('{}')), ai_complete(prompt) FROM prompts");
-        executeAsRoot("REVOKE USAGE ON ALL AI FUNCTIONS FROM '" + user + "'");
-        assertDenied("SELECT ai_query(prompt, parse_json('{}')) FROM prompts");
-    }
-
-    @Test
-    public void testSqlUdfBodyRequiresLegacyQueryUsage() throws Exception {
-        boolean previousEnableUdf = Config.enable_udf;
-        Config.enable_udf = true;
-        try {
-            executeAsRoot("CREATE FUNCTION legacy_query_wrapper(x STRING) RETURNS ai_query(x, parse_json('{}'))");
-            executeAsRoot("GRANT USAGE ON FUNCTION ai_rbac.legacy_query_wrapper(STRING) TO '" + user + "'");
-            assertDenied("SELECT legacy_query_wrapper(prompt) FROM prompts");
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'");
-            authorize("SELECT legacy_query_wrapper(prompt) FROM prompts");
-            PrepareStmt prepared = prepare("SELECT legacy_query_wrapper(prompt) FROM prompts WHERE id = ?");
-            try {
-                executePrepared(prepared, 1);
-                executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM '" + user + "'");
-                Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 2));
-            } finally {
-                caller.removePreparedStmt(prepared.getName());
-            }
-            assertDenied("SELECT legacy_query_wrapper(prompt) FROM prompts");
-        } finally {
-            executeAsRoot("DROP FUNCTION IF EXISTS legacy_query_wrapper(STRING)");
-            Config.enable_udf = previousEnableUdf;
-        }
-    }
-
     @Test
     public void testSameNameSqlUdfDoesNotRequireAIUsage() throws Exception {
         boolean previousEnableUdf = Config.enable_udf;
         Config.enable_udf = true;
+        String signature = "ai_rbac.ai_complete(STRING, STRING, STRING, STRING)";
+        String sql = "SELECT ai_rbac.ai_complete(prompt, 'a', 'b', 'c') FROM prompts";
         try {
-            executeAsRoot("CREATE FUNCTION ai_query(x STRING) RETURNS upper(x)");
-            executeAsRoot("GRANT USAGE ON FUNCTION ai_rbac.ai_query(STRING) TO '" + user + "'");
-            authorize("SELECT ai_rbac.ai_query(prompt) FROM prompts");
+            executeAsRoot("CREATE FUNCTION ai_complete(x STRING, y STRING, z STRING, suffix STRING) "
+                    + "RETURNS concat(x, y, z, suffix)");
+            assertDenied(sql, "FUNCTION");
+            executeAsRoot("GRANT USAGE ON FUNCTION " + signature + " TO '" + user + "'");
+            QueryStatement statement = (QueryStatement) analyze(sql);
+            FunctionCallExpr call = (FunctionCallExpr) statement.getQueryRelation().getOutputExpression().get(0);
+            Assertions.assertInstanceOf(SqlFunction.class, call.getFn());
+            Assertions.assertFalse(call.getFn().isAi());
+            authorize(sql);
+            executeAsRoot("REVOKE USAGE ON FUNCTION " + signature + " FROM '" + user + "'");
+            assertDenied(sql, "FUNCTION");
         } finally {
-            executeAsRoot("DROP FUNCTION IF EXISTS ai_rbac.ai_query(STRING)");
+            executeAsRoot("DROP FUNCTION IF EXISTS " + signature);
             Config.enable_udf = previousEnableUdf;
         }
     }
@@ -207,11 +165,10 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
         assertDenied(sql);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"ai_complete('prompt')", "ai_query('prompt', parse_json('{}'))"})
-    public void testPrepareRequiresAIUsage(String expression) throws Exception {
+    @Test
+    public void testPrepareRequiresAIUsage() throws Exception {
         caller.getSessionVariable().setEnablePrepareStmt(true);
-        assertDenied("PREPARE ai_denied FROM SELECT " + expression);
+        assertDenied("PREPARE ai_denied FROM SELECT ai_complete('prompt')");
     }
 
     @Test
@@ -225,101 +182,6 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     @Test
     public void testOrdinaryFunctionsRemainUnrestricted() throws Exception {
         authorize("SELECT upper(prompt) FROM prompts");
-    }
-
-    @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    public void testLegacyTaskRequiresProvenanceBeforeAIGrants(boolean grantUsage) throws Exception {
-        caller.setQuerySource(QueryDetail.QuerySource.TASK);
-        if (grantUsage) {
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
-        }
-        StatementBase statement = analyze("SELECT answer FROM ai_nested");
-        try (var ignored = caller.bindScope()) {
-            SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> Authorizer.check(statement, caller));
-            Assertions.assertTrue(error.getMessage().contains("trusted task creator identity"), error.getMessage());
-        }
-    }
-
-    @Test
-    public void testTaskAuthorizationRejectsChangedAuthenticatedIdentity() throws Exception {
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
-        AuthenticationHandler.authenticate(caller, user, "127.0.0.1", new byte[0]);
-        caller.setQuerySource(QueryDetail.QuerySource.TASK);
-        caller.setDistinguishedName("changed_task_creator");
-        StatementBase statement = analyze("SELECT ai_complete('prompt')");
-        try (var ignored = caller.bindScope()) {
-            SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> Authorizer.check(statement, caller));
-            Assertions.assertTrue(error.getMessage().contains("authenticated creator identity"), error.getMessage());
-        }
-    }
-
-    @Test
-    public void testLegacyTaskRetryRequiresProvenance() throws Exception {
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
-        caller.setQuerySource(QueryDetail.QuerySource.TASK);
-        StatementBase statement = analyze("SELECT ai_complete(prompt) FROM prompts");
-        try (var ignored = caller.bindScope()) {
-            SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> StatementPlanner.reAnalyzeStmt(statement, caller, new PlannerMetaLocker(caller, statement)));
-            Assertions.assertTrue(error.getMessage().contains("trusted task creator identity"), error.getMessage());
-        }
-    }
-
-    @Test
-    public void testLegacyTaskOrdinaryFunctionsRemainUnrestricted() throws Exception {
-        caller.setQuerySource(QueryDetail.QuerySource.TASK);
-        authorize("SELECT upper(prompt) FROM prompts");
-    }
-
-    @Test
-    public void testLegacyQueryTaskRequiresProvenance() throws Exception {
-        caller.setQuerySource(QueryDetail.QuerySource.TASK);
-        StatementBase statement = analyze("SELECT ai_query(prompt, parse_json('{}')) FROM prompts");
-        SemanticException error = Assertions.assertThrows(SemanticException.class,
-                () -> Authorizer.check(statement, caller));
-        Assertions.assertTrue(error.getMessage().contains("trusted task creator identity"), error.getMessage());
-    }
-
-    @Test
-    public void testLegacyQueryTaskCapturesIdentityAndRechecksUsage() throws Exception {
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'");
-        AuthenticationHandler.authenticate(caller, user, "127.0.0.1", new byte[0]);
-        SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE legacy_task_output AS "
-                + "SELECT ai_query('prompt', parse_json('{}')) AS answer");
-        Task task = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(TaskBuilder.buildTask(submit, caller)), Task.class);
-        Assertions.assertNotNull(task.getExecutionIdentity());
-        caller = restoreTaskContext(task);
-        authorize(task.getDefinition());
-        executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM '" + user + "'");
-        caller = restoreTaskContext(task);
-        assertDenied(task.getDefinition());
-    }
-
-    @Test
-    public void testSqlUdfTaskCapturesIdentityAndRechecksLegacyQueryUsage() throws Exception {
-        boolean previousEnableUdf = Config.enable_udf;
-        Config.enable_udf = true;
-        try {
-            executeAsRoot("CREATE FUNCTION legacy_task_wrapper(x STRING) RETURNS ai_query(x, parse_json('{}'))");
-            executeAsRoot("GRANT USAGE ON FUNCTION ai_rbac.legacy_task_wrapper(STRING) TO '" + user + "'");
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'");
-            AuthenticationHandler.authenticate(caller, user, "127.0.0.1", new byte[0]);
-            SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE legacy_udf_task_output AS "
-                    + "SELECT legacy_task_wrapper('prompt') AS answer");
-            Task task = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(TaskBuilder.buildTask(submit, caller)), Task.class);
-            Assertions.assertNotNull(task.getExecutionIdentity());
-            caller = restoreTaskContext(task);
-            authorize(task.getDefinition());
-            executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM '" + user + "'");
-            caller = restoreTaskContext(task);
-            assertDenied(task.getDefinition());
-        } finally {
-            executeAsRoot("DROP FUNCTION IF EXISTS legacy_task_wrapper(STRING)");
-            Config.enable_udf = previousEnableUdf;
-        }
     }
 
     @Test
@@ -351,6 +213,8 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @Test
     public void testReplayedTaskRechecksCurrentRolePrivileges() throws Exception {
+        boolean previousUseCreator = Config.mv_use_creator_based_authorization;
+        Config.mv_use_creator_based_authorization = true;
         String role = user + "_task_role";
         List<String> objects = List.of("AI FUNCTION ai_custom_query", "AI PROVIDER ai_rbac_provider");
         executeAsRoot("CREATE ROLE " + role);
@@ -359,18 +223,15 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
                 executeAsRoot("GRANT USAGE ON " + object + " TO ROLE " + role);
             }
             executeAsRoot("GRANT " + role + " TO '" + user + "'");
-            AuthenticationHandler.authenticate(caller, user, "127.0.0.1", new byte[0]);
+            Long roleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull(role);
+            caller.setCurrentRoleIds(Set.of(roleId));
             SubmitTaskStmt submit = (SubmitTaskStmt) analyze("SUBMIT TASK AS CREATE TABLE task_output AS "
                     + "SELECT ai_custom_query('ai_rbac_provider', 'prompt') AS answer");
             Task task = GsonUtils.GSON.fromJson(
                     GsonUtils.GSON.toJson(TaskBuilder.buildTask(submit, caller)), Task.class);
-            Long roleId = GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdByNameAllowNull(role);
-
             caller = restoreTaskContext(task);
             Assertions.assertEquals(new UserIdentity(user, "%"), caller.getCurrentUserIdentity());
             Assertions.assertTrue(caller.getCurrentRoleIds().contains(roleId));
-            Assertions.assertEquals(QueryDetail.QuerySource.TASK, caller.getQuerySource());
-            Assertions.assertNotNull(caller.getAuthenticatedTaskIdentity());
             authorize(task.getDefinition());
             for (String object : objects) {
                 executeAsRoot("REVOKE USAGE ON " + object + " FROM ROLE " + role);
@@ -381,14 +242,14 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
                 authorize(task.getDefinition());
             }
         } finally {
+            Config.mv_use_creator_based_authorization = previousUseCreator;
             executeAsRoot("DROP ROLE " + role);
         }
     }
 
     @Test
-    public void testActiveRoleAndGroupGrantsUseCurrentMergedPrivileges() throws Exception {
+    public void testActiveRolesUseCurrentPrivileges() throws Exception {
         String role = user + "_role";
-        String group = user + "_group";
         executeAsRoot("CREATE ROLE " + role);
         try {
             executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO ROLE " + role);
@@ -400,13 +261,11 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
             caller.setCurrentRoleIds(Set.of());
             assertDenied("SELECT ai_complete('prompt')");
 
-            executeAsRoot("GRANT " + role + " TO EXTERNAL GROUP " + group);
-            caller.setGroups(Set.of(group));
+            caller.setCurrentRoleIds(Set.of(roleId));
             authorize("SELECT ai_complete('prompt')");
             executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_complete FROM ROLE " + role);
             assertDenied("SELECT ai_complete('prompt')");
         } finally {
-            caller.setGroups(Set.of());
             caller.setCurrentRoleIds(Set.of());
             executeAsRoot("DROP ROLE " + role);
         }
@@ -430,24 +289,6 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testPreparedLegacyQueryRechecksRevokedUsage() throws Exception {
-        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO '" + user + "'");
-        boolean previousShortCircuit = caller.getSessionVariable().isEnableShortCircuit();
-        caller.getSessionVariable().setEnableShortCircuit(true);
-        PrepareStmt prepared = prepare("SELECT ai_query(prompt, parse_json('{}')) FROM prompts WHERE id = ?");
-        try {
-            ExecPlan first = executePrepared(prepared, 1);
-            Assertions.assertTrue(first.isShortCircuit());
-            Assertions.assertTrue(executedAIFamilies(first).isEmpty());
-            executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM '" + user + "'");
-            Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 2));
-        } finally {
-            caller.removePreparedStmt(prepared.getName());
-            caller.getSessionVariable().setEnableShortCircuit(previousShortCircuit);
-        }
-    }
-
-    @Test
     public void testPreparedAIChecksCurrentActiveRole() throws Exception {
         String role = user + "_prepared_role";
         executeAsRoot("CREATE ROLE " + role);
@@ -463,8 +304,6 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
                 Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 2));
                 caller.setCurrentRoleIds(Set.of(roleId));
                 executePrepared(prepared, 3);
-                executeAsRoot("REVOKE " + role + " FROM '" + user + "'");
-                Assertions.assertThrows(ErrorReportException.class, () -> executePrepared(prepared, 4));
             } finally {
                 caller.removePreparedStmt(prepared.getName());
             }
@@ -545,26 +384,24 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
 
     @Test
     public void testRetryRechecksAIUsage() throws Exception {
+        executeAsRoot("GRANT USAGE ON AI FUNCTION ai_complete TO '" + user + "'");
         StatementBase statement = analyze("SELECT ai_complete(prompt) FROM prompts");
+        executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_complete FROM '" + user + "'");
         try (var ignored = caller.bindScope()) {
             ErrorReportException error = Assertions.assertThrows(ErrorReportException.class,
                     () -> StatementPlanner.reAnalyzeStmt(statement, caller, new PlannerMetaLocker(caller, statement)));
             Assertions.assertTrue(error.getMessage().contains("AI FUNCTION"), error.getMessage());
-
-            caller.setBypassAuthorizerCheck(true);
-            Assertions.assertDoesNotThrow(() -> StatementPlanner.reAnalyzeStmt(
-                    statement, caller, new PlannerMetaLocker(caller, statement)));
         }
     }
 
     @Test
     public void testCurrentControllerCannotFallBackToNative() throws Exception {
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SELECT ai_complete('prompt')", connectContext);
         AccessControlProvider provider = Authorizer.getInstance();
         AccessController original = provider.catalogToAccessControl.put(
                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, new AccessController() { });
         try {
-            Assertions.assertThrows(ErrorReportException.class, () -> Authorizer.check(statement, connectContext));
+            Assertions.assertThrows(ErrorReportException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser("SELECT ai_complete('prompt')", connectContext));
         } finally {
             provider.catalogToAccessControl.put(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, original);
         }
@@ -615,10 +452,9 @@ public class AIFunctionPrivilegeCheckerTest extends PlanTestNoneDBBase {
     }
 
     private void assertDenied(String sql, String objectType) throws Exception {
-        StatementBase statement = analyze(sql);
         try (var ignored = caller.bindScope()) {
             ErrorReportException error = Assertions.assertThrows(ErrorReportException.class,
-                    () -> Authorizer.check(statement, caller));
+                    () -> Authorizer.check(analyze(sql), caller));
             Assertions.assertTrue(error.getMessage().contains(objectType), error.getMessage());
             Assertions.assertFalse(error.getMessage().contains("private-rbac-test-key"));
         }

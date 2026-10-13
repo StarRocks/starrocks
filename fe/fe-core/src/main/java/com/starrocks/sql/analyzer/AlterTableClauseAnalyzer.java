@@ -785,10 +785,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             Expr expr = columnDef.generatedColumnExpr();
             TableName tableName = new TableName(context.getDatabase(), table.getName());
 
-            ExpressionAnalyzer.analyzeGeneratedColumnExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -885,10 +887,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                 Expr expr = colDef.generatedColumnExpr();
                 TableName tableName = new TableName(context.getDatabase(), table.getName());
 
-                ExpressionAnalyzer.analyzeGeneratedColumnExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                         new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                         tableName, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();
@@ -1077,10 +1081,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             Expr expr = columnDef.generatedColumnExpr();
             TableName tableName = new TableName(context.getDatabase(), table.getName());
 
-            ExpressionAnalyzer.analyzeGeneratedColumnExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+            ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                     new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
                                     tableName, null))
                             .collect(Collectors.toList()))), context);
+            AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
             // check if contain aggregation
             List<FunctionCallExpr> funcs = Lists.newArrayList();

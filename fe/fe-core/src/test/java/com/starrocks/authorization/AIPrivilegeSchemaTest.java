@@ -107,7 +107,6 @@ public class AIPrivilegeSchemaTest {
                 .filter(Function::isAi).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
         Assertions.assertFalse(families.isEmpty());
-        families.add("ai_query");
         for (String family : families) {
             PEntryObject object = authorizationProvider.generateObject(type, List.of(family));
             PEntryObject upper = authorizationProvider.generateObject(type, List.of(family.toUpperCase(Locale.ROOT)));
@@ -122,7 +121,7 @@ public class AIPrivilegeSchemaTest {
             Assertions.assertEquals(object, GsonUtils.GSON.fromJson(
                     GsonUtils.GSON.toJson(object, PEntryObject.class), PEntryObject.class));
         }
-        for (List<String> tokens : List.of(List.of("lower"),
+        for (List<String> tokens : List.of(List.of("lower"), List.of("ai_query"), List.of("AI_QUERY"),
                 List.of("missing_ai_function"), List.of("db", "ai_complete"))) {
             Assertions.assertThrows(PrivilegeException.class, () -> authorizationProvider.generateObject(type, tokens));
         }
@@ -181,7 +180,7 @@ public class AIPrivilegeSchemaTest {
     public void testFunctionExecutionRejectsWildcardAndUnregisteredFamiliesEvenForRoot() {
         NativeAccessController controller = new NativeAccessController();
         Assertions.assertDoesNotThrow(() -> controller.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE));
-        for (String name : List.of("*", "lower", "missing_ai_function")) {
+        for (String name : List.of("*", "lower", "ai_query", "missing_ai_function")) {
             Assertions.assertThrows(AccessDeniedException.class,
                     () -> controller.checkAIFunctionAction(context, name, PrivilegeType.USAGE));
         }
@@ -352,7 +351,6 @@ public class AIPrivilegeSchemaTest {
         Set<String> families = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
                 .filter(Function::isAi).filter(Function::isUserVisible)
                 .map(Function::functionName).collect(Collectors.toSet());
-        families.add("ai_query");
         Assertions.assertEquals(families, rows.stream().map(TGetGrantsToRolesOrUserItem::getObject_name)
                 .collect(Collectors.toSet()));
         Assertions.assertEquals(families.size(), rows.size());

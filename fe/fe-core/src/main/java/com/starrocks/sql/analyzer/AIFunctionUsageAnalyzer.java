@@ -57,9 +57,7 @@ final class AIFunctionUsageAnalyzer {
     }
 
     static void verifyNoAIFunctions(Expr expression, PlacementContext context) {
-        FunctionCallExpr function = (context == PlacementContext.GENERATED_COLUMN_EXPRESSION
-                ? ResolvedAIFunctionDetector.findAllForAuthorization(expression).stream().findFirst()
-                : ResolvedAIFunctionDetector.findFirst(expression)).orElse(null);
+        FunctionCallExpr function = ResolvedAIFunctionDetector.findFirst(expression).orElse(null);
         if (function != null) {
             throw new SemanticException(context.description + " cannot contain AI function "
                     + function.getFunctionName(), expression.getPos());

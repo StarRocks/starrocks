@@ -115,40 +115,6 @@ public class AIPreparedInvokerViewPrivilegeTest extends PlanTestNoneDBBase {
         }
     }
 
-    @Test
-    public void testPreparedInvokerRetainsLegacyQueryAuthorizationAfterViewChanges() throws Exception {
-        String user = USER + "_legacy";
-        executeAsRoot("CREATE USER " + user);
-        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity(user, "%"));
-        caller.setCurrentRoleIds(Set.of());
-        caller.setDatabase(DATABASE);
-        caller.getSessionVariable().setEnablePrepareStmt(true);
-        try {
-            executeAsRoot("CREATE VIEW legacy_answers SECURITY INVOKER AS "
-                    + "SELECT id, ai_query(prompt, parse_json('{}')) AS answer FROM prompts");
-            executeAsRoot("GRANT SELECT ON TABLE " + DATABASE + ".prompts TO " + user);
-            executeAsRoot("GRANT SELECT ON VIEW " + DATABASE + ".legacy_answers TO " + user);
-            executeAsRoot("GRANT USAGE ON AI FUNCTION ai_query TO " + user);
-            PrepareStmt prepared;
-            try (var ignored = caller.bindScope()) {
-                prepared = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
-                        "PREPARE legacy_snapshot FROM SELECT answer FROM legacy_answers WHERE id = ?", caller);
-                Authorizer.check(prepared, caller);
-            }
-            caller.putPreparedStmt(prepared.getName(), new PrepareStmtContext(prepared, caller, null));
-            executePrepared(caller, prepared);
-            executeAsRoot("ALTER VIEW legacy_answers AS SELECT id, upper(prompt) AS answer FROM prompts");
-            executePrepared(caller, prepared);
-            executeAsRoot("REVOKE USAGE ON AI FUNCTION ai_query FROM " + user);
-            assertPreparedDenied(caller, prepared, "ai_query");
-        } finally {
-            caller.removePreparedStmt("legacy_snapshot");
-            executeAsRoot("DROP VIEW IF EXISTS legacy_answers");
-            executeAsRoot("DROP USER " + user);
-            connectContext.setThreadLocalInfo();
-        }
-    }
-
     private static void assertPreparedDenied(ConnectContext caller, PrepareStmt prepared, String family) {
         ErrorReportException error = Assertions.assertThrows(ErrorReportException.class,
                 () -> executePrepared(caller, prepared));

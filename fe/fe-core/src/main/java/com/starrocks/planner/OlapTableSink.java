@@ -84,7 +84,6 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -965,7 +964,6 @@ public class OlapTableSink extends DataSink {
 
                 whereClause = whereClause.accept(visitor, null);
                 whereClause = ExprUtils.analyzeAndCastFold(whereClause);
-                CreateSyncMVStmtAnalyzer.verifyNoAIFunctions(whereClause);
 
                 indexSchema.setWhere_clause(ExprToThrift.treeToThrift(whereClause));
                 if (LOG.isDebugEnabled()) {

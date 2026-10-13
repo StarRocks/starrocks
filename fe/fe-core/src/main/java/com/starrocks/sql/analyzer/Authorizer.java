@@ -50,6 +50,8 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
@@ -73,11 +75,35 @@ public class Authorizer {
 
     public static void check(StatementBase statement, ConnectContext context) {
         getInstance().getPrivilegeCheckerVisitor().check(statement, context);
-        checkAIFunctionPrivileges(statement, context);
     }
 
-    public static void checkAIFunctionPrivileges(StatementBase statement, ConnectContext context) {
-        AIFunctionPrivilegeChecker.check(statement, context);
+    public static void checkAIFunctionUsage(ConnectContext context, FunctionCallExpr call) {
+        Function function = call.getFn();
+        if (!function.isAi()) {
+            return;
+        }
+        if (context.getCurrentUserIdentity() == null) {
+            throw new SemanticException("AI functions require a user identity in the execution context", call.getPos());
+        }
+        try {
+            checkAIFunctionAction(context, function.functionName(), PrivilegeType.USAGE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.USAGE.name(), "AI FUNCTION", function.functionName());
+        }
+        if (function.getAiModelSource() == TAIModelSource.PROVIDER) {
+            String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(function)));
+            AIProvider provider = context.getGlobalStateMgr().getAIProviderMgr().getProvider(name);
+            if (provider == null) {
+                throw new SemanticException("AI provider '%s' does not exist", name);
+            }
+            try {
+                checkAIProviderAction(context, provider, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(null, context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.USAGE.name(), "AI PROVIDER", name);
+            }
+        }
     }
 
     public static void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)

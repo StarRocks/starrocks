@@ -40,7 +40,6 @@ import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
-import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -51,18 +50,14 @@ import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -236,83 +231,72 @@ public class MysqlProto {
             context.getSerializer().setCapability(context.getCapability());
             return false;
         }
-        // Preserve the original session until authentication, database selection and connection accounting succeed.
+        // save previous user login info
         UserIdentity previousUserIdentity = context.getCurrentUserIdentity();
         Set<Long> previousRoleIds = context.getCurrentRoleIds();
-        Set<String> previousGroups = context.getGroups();
         String previousQualifiedUser = context.getQualifiedUser();
-        String previousSecurityIntegration = context.getSecurityIntegration();
-        String previousDN = context.getDistinguishedName();
-        TaskExecutionIdentity previousTaskIdentity = context.getAuthenticatedTaskIdentity();
-        AuthenticationProvider previousProvider = context.getAuthenticationProvider();
-        String previousAuthToken = context.getAuthToken();
-        SessionVariable previousSessionVariable = context.getSessionVariable();
-        Map<String, SystemVariable> previousModifiedSessionVariables =
-                new HashMap<>(context.getModifiedSessionVariablesMap());
-        ComputeResource previousComputeResource = context.getCurrentComputeResourceNoAcquire();
+        String previousResourceGroup = context.getSessionVariable().getResourceGroup();
+        String previousCatalog = context.getCurrentCatalog();
         String previousDb = context.getDatabase();
-        boolean changed = false;
+        // do authenticate again
+
         try {
-            context.setSessionVariable(previousSessionVariable.clone());
+            AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    changeUserPacket.getAuthResponse());
+        } catch (AuthenticationException e) {
+            LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
+                    changeUserPacket.getUser());
+            sendResponsePacket(context);
+            // reconstruct serializer with context capability
+            context.getSerializer().setCapability(context.getCapability());
+            // recover from previous user login info
+            context.getSessionVariable().setResourceGroup(previousResourceGroup);
+            return false;
+        }
+        // set database
+        String db = changeUserPacket.getDb();
+        if (!Strings.isNullOrEmpty(db)) {
             try {
-                AuthenticationHandler.authenticate(context, changeUserPacket.getUser(),
-                        context.getMysqlChannel().getRemoteIp(), changeUserPacket.getAuthResponse());
-            } catch (AuthenticationException e) {
-                LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
-                        changeUserPacket.getUser());
+                context.changeCatalogDb(db);
+            } catch (Exception e) {
+                LOG.warn("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
+                        previousQualifiedUser, changeUserPacket.getUser(), e.getMessage(), e);
+                if (!context.getState().isError()) {
+                    context.getState().setError(e.getMessage());
+                }
                 sendResponsePacket(context);
                 // reconstruct serializer with context capability
                 context.getSerializer().setCapability(context.getCapability());
-                return false;
-            }
-            String db = changeUserPacket.getDb();
-            if (!Strings.isNullOrEmpty(db)) {
-                try {
-                    context.changeCatalogDb(db);
-                } catch (Exception e) {
-                    LOG.warn("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
-                            previousQualifiedUser, changeUserPacket.getUser(), e.getMessage(), e);
-                    if (!context.getState().isError()) {
-                        context.getState().setError(e.getMessage());
-                    }
-                    sendResponsePacket(context);
-                    context.getSerializer().setCapability(context.getCapability());
-                    return false;
-                }
-            }
-            ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-            Pair<Boolean, String> userChangeResult = connectScheduler.onUserChanged(
-                    context, previousQualifiedUser, context.getQualifiedUser());
-            if (!userChangeResult.first) {
-                context.getState().setErrorCode(ErrorCode.ERR_TOO_MANY_USER_CONNECTIONS);
-                context.getState().setError(userChangeResult.second);
-                sendResponsePacket(context);
-                context.getSerializer().setCapability(context.getCapability());
-                return false;
-            }
-
-            changed = true;
-            LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
-                    context.getQualifiedUser());
-            return true;
-        } finally {
-            if (!changed) {
+                context.setCurrentCatalog(previousCatalog);
+                context.setDatabase(previousDb);
+                // recover from previous user login info
+                context.getSessionVariable().setResourceGroup(previousResourceGroup);
                 context.setCurrentUserIdentity(previousUserIdentity);
                 context.setCurrentRoleIds(previousRoleIds);
-                context.setGroups(previousGroups);
                 context.setQualifiedUser(previousQualifiedUser);
-                context.setSecurityIntegration(previousSecurityIntegration);
-                context.setDistinguishedName(previousDN);
-                context.setAuthenticatedTaskIdentity(previousTaskIdentity);
-                context.getAccessControlContext().setAuthenticationProvider(previousProvider);
-                context.setAuthToken(previousAuthToken);
-                context.setSessionVariable(previousSessionVariable);
-                context.getModifiedSessionVariablesMap().clear();
-                context.getModifiedSessionVariablesMap().putAll(previousModifiedSessionVariables);
-                context.setCurrentComputeResource(previousComputeResource);
-                context.setDatabase(previousDb);
+                return false;
             }
         }
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        Pair<Boolean, String> userChangeResult = connectScheduler.onUserChanged(
+                context, previousQualifiedUser, context.getQualifiedUser());
+        if (!userChangeResult.first) {
+            context.getState().setErrorCode(ErrorCode.ERR_TOO_MANY_USER_CONNECTIONS);
+            context.getState().setError(userChangeResult.second);
+            sendResponsePacket(context);
+            context.getSerializer().setCapability(context.getCapability());
+            context.getSessionVariable().setResourceGroup(previousResourceGroup);
+            context.setCurrentUserIdentity(previousUserIdentity);
+            context.setCurrentRoleIds(previousRoleIds);
+            context.setQualifiedUser(previousQualifiedUser);
+            context.setCurrentCatalog(previousCatalog);
+            context.setDatabase(previousDb);
+            return false;
+        }
+
+        LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
+                context.getQualifiedUser());
+        return true;
     }
 
     public static boolean isRemoteIPLocalhost(String remoteIP) {

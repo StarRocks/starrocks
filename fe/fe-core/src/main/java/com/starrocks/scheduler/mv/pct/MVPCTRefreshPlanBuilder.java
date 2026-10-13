@@ -36,9 +36,7 @@ import com.starrocks.scheduler.mv.MVTraceUtils;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
-import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.Scope;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
@@ -122,9 +120,6 @@ public class MVPCTRefreshPlanBuilder {
                                                 Map<Table, PCellSortedSet> refTableRefreshPartitions,
                                                 ConnectContext ctx) throws AnalysisException {
         Analyzer.analyze(insertStmt, ctx);
-        if (ResolvedAIFunctionDetector.containsForAuthorization(insertStmt)) {
-            throw new SemanticException("AI functions are not supported in materialized view refresh");
-        }
         return buildInsertPlan(insertStmt, mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
     }
 

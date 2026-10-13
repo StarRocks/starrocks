@@ -196,9 +196,9 @@ public class CreateSyncMVStmtAnalyzer {
         analyzeExprWithTableAlias(context, stmt.getDBName(), table, stmt.getMVColumnItemList());
     }
 
-    /** Rollup jobs and ingestion evaluate these expressions without an authenticated AI execution identity. */
-    public static void verifyNoAIFunctions(ParseNode node) {
-        if (ResolvedAIFunctionDetector.containsForAuthorization(node)) {
+    /** Rollup jobs evaluate scalar expressions without the AIProject operator required by AI functions. */
+    private static void verifyNoAIFunctions(ParseNode node) {
+        if (ResolvedAIFunctionDetector.contains(node)) {
             throw new SemanticException("Synchronous materialized view expressions cannot contain AI functions", node.getPos());
         }
     }

@@ -16,7 +16,6 @@ package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
@@ -81,9 +80,6 @@ public class Task implements Writable, GsonPostProcessable {
 
     @SerializedName("createUserIdentity")
     private UserIdentity userIdentity;
-
-    @SerializedName("executionIdentity")
-    private TaskExecutionIdentity executionIdentity;
 
     // the last time this task is scheduled, unit: second
     @SerializedName("lastScheduleTime")
@@ -239,14 +235,6 @@ public class Task implements Writable, GsonPostProcessable {
 
     public void setUserIdentity(UserIdentity userIdentity) {
         this.userIdentity = userIdentity;
-    }
-
-    public TaskExecutionIdentity getExecutionIdentity() {
-        return executionIdentity;
-    }
-
-    public void setExecutionIdentity(TaskExecutionIdentity executionIdentity) {
-        this.executionIdentity = executionIdentity;
     }
 
     public String getPostRun() {

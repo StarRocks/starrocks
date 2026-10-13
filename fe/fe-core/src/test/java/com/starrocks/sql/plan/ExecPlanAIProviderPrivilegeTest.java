@@ -105,8 +105,16 @@ public class ExecPlanAIProviderPrivilegeTest extends PlanTestNoneDBBase {
 
     @Test
     public void testRejectedProviderIsNotCapturedOrCached() throws Exception {
-        QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                "select ai_custom_query('private_provider', 'prompt')", connectContext);
+        AIProviderMgr registry = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        registry.createProvider("private_provider", AIProviderType.CHAT,
+                Map.of("endpoint", "https://example.test/v1/chat/completions", "model", "test-model"), "");
+        QueryStatement statement;
+        try {
+            statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
+                    "select ai_custom_query('private_provider', 'prompt')", connectContext);
+        } finally {
+            registry.dropProvider("private_provider", true);
+        }
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                 .getOutputExpression().get(0);
         Map<SlotId, Expr> project = new HashMap<>(Map.of(new SlotId(1), call));

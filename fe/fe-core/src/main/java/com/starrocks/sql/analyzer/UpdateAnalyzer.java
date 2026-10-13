@@ -336,7 +336,7 @@ public class UpdateAnalyzer {
             SelectListItem item = mcToItem.get(column);
             Expr orginExpr = item.getExpr();
 
-            ExpressionAnalyzer.analyzeGeneratedColumnExpression(orginExpr, new AnalyzeState(),
+            ExpressionAnalyzer.analyzeExpression(orginExpr, new AnalyzeState(),
                     new Scope(RelationId.anonymous(),
                             new RelationFields(
                                     table.getBaseSchema()

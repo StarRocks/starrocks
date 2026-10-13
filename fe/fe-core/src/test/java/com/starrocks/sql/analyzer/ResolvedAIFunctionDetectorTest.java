@@ -16,19 +16,13 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionName;
-import com.starrocks.catalog.SqlFunction;
-import com.starrocks.sql.ast.DataCacheSelectStatement;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PivotAggregation;
 import com.starrocks.sql.ast.PivotRelation;
-import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetQualifier;
-import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
-import com.starrocks.sql.ast.TaskName;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -36,7 +30,6 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.FunctionParams;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.Subquery;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
@@ -44,29 +37,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
 
 public class ResolvedAIFunctionDetectorTest {
-    @Test
-    public void testPrepareWrapperIsTraversed() {
-        FunctionCallExpr ai = resolvedAI("prepared");
-        PrepareStmt prepared = new PrepareStmt("prepared", new QueryStatement(values(ai)), List.of());
-        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(prepared));
-    }
-
-    @Test
-    public void testDataCacheAndSubmitWrappersAreTraversed() {
-        FunctionCallExpr ai = resolvedAI("cached");
-        InsertStmt insert = new InsertStmt(new QueryStatement(values(ai)), NodePosition.ZERO);
-        DataCacheSelectStatement cache = new DataCacheSelectStatement(insert, Map.of(), NodePosition.ZERO);
-        SubmitTaskStmt submit = new SubmitTaskStmt(new TaskName("db", "cache_task"), 0, cache, NodePosition.ZERO);
-
-        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(cache));
-        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(submit));
-        Assertions.assertEquals(List.of(ai), ResolvedAIFunctionDetector.findAll(
-                new SubmitTaskStmt(new TaskName("db", "insert_task"), 0, insert, NodePosition.ZERO)));
-    }
-
     @Test
     public void testResolvedMetadataControlsDetection() {
         FunctionCallExpr unresolvedAIName = new FunctionCallExpr("ai_complete", List.of());
@@ -78,48 +50,6 @@ public class ResolvedAIFunctionDetectorTest {
         Assertions.assertSame(resolvedAI, ResolvedAIFunctionDetector.findFirst(nested).orElseThrow());
         Assertions.assertFalse(ResolvedAIFunctionDetector.contains(unresolvedAIName));
         Assertions.assertFalse(ResolvedAIFunctionDetector.contains(resolvedRegularFunction));
-    }
-
-    @Test
-    public void testLegacyAuthorizationDoesNotChangeExecutionDetection() {
-        FunctionCallExpr legacy = resolvedLegacyQuery();
-        Assertions.assertEquals(List.of(legacy), ResolvedAIFunctionDetector.findAllForAuthorization(legacy));
-        Assertions.assertTrue(ResolvedAIFunctionDetector.containsForAuthorization(legacy));
-        Assertions.assertFalse(ResolvedAIFunctionDetector.contains(legacy));
-        Assertions.assertTrue(ResolvedAIFunctionDetector.findFirstInCurrentQueryBlock(legacy).isEmpty());
-        Assertions.assertFalse(ResolvedAIFunctionDetector.containsForAuthorization(
-                new FunctionCallExpr("ai_query", List.of())));
-        legacy.getFn().getFunctionName().setDb("udf_db");
-        Assertions.assertFalse(ResolvedAIFunctionDetector.containsForAuthorization(legacy));
-    }
-
-    @Test
-    public void testAuthorizationTraversesAnalyzedSqlFunctionBodiesAndArguments() {
-        FunctionCallExpr body = resolvedLegacyQuery();
-        SqlFunction function = new SqlFunction(new FunctionName("udf_db", "wrapper"),
-                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, new String[] {"x"}, "unused");
-        function.setAnalyzeExpr(body);
-        FunctionCallExpr argument = resolvedLegacyQuery();
-        FunctionCallExpr wrapper = new FunctionCallExpr("wrapper", List.of(argument));
-        wrapper.setFn(function);
-        Assertions.assertEquals(List.of(body, argument),
-                ResolvedAIFunctionDetector.findAllForAuthorization(wrapper));
-        Assertions.assertFalse(ResolvedAIFunctionDetector.contains(wrapper));
-
-        PrepareStmt prepared = new PrepareStmt("wrapped", new QueryStatement(values(wrapper)), List.of());
-        Assertions.assertTrue(ResolvedAIFunctionDetector.containsForAuthorization(prepared));
-        InsertStmt insert = new InsertStmt(new QueryStatement(values(wrapper)), NodePosition.ZERO);
-        SubmitTaskStmt submit = new SubmitTaskStmt(new TaskName("db", "task"), 0, insert, NodePosition.ZERO);
-        Assertions.assertTrue(ResolvedAIFunctionDetector.containsForAuthorization(submit));
-    }
-
-    private static FunctionCallExpr resolvedLegacyQuery() {
-        FunctionCallExpr call = new FunctionCallExpr("ai_query", List.of(new StringLiteral("prompt")));
-        Function function = new Function(new FunctionName("ai_query"),
-                new Type[] {VarcharType.VARCHAR}, VarcharType.VARCHAR, false);
-        function.setBinaryType(TFunctionBinaryType.BUILTIN);
-        call.setFn(function);
-        return call;
     }
 
     @Test

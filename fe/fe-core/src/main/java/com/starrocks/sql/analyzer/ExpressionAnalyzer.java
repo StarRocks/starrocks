@@ -1155,6 +1155,7 @@ public class ExpressionAnalyzer {
                 FunctionAnalyzer.analyze(node);
                 verifyNoAiInConditionalFunction(node);
                 checkGetQueryProfileAccess(node);
+                Authorizer.checkAIFunctionUsage(session, node);
                 return null;
             }
 
@@ -1181,6 +1182,7 @@ public class ExpressionAnalyzer {
                     FunctionAnalyzer.analyze(node);
                     verifyNoAiInConditionalFunction(node);
                     checkGetQueryProfileAccess(node);
+                    Authorizer.checkAIFunctionUsage(session, node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1197,6 +1199,7 @@ public class ExpressionAnalyzer {
             FunctionAnalyzer.analyze(node);
             verifyNoAiInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
+            Authorizer.checkAIFunctionUsage(session, node);
             return null;
         }
 
@@ -2293,14 +2296,6 @@ public class ExpressionAnalyzer {
     public static void analyzeExpression(Expr expression, AnalyzeState state, Scope scope, ConnectContext session) {
         ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
         expressionAnalyzer.analyze(expression, state, scope);
-    }
-
-    public static void analyzeGeneratedColumnExpression(Expr expression, AnalyzeState state, Scope scope,
-                                                         ConnectContext session) {
-        analyzeExpression(expression, state, scope, session);
-        // Generated expressions can also run in load/schema-change jobs without an authenticated caller.
-        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
-                expression, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
     }
 
     public static void analyzeExpressionIgnoreSlot(Expr expression, ConnectContext session) {

@@ -56,7 +56,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
-import com.starrocks.sql.analyzer.CreateSyncMVStmtAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
@@ -906,7 +905,7 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 // If fe restart and Insert INTO is executed, the re-analyze is needed.
                 Expr expr = targetColumn.getGeneratedColumnExpr(insertStatement.getTargetTable().getIdToColumn());
-                ExpressionAnalyzer.analyzeGeneratedColumnExpression(expr,
+                ExpressionAnalyzer.analyzeExpression(expr,
                         new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
                                 insertStatement.getTargetTable().getBaseSchema().stream()
                                         .map(col -> {
@@ -1036,7 +1035,6 @@ public class InsertPlanner {
                     expressionMapping.put(slot, originColRefOp);
                 }
 
-                CreateSyncMVStmtAnalyzer.verifyNoAIFunctions(targetColumn.getDefineExpr());
                 ScalarOperator scalarOperator =
                         SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
                                 columnRefFactory);

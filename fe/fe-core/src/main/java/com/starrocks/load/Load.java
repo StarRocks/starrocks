@@ -1013,7 +1013,7 @@ public class Load {
     }
 
     public static void rejectAIExpression(Expr expression) throws StarRocksException {
-        if (ResolvedAIFunctionDetector.containsForAuthorization(expression)) {
+        if (ResolvedAIFunctionDetector.contains(expression)) {
             throw new StarRocksException("AI functions are not supported in LOAD expressions");
         }
     }

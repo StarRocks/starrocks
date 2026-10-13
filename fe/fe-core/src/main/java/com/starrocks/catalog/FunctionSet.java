@@ -1217,13 +1217,6 @@ public class FunctionSet {
         return null;
     }
 
-    /** Legacy ai_query uses ordinary builtin execution but shares AI function authorization. */
-    public static boolean requiresAIFunctionPrivilege(Function function) {
-        return function != null && (function.isAi()
-                || (function.getBinaryType() == TFunctionBinaryType.BUILTIN
-                && function.getFunctionName().getDb() == null && "ai_query".equals(function.functionName())));
-    }
-
     /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
     public String getGrantableAIFunctionFamily(String name) {
         if (name == null || name.contains(".")) {
@@ -1234,11 +1227,9 @@ public class FunctionSet {
         if (family == null || family.isEmpty()) {
             return null;
         }
-        boolean aiExecution = family.get(0).isAi();
         TAIModelSource modelSource = family.get(0).getAiModelSource();
-        if ((aiExecution && modelSource == null) || (!aiExecution && modelSource != null)
-                || family.stream().anyMatch(fn -> !requiresAIFunctionPrivilege(fn) || !fn.isUserVisible()
-                || fn.isAi() != aiExecution || fn.getAiModelSource() != modelSource)) {
+        if (modelSource == null || family.stream().anyMatch(fn -> !fn.isAi() || !fn.isUserVisible()
+                || fn.getAiModelSource() != modelSource)) {
             return null;
         }
         return canonicalName;

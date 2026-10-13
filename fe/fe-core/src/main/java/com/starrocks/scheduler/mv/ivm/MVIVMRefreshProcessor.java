@@ -60,7 +60,6 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
-import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
@@ -617,9 +616,6 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     private void analyzeInsertStmt(InsertStmt insertStmt) throws AnalysisException {
         ConnectContext ctx = mvContext.getCtx();
         Analyzer.analyze(insertStmt, ctx);
-        if (ResolvedAIFunctionDetector.containsForAuthorization(insertStmt)) {
-            throw new SemanticException("AI functions are not supported in materialized view refresh");
-        }
     }
 
     private InsertStmt buildInsertPlan(InsertStmt insertStmt) throws AnalysisException {

@@ -46,8 +46,21 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
 
     @BeforeAll
     public static void resolveFunctions() throws Exception {
-        chatTemplate = analyzedCall("ai_custom_query");
-        embeddingTemplate = analyzedCall("ai_custom_embedding");
+        AIProviderMgr registry = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        registry.createProvider("chat_template", AIProviderType.CHAT,
+                Map.of("endpoint", "https://example.test/v1/chat/completions", "model", "chat-model"), "");
+        try {
+            chatTemplate = analyzedCall("ai_custom_query", "chat_template");
+        } finally {
+            registry.dropProvider("chat_template", true);
+        }
+        registry.createProvider("embedding_template", AIProviderType.EMBEDDING,
+                Map.of("endpoint", "https://example.test/v1/embeddings", "model", "embedding-model"), "");
+        try {
+            embeddingTemplate = analyzedCall("ai_custom_embedding", "embedding_template");
+        } finally {
+            registry.dropProvider("embedding_template", true);
+        }
     }
 
     @Test
@@ -181,9 +194,9 @@ public class ExecPlanAIProviderTest extends PlanTestBase {
         Assertions.assertTrue(Modifier.isFinal(FunctionCallExpr.class.getDeclaredField("aiModelConfigId").getModifiers()));
     }
 
-    private static FunctionCallExpr analyzedCall(String function) throws Exception {
+    private static FunctionCallExpr analyzedCall(String function, String providerName) throws Exception {
         QueryStatement statement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(
-                "select " + function + "('template', 'prompt')", connectContext);
+                "select " + function + "('" + providerName + "', 'prompt')", connectContext);
         return (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation()).getOutputExpression().get(0);
     }
 

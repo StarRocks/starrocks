@@ -16,16 +16,18 @@ package com.starrocks.load;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.type.VarcharType;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -34,39 +36,65 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.HashMap;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AILoadExpressionTest {
+    private static String previousEndpoint;
+    private static String previousModel;
+    private static String previousProvider;
+
     @BeforeAll
     public static void setUp() throws Exception {
         AnalyzeTestUtil.init();
+        previousEndpoint = Config.ai_default_chat_endpoint;
+        previousModel = Config.ai_default_chat_model;
+        previousProvider = Config.ai_default_chat_provider;
+        Config.ai_default_chat_endpoint = "https://models.example.test/v1/chat/completions";
+        Config.ai_default_chat_model = "load-test-model";
+        Config.ai_default_chat_provider = "openai_compatible";
+    }
+
+    @AfterAll
+    public static void restoreAIConfiguration() {
+        Config.ai_default_chat_endpoint = previousEndpoint;
+        Config.ai_default_chat_model = previousModel;
+        Config.ai_default_chat_provider = previousProvider;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ai_complete('prompt')", "upper(ai_complete('prompt'))"})
+    public void testLoadMappingRejectsAI(String expression) {
+        AnalyzeTestUtil.getConnectContext().setThreadLocalInfo();
+        StarRocksException error = assertThrows(StarRocksException.class, () -> initMapping(expression));
+        assertTrue(error.getMessage().contains("AI functions are not supported in LOAD"));
     }
 
     @Test
-    public void testLoadMappingRejectsAI() {
-        AnalyzeTestUtil.getConnectContext().setThreadLocalInfo();
+    public void testLoadMappingWithoutContextRejectsAIWithAnalysisError() {
+        ConnectContext previous = ConnectContext.get();
+        ConnectContext.remove();
+        try {
+            assertDoesNotThrow(() -> initMapping("upper('prompt')"));
+            StarRocksException error = assertThrows(StarRocksException.class, () -> initMapping("ai_complete('prompt')"));
+            assertTrue(error.getMessage().contains("execution context"), error.getMessage());
+        } finally {
+            if (previous != null) {
+                previous.setThreadLocalInfo();
+            }
+        }
+    }
+
+    private static void initMapping(String expression) throws StarRocksException {
         Column column = new Column("answer", VarcharType.VARCHAR, true, null, true, null, "");
         Table table = new Table(1L, "load_target", Table.TableType.OLAP, List.of(column));
         DescriptorTable descriptors = new DescriptorTable();
         TupleDescriptor tuple = descriptors.createTupleDescriptor();
         tuple.setTable(table);
-        FunctionCallExpr ai = new FunctionCallExpr("ai_custom_query",
-                List.of(new StringLiteral("provider"), new StringLiteral("prompt")));
-        StarRocksException error = assertThrows(StarRocksException.class,
-                () -> Load.initColumns(table, List.of(new ImportColumnDesc("answer", ai)), null,
-                        new HashMap<>(), descriptors, tuple, new HashMap<>(), new TBrokerScanRangeParams(),
-                        true, true, List.of(), false));
-        assertTrue(error.getMessage().contains("AI functions are not supported in LOAD"));
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"ai_query('prompt', parse_json('{}'))", "upper(ai_query('prompt', parse_json('{}')))"})
-    public void testLoadRejectsLegacyAI(String expression) {
-        QueryStatement statement = (QueryStatement)
-                AnalyzeTestUtil.analyzeSuccess("SELECT " + expression);
-        StarRocksException error = assertThrows(StarRocksException.class,
-                () -> Load.rejectAIExpression(statement.getQueryRelation().getOutputExpression().get(0)));
-        assertTrue(error.getMessage().contains("AI functions are not supported in LOAD"));
+        Expr ai = SqlParser.parseSqlToExpr(expression, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        Load.initColumns(table, List.of(new ImportColumnDesc("answer", ai)), null,
+                new HashMap<>(), descriptors, tuple, new HashMap<>(), new TBrokerScanRangeParams(),
+                true, true, List.of(), false);
     }
 }

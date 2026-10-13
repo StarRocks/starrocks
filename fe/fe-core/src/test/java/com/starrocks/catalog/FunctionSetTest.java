@@ -425,7 +425,10 @@ public class FunctionSetTest {
         }
 
         Assertions.assertTrue(FunctionSet.nonDeterministicFunctions.contains("ai_complete"));
+    }
 
+    @Test
+    public void testLegacyAIQueryRemainsOrdinaryBuiltin() {
         Function aiQuery = functionSet.getBuiltinFunctions().stream()
                 .filter(fn -> fn.getFunctionId() == 200000L)
                 .findFirst()
@@ -434,7 +437,8 @@ public class FunctionSetTest {
         Assertions.assertFalse(aiQuery.isAi());
         Assertions.assertEquals(TFunctionBinaryType.BUILTIN, aiQuery.getBinaryType());
         Assertions.assertNull(aiQuery.getAiModelSource());
-        Assertions.assertEquals("ai_query", functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
     }
 
     @Test
@@ -459,32 +463,6 @@ public class FunctionSetTest {
         Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
         overload.setAiModelSource(TAIModelSource.SYSTEM);
         Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("ai_complete"));
-    }
-
-    @Test
-    public void testLegacyAIPrivilegeClassificationRequiresBuiltinMetadata() {
-        Function legacy = functionSet.getBuiltinFunctions().stream()
-                .filter(fn -> "ai_query".equals(fn.functionName())).findFirst().orElseThrow();
-        Assertions.assertTrue(FunctionSet.requiresAIFunctionPrivilege(legacy));
-        Assertions.assertFalse(FunctionSet.requiresAIFunctionPrivilege(null));
-        Function namesake = new Function(new FunctionName("ai_query"), new Type[] {VarcharType.VARCHAR},
-                VarcharType.VARCHAR, false);
-        Assertions.assertFalse(FunctionSet.requiresAIFunctionPrivilege(namesake));
-        namesake.setBinaryType(TFunctionBinaryType.BUILTIN);
-        namesake.getFunctionName().setDb("user_db");
-        Assertions.assertFalse(FunctionSet.requiresAIFunctionPrivilege(namesake));
-        Function ordinary = functionSet.getBuiltinFunctions().stream()
-                .filter(fn -> "lower".equals(fn.functionName())).findFirst().orElseThrow();
-        Assertions.assertFalse(FunctionSet.requiresAIFunctionPrivilege(ordinary));
-
-        legacy.setAiModelSource(TAIModelSource.PROVIDER);
-        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
-        legacy.setAiModelSource(null);
-        legacy.setUserVisible(false);
-        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
-        legacy.setUserVisible(true);
-        legacy.getFunctionName().setDb("user_db");
-        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
     }
 
     @Test
