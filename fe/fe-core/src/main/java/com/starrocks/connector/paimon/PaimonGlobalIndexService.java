@@ -20,6 +20,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.index.IndexTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
@@ -35,7 +36,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 
-/** Executes and aggregates the first, distributed stage of a Paimon Global Index scan. */
+/**
+ * Executes and aggregates the first, distributed stage of a Paimon Global Index scan.
+ * The internal SQL uses the caller's identity and the virtual table's normal authorization checks;
+ * base-table privileges are not mapped to the virtual table. Authorization failures propagate to
+ * the scan planner, which retains the original predicate and falls back to SDK split planning.
+ */
 public final class PaimonGlobalIndexService {
     interface QueryExecutor {
         List<TResultBatch> execute(String sql, int timeoutSeconds);
@@ -48,7 +54,8 @@ public final class PaimonGlobalIndexService {
     public PaimonGlobalIndexService(PaimonTable table, PaimonGlobalIndexRequest request) {
         this(table, request,
                 (sql, timeout) -> new SimpleExecutor("PaimonGlobalIndex", TResultSinkType.HTTP_PROTOCAL)
-                        .executeDQL(sql, timeout, ConnectContext.get()));
+                        // Every shard bitmap is required, regardless of the caller's SELECT cap.
+                        .executeDQLAsCaller(sql, timeout, ConnectContext.get(), SessionVariable.DEFAULT_SELECT_LIMIT));
     }
 
     PaimonGlobalIndexService(
