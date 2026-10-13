@@ -140,7 +140,8 @@ public class QueryActionTest extends StarRocksHttpTestCase {
         pushProfile("q_xss_long", XSS_PAYLOAD, "root", longSql);
 
         String body = getQueryPageAsRoot();
-        Assertions.assertFalse(body.contains("<img"), body);
+        // The page itself has an <img> logo in the navigation bar, so look for the payload rather than any <img>.
+        Assertions.assertFalse(body.contains(XSS_PAYLOAD), body);
         // short statement, truncated long statement and custom query id
         Assertions.assertTrue(body.contains("<td>select &#39;" + XSS_PAYLOAD_HTML + "&#39;</td>"), body);
         Assertions.assertTrue(body.contains("\">select &#39;" + XSS_PAYLOAD_HTML), body);
