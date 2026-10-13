@@ -35,6 +35,7 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.util.CredentialMask;
@@ -114,14 +115,8 @@ public class ConfigBase {
     // Same as maskIfSensitive(ConfField, String), for the config named key (its name or an alias). An unknown key is
     // not masked.
     public static String maskIfSensitive(String key, String value) {
-        if (configFields == null || Strings.isNullOrEmpty(value)) {
-            return value;
-        }
-        for (Field f : configFields) {
-            ConfField anno = f.getAnnotation(ConfField.class);
-            if (anno != null && (f.getName().equals(key) || Arrays.asList(anno.aliases()).contains(key))) {
-                return maskIfSensitive(anno, value);
-            }
+        if (sensitiveConfigNames.contains(key) && !Strings.isNullOrEmpty(value)) {
+            return CredentialMask.LONG;
         }
         return value;
     }
@@ -131,11 +126,15 @@ public class ConfigBase {
     private static String configPath;
     protected static Field[] configFields;
     protected static Map<String, Field> allMutableConfigs = new HashMap<>();
+    // The names and aliases of the sensitive configs, so that maskIfSensitive(String, String) need not scan
+    // configFields: it runs for every parameter of a request uri that is logged, before authentication.
+    private static Set<String> sensitiveConfigNames = ImmutableSet.of();
 
     public void init(String propFile) throws Exception {
         configPath = propFile;
         configFields = this.getClass().getFields();
         initAllMutableConfigs();
+        initSensitiveConfigNames();
         props = new Properties();
         try (FileReader reader = new FileReader(propFile)) {
             props.load(reader);
@@ -163,6 +162,17 @@ public class ConfigBase {
                 allMutableConfigs.put(aliasName, field);
             }
         }
+    }
+
+    private static void initSensitiveConfigNames() {
+        ImmutableSet.Builder<String> names = ImmutableSet.builder();
+        for (Field field : configFields) {
+            ConfField confField = field.getAnnotation(ConfField.class);
+            if (confField != null && confField.sensitive()) {
+                names.add(field.getName()).add(confField.aliases());
+            }
+        }
+        sensitiveConfigNames = names.build();
     }
 
     public static Map<String, Field> getAllMutableConfigs() {
