@@ -304,7 +304,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("pk_index_parallel_execution_threadpool_max_threads", [&]() -> Status {
             auto thread_pool = _exec_env->pk_index_execution_thread_pool();
             if (thread_pool != nullptr) {
-                return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+                int max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+                if (max_thread_count <= 0) {
+                    max_thread_count = CpuInfo::num_cores();
+                }
+                return thread_pool->update_max_threads(std::max(1, max_thread_count));
             }
             return Status::OK();
         });
