@@ -1545,10 +1545,6 @@ public class MergeTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, splitJob.getJobState());
         MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
         Assertions.assertEquals(2, oldIndex.getTablets().size());
-        // As if compaction had already rewritten the files the split children share; merge refuses them otherwise.
-        for (Tablet tablet : oldIndex.getTablets()) {
-            ((LakeTablet) tablet).setHasSharedFiles(false);
-        }
         long oldVersion = physicalPartition.getVisibleVersion();
 
         // Tablets whose compute-node metadata all carries the first tablet's range merge into that range,
