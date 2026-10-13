@@ -1840,10 +1840,10 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
     //     (segment_iterator.cpp), so caching an object built with the rssid makes every later query
     //     look the delvec up under `rowset_id + rssid`, find nothing, and stop masking the rows the
     //     partial update superseded -- duplicate primary keys.
-    //   - `tablet_schema` must be the full tablet schema. Segment builds `_column_readers` from the
-    //     schema it was constructed with, and `new_column_iterator_or_default` silently falls back to
-    //     a default-value iterator for a column that has no reader, so a cached narrow Segment hands
-    //     later readers defaults in place of the stored data.
+    //   - `tablet_schema` must match the full rowset schema. The current logical schema can omit a
+    //     physically stored column after a metadata-only DROP. Segment builds `_column_readers` from
+    //     its construction schema, so caching that narrower schema would make an older reader get
+    //     defaults instead of the stored data. Keep such opens private to this publish.
     //
     // Callers that cannot honour both must pass `allow_segment_cache=false`.
     // Sized from every base segment of the tablet, not just the ones this call reads. A publish runs
@@ -1984,10 +1984,18 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, c
         // object must carry as its id. Both maps are filled together by
         // RssidFileInfoContainer::add_rssid_to_file and keyed by `rowset_id + segment_idx`, so the
         // membership check above covers this lookup too.
-        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid,
-                                                  rssid - params.container.rssid_to_rowid().at(rssid),
-                                                  params.tablet_schema, rowids, column_ids,
-                                                  /*allow_segment_cache=*/true));
+        const auto rowset_id = params.container.rssid_to_rowid().at(rssid);
+        const auto& schema_pins = params.metadata->rowset_to_schema();
+        const auto pin = schema_pins.find(rowset_id);
+        bool allow_segment_cache = params.metadata->schema().id() == params.tablet_schema->id();
+        if (pin != schema_pins.end()) {
+            allow_segment_cache = pin->second == params.tablet_schema->id() &&
+                                  params.metadata->historical_schemas().contains(pin->second);
+        }
+        // Keep the current schema for read ordinals, DCG lookup and casts even when the rowset's
+        // construction schema differs. Bypass both cache lookup and insertion in that case.
+        RETURN_IF_ERROR(fetch_values_from_segment(params.container.rssid_to_file().at(rssid), rssid, rssid - rowset_id,
+                                                  params.tablet_schema, rowids, column_ids, allow_segment_cache));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {

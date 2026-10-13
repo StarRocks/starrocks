@@ -1936,14 +1936,28 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         } else {
             ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
-        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, tablet_schema, this);
         if (fill_meta_cache) {
+            TEST_SYNC_POINT_CALLBACK("TabletManager::load_segment:before_cache_insert", &segment);
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
             if (auto cached_segment = _metacache->cache_segment_if_absent(cache_key, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
+        }
+    }
+    if (tablet_schema != nullptr) {
+        const auto cached_schema = segment->tablet_schema_share_ptr();
+        if (cached_schema == nullptr || cached_schema->id() != tablet_schema->id() ||
+            cached_schema->schema_version() != tablet_schema->schema_version() ||
+            cached_schema->num_columns() != tablet_schema->num_columns()) {
+            // Check the final cache winner, including an insert_if_absent race. A logical schema
+            // used by another reader can omit columns this request still needs, even if the footer
+            // physically contains them. Do not replace that reader's entry or share its Segment.
+            auto fs = segment_info.fs ? segment_info.fs : segment->shared_file_system();
+            segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema),
+                                                /*tablet_manager=*/nullptr);
         }
     }
     // segment->open will read the footer, and it is time-consuming.
