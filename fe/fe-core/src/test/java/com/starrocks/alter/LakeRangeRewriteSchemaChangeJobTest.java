@@ -3494,7 +3494,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                                                    Map<Long, Long> commitVersionMap,
                                                    Map<Long, List<Tablet>> tabletsByPartition,
                                                    ComputeResource computeResource,
-                                                   boolean useAggregatePublish, PublishProperty publishProperty) {
+                                                   boolean useAggregatePublish) {
                 return true;
             }
         };

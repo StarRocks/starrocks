@@ -924,7 +924,6 @@ public class LakeTableAlterMetaJobTest {
                 repairInfo.getNewVersion());
     }
 
-<<<<<<< HEAD
     /**
      * A logical partition with several physical sub-partitions (the shape automatic bucketing produces)
      * involves TWO different physical partitions, and the repair owes each of them something different:
@@ -1007,7 +1006,8 @@ public class LakeTableAlterMetaJobTest {
         Assertions.assertEquals(commitVersions.get(postAlterLatest.getId()).longValue(),
                 repairInfo.getNewVersion());
         Assertions.assertEquals(900L, repairInfo.getNewVersionTime());
-=======
+    }
+
     @Test
     public void testLeaderPrunesFinishedJob() throws Exception {
         runToFinished(job);
@@ -1044,18 +1044,22 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testFollowerReplayPrunesFinishedJob() throws Exception {
-        LakeTableAlterMetaJob cdcJob = new LakeTableAlterMetaJob(
+        LakeTableAlterMetaJob disableIndexJob = new LakeTableAlterMetaJob(
                 GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
-                60 * 1000, TTabletMetaType.CHANGE_DATA_CAPTURE, true, "CLOUD_NATIVE", false, "DEFAULT", true);
+                60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, false, "CLOUD_NATIVE");
         // The follower starts from the catalog as it was before the alter.
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
-        runToFinished(cdcJob);
-        Assertions.assertTrue(table.enableChangeDataCapture());
-        List<LakeTableAlterMetaJob> entries = readJournaledEntries(cdcJob.getJobId());
+        runToFinished(disableIndexJob);
+        Assertions.assertFalse(table.enablePersistentIndex());
+        List<LakeTableAlterMetaJob> entries = readJournaledEntries(disableIndexJob.getJobId());
 
         LocalMetastore followerMetastore = loadMetastore(initialImage);
         OlapTable followerTable = (OlapTable) followerMetastore.getTable(DB_NAME, table.getName());
-        Assertions.assertFalse(followerTable.enableChangeDataCapture());
+        // The alter bumps the visible version of every partition, which only the replay brings to the follower.
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            Assertions.assertNotEquals(physicalPartition.getVisibleVersion(),
+                    followerTable.getPhysicalPartition(physicalPartition.getId()).getVisibleVersion());
+        }
         SchemaChangeHandler followerHandler = new SchemaChangeHandler();
         for (LakeTableAlterMetaJob entry : entries) {
             replayOn(followerMetastore, followerHandler, entry);
@@ -1063,13 +1067,12 @@ public class LakeTableAlterMetaJobTest {
 
         // The handler keeps the first replayed entry and copies the data of each later one into it.
         LakeTableAlterMetaJob retained = entries.get(0);
-        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(cdcJob.getJobId()));
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(disableIndexJob.getJobId()));
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
         assertPruned(retained);
         for (LakeTableAlterMetaJob entry : entries.subList(1, entries.size())) {
             assertHasTabletData(entry);
         }
-        Assertions.assertTrue(followerTable.enableChangeDataCapture());
         Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             Assertions.assertEquals(physicalPartition.getVisibleVersion(),
@@ -1192,6 +1195,5 @@ public class LakeTableAlterMetaJobTest {
     private static void assertPruned(LakeTableAlterMetaJob alterMetaJob) {
         Assertions.assertTrue(alterMetaJob.getPartitionIndexMap().isEmpty());
         Assertions.assertNull(alterMetaJob.batchTask);
->>>>>>> 2480cf4bccc... [Enhancement][RB-350] Drop the per-tablet data of done alter jobs on every FE (#65078)
     }
 }
