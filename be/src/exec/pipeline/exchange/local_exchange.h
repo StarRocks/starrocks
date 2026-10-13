@@ -22,6 +22,7 @@
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
+#include "testutil/sync_point.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -170,12 +171,15 @@ public:
         _sink_observable.add_observer(state, observer);
     }
 
+    void notify_sink() {
+        if (_memory_manager->full_events_changed() || is_all_sources_finished()) {
+            TEST_SYNC_POINT("LocalExchanger::notify_sink::notify_observers");
+            _sink_observable.notify_sink_observers();
+        }
+    }
+
     auto defer_notify_sink() {
-        return DeferOp([this]() {
-            if (_memory_manager->full_events_changed() || is_all_sources_finished()) {
-                _sink_observable.notify_sink_observers();
-            }
-        });
+        return DeferOp([this]() { notify_sink(); });
     }
 
 protected:
