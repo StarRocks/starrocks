@@ -32,7 +32,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/storage_engine.h"
 
 #include <fmt/format.h>
@@ -76,6 +75,7 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
