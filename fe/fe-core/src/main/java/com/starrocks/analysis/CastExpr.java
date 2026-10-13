@@ -36,6 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
@@ -142,6 +143,9 @@ public class CastExpr extends Expr {
     @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.CAST_EXPR;
+        if (!isImplicit && getType().isChar() && ((ScalarType) getType()).getLength() >= 0) {
+            msg.setCast_char_truncate(true);
+        }
         msg.setOpcode(opcode);
         msg.setOutput_column(outputColumn);
         if (getChild(0).getType().isComplexType()) {

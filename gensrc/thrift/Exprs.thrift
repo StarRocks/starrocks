@@ -256,19 +256,9 @@ struct TExprNode {
 
   // lambda function contain non-deterministic sub-exprs
   58: optional bool is_nondeterministic
-<<<<<<< HEAD
-=======
-
-  // When true, STRUCT cast matches fields by name instead of by position.
-  // Set by the FE when SQLMode contains STRUCT_CAST_BY_NAME.
-  59: optional bool cast_struct_by_name
-
-  // Identifies the endpoint configuration owned by the enclosing AI project.
-  60: optional string ai_model_config_id
 
   // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
-  61: optional bool cast_char_truncate
->>>>>>> 4206661 ([BugFix] Truncate CAST(x AS CHAR(N)) to N characters (MySQL-compatible) (#75909))
+  59: optional bool cast_char_truncate
 }
 
 struct TPartitionLiteral {

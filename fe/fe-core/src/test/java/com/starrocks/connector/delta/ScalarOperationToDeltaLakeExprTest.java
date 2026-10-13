@@ -15,6 +15,7 @@
 package com.starrocks.connector.delta;
 
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -180,7 +181,7 @@ public class ScalarOperationToDeltaLakeExprTest {
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
         ConstantOperator value = ConstantOperator.createVarchar("hello");
         ScalarOperator equality = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(new CharType(5), cVarcharCol), value);
+                new CastOperator(ScalarType.createCharType(5), cVarcharCol), value);
         Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(equality), context));
 
         ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, cIntCol,
@@ -189,7 +190,7 @@ public class ScalarOperationToDeltaLakeExprTest {
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(equality, safeEquality), context).toString());
 
         ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ,
-                new CastOperator(new CharType(5), cVarcharCol, true), value);
+                new CastOperator(ScalarType.createCharType(5), cVarcharCol, true), value);
         expected = new Predicate("=", cDeltaVarcharCol, Literal.ofString("hello"));
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitEquality), context).toString());
     }
