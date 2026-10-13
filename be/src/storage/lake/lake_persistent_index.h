@@ -386,9 +386,11 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
-    // Submit disjoint key batches without waiting. The caller owns keys/values until runner joins,
-    // and must finish all submitting tasks before joining when they share the runner's pool.
-    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, IndexValue* values);
+    // Submit disjoint filter lookups without waiting. Keep only packed per-batch skip flags;
+    // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
+    // and filter_batches until runner joins, after all producers sharing its pool have finished.
+    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                        std::vector<std::vector<bool>>* filter_batches);
 
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);

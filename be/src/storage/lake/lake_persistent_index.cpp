@@ -425,20 +425,39 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
     return Status::OK();
 }
 
-Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, IndexValue* values) {
+Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                                         std::vector<std::vector<bool>>* filter_batches) {
     const size_t rows_per_task = get_pk_index_parallel_execution_min_rows();
-    if (n <= rows_per_task || (_sstable_filesets.empty() && _inactive_memtables.empty())) {
-        return get(n, keys, values);
-    }
-
-    for (size_t offset = 0; offset < n;) {
+    const bool parallel = n > rows_per_task && (!_sstable_filesets.empty() || !_inactive_memtables.empty());
+    const size_t num_batches = n / rows_per_task + (n % rows_per_task != 0);
+    // Size the outer vector before submitting: each task owns one separate packed bitmap, so
+    // batches cannot race on a shared vector<bool> word, even when boundaries are unaligned.
+    filter_batches->resize(num_batches);
+    for (size_t batch = 0, offset = 0; offset < n; ++batch) {
         const size_t count = std::min(rows_per_task, n - offset);
-        runner->run([this, keys, values, offset, count]() {
-            TRACE_COUNTER_INCREMENT("rebuild_index_del_get_cnt", 1);
-            // Reads share the index but write disjoint output ranges. Keep the newest-to-oldest
-            // memtable/SST lookup order within every batch, including tombstones.
-            return get(count, keys + offset, values + offset);
-        });
+        auto lookup = [this, keys, filter_batches, too_old, batch, offset, count]() -> Status {
+            // Allocate only when a worker starts, never when queuing a file's lookups. Release
+            // these 8-byte values when this task finishes, rather than keeping all files' results
+            // until both runners join. Queued/completed tasks retain only one bit per key.
+            std::vector<IndexValue> values(count, IndexValue(NullIndexValue));
+            TEST_SYNC_POINT_CALLBACK("LakePersistentIndex::parallel_get:values", &values);
+            // Preserve newest-to-oldest lookup order, including tombstones and missing keys.
+            RETURN_IF_ERROR(get(count, keys + offset, values.data()));
+            auto& filter = (*filter_batches)[batch];
+            filter.assign(count, false);
+            for (size_t i = 0; i < count; ++i) {
+                filter[i] = values[i] != IndexValue(NullIndexValue) && values[i].get_rssid() > too_old;
+            }
+            return Status::OK();
+        };
+        if (parallel) {
+            runner->run([lookup = std::move(lookup)]() {
+                TRACE_COUNTER_INCREMENT("rebuild_index_del_get_cnt", 1);
+                return lookup();
+            });
+        } else {
+            RETURN_IF_ERROR(lookup());
+        }
         offset += count;
     }
     return Status::OK();
@@ -982,11 +1001,10 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // A decoded del file ready to replay: key Slices (borrowing from the owned pk column) + per-key
     // skip filter.
     struct DecodedDel {
-        MutableColumnPtr pkc;                 // owns the key bytes; keys/filter borrow from it
-        Buffer<Slice> keys;                   // Slices into pkc
-        std::vector<bool> filter;             // true = skip this delete (too old)
-        std::vector<IndexValue> found_values; // owned until all deferred lookups finish
-        uint32_t too_old = 0;
+        MutableColumnPtr pkc; // owns the key bytes; keys borrow from it
+        Buffer<Slice> keys;   // Slices into pkc
+        std::vector<bool> filter;
+        std::vector<std::vector<bool>> filter_batches; // independent packed skip flags until replay
     };
 
     auto get_token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
@@ -1032,7 +1050,6 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     auto load_one = [&](int del_idx, DecodedDel* out) -> Status {
         ASSIGN_OR_RETURN(out->pkc, read_one(del_idx));
         RETURN_IF_ERROR(extract_keys(out->pkc, &out->keys));
-        out->filter.assign(out->keys.size(), false);
         const auto& del = rowset->metadata().del_files(del_idx);
         const bool is_origin = (rowset->id() == del.origin_rowset_id());
         // Fall back to the max segment id when a delete has no recorded op_offset (older metadata):
@@ -1045,25 +1062,25 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // so nothing in (or before) this rowset can be newer than it; otherwise some key may be newer.
         const bool need_filter = !is_origin || op_offset < get_max_segment_idx(rowset->metadata());
         if (need_filter) {
-            out->found_values.assign(out->keys.size(), IndexValue(NullIndexValue));
             // Use `origin_rowset_id + op_offset` as the delete's rssid; keys whose current entry is
             // newer (upserted by a later segment, or a newer rowset) are skipped.
-            out->too_old = del.origin_rowset_id() + op_offset;
+            const uint32_t too_old = del.origin_rowset_id() + op_offset;
             // Never join here: load_one and these lookups share the PK execution pool.
-            return parallel_get(&get_runner, out->keys.size(), out->keys.data(), out->found_values.data());
+            return parallel_get(&get_runner, out->keys.size(), out->keys.data(), too_old, &out->filter_batches);
         }
         return Status::OK();
     };
 
-    // Build the filter only after every lookup finishes. vector<bool> packs adjacent flags into
-    // shared words, so even disjoint lookup batches must not write it concurrently.
+    // Flatten the independent batch bitmaps only after every lookup finishes, immediately before
+    // replaying this file. No IndexValue arrays survive completed lookup tasks.
     auto filter_one = [](DecodedDel* d) {
-        for (size_t i = 0; i < d->found_values.size(); ++i) {
-            if (d->found_values[i] != IndexValue(NullIndexValue) && d->found_values[i].get_rssid() > d->too_old) {
-                d->filter[i] = true;
-            }
+        d->filter.assign(d->keys.size(), false);
+        size_t offset = 0;
+        for (const auto& batch : d->filter_batches) {
+            std::copy(batch.begin(), batch.end(), d->filter.begin() + offset);
+            offset += batch.size();
         }
-        std::vector<IndexValue>().swap(d->found_values);
+        std::vector<std::vector<bool>>().swap(d->filter_batches);
     };
 
     // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
@@ -1129,7 +1146,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         runner.run([&decoded, del_idx, &load_one]() { return load_one(del_idx, &decoded[del_idx]); });
     }
     auto load_status = runner.join();
-    // Drain lookups even if a load failed, before destroying their borrowed keys/owned results.
+    // Drain lookups even if a load failed, before destroying their borrowed keys and packed filter outputs.
     auto get_status = join_get();
     RETURN_IF_ERROR(load_status);
     RETURN_IF_ERROR(get_status);
