@@ -43,6 +43,7 @@ public class LanceScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private boolean incrementalRangeConsumed;
 
     public LanceScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -73,10 +74,23 @@ public class LanceScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+        // Zero requests the complete range list for plan inspection or non-incremental scheduling.
+        if (maxScanRangeLength > 0) {
+            if (incrementalRangeConsumed) {
+                return List.of();
+            }
+            incrementalRangeConsumed = true;
+        }
         return scanRangeLocationsList;
     }
 
+    @Override
+    public void prepareRetry() {
+        incrementalRangeConsumed = false;
+    }
+
     public void setupScanRangeLocations() {
+        incrementalRangeConsumed = false;
         scanRangeLocationsList.clear();
         // Worker discovery belongs to scheduling, after query queue admission.
 

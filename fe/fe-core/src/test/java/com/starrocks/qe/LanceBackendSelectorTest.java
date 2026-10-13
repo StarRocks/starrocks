@@ -16,19 +16,26 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.hash.Hashing;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.BackendSelectorFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
@@ -167,6 +174,49 @@ public class LanceBackendSelectorTest {
         HDFSBackendSelector selector = new HDFSBackendSelector(scan, scan.getScanRangeLocations(0),
                 new FragmentScanRangeAssignment(), provider, false, false, false, context(false));
         Assertions.assertThrows(StarRocksException.class, selector::computeScanRangeAssignment);
+    }
+
+    @Test
+    public void testMixedIncrementalBatchesDoNotRepeatLanceAfterConsumptionOrRetry() throws Exception {
+        LanceScanNode lance = newScan("s3://bucket/vectors.lance");
+        HdfsScanNode hive = mock(HdfsScanNode.class);
+        HiveTable table = mock(HiveTable.class);
+        when(table.getTableLocation()).thenReturn("s3://bucket/hive");
+        when(hive.getHiveTable()).thenReturn(table);
+        when(hive.getScanNodePredicates()).thenReturn(new HDFSScanNodePredicates());
+        when(hive.getId()).thenReturn(new PlanNodeId(1));
+        when(hive.isConnectorScanNode()).thenReturn(true);
+        ConnectContext context = context(false);
+        long batchSize = context.getSessionVariable().getConnectorIncrementalScanRangeNumber();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) {
+                lance.prepareRetry();
+            }
+            WorkerProvider provider = new DefaultWorkerProvider(workers(11), ImmutableMap.of(), workers(11),
+                    ImmutableMap.of(), false, WarehouseManager.DEFAULT_RESOURCE);
+            FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+            ExecutionFragment fragment = mock(ExecutionFragment.class);
+            when(fragment.getScanRangeAssignment()).thenReturn(assignment);
+            for (int batch = 0; batch < 3; batch++) {
+                assignment.clear();
+                THdfsScanRange range = new THdfsScanRange().setFull_path("s3://bucket/hive/" + batch).setLength(1);
+                when(hive.getScanRangeLocations(batchSize)).thenReturn(List.of(
+                        new TScanRangeLocations().setScan_range(new TScanRange().setHdfs_scan_range(range))));
+                when(hive.hasMoreScanRanges()).thenReturn(batch < 2);
+                // The coordinator assigns every scan again while any source has another batch.
+                for (ScanNode scan : List.of(lance, hive)) {
+                    BackendSelectorFactory.create(scan, false, fragment, provider, context,
+                            new HashSet<>(), true).computeScanRangeAssignment();
+                }
+                Assertions.assertEquals(batch == 0 ? 1 : 0, assignedDataRanges(assignment, 0));
+                Assertions.assertEquals(1, assignedDataRanges(assignment, 1));
+            }
+        }
+    }
+
+    private static long assignedDataRanges(FragmentScanRangeAssignment assignment, int scanId) {
+        return assignment.values().stream().flatMap(scans -> scans.getOrDefault(scanId, List.of()).stream())
+                .filter(range -> !range.isEmpty()).count();
     }
 
     @Test

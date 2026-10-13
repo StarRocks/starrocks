@@ -53,6 +53,24 @@ public class LanceScanNodeTest {
     }
 
     @Test
+    public void testIncrementalRangeConsumptionAndRetry() {
+        LanceScanNode scan = newScan();
+        scan.setupScanRangeLocations();
+        // Plan inspection must not consume the first scheduling batch.
+        Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
+        Assertions.assertEquals(1, scan.getScanRangeLocations(1).size());
+        Assertions.assertFalse(scan.hasMoreScanRanges());
+        Assertions.assertTrue(scan.getScanRangeLocations(1).isEmpty());
+        Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
+        Assertions.assertTrue(scan.getScanRangeLocations(1).isEmpty());
+        scan.prepareRetry();
+        Assertions.assertEquals(1, scan.getScanRangeLocations(1).size());
+        Assertions.assertTrue(scan.getScanRangeLocations(1).isEmpty());
+        scan.setupScanRangeLocations();
+        Assertions.assertEquals(1, scan.getScanRangeLocations(1).size());
+    }
+
+    @Test
     public void testSerializationPreservesScanPredicates() {
         LanceScanNode scan = newScan();
         BoolLiteral predicate = new BoolLiteral(false);
