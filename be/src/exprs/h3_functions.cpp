@@ -566,54 +566,162 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
 }
 
 namespace {
-struct H3PolygonComponent {
-    std::vector<std::vector<LatLng> > vertices;
-    std::vector< ::GeoLoop> holes;
-    ::GeoPolygon polygon{};
+class H3PolygonComponent {
+public:
+    static StatusOr<H3PolygonComponent> create(const WkbGeometry& geometry) {
+        H3PolygonComponent out;
+        out._vertices.reserve(geometry.rings.size());
+        for (const auto& ring : geometry.rings) {
+            if (ring.size() < 4 || ring.front() != ring.back()) {
+                return Status::InvalidArgument("H3_PolygonToCells requires closed rings");
+            }
+            auto& vertices = out._vertices.emplace_back();
+            vertices.reserve(ring.size() - 1);
+            for (size_t i = 0; i + 1 < ring.size(); ++i) {
+                vertices.push_back({ring[i].y * kRadiansPerDegree, ring[i].x * kRadiansPerDegree});
+            }
+            out._vertex_count += ring.size();
+        }
+        if (out._vertices.empty()) return Status::InvalidArgument("H3_PolygonToCells requires an exterior ring");
+        out._holes.reserve(out._vertices.size() - 1);
+        for (size_t i = 1; i < out._vertices.size(); ++i) {
+            out._holes.push_back({static_cast<int>(out._vertices[i].size()), out._vertices[i].data()});
+        }
+        return out;
+    }
+
+    H3PolygonComponent(H3PolygonComponent&&) noexcept = default;
+    H3PolygonComponent& operator=(H3PolygonComponent&&) noexcept = default;
+    H3PolygonComponent(const H3PolygonComponent&) = delete;
+    H3PolygonComponent& operator=(const H3PolygonComponent&) = delete;
+
+    ::GeoPolygon h3_polygon() {
+        return {{static_cast<int>(_vertices[0].size()), _vertices[0].data()},
+                static_cast<int>(_holes.size()),
+                _holes.empty() ? nullptr : _holes.data()};
+    }
+
+    size_t vertex_count() const { return _vertex_count; }
+    const std::vector<std::vector<LatLng> >& vertices() const { return _vertices; }
     int64_t slots = 0;
-    size_t vertex_count = 0;
+
+private:
+    H3PolygonComponent() = default;
+    std::vector<std::vector<LatLng> > _vertices;
+    std::vector< ::GeoLoop> _holes;
+    size_t _vertex_count = 0;
 };
+
+constexpr size_t kH3RecursiveFillMinVertices = 128;
+constexpr double kH3RecursiveFillMaxLatitude = 70 * kRadiansPerDegree;
+constexpr double kH3RecursiveFillMaxLongitudeSpan = 90 * kRadiansPerDegree;
 
 // The pinned H3 4.5 center iterator avoids tracing every edge of complex
 // polygons. Keep the standard fill for small, polar, or wide/seam-crossing
 // components, where its behavior and startup cost are preferable.
 bool h3_use_recursive_fill(const H3PolygonComponent& component) {
-    if (component.vertex_count < 128) return false;
+    if (component.vertex_count() < kH3RecursiveFillMinVertices) return false;
     double west = std::numeric_limits<double>::max();
     double east = std::numeric_limits<double>::lowest();
-    for (const auto& ring : component.vertices) {
+    for (const auto& ring : component.vertices()) {
         for (const auto& vertex : ring) {
-            if (std::abs(vertex.lat) > 70 * kRadiansPerDegree) return false;
+            if (std::abs(vertex.lat) > kH3RecursiveFillMaxLatitude) return false;
             west = std::min(west, vertex.lng);
             east = std::max(east, vertex.lng);
         }
     }
-    return east - west <= 90 * kRadiansPerDegree;
+    return east - west <= kH3RecursiveFillMaxLongitudeSpan;
 }
 
-StatusOr<std::unique_ptr<H3PolygonComponent> > h3_component(const WkbGeometry& geometry) {
-    auto out = std::make_unique<H3PolygonComponent>();
-    out->vertices.reserve(geometry.rings.size());
-    for (const auto& ring : geometry.rings) {
-        if (ring.size() < 4 || ring.front() != ring.back()) {
-            return Status::InvalidArgument("H3_PolygonToCells requires closed rings");
-        }
-        auto& vertices = out->vertices.emplace_back();
-        vertices.reserve(ring.size() - 1);
-        for (size_t i = 0; i + 1 < ring.size(); ++i) {
-            vertices.push_back({ring[i].y * kRadiansPerDegree, ring[i].x * kRadiansPerDegree});
-        }
-        out->vertex_count += ring.size();
+StatusOr<bool> h3_polygon_is_valid(const WkbGeometry& geometry) {
+    if (geometry.type != WkbGeometryType::POLYGON || geometry.rings.size() != 1) {
+        return spherical_is_valid(geometry);
     }
-    if (out->vertices.empty()) return Status::InvalidArgument("H3_PolygonToCells requires an exterior ring");
-    out->polygon.geoloop = {static_cast<int>(out->vertices[0].size()), out->vertices[0].data()};
-    out->holes.reserve(out->vertices.size() - 1);
-    for (size_t i = 1; i < out->vertices.size(); ++i) {
-        out->holes.push_back({static_cast<int>(out->vertices[i].size()), out->vertices[i].data()});
+    const auto& ring = geometry.rings.front();
+    GeoCoordinateList coordinates;
+    coordinates.list.reserve(ring.size());
+    for (const auto& coordinate : ring) {
+        coordinates.add({coordinate.x, coordinate.y});
     }
-    out->polygon.numHoles = static_cast<int>(out->holes.size());
-    out->polygon.holes = out->holes.data();
-    return out;
+    const bool valid = starrocks::GeoPolygon::is_valid_ring(coordinates);
+    return valid;
+}
+
+struct H3PolygonPlan {
+    std::vector<H3PolygonComponent> components;
+    uint64_t slots = 0;
+};
+
+StatusOr<H3PolygonPlan> h3_plan_polygon(const WkbGeometry& geometry, size_t count, int resolution) {
+    H3PolygonPlan plan;
+    plan.components.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+        const auto& polygon = geometry.type == WkbGeometryType::POLYGON ? geometry : geometry.children[i];
+        if (polygon.empty) continue;
+        ASSIGN_OR_RETURN(auto component, H3PolygonComponent::create(polygon));
+        const ::GeoPolygon polygon_view = component.h3_polygon();
+        const H3Error error = maxPolygonToCellsSize(&polygon_view, resolution, 0, &component.slots);
+        if (error != E_SUCCESS) return h3_error("H3_PolygonToCells size", error);
+        if (component.slots < 0 ||
+            static_cast<uint64_t>(component.slots) > std::numeric_limits<uint32_t>::max() - plan.slots) {
+            return Status::InvalidArgument("H3 array offset limit exceeded");
+        }
+        plan.slots += static_cast<uint64_t>(component.slots);
+        RETURN_IF_ERROR(h3_array_size_check(static_cast<int64_t>(plan.slots)));
+        plan.components.push_back(std::move(component));
+    }
+    return plan;
+}
+
+Status h3_fill_polygon(H3PolygonPlan& plan, int resolution, std::vector<H3Index>& cells) {
+    const bool single_component = plan.components.size() == 1;
+    if (!single_component) {
+        cells.reserve(static_cast<size_t>(plan.slots));
+    }
+    for (auto& component : plan.components) {
+        std::vector<H3Index> scratch;
+        scratch.assign(static_cast<size_t>(component.slots), 0);
+        const bool recursive = h3_use_recursive_fill(component);
+        const ::GeoPolygon polygon_view = component.h3_polygon();
+        H3Error error = recursive ? polygonToCellsExperimental(&polygon_view, resolution, CONTAINMENT_CENTER,
+                                                               component.slots, scratch.data())
+                                  : polygonToCells(&polygon_view, resolution, 0, scratch.data());
+        if (recursive) {
+            // Keep the allocated standard-fill slab and fall back rather
+            // than increasing it if the iterator needs more output slots.
+            if (error == E_MEMORY_BOUNDS) {
+                std::fill(scratch.begin(), scratch.end(), H3_NULL);
+                error = polygonToCells(&polygon_view, resolution, 0, scratch.data());
+            }
+        }
+        if (error != E_SUCCESS) return h3_error("H3_PolygonToCells", error);
+        if (single_component) {
+            cells = std::move(scratch);
+            continue;
+        }
+        for (H3Index cell : scratch) {
+            if (cell == H3_NULL) continue;
+            cells.push_back(cell);
+        }
+    }
+    size_t write = 0;
+    if (single_component) {
+        // Both pinned H3 fills already emit unique cells for one component.
+        // Compact their allocated slab in place and retain its output order.
+        for (size_t i = 0; i < cells.size(); ++i) {
+            const H3Index cell = cells[i];
+            if (cell == H3_NULL) continue;
+            cells[write++] = cell;
+        }
+    } else {
+        std::unordered_set<H3Index> seen;
+        seen.reserve(cells.size());
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (seen.insert(cells[i]).second) cells[write++] = cells[i];
+        }
+    }
+    cells.resize(write);
+    return Status::OK();
 }
 } // namespace
 
@@ -639,88 +747,14 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
         ASSIGN_OR_RETURN(const auto* geometry, h3_geometry(input, row, true, prepared, &local, &varying));
         const size_t count = geometry->type == WkbGeometryType::POLYGON ? 1 : geometry->children.size();
         if (geometry->empty) {
-            RETURN_IF_ERROR(result.append({}));
+            RETURN_IF_ERROR(result.append_bulk({}));
             continue;
         }
-        bool valid;
-        if (geometry->type == WkbGeometryType::POLYGON && geometry->rings.size() == 1) {
-            const auto& ring = geometry->rings.front();
-            GeoCoordinateList coordinates;
-            coordinates.list.reserve(ring.size());
-            for (size_t i = 0; i < ring.size(); ++i) {
-                coordinates.add({ring[i].x, ring[i].y});
-            }
-            valid = starrocks::GeoPolygon::is_valid_ring(coordinates);
-        } else {
-            ASSIGN_OR_RETURN(valid, spherical_is_valid(*geometry));
-        }
+        ASSIGN_OR_RETURN(const bool valid, h3_polygon_is_valid(*geometry));
         if (!valid) return Status::InvalidArgument("H3_PolygonToCells requires valid spherical GEOGRAPHY topology");
-        std::vector<std::unique_ptr<H3PolygonComponent> > components;
-        components.reserve(count);
-        int64_t slots = 0;
-        for (size_t i = 0; i < count; ++i) {
-            const auto& poly = geometry->type == WkbGeometryType::POLYGON ? *geometry : geometry->children[i];
-            if (poly.empty) continue;
-            ASSIGN_OR_RETURN(auto component, h3_component(poly));
-            const H3Error error = maxPolygonToCellsSize(&component->polygon, res, 0, &component->slots);
-            if (error != E_SUCCESS) return h3_error("H3_PolygonToCells size", error);
-            if (component->slots < 0 ||
-                component->slots > static_cast<int64_t>(std::numeric_limits<uint32_t>::max()) - slots) {
-                return Status::InvalidArgument("H3 array offset limit exceeded");
-            }
-            slots += component->slots;
-            RETURN_IF_ERROR(h3_array_size_check(slots));
-            components.push_back(std::move(component));
-        }
+        ASSIGN_OR_RETURN(auto plan, h3_plan_polygon(*geometry, count, res));
         std::vector<H3Index> cells;
-        const bool single_component = components.size() == 1;
-        if (!single_component) {
-            cells.reserve(static_cast<size_t>(slots));
-        }
-        for (const auto& component : components) {
-            std::vector<H3Index> scratch;
-            scratch.assign(static_cast<size_t>(component->slots), 0);
-            const bool recursive = h3_use_recursive_fill(*component);
-            H3Error error = recursive ? polygonToCellsExperimental(&component->polygon, res, CONTAINMENT_CENTER,
-                                                                   component->slots, scratch.data())
-                                      : polygonToCells(&component->polygon, res, 0, scratch.data());
-            if (recursive) {
-                // Keep the allocated standard-fill slab and fall back rather
-                // than increasing it if the iterator needs more output slots.
-                if (error == E_MEMORY_BOUNDS) {
-                    std::fill(scratch.begin(), scratch.end(), H3_NULL);
-                    error = polygonToCells(&component->polygon, res, 0, scratch.data());
-                }
-            }
-            if (error != E_SUCCESS) return h3_error("H3_PolygonToCells", error);
-            if (single_component) {
-                cells = std::move(scratch);
-                continue;
-            }
-            for (H3Index cell : scratch) {
-                if (cell == H3_NULL) continue;
-                if (!isValidCell(cell)) return Status::InternalError("H3_PolygonToCells returned invalid cell");
-                cells.push_back(cell);
-            }
-        }
-        size_t write = 0;
-        if (single_component) {
-            // Both pinned H3 fills already emit unique cells for one component.
-            // Compact their allocated slab in place and retain its output order.
-            for (size_t i = 0; i < cells.size(); ++i) {
-                const H3Index cell = cells[i];
-                if (cell == H3_NULL) continue;
-                if (!isValidCell(cell)) return Status::InternalError("H3_PolygonToCells returned invalid cell");
-                cells[write++] = cell;
-            }
-        } else {
-            std::unordered_set<H3Index> seen;
-            seen.reserve(cells.size());
-            for (size_t i = 0; i < cells.size(); ++i) {
-                if (seen.insert(cells[i]).second) cells[write++] = cells[i];
-            }
-        }
-        cells.resize(write);
+        RETURN_IF_ERROR(h3_fill_polygon(plan, res, cells));
         RETURN_IF_ERROR(result.append_bulk(cells));
     }
     return result.build(size, constant);
