@@ -17,12 +17,6 @@
 #include <memory>
 #include <numeric>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> b38e0ed ([BugFix][POST-1950] Fix lost sink wake-up in local exchange with event scheduler (#80547))
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -30,11 +24,12 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "gutil/casts.h"
 #include "runtime/exec_env.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "types/logical_type.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -400,19 +395,24 @@ TEST_F(LocalExchangeMemoryTest, send_after_all_sources_finished_refunds_immediat
 
 // Records sink notifications that are issued while the local-exchange buffer is not full,
 // i.e. the ones that can actually wake an OUTPUT_FULL sink driver.
-class SinkWakeupObserver final : public PipelineObserver {
+// PipelineObserver is bound to a real driver on this branch and cannot be mocked, so hook the point where
+// LocalExchanger broadcasts to its sink observers instead.
+class SinkWakeupObserver {
 public:
-    explicit SinkWakeupObserver(ChunkBufferMemoryManager* manager) : _manager(manager) {}
-    void source_trigger() override {}
-    void sink_trigger() override {
-        if (!_manager->is_full()) {
-            not_full_sink_count++;
-        }
+    static constexpr const char* kNotifyPoint = "LocalExchanger::notify_sink::notify_observers";
+
+    explicit SinkWakeupObserver(ChunkBufferMemoryManager* manager) : _manager(manager) {
+        SyncPoint::GetInstance()->SetCallBack(kNotifyPoint, [this](void*) {
+            if (!_manager->is_full()) {
+                not_full_sink_count++;
+            }
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
     }
-    void cancel_trigger() override {}
-    void all_trigger() override { sink_trigger(); }
-    void runtime_filter_timeout_trigger() override {}
-    std::string debug_string() const override { return "SinkWakeupObserver"; }
+    ~SinkWakeupObserver() {
+        SyncPoint::GetInstance()->ClearCallBack(kNotifyPoint);
+        SyncPoint::GetInstance()->DisableProcessing();
+    }
 
     std::atomic_int32_t not_full_sink_count{0};
 
@@ -426,7 +426,6 @@ private:
 TEST_F(LocalExchangeMemoryTest, sink_woken_when_full_transition_is_missed) {
     _runtime_state->set_enable_event_scheduler(true);
     SinkWakeupObserver observer(_memory_manager.get());
-    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
 
     auto chunk = _make_int_chunk(100);
     const int64_t mem = chunk->memory_usage();
@@ -468,7 +467,6 @@ TEST_F(LocalExchangeMemoryTest, sink_woken_when_full_transition_is_missed) {
 TEST_F(LocalExchangeMemoryTest, sink_woken_when_last_refund_happens_in_send_chunk) {
     _runtime_state->set_enable_event_scheduler(true);
     SinkWakeupObserver observer(_memory_manager.get());
-    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
 
     auto chunk = _make_int_chunk(_dop * 4);
     _memory_manager->update_max_memory_usage(chunk->memory_usage());
@@ -537,7 +535,6 @@ TEST_F(LocalExchangeMemoryTest, full_transition_recorded_across_two_counters) {
 TEST_F(LocalExchangeMemoryTest, no_sink_notification_without_backpressure) {
     _runtime_state->set_enable_event_scheduler(true);
     SinkWakeupObserver observer(_memory_manager.get());
-    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
 
     _source(0)->add_chunk(_make_int_chunk(100));
     _source(0)->add_chunk(_make_int_chunk(100));
@@ -556,7 +553,6 @@ TEST_F(LocalExchangeMemoryTest, no_sink_notification_without_backpressure) {
 TEST_F(LocalExchangeMemoryTest, sink_woken_when_limit_is_lowered) {
     _runtime_state->set_enable_event_scheduler(true);
     SinkWakeupObserver observer(_memory_manager.get());
-    _exchanger->attach_sink_observer(_runtime_state.get(), &observer);
 
     _source(0)->add_chunk(_make_int_chunk(100));
     ASSERT_FALSE(_memory_manager->is_full());

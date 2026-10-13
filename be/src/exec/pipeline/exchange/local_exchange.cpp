@@ -18,13 +18,13 @@
 #include <memory>
 #include <unordered_map>
 
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "connector/utils.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 #include "gutil/hash/hash.h"
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::pipeline {

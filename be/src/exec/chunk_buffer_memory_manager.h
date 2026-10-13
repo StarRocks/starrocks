@@ -18,12 +18,8 @@
 #include <cstdint>
 #include <limits>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/sync_point.h"
-#include "base/utility/updater.h"
->>>>>>> b38e0ed ([BugFix][POST-1950] Fix lost sink wake-up in local exchange with event scheduler (#80547))
 #include "common/logging.h"
+#include "testutil/sync_point.h"
 #include "util/updater.h"
 
 namespace starrocks::pipeline {
