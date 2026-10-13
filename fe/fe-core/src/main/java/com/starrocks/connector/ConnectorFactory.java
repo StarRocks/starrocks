@@ -44,6 +44,8 @@ public class ConnectorFactory {
             LazyConnector lazyConnector = new LazyConnector(context);
             if (!isReplay) {
                 lazyConnector.initIfNeeded();
+            } else {
+                lazyConnector.refreshAccessControlIfRegistered();
             }
 
             InformationSchemaConnector informationSchemaConnector =
