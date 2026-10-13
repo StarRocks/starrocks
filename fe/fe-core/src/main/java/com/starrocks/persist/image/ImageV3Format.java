@@ -33,7 +33,7 @@ public final class ImageV3Format {
     public static final int TRAILER_LENGTH = 8;
     /** Value written into every {@code IndexEntryPB.version} today. */
     public static final int CURRENT_SECTION_VERSION = 0;
-    /** Highest {@code IndexEntryPB.version} this code understands; newer sections are skipped. */
+    /** Highest {@code IndexEntryPB.version} this code understands; newer registered sections fail to load. */
     public static final int SUPPORTED_SECTION_VERSION = 0;
     /** A manager message larger than this is a design smell; the writer logs a warning. */
     public static final long MANAGER_MESSAGE_SOFT_LIMIT_BYTES = 64L << 20;

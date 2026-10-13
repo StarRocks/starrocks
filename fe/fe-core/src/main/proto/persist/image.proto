@@ -51,7 +51,8 @@ enum ChecksumType {
 }
 
 // Encoding of the messages inside a section. Only protobuf exists today; the field is a hook for
-// future format evolution, and a reader skips sections whose format it does not recognize.
+// future format evolution. An unknown format fails loading for a registered section; section types
+// with no registered loader are skipped.
 enum PayloadFormat {
   PAYLOAD_FORMAT_UNSPECIFIED = 0;
   PAYLOAD_FORMAT_PB = 1;
@@ -75,7 +76,7 @@ message IndexEntryPB {
   // Section type. Values are assigned from per-module numeric ranges (see SectionId) and are never
   // reused; readers skip types they do not know.
   uint32 type = 1;
-  // Format version of this section's payload. Readers skip sections newer than they understand.
+  // Format version of this section's payload. A registered section with a newer version fails loading.
   uint32 version = 2;
   PayloadFormat payload_format = 3;
   // Absolute file offset of the section.
@@ -88,8 +89,10 @@ message IndexEntryPB {
   // has no manager message. The entries, when there are any, follow it and run to the end of the
   // section as one stream.
   uint64 manager_length = 7;
-  // Checksum of the section's on-disk bytes, used to locate corruption after the whole-file check
-  // fails. Explicitly optional: 0 is a valid checksum value, so presence must be distinguishable.
+  // Checksum of the section's on-disk bytes, written by the writer for future section verification
+  // and diagnostics. The current reader validates only the whole-file checksum, which also covers
+  // the index, and does not check this field. Explicitly optional: 0 is a valid checksum value, so
+  // presence must be distinguishable.
   optional fixed32 crc32 = 8;
 }
 

@@ -24,6 +24,7 @@ import com.starrocks.persist.proto.FooterPB;
 import com.starrocks.persist.proto.ImageHeaderPB;
 import com.starrocks.persist.proto.IndexEntryPB;
 import com.starrocks.persist.proto.PayloadFormat;
+import org.apache.commons.io.input.CountingInputStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -119,10 +120,11 @@ public final class ImageReaderV3 implements Closeable {
             }
             // A registered section this build cannot decode is fatal: skipping it would silently drop
             // metadata. Only sections nobody asked for may be ignored.
-            if (entry.getVersion() > ImageV3Format.SUPPORTED_SECTION_VERSION) {
+            if (Integer.compareUnsigned(entry.getVersion(), ImageV3Format.SUPPORTED_SECTION_VERSION) > 0) {
                 throw new ImageFormatException(String.format(
-                        "%s: section %s was written with version %d, this build supports up to %d",
-                        path, id, entry.getVersion(), ImageV3Format.SUPPORTED_SECTION_VERSION));
+                        "%s: section %s was written with version %s, this build supports up to %s",
+                        path, id, Integer.toUnsignedString(entry.getVersion()),
+                        Integer.toUnsignedString(ImageV3Format.SUPPORTED_SECTION_VERSION)));
             }
             if (entry.getPayloadFormat() != PayloadFormat.PAYLOAD_FORMAT_PB) {
                 throw new ImageFormatException(String.format("%s: section %s has unsupported payload format %d",
@@ -189,8 +191,11 @@ public final class ImageReaderV3 implements Closeable {
             throw new ImageFormatException(path + ": unreadable footer", e);
         }
         ImageHeaderPB header;
-        try (InputStream in = new ChannelRegionInputStream(ch, magicLength, footerStart - magicLength)) {
+        long dataStart;
+        try (CountingInputStream in = new CountingInputStream(
+                new ChannelRegionInputStream(ch, magicLength, footerStart - magicLength))) {
             header = ImageHeaderPB.parseDelimitedFrom(in);
+            dataStart = magicLength + in.getByteCount();
         } catch (InvalidProtocolBufferException e) {
             throw new ImageFormatException(path + ": unreadable header", e);
         }
@@ -203,7 +208,7 @@ public final class ImageReaderV3 implements Closeable {
         if (header.getCompression() == CompressionType.UNRECOGNIZED) {
             throw new ImageFormatException(path + ": unsupported compression type " + header.getCompressionValue());
         }
-        validateIndex(footer, path, magicLength, footerStart);
+        validateIndex(footer, path, dataStart, footerStart);
         return new Skeleton(header, footer);
     }
 
@@ -215,17 +220,19 @@ public final class ImageReaderV3 implements Closeable {
                 throw new ImageFormatException(path + ": section type " + e.getType() + " appears twice in the index");
             }
             long start = e.getOffset();
-            long end = start + e.getLength();
-            if (e.getLength() < 0 || start < previousEnd || end > dataEnd) {
-                throw new ImageFormatException(String.format("%s: section type %d has an invalid range [%d, %d)",
-                        path, e.getType(), start, end));
+            long length = e.getLength();
+            // Check the length against the remaining region before adding it to the offset.
+            if (length < 0 || start < previousEnd || start > dataEnd || length > dataEnd - start) {
+                throw new ImageFormatException(String.format(
+                        "%s: section type %d has an invalid range: offset %d, length %d",
+                        path, e.getType(), start, length));
             }
             if (e.getManagerLength() < 0 || e.getManagerLength() > e.getLength()) {
                 throw new ImageFormatException(String.format(
                         "%s: section type %d declares a manager message of %d bytes in a section of %d bytes",
                         path, e.getType(), e.getManagerLength(), e.getLength()));
             }
-            previousEnd = end;
+            previousEnd = start + length;
         }
     }
 

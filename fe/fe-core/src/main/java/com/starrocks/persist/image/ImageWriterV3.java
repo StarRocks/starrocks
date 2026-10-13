@@ -41,9 +41,9 @@ import java.util.zip.CRC32;
  * the manager message and one for the entries of every section, the two levels of crc32 and the
  * index. Managers only see {@link SectionWriter}.
  *
- * <p>Usage: construct, then for every section {@code try (SectionWriter s = beginSection(id)) {...}}
- * in the order the sections must be loaded, then {@link #finish()} and {@link #close()}. Sections
- * are written strictly one at a time; the file order is the load order.
+ * <p>Usage: construct, then for every section {@code try (SectionWriter s = beginSection(id)) {...}},
+ * then {@link #finish()} and {@link #close()}. Sections are written strictly one at a time; the reader
+ * loads them in the order of its registered loaders.
  */
 public final class ImageWriterV3 implements Closeable {
     private static final Logger LOG = LogManager.getLogger(ImageWriterV3.class);
