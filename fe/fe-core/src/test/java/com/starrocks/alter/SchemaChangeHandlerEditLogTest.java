@@ -39,6 +39,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -467,14 +468,24 @@ public class SchemaChangeHandlerEditLogTest {
 
         LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
         try {
-            SchemaChangeHandler followerHandler = new SchemaChangeHandler();
             followerHandler.replayFastSchemaEvolutionMetaChange(replayInfo);
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
             assertHistoryOnlyJobPruned(followerHandler, jobId, DB_ID, TABLE_ID, baseSchemaId);
         } finally {
             GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
         }
+
+        // once nothing below its threshold is running, the leader releases the pre-alter schema and the
+        // follower drops its copy on replay
+        handler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertTrue(handler.getHistorySchema(db.getId(), table.getId(), baseSchemaId).isEmpty());
+        ReleaseAlterJobHistorySchemaLog releaseLog = (ReleaseAlterJobHistorySchemaLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA);
+        Assertions.assertEquals(jobId, releaseLog.getJobId());
+        followerHandler.replayReleaseHistorySchema(releaseLog);
+        Assertions.assertTrue(followerHandler.getHistorySchema(DB_ID, TABLE_ID, baseSchemaId).isEmpty());
     }
 
     private static void assertHistoryOnlyJobPruned(SchemaChangeHandler handler, long jobId, long dbId, long tableId,

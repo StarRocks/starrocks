@@ -93,6 +93,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ModifyColumnCommentLog;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -5132,6 +5133,23 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         job.setComputeResource(computeResource);
         return job;
+    }
+
+    /**
+     * Replays the leader's release of a job's history schema. Idempotent, and skips a job that is gone or has no
+     * history schema; never writes the journal.
+     */
+    public void replayReleaseHistorySchema(ReleaseAlterJobHistorySchemaLog log) {
+        AlterJobV2 job = alterJobsV2.get(log.getJobId());
+        Optional<OlapTableHistorySchema> historySchema = job == null ? Optional.empty() : job.getHistorySchema();
+        if (historySchema.isEmpty()) {
+            LOG.info("skip replaying the release of the history schema of alter job {}, db {}, table {}: "
+                    + "the job or its history schema does not exist", log.getJobId(), log.getDbId(), log.getTableId());
+            return;
+        }
+        historySchema.get().setExpire();
+        LOG.info("replay releasing the history schema of alter job {}, db {}, table {}",
+                log.getJobId(), log.getDbId(), log.getTableId());
     }
 
     /**

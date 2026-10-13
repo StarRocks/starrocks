@@ -703,6 +703,19 @@ public class OperationType {
     // exception should be skippable (metadata_journal_ignore_replay_failure) rather than abort the FE.
     @IgnorableOnReplayFailed
     public static final short OP_ERASE_MATERIALIZED_INDEX = 13558;
+<<<<<<< HEAD
+=======
+    // Per-partition incremental (bounded, resumable) auto-vacuum state, written each round by the
+    // autovacuum coordinator. Non-critical operational state, so replay failure is ignorable.
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_PARTITION_VACUUM_STATE = 13559;
+    // Release the history schema (the pre-alter schemas kept for loads still bound to them) of a done alter job.
+    // Only the leader can tell that no such load is left, so it journals the release; followers and checkpoint
+    // images would otherwise keep the payload until the job itself is removed. Ignorable: replay is idempotent
+    // and skips a job that is gone, and a skipped release only keeps the payload until the job is removed.
+    @IgnorableOnReplayFailed
+    public static final short OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA = 13562;
+>>>>>>> 0ef9a71f0d2... [Enhancement][RB-357] Journal the release of an alter job's history schema (#65086)
 
     /*
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
