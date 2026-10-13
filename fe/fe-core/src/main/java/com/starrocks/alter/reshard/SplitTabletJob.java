@@ -685,7 +685,8 @@ public class SplitTabletJob extends TabletReshardJob {
                 }
             } else if (returnedCount == 1 && tabletRanges.containsKey(first)) {
                 TabletRange child = tabletRanges.get(first);
-                if (!sameLowerBound(child.getRange(), parent) || !sameUpperBound(child.getRange(), parent)) {
+                if (!TabletReshardUtils.sameLowerBound(child.getRange(), parent)
+                        || !TabletReshardUtils.sameUpperBound(child.getRange(), parent)) {
                     throw new TabletReshardException(String.format(
                             "Split result rejected: tablet %d fell back to identical tablet %d, whose range %s on "
                                     + "the compute node differs from its range %s on FE. The compute node's tablet "
@@ -745,12 +746,12 @@ public class SplitTabletJob extends TabletReshardJob {
                 return String.format("new tablet %d has range %s, which is empty", newTabletIds.get(i), children.get(i));
             }
         }
-        if (!sameLowerBound(children.get(0).getRange(), parent)) {
+        if (!TabletReshardUtils.sameLowerBound(children.get(0).getRange(), parent)) {
             return String.format("new tablet %d starts at range %s, not at the parent's lower bound",
                     newTabletIds.get(0), children.get(0));
         }
         int last = children.size() - 1;
-        if (!sameUpperBound(children.get(last).getRange(), parent)) {
+        if (!TabletReshardUtils.sameUpperBound(children.get(last).getRange(), parent)) {
             return String.format("new tablet %d ends at range %s, not at the parent's upper bound",
                     newTabletIds.get(last), children.get(last));
         }
@@ -765,24 +766,6 @@ public class SplitTabletJob extends TabletReshardJob {
             }
         }
         return null;
-    }
-
-    // Bounds are compared by value: a bound decoded from the compute node can carry a different scalar
-    // type than the FE tuple for the same value, which Tuple.equals would treat as different.
-    private static boolean sameLowerBound(Range<Tuple> a, Range<Tuple> b) {
-        if (a.isMinimum() || b.isMinimum()) {
-            return a.isMinimum() && b.isMinimum();
-        }
-        return a.getLowerBound().compareTo(b.getLowerBound()) == 0
-                && a.isLowerBoundIncluded() == b.isLowerBoundIncluded();
-    }
-
-    private static boolean sameUpperBound(Range<Tuple> a, Range<Tuple> b) {
-        if (a.isMaximum() || b.isMaximum()) {
-            return a.isMaximum() && b.isMaximum();
-        }
-        return a.getUpperBound().compareTo(b.getUpperBound()) == 0
-                && a.isUpperBoundIncluded() == b.isUpperBoundIncluded();
     }
 
     /**
