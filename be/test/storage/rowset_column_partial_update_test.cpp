@@ -1642,6 +1642,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) 
     });
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
+    tablet->updates()->stop_compaction(true);
     ASSERT_EQ(1, tablet->updates()->version_history_count());
 
     // create full rowsets first
@@ -1676,7 +1677,9 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_size_tier_compaction) 
     }));
     ASSERT_EQ(11, tablet->updates()->num_rowsets());
     for (size_t expected_count : {size_t{8}, size_t{5}, size_t{2}}) {
-        ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+        tablet->updates()->stop_compaction(false);
+        auto st = tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get());
+        ASSERT_TRUE(st.ok()) << st;
         ASSERT_EQ(expected_count, tablet->updates()->num_rowsets());
         ASSERT_EQ(version, tablet->updates()->max_version());
         ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {

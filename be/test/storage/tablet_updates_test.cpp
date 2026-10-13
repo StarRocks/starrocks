@@ -3944,6 +3944,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     const int64_t old_level_num = config::size_tiered_level_num;
     const int64_t old_min_level_size = config::size_tiered_min_level_size;
     const int64_t old_size_threshold = config::update_compaction_size_threshold;
+    const int64_t old_empty_rowset_batch_size = config::max_update_compaction_num_level_minus_one_rowsets;
     const int32_t old_min_interval = config::update_compaction_per_tablet_min_interval_seconds;
     DeferOp restore_config([&]() {
         config::enable_pk_size_tiered_compaction_strategy = old_pk_size_tiered;
@@ -3951,6 +3952,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
         config::size_tiered_level_num = old_level_num;
         config::size_tiered_min_level_size = old_min_level_size;
         config::update_compaction_size_threshold = old_size_threshold;
+        config::max_update_compaction_num_level_minus_one_rowsets = old_empty_rowset_batch_size;
         config::update_compaction_per_tablet_min_interval_seconds = old_min_interval;
     });
 
@@ -3959,6 +3961,7 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     config::size_tiered_level_num = 7;
     config::size_tiered_min_level_size = 64;
     config::update_compaction_size_threshold = 64 * 1024 * 1024;
+    config::max_update_compaction_num_level_minus_one_rowsets = 4;
     config::update_compaction_per_tablet_min_interval_seconds = 86400;
     _tablet = create_tablet(rand(), rand());
     _tablet->updates()->stop_compaction(true);
@@ -3982,9 +3985,9 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     }
     ASSERT_EQ(10, read_tablet(_tablet, version - 1));
 
-    // empty rowsets level -1
+    // empty rowsets level -1: leave one beyond the batch limit
     rowsets.clear();
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 5; i++) {
         rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, true, false));
     }
     // delete history rowsets data
@@ -4019,14 +4022,20 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
 
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
-    ASSERT_EQ(15, rowsets.size());
+    ASSERT_EQ(18, rowsets.size());
 
     _tablet->updates()->stop_compaction(false);
     ASSERT_TRUE(_tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get()).ok());
 
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
-    ASSERT_EQ(3, rowsets.size());
+    ASSERT_EQ(4, rowsets.size());
+    size_t remaining_empty_rowsets = 0;
+    for (const auto& rowset : rowsets) {
+        remaining_empty_rowsets += rowset->num_rows() == 0;
+    }
+    ASSERT_EQ(1, remaining_empty_rowsets);
+    ASSERT_EQ(10 + N * 2, read_tablet(_tablet, version - 1));
 }
 
 TEST_F(TabletUpdatesTest, test_compaction_rowset_source_limit) {
