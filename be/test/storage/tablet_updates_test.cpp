@@ -15,6 +15,7 @@
 #include "storage/tablet_updates_test.h"
 
 #include <random>
+#include <set>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/sync_point.h"
@@ -4023,6 +4024,13 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
     ASSERT_EQ(18, rowsets.size());
+    std::set<uint32_t> original_empty_rowset_ids;
+    for (const auto& rowset : rowsets) {
+        if (rowset->num_rows() == 0) {
+            original_empty_rowset_ids.insert(rowset->rowset_meta()->get_rowset_seg_id());
+        }
+    }
+    ASSERT_EQ(5, original_empty_rowset_ids.size());
 
     _tablet->updates()->stop_compaction(false);
     ASSERT_TRUE(_tablet->updates()->compaction_for_size_tiered(_compaction_mem_tracker.get()).ok());
@@ -4030,11 +4038,12 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     rowsets.clear();
     ASSERT_TRUE(_tablet->updates()->get_applied_rowsets(version - 1, &rowsets).ok());
     ASSERT_EQ(5, rowsets.size());
-    size_t remaining_empty_rowsets = 0;
+    size_t remaining_original_empty_rowsets = 0;
     for (const auto& rowset : rowsets) {
-        remaining_empty_rowsets += rowset->num_rows() == 0;
+        remaining_original_empty_rowsets +=
+                original_empty_rowset_ids.count(rowset->rowset_meta()->get_rowset_seg_id());
     }
-    ASSERT_EQ(1, remaining_empty_rowsets);
+    ASSERT_EQ(1, remaining_original_empty_rowsets);
     ASSERT_EQ(10 + N * 2, read_tablet(_tablet, version - 1));
 }
 
