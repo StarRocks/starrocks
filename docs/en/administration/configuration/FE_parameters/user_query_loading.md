@@ -1195,7 +1195,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 
 ### `history_job_keep_max_num`
 
-- Default: 1000
+- Default: 10000
 - Type: Int
 - Unit: -
 - Is mutable: Yes
