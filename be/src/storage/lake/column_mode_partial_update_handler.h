@@ -15,11 +15,19 @@
 #pragma once
 
 #include <functional>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset_column_update_state.h"
+
+namespace starrocks {
+class WritableFile;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -50,6 +58,27 @@ private:
             const RowsetUpdateStateParams& params, const std::shared_ptr<TabletSchema>& tschema);
     Status _update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
                                        StreamChunkContainer container, int32_t condition_idx_in_partial_schema);
+
+    // Partition the update rows of a column batch by source segment into a local spill file.
+    //
+    // A source segment needs only the rows of each update file that land in it, but the update files
+    // are ordered by key, not by source segment, so the per-segment apply used to read every update
+    // file it touched in full: keys are hash distributed, every update file carries rows of nearly
+    // every source segment, and a full-table column update read every update file once per source
+    // segment, O(source segments x update files) reads of the same data. The partition pass reads each
+    // update file once, in update-file order, and appends each row (its columns of this batch plus
+    // its source rowid) to its segment's slice of the spill file. The segment tasks then read their own
+    // slices, a few KB each, from local disk. Memory is bounded by lake_pk_column_mode_spill_buffer_bytes
+    // and does not depend on the number of source segments or update files.
+    Status _spill_update_rows(const std::map<uint32_t, UptidToRowidPairs>& rss_upt_id_to_rowid_pairs,
+                              const Schema& partial_schema);
+    // Apply the spilled rows of source segment `rssid` that fall into `container`. Same semantics as
+    // _update_source_chunk_by_upt: update files in order, rows of one file sorted by source rowid,
+    // the condition column compared inline when condition update is on.
+    Status _update_source_chunk_from_spill(uint32_t rssid, const Schema& partial_schema, StreamChunkContainer container,
+                                           int32_t condition_idx_in_partial_schema);
+    void _release_spill();
+    static std::string _spill_dir();
     Status _read_from_source_segment_and_update(const RowsetUpdateStateParams& params, const Schema& schema,
                                                 uint32_t rssid,
                                                 const std::function<Status(StreamChunkContainer)>& update_func);
@@ -80,6 +109,23 @@ private:
     // Only a SPLIT child's cross publish builds one. Outlives the SegmentPKIterators that reference it.
     CrossPublishRowSelectorPtr _row_selector;
     int64_t _upt_memory_usage_per_row = 0;
+
+    struct SpillRecord {
+        uint32_t upt_id;
+        uint32_t num_rows;
+        int64_t offset;
+        int64_t length;
+    };
+    struct UptSpill {
+        std::string path;
+        std::unique_ptr<WritableFile> writer;
+        int64_t size = 0;
+        // Source segment -> its records, in apply order (update-file order, then write order).
+        std::map<uint32_t, std::vector<SpillRecord>> records;
+        bool ready = false;
+    };
+    UptSpill _spill;
+    int64_t _spill_seq = 0;
 };
 
 class CompactionUpdateConflictChecker {

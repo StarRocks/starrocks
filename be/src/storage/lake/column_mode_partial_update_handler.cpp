@@ -14,7 +14,9 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include <algorithm>
 #include <climits>
+#include <filesystem>
 
 #include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
@@ -23,11 +25,14 @@
 #include "base/utility/defer_op.h"
 #include "column/chunk_factory.h"
 #include "column/chunk_schema_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/serde/column_array_serde.h"
+#include "column/vectorized_fwd.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/tracer.h"
+#include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -35,6 +40,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
+#include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/filenames.h"
@@ -48,6 +54,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
+#include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage_primitive/primary_key_encoder.h"
 
@@ -78,6 +85,7 @@ ColumnModePartialUpdateHandler::ColumnModePartialUpdateHandler(int64_t base_vers
         : _base_version(base_version), _txn_id(txn_id), _tracker(tracker) {}
 
 ColumnModePartialUpdateHandler::~ColumnModePartialUpdateHandler() {
+    _release_spill();
     _tracker->release(_memory_usage);
 }
 
@@ -410,6 +418,286 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     return Status::OK();
 }
 
+std::string ColumnModePartialUpdateHandler::_spill_dir() {
+    if (!config::lake_pk_column_mode_spill_dir.empty()) {
+        return config::lake_pk_column_mode_spill_dir;
+    }
+    auto* engine = StorageEngine::instance();
+    if (engine != nullptr) {
+        auto stores = engine->get_stores();
+        if (!stores.empty()) {
+            return stores[0]->path() + "/lake_pcu_spill";
+        }
+    }
+    return std::filesystem::temp_directory_path().string() + "/lake_pcu_spill";
+}
+
+void ColumnModePartialUpdateHandler::_release_spill() {
+    if (_spill.writer != nullptr) {
+        (void)_spill.writer->close();
+        _spill.writer.reset();
+    }
+    if (!_spill.path.empty()) {
+        auto st = FileSystem::Default()->delete_file(_spill.path);
+        if (!st.ok() && !st.is_not_found()) {
+            LOG(WARNING) << "Fail to delete column-mode partial update spill file " << _spill.path << ": " << st;
+        }
+        _spill.path.clear();
+    }
+    _spill.records.clear();
+    _spill.size = 0;
+    _spill.ready = false;
+}
+
+Status ColumnModePartialUpdateHandler::_spill_update_rows(
+        const std::map<uint32_t, UptidToRowidPairs>& rss_upt_id_to_rowid_pairs, const Schema& partial_schema) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pcu_spill_write_us");
+    _release_spill();
+    const uint32_t num_upt = _rowset_ptr->num_segments();
+
+    // Invert rssid -> upt_id -> (source rowid, upt rowid) into one list per update file, ordered by
+    // upt rowid, so the file can be streamed once and each row routed to its segment on the way.
+    struct Entry {
+        uint32_t upt_rowid;
+        uint32_t rssid;
+        uint32_t src_rowid;
+    };
+    std::vector<std::vector<Entry>> per_upt(num_upt);
+    for (const auto& [rssid, upt_map] : rss_upt_id_to_rowid_pairs) {
+        for (const auto& [upt_id, pairs] : upt_map) {
+            RETURN_ERROR_IF_FALSE(upt_id < num_upt, fmt::format("update file id {} out of range {}, tablet {} txn {}",
+                                                                upt_id, num_upt, _rowset_ptr->tablet_id(), _txn_id));
+            for (const auto& p : pairs) {
+                per_upt[upt_id].push_back({p.second, rssid, p.first});
+            }
+        }
+    }
+    for (auto& entries : per_upt) {
+        std::sort(entries.begin(), entries.end(),
+                  [](const Entry& a, const Entry& b) { return a.upt_rowid < b.upt_rowid; });
+    }
+
+    const std::string dir = _spill_dir();
+    RETURN_IF_ERROR(FileSystem::Default()->create_dir_recursive(dir));
+    _spill.path = fmt::format("{}/pcu_{}_{}_{}.spill", dir, _rowset_ptr->tablet_id(), _txn_id, _spill_seq++);
+    ASSIGN_OR_RETURN(_spill.writer, FileSystem::Default()->new_writable_file(_spill.path));
+
+    // One buffer per source segment: this batch's columns plus the source rowid of each row.
+    struct Buffer {
+        ChunkUniquePtr chunk;
+        UInt32Column::MutablePtr rowids;
+    };
+    std::map<uint32_t, Buffer> buffers;
+    int64_t buffered_bytes = 0;
+    DeferOp release_buffered([&]() { _tracker->release(buffered_bytes); });
+
+    auto flush = [&](uint32_t upt_id) -> Status {
+        std::string payload;
+        for (auto& [rssid, buffer] : buffers) {
+            if (buffer.chunk == nullptr || buffer.chunk->num_rows() == 0) {
+                continue;
+            }
+            int64_t max_size = 0;
+            for (const auto& column : buffer.chunk->columns()) {
+                const int64_t n = serde::ColumnArraySerde::max_serialized_size(*column);
+                RETURN_ERROR_IF_FALSE(n > 0, "column-mode partial update cannot spill this column type");
+                max_size += n;
+            }
+            max_size += serde::ColumnArraySerde::max_serialized_size(*buffer.rowids);
+            payload.resize(max_size);
+            auto* cur = reinterpret_cast<uint8_t*>(payload.data());
+            for (const auto& column : buffer.chunk->columns()) {
+                ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*column, cur));
+            }
+            ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::serialize(*buffer.rowids, cur));
+            const int64_t length = cur - reinterpret_cast<uint8_t*>(payload.data());
+            RETURN_IF_ERROR(_spill.writer->append(Slice(payload.data(), length)));
+            _spill.records[rssid].push_back(SpillRecord{.upt_id = upt_id,
+                                                        .num_rows = static_cast<uint32_t>(buffer.chunk->num_rows()),
+                                                        .offset = _spill.size,
+                                                        .length = length});
+            _spill.size += length;
+            TRACE_COUNTER_INCREMENT("pcu_spill_records", 1);
+            buffer.chunk->reset();
+            buffer.rowids->reset_column();
+        }
+        _tracker->release(buffered_bytes);
+        buffered_bytes = 0;
+        return Status::OK();
+    };
+
+    for (uint32_t upt_id = 0; upt_id < num_upt; upt_id++) {
+        auto& entries = per_upt[upt_id];
+        if (entries.empty()) {
+            continue;
+        }
+        OlapReaderStatistics stats;
+        ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+        RETURN_ERROR_IF_FALSE(segment_iters.size() == num_upt);
+        DeferOp close_iters([&]() {
+            for (auto& iter : segment_iters) {
+                if (iter != nullptr) {
+                    iter->close();
+                }
+            }
+        });
+        if (segment_iters[upt_id] == nullptr) {
+            // A lost update-file segment ignored via experimental_lake_ignore_lost_segment produces
+            // no rowid pairs, so this should not happen; keep the old behaviour of skipping it.
+            LOG(WARNING) << "column-mode partial update skips a null update-file segment iterator, tablet: "
+                         << _rowset_ptr->tablet_id() << ", upt_id: " << upt_id
+                         << " (a lost segment via experimental_lake_ignore_lost_segment, or an unexpected empty slot)";
+            continue;
+        }
+        TEST_SYNC_POINT_CALLBACK("ColumnModePartialUpdateHandler::_spill_update_rows:upt_read", &upt_id);
+        auto& iter = segment_iters[upt_id];
+        auto chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        uint32_t base = 0;
+        size_t pos = 0;
+        std::vector<uint32_t> indexes;
+        std::vector<uint32_t> src_rowids;
+        while (pos < entries.size()) {
+            chunk->reset();
+            auto st = iter->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            }
+            const uint32_t n = chunk->num_rows();
+            const uint32_t end = base + n;
+            const size_t start = pos;
+            while (pos < entries.size() && entries[pos].upt_rowid < end) {
+                pos++;
+            }
+            if (start < pos) {
+                RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*chunk, "column mode partial update upt chunk",
+                                                                     _rowset_ptr->tablet_id(), _txn_id));
+                const int64_t row_bytes = static_cast<int64_t>(chunk->bytes_usage()) / n + sizeof(uint32_t);
+                // Group this chunk's rows by segment; the stable sort keeps upt rowid order inside a group.
+                std::stable_sort(entries.begin() + start, entries.begin() + pos,
+                                 [](const Entry& a, const Entry& b) { return a.rssid < b.rssid; });
+                size_t i = start;
+                while (i < pos) {
+                    const uint32_t rssid = entries[i].rssid;
+                    indexes.clear();
+                    src_rowids.clear();
+                    for (; i < pos && entries[i].rssid == rssid; i++) {
+                        indexes.push_back(entries[i].upt_rowid - base);
+                        src_rowids.push_back(entries[i].src_rowid);
+                    }
+                    auto& buffer = buffers[rssid];
+                    if (buffer.chunk == nullptr) {
+                        buffer.chunk = ChunkFactory::new_chunk(partial_schema, 0);
+                        buffer.rowids = UInt32Column::create();
+                    }
+                    TRY_CATCH_BAD_ALLOC(buffer.chunk->append_selective(*chunk, indexes.data(), 0, indexes.size()));
+                    buffer.rowids->append_numbers(src_rowids.data(), src_rowids.size() * sizeof(uint32_t));
+                    const int64_t bytes = row_bytes * static_cast<int64_t>(indexes.size());
+                    _tracker->consume(bytes);
+                    buffered_bytes += bytes;
+                }
+                if (buffered_bytes > config::lake_pk_column_mode_spill_buffer_bytes) {
+                    RETURN_IF_ERROR(flush(upt_id));
+                }
+            }
+            base = end;
+        }
+        // Flush at the update-file boundary so every record holds rows of one update file.
+        RETURN_IF_ERROR(flush(upt_id));
+    }
+    RETURN_IF_ERROR(_spill.writer->close());
+    _spill.writer.reset();
+    _spill.ready = true;
+    TRACE_COUNTER_INCREMENT("pcu_spill_bytes", _spill.size);
+    return Status::OK();
+}
+
+Status ColumnModePartialUpdateHandler::_update_source_chunk_from_spill(uint32_t rssid, const Schema& partial_schema,
+                                                                       StreamChunkContainer container,
+                                                                       int32_t condition_idx_in_partial_schema) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
+    RETURN_ERROR_IF_FALSE(_spill.ready, "column-mode partial update spill is not ready");
+    auto it = _spill.records.find(rssid);
+    if (it == _spill.records.end()) {
+        return Status::OK();
+    }
+    // read_at_fully is a seek followed by a read, so the segment tasks must not share one stream:
+    // each call opens its own reader on the local file.
+    ASSIGN_OR_RETURN(auto reader, FileSystem::Default()->new_random_access_file(_spill.path));
+    std::string payload;
+    std::vector<std::pair<uint32_t, uint32_t>> rows; // (source rowid in container, row in record)
+    for (const auto& rec : it->second) {
+        payload.resize(rec.length);
+        RETURN_IF_ERROR(reader->read_at_fully(rec.offset, payload.data(), rec.length));
+        auto upt_chunk = ChunkFactory::new_chunk(partial_schema, rec.num_rows);
+        auto rowids = UInt32Column::create();
+        const auto* cur = reinterpret_cast<const uint8_t*>(payload.data());
+        const auto* end = cur + rec.length;
+        for (auto& column : upt_chunk->columns()) {
+            ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, column->as_mutable_raw_ptr()));
+        }
+        ASSIGN_OR_RETURN(cur, serde::ColumnArraySerde::deserialize(cur, end, rowids.get()));
+        RETURN_ERROR_IF_FALSE(upt_chunk->num_rows() == rec.num_rows && rowids->size() == rec.num_rows,
+                              "column-mode partial update spill record is corrupted");
+
+        // Keep only the rows of this streamed source range, ordered by source rowid like the
+        // whole-file path does.
+        rows.clear();
+        const auto& src = rowids->get_data();
+        for (uint32_t i = 0; i < rec.num_rows; i++) {
+            if (src[i] >= container.start_rowid && src[i] < container.end_rowid) {
+                rows.emplace_back(src[i] - container.start_rowid, i);
+            }
+        }
+        if (rows.empty()) {
+            continue;
+        }
+        std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::vector<uint32_t> sorted_source_rowids;
+        std::vector<uint32_t> unsorted_upt_rowids;
+        sorted_source_rowids.reserve(rows.size());
+        unsorted_upt_rowids.reserve(rows.size());
+        for (const auto& [source_rowid, upt_rowid] : rows) {
+            sorted_source_rowids.push_back(source_rowid);
+            unsorted_upt_rowids.push_back(upt_rowid);
+        }
+
+        if (condition_idx_in_partial_schema >= 0) {
+            const auto& source_cond = container.chunk_ptr->get_column_by_index(condition_idx_in_partial_schema);
+            const auto& upt_cond = upt_chunk->get_column_by_index(condition_idx_in_partial_schema);
+            const size_t original_size = sorted_source_rowids.size();
+            std::vector<uint32_t> filtered_source_rowids;
+            std::vector<uint32_t> filtered_upt_rowids;
+            filtered_source_rowids.reserve(original_size);
+            filtered_upt_rowids.reserve(original_size);
+            for (size_t i = 0; i < original_size; ++i) {
+                const uint32_t src_rowid = sorted_source_rowids[i];
+                const uint32_t upt_rowid = unsorted_upt_rowids[i];
+                if (source_cond->compare_at(src_rowid, upt_rowid, *upt_cond, -1) <= 0) {
+                    filtered_source_rowids.push_back(src_rowid);
+                    filtered_upt_rowids.push_back(upt_rowid);
+                }
+            }
+            sorted_source_rowids.swap(filtered_source_rowids);
+            unsorted_upt_rowids.swap(filtered_upt_rowids);
+            TRACE_COUNTER_INCREMENT("pcu_condition_kept_cnt", sorted_source_rowids.size());
+            TRACE_COUNTER_INCREMENT("pcu_condition_dropped_cnt", original_size - sorted_source_rowids.size());
+        }
+        if (sorted_source_rowids.empty()) {
+            continue;
+        }
+        auto tmp_chunk = ChunkFactory::new_chunk(partial_schema, unsorted_upt_rowids.size());
+        TRY_CATCH_BAD_ALLOC(
+                tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
+        RETURN_IF_EXCEPTION(container.chunk_ptr->update_rows(*tmp_chunk, sorted_source_rowids.data()));
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
+                                                             "column mode partial update merged source chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
+    }
+    return Status::OK();
+}
+
 template <typename T>
 static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_t offset, size_t batch_size) {
     std::vector<T> new_array;
@@ -557,6 +845,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                              _locate_condition_idx_in_partial_schema(selective_update_column_ids, condition_cid));
         }
 
+        // Read each update file once and hand every source segment its own rows (see
+        // _spill_update_rows). Declared before the runner so the spill outlives every task.
+        const bool spill_update_rows = config::lake_pk_column_mode_spill_update_rows;
+        if (spill_update_rows) {
+            RETURN_IF_ERROR(_spill_update_rows(rss_upt_id_to_rowid_pairs, partial_schema));
+        }
+        DeferOp release_spill([&]() { _release_spill(); });
+
         // Create thread pool token for segment-level parallelism
         auto token = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
@@ -576,7 +872,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             const auto* upt_pairs_ptr = &each.second;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
-                         upt_pairs_ptr, condition_idx_in_partial_schema, &dcg_column_ids,
+                         upt_pairs_ptr, condition_idx_in_partial_schema, spill_update_rows, &dcg_column_ids,
                          &dcg_column_file_with_encryption_metas, &dcg_column_file_sizes, &result_mutex]() -> Status {
                 // 3.3 prepare one DCG writer, then stream source-segment chunks through update and append.
                 ASSIGN_OR_RETURN(auto delta_column_group_writer,
@@ -587,9 +883,15 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             _tracker->consume(source_chunk_size);
                             DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
 
-                            // 3.4 read from update segments and apply rows in this source range.
-                            RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
-                                                                        condition_idx_in_partial_schema));
+                            // 3.4 apply this source range's update rows (from the spill, or by
+                            // reading the update files).
+                            if (spill_update_rows) {
+                                RETURN_IF_ERROR(_update_source_chunk_from_spill(rssid, partial_schema, container,
+                                                                                condition_idx_in_partial_schema));
+                            } else {
+                                RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
+                                                                            condition_idx_in_partial_schema));
+                            }
                             padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
                             RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
                                     *container.chunk_ptr, "column mode partial update padded source chunk",

@@ -1025,6 +1025,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：部分更新（partial update）每个工作线程的内存上限，用于限制单个 worker 在处理 partial update 时的内存占用。
+### lake_pk_column_mode_spill_update_rows
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：存算分离主键表做列模式部分更新时，是否先把更新行按源 segment 分区写入本地 spill 文件再应用。开启后每个更新文件在每个列批次只从对象存储读取一次，每个源 segment 只从本地盘读取属于自己的行。关闭时每个源 segment 会重复读取它涉及的所有更新文件，在 segment 很多的 tablet 上会很慢。分区过程占用的内存由 `lake_pk_column_mode_spill_buffer_bytes` 限制。
+- 引入版本：-
+
+### lake_pk_column_mode_spill_buffer_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：列模式部分更新的分区过程在刷写到 spill 文件之前最多缓冲的内存。参见 `lake_pk_column_mode_spill_update_rows`。
+- 引入版本：-
+
+### lake_pk_column_mode_spill_dir
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：列模式部分更新写 spill 文件的目录。为空时使用第一个本地存储路径，节点没有本地存储路径时使用系统临时目录。publish 结束后 spill 文件立即删除。
+- 引入版本：-
+
 ### enable_load_spill_parallel_merge
 
 - 默认值：true
