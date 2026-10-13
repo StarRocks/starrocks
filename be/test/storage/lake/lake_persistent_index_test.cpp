@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <fmt/format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -2052,7 +2053,7 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_propagates_io_error) {
     rowset_meta.set_id(42);
     for (int i = 0; i < 3; ++i) {
         auto* d = rowset_meta.add_del_files();
-        d->set_name("nonexistent_del_" + std::to_string(i));
+        d->set_name(fmt::format("nonexistent_del_{}", i));
         d->set_origin_rowset_id(42);
         d->set_op_offset(0);
     }

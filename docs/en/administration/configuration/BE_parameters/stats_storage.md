@@ -949,7 +949,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to half of the number of CPU cores.
+- Description: The maximum number of threads in the thread pool for Primary Key index parallel execution in a shared-data cluster. `0` means automatically set to the number of CPU cores, with at least one thread. Setting this parameter to `0` at runtime restores this automatic sizing.
 - Introduced in: -
 
 ### pk_index_parallel_rebuild_mem_ratio

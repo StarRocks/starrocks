@@ -583,7 +583,8 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // the anchor is local we avoid a cross-node get-shard-info RPC; when it is not (e.g.
 // FE picked an aggregator that does not own any tablet in the batch), the worker has
 // to fall back to remote fetch. See the FE-side LakeAggregator.chooseAggregatorNode
-// for the companion optimization.
+// for the companion optimization. The load coordinator cannot be chosen that way, so
+// the tablet owners hand it their shard info instead, see `borrow_shard_info`.
 int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates) {
     DCHECK(!candidates.empty());
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
@@ -592,8 +593,36 @@ int64_t TabletManager::pick_local_anchor_tablet_id(const std::vector<int64_t>& c
             return tablet_id;
         }
     }
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        for (int64_t tablet_id : candidates) {
+            if (worker->has_borrowed_shard_info(tablet_id)) {
+                return tablet_id;
+            }
+        }
+    }
 #endif
     return candidates.front();
+}
+
+std::string TabletManager::export_shard_info(int64_t tablet_id) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto info_or = worker->export_shard_info(tablet_id); info_or.ok()) {
+            return std::move(info_or).value();
+        }
+    }
+#endif
+    return {};
+}
+
+void TabletManager::borrow_shard_info(const std::string& serialized) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (auto worker = get_staros_worker(); worker != nullptr) {
+        if (auto st = worker->borrow_shard_info(serialized); !st.ok()) {
+            LOG(WARNING) << "failed to keep the shard info handed over by a tablet owner: " << st;
+        }
+    }
+#endif
 }
 
 // Refuse to persist a bundle that does not cover every tablet in |expected_tablet_ids|.
@@ -965,10 +994,10 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
 
     if (metadata_or.status().is_not_found() && wants_initial_version && !shared_initial_attempted) {
         // Last-resort: this tablet has no version-1 key of its own, so try the partition-shared
-        // object. Reached on any read that carries no hint, and on a partition whose shared layout
-        // did not come from `file_bundling` (today, one built under
-        // Config.lake_enable_tablet_creation_optimization), since FE derives the hint from the table
-        // property alone and so never sends one for those.
+        // object. Reached on any read that carries no hint, and on a partition whose shared layout FE
+        // does not hint: one built under Config.lake_enable_tablet_creation_optimization rather than
+        // `file_bundling`, or a range-distribution partition created before FE stopped giving those
+        // tables the shared layout.
         //
         // Reached only after the tablet's own key missed, which is what the ordering invariant above
         // requires, and it memoizes nothing about the layout: the object itself is cached (see
@@ -1916,7 +1945,7 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     // NOTE: if partial compaction is turned on, `segment_id` might not be the same as cached segment id
     //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
     //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
@@ -1950,16 +1979,16 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // segment->open will read the footer, and it is time-consuming.
     // separate it from static Segment::open is to prevent a large number of cache misses,
     // and many temporary segment objects generation when loading the same segment concurrently.
-    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts, stats));
     return segment;
 }
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id,
                                                  const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                                 TabletSchemaPtr tablet_schema) {
+                                                 TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats) {
     size_t footer_size_hint = 16 * 1024;
     return load_segment(segment_info, segment_id, &footer_size_hint, lake_io_opts, fill_meta_cache,
-                        std::move(tablet_schema));
+                        std::move(tablet_schema), stats);
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)

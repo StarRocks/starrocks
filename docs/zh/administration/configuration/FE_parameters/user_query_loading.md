@@ -107,7 +107,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 未显式指定模型时使用的默认模型，包括 FILE 重载。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_chat_provider`
@@ -115,9 +115,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`qwen_compatible`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible` 或 `qwen_compatible`；空值或其他值都会导致分析失败。两种协议均支持文本和 inline 图片 FILE 输入；只有 `qwen_compatible` 支持 inline MP4 视频。所选模型必须支持输入模态。协议不会根据 endpoint 或模型名称推断。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +143,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`dashscope_multimodal`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为用于文本的 `openai_compatible`，或用于文本以及 inline JPEG、PNG、WebP 图片 FILE 的 `dashscope_multimodal`。所选模型必须支持输入模态。不支持视频 FILE 向量化。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置，也不会根据 endpoint 或模型名称推断协议。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -1191,6 +1191,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 完成事务期间获取数据库和表锁的默认超时。
 - 引入版本: v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 内存中保留的已完成或已取消 ALTER 作业的最大数量，这些作业可通过 SHOW ALTER TABLE 查看。schema 变更作业与优化作业共用一个上限，rollup 作业单独计数。超出上限时，按完成时间从早到晚删除作业，即使作业尚未超过 `history_job_keep_max_second` 设定的保留时长。以下两种情况下作业会继续保留，作业数因此可能暂时超过上限：一是正在进行的导入可能还在使用该作业变更前的 schema；二是存算分离集群中仍有集群快照依赖该作业。设为 `0` 或负数表示不限制。
+- 引入版本: -
 
 ### `history_job_keep_max_second`
 

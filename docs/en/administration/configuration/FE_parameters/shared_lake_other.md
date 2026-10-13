@@ -512,7 +512,7 @@ This topic introduces the following types of FE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: The Compaction Score threshold that triggers Compaction operations in a shared-data cluster. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- Description: The Compaction Score threshold for automatic Compaction in a shared-data cluster. Automatic Compaction requires a partition score greater than `0` and greater than or equal to this threshold. Partitions with a score of `0` are skipped even when this parameter is set to `0`. Manual Compaction and other priority requests bypass these score checks.
 - Introduced in: v3.1.0
 
 ### `lake_compaction_score_upper_bound`
@@ -793,7 +793,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Tables that use range distribution never use the optimization: each of their tablets carries its own key range, so its metadata is always created per tablet. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
