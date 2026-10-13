@@ -1,5 +1,10 @@
 -- name: test_ai_privileges @no_arrow_flight_sql
 -- EXPLAIN checks authorization without making external AI requests.
+-- Keep the fixture suffix available to CLEANUP even if an assertion fails.
+fixture_suffix=SELECT '${uuid0}';
+-- result:
+[REGEX]^[0-9a-f]{32}$
+-- !result
 CREATE USER ai_user_${uuid0};
 -- result:
 -- !result
@@ -175,6 +180,6 @@ EXPLAIN SELECT ai_custom_query('ai_provider_${uuid0}', 'prompt');
 
 CLEANUP {
     EXECUTE AS root WITH NO REVERT;
-    DROP USER IF EXISTS ai_user_${uuid0};
-    DROP AI PROVIDER IF EXISTS ai_provider_${uuid0};
+    DROP USER IF EXISTS ai_user_${fixture_suffix};
+    DROP AI PROVIDER IF EXISTS ai_provider_${fixture_suffix};
 } END CLEANUP
