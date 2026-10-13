@@ -49,6 +49,7 @@ struct AIProjectModelConfig {
     TAIModelSource::type source = TAIModelSource::SYSTEM;
     std::optional<int64_t> timeout_ms;
     std::optional<int32_t> dimensions;
+    std::string protocol = "openai_compatible";
 };
 
 using AIProjectModelConfigs = std::map<std::string, AIProjectModelConfig, std::less<>>;

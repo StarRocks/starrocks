@@ -18,6 +18,7 @@ import re
 # The BE prompt input contracts, not SQL function registrations. Overloads bind
 # argument positions in functions.py. Substitution order stays in build_prompt().
 AI_PROMPT_INPUT_TYPES = {
+    'NONE': [],
     'PASSTHROUGH': ['VARCHAR'],
     'SENTIMENT': ['VARCHAR'],
     'CLASSIFY': ['VARCHAR', 'ARRAY_VARCHAR'],
@@ -33,6 +34,7 @@ AI_PROMPT_INPUT_TYPES = {
 # These user-prompt literals generate both BE templates and FE fixed byte counts.
 # Keep placeholders in strings::Substitute order, as used by build_prompt().
 AI_PROMPT_TEMPLATES = {
+    'NONE': '',
     'PASSTHROUGH': '$0',
     'SENTIMENT': (
         'Analyze the overall sentiment of the following text. '

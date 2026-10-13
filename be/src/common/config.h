@@ -896,9 +896,14 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
-// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
-// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
-// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+// Whether to require Basic Auth for the BE HTTP endpoints. Default false for backward
+// compatibility. Immutable; requires a BE restart to change. When true:
+// - Exempt are the token-gated internal transport (BE-to-BE tablet clone and internal load
+//   download: /api/_tablet/_download, /api/_download_load), and the Stream Load and transaction
+//   endpoints, which authenticate inside the handler.
+// - Every other endpoint requires a user the FE leader authenticates, including the health probe
+//   and the Prometheus metrics (/api/health, /metrics, /metrics/memory), which need no privilege.
+//   Most admin endpoints also require a SYSTEM privilege, such as OPERATE.
 CONF_Bool(enable_http_auth, "false");
 
 // Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
@@ -1398,6 +1403,19 @@ CONF_mInt64(object_storage_client_cache_size, "8");
 CONF_Strings(fallback_to_hadoop_fs_list, "");
 CONF_Strings(s3_compatible_fs_list, "s3n://, s3a://, s3://, oss://, cos://, cosn://, obs://, ks3://, tos://");
 CONF_mBool(s3_use_list_objects_v1, "false");
+// Some S3-compatible stores (e.g. Cloudflare R2) reject a multipart upload whose non-trailing parts
+// differ in length. When enabled, every part of an S3 multipart upload except the last one is
+// exactly the configured part size, and only the last part may be shorter. The default, false,
+// keeps the current behavior, which cuts a part whenever the buffer reaches the part size.
+//
+// One switch for both S3 writers: starlet in a shared-data cluster, forwarded to the starlet gflag
+// `fslib_s3_multipart_equal_part_size` and cutting parts of `starlet_fslib_s3_min_upload_part_size`,
+// and the BE S3 filesystem, cutting parts of `experimental_s3_min_upload_part_size`.
+//
+// Mutable. The value is snapshotted once per output stream, so a change applies to the uploads
+// started afterwards. S3 allows at most 10,000 parts per upload, so an object is limited to
+// 10,000 times the part size; raise the part size for larger objects.
+CONF_mBool(s3_multipart_equal_part_size, "false");
 
 // Lake
 CONF_mBool(io_coalesce_lake_read_enable, "false");
@@ -2523,6 +2541,11 @@ CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
+// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
+// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
+// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
+CONF_mBool(lake_enable_tablet_location_handoff, "true");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
 // use to decide whether to enable the collection of table metrics
@@ -2554,6 +2577,8 @@ CONF_mInt64(ai_function_request_timeout_ms, "600000");
 // A zero connect timeout disables the independent connection cap.
 CONF_mInt64(ai_function_connect_timeout_ms, "10000");
 CONF_mInt64(ai_function_max_response_bytes, "8388608");
+// Maximum raw inline FILE bytes before copying into the AI payload or encoding. Must be positive.
+CONF_mInt64(ai_function_max_input_file_bytes, "10485760");
 CONF_mInt32(ai_function_worker_thread_num, "16");
 CONF_mInt32(ai_function_sub_chunk_size, "64");
 CONF_mInt32(ai_function_max_retries, "3");
@@ -2598,12 +2623,5 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
-// Limits for one H3 function row/worker; all values must be positive.
-CONF_mInt64(h3_max_cells_per_row, "100000");
-CONF_mInt32(h3_max_grid_disk_k, "128");
-CONF_mInt64(h3_max_polygon_vertices, "10000");
-CONF_mInt32(h3_max_polygon_components, "256");
-CONF_mInt64(h3_max_working_bytes, "67108864");
-CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
 
 } // namespace starrocks::config

@@ -1766,7 +1766,7 @@ vectorized_functions = [
 # dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
 # BE builtin descriptor table.
 def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
-                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=()):
+                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=(), file_argument=-1):
     # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
     return {
         'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
@@ -1776,6 +1776,7 @@ def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_arg
         'input_arguments': list(input_arguments),
         'model_argument': model_argument,
         'provider_argument': provider_argument,
+        'file_argument': file_argument,
         'null_as_empty_arguments': list(null_as_empty_arguments),
         'blank_as_null_arguments': list(blank_as_null_arguments),
     }
@@ -1790,6 +1791,14 @@ ai_vectorized_functions = [
      ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
     [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
+    [200104, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200105, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0], file_argument=1)],
+    [200106, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
+    [200107, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'FILE', 'ANY_MAP'],
+     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0, file_argument=2)],
     [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
      'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
     [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
@@ -1836,6 +1845,14 @@ ai_vectorized_functions = [
      ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
     [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
      'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
+    [200134, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200135, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], file_argument=0)],
+    [200136, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
+    [200137, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'FILE', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'NONE', 'EMBEDDING', [], model_argument=0, file_argument=1)],
     [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
      'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
     [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],

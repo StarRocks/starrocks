@@ -31,9 +31,12 @@ shell: sleep 3
 
 drop task etl_${uuid0};
 
-function: wait_util_no_queries()
-
+-- Turn the sleep off before waiting: every queued load task sleeps 3s on each run before it
+-- notices the cancel, so leaving it on can keep the cancelled query alive past the case timeout.
+-- Tasks already asleep still wake up after the operator is closed, which is the window under test.
 admin disable failpoint 'spill_hash_join_probe_load_partition_sleep';
+
+function: wait_util_no_queries()
 
 select "cluster still alive" as status;
 

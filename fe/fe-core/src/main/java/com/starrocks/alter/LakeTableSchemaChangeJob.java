@@ -587,8 +587,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
                     && !hasZstdCompressionChange;
 
-            // disable tablet creation optimaization to avoid overwriting files with the same name.
-            if (table.isFileBundling()) {
+            // disable tablet creation optimization to avoid overwriting files with the same name, and for a
+            // range-distribution table, whose tablets each carry their own range.
+            if (table.isFileBundling() || table.isRangeDistribution()) {
                 enableTabletCreationOptimization = false;
             }
             if (enableTabletCreationOptimization) {
@@ -1489,12 +1490,27 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return new LakeTableSchemaChangeJob(this);
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: replay shares them with the journal entry they came from.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIndexTabletMap = HashBasedTable.create();
+        physicalPartitionIndexMap = HashBasedTable.create();
+        indexMetaIdToSchema = Maps.newHashMap();
+        indexMetaIdToShortKey = Maps.newHashMap();
+        schemaChangeBatchTask = new AgentBatchTask();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
+        // Read once: this runs without the job lock, and pruning the done job replaces the batch.
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
-            progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
+        AgentBatchTask batchTask = schemaChangeBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            progress = batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum();
         }
 
         // one line for one shadow index

@@ -772,4 +772,36 @@ public class LakeRangeRollupJobTest {
         }
         assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must survive r2 cancel");
     }
+
+    // ---- pruning the per-partition state of a done job ----------------------------------------
+
+    /**
+     * Each replay of a FINISHED entry, the first one and a repeated one, leaves the job kept by the handler without
+     * its partition states, while the flip itself runs once.
+     */
+    @Test
+    public void testReplayPrunesFinishedJob() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(
+                List.of(baseSchema.get(1), baseSchema.get(0)));
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        String text = GsonUtils.GSON.toJson(job.copyForPersist());
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long visibleBeforeFlip = physicalPartition.getVisibleVersion();
+        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+
+        for (int i = 0; i < 2; i++) {
+            // An independently deserialized copy of the entry each time, as a follower may replay it twice.
+            LakeRangeRollupJob entry = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+            assertFalse(entry.partitionStates.isEmpty());
+            followerHandler.replayAlterJobV2(entry);
+
+            LakeRangeRollupJob retained = (LakeRangeRollupJob) followerHandler.getAlterJobsV2().get(job.getJobId());
+            assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+            assertTrue(retained.partitionStates.isEmpty());
+            assertFalse(retained.flipNotYetApplied(table));
+            assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion());
+        }
+    }
 }

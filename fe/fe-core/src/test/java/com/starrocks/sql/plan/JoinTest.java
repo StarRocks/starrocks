@@ -3677,7 +3677,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
+                "  |  other predicates: 2: v2 = 3: v3 + 4: v4");
 
         // `t0.v3 + t1.v4` reads both sides of the join, so the ON clause carries no temporal condition
         // between the two tables. The analyzer rejects it before planning.
@@ -3703,7 +3703,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4\n" +
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
-                "  |  other join predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
+                "  |  other predicates: (3: v3 = 6: v6) OR (3: v3 = 4: v4)");
     }
     
     @Test

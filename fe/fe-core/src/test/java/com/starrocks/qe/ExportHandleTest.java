@@ -19,7 +19,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
@@ -27,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.thrift.THdfsProperties;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -39,8 +39,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class ExportHandleTest {
     private static ConnectContext connectContext;
@@ -123,15 +121,11 @@ public class ExportHandleTest {
      */
     @Test
     public void testABrokerlessExportResolvesItsFileSystemOutsideTheTableLock() throws Exception {
-        AtomicInteger calls = new AtomicInteger();
-        AtomicBoolean underLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onAnyThread();
         new MockUp<HdfsUtil>() {
             @Mock
             public void getTProperties(String path, Map<String, String> properties, THdfsProperties tProperties) {
-                calls.incrementAndGet();
-                if (LockHoldDepth.isUnderLock()) {
-                    underLock.set(true);
-                }
+                probe.record("getTProperties");
             }
         };
         String sql = "EXPORT TABLE export_tbl TO \"hdfs://hdfs_host:port/lock/\" "
@@ -145,7 +139,8 @@ public class ExportHandleTest {
         Assertions.assertFalse(job.getCoordList().isEmpty(), "the export planned no fragment");
         job.resetCoord(0, UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
 
-        Assertions.assertFalse(underLock.get(), "getTProperties ran with the table lock held");
-        Assertions.assertEquals(1, calls.get(), "the file system properties should be resolved exactly once");
+        Assertions.assertFalse(probe.everUnderLock("getTProperties"), "getTProperties ran with the table lock held");
+        Assertions.assertEquals(1, probe.calls("getTProperties"),
+                "the file system properties should be resolved exactly once");
     }
 }

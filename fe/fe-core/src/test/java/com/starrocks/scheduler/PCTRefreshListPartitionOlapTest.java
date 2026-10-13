@@ -23,7 +23,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
@@ -36,6 +35,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -52,7 +52,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -292,15 +291,11 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
      */
     @Test
     public void testBaseTablePartitionsAreCollectedBeforeTakingTheLock() {
-        AtomicBoolean collected = new AtomicBoolean(false);
-        AtomicBoolean collectedUnderLock = new AtomicBoolean(false);
+        LockProbe probe = LockProbe.onAnyThread();
         new MockUp<ListPartitionDiffer>() {
             @Mock
             public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
-                collected.set(true);
-                if (LockHoldDepth.isUnderLock()) {
-                    collectedUnderLock.set(true);
-                }
+                probe.record("syncBaseTablePartitionInfos");
                 return invocation.proceed();
             }
         };
@@ -323,8 +318,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
                         Assertions.assertNotNull(getExecPlanAfterInsert(taskRun, insertSql));
 
-                        Assertions.assertTrue(collected.get(), "the base table partitions should have been collected");
-                        Assertions.assertFalse(collectedUnderLock.get(),
+                        probe.assertReachedOutsideTheLock("syncBaseTablePartitionInfos",
                                 "collecting base table partitions goes through the connector for an external base " +
                                         "table and must not run under the mv's lock");
                     });

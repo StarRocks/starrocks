@@ -125,6 +125,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_response_bytes(config::ai_function_max_response_bytes);
     });
+    registry->register_callback("ai_function_max_input_file_bytes", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_input_file_bytes(config::ai_function_max_input_file_bytes);
+    });
     registry->register_callback("ai_function_worker_thread_num", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_worker_thread_num(config::ai_function_worker_thread_num);
@@ -419,7 +423,11 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
         auto thread_pool = runtime_env_ptr->pk_index_execution_thread_pool();
         if (thread_pool != nullptr) {
-            return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+            int max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+            if (max_thread_count <= 0) {
+                max_thread_count = CpuInfo::num_cores();
+            }
+            return thread_pool->update_max_threads(std::max(1, max_thread_count));
         }
         return Status::OK();
     });
@@ -617,6 +625,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_gcs_max_single_part_size, fslib_gs_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
+    UPDATE_STARLET_CONFIG(s3_multipart_equal_part_size, fslib_s3_multipart_equal_part_size);
 #undef UPDATE_STARLET_CONFIG
 
     // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.

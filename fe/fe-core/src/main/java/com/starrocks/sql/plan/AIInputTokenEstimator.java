@@ -80,6 +80,9 @@ final class AIInputTokenEstimator {
         if (descriptor == null) {
             return AIInputTokenEstimate.unknown("unsupported prompt template");
         }
+        if (descriptor.fileArgument() >= 0) {
+            return AIInputTokenEstimate.unknown("FILE input token estimation is not supported");
+        }
         if (call.getChildren().stream().anyMatch(argument -> argument.getType().isMapType())) {
             return AIInputTokenEstimate.unknown("request options may change input tokens");
         }

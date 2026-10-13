@@ -90,6 +90,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーが持つことができるロールの最大数。
 - 導入時期：v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- デフォルト：false
+- タイプ：Boolean
+- Unit: -
+- 変更可能：Yes
+- 説明：Ranger Hive Service (`ranger.plugin.hive.service.name`) を使用する External Catalog のプロパティ `ranger.plugin.hive.catalog_prefix.enabled` のデフォルト値。有効値が `true` の場合、StarRocks は Ranger に送る `database` リソースとして素のデータベース名ではなく `<catalog_name><separator><database_name>` を使用し、1 つの Ranger Hive Service を共有する複数の Catalog が同名のデータベースで衝突しないようにします。Catalog 側でこのプロパティを明示的に設定した場合はそちらが優先されます。変更は、それを受け取ったすべての FE で即時に有効になります。
+- 導入時期：v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- デフォルト：_
+- タイプ：String
+- Unit: -
+- 変更可能：Yes
+- 説明：`ranger_hive_catalog_prefix_enabled` (または Catalog プロパティ `ranger.plugin.hive.catalog_prefix.enabled`) が `true` の場合に、Catalog 名とデータベース名の間に挿入する区切り文字。1 つの Ranger Hive Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+- 導入時期：v4.2
+
 ## クエリエンジン
 
 ### `ai_default_chat_endpoint`
@@ -107,7 +125,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：FILE オーバーロードを含む、モデルを明示しない SYSTEM `ai_complete` 呼び出しで使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_chat_provider`
@@ -115,9 +133,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`qwen_compatible`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。正確に `openai_compatible` または `qwen_compatible` を指定する必要があり、空または未対応の値は解析に失敗します。両方のプロトコルがテキストと inline 画像 FILE に対応し、inline MP4 動画は `qwen_compatible` のみが対応します。選択したモデルは入力のモダリティに対応している必要があります。プロトコルを endpoint やモデル名から推定することはありません。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +161,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`dashscope_multimodal`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。テキスト用の `openai_compatible`、またはテキストと inline JPEG、PNG、WebP 画像 FILE 用の `dashscope_multimodal` を正確に指定します。選択したモデルは入力のモダリティに対応している必要があります。動画 FILE の埋め込みは未対応です。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。プロトコルを endpoint やモデル名から推定することはありません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_query_admission_max_estimated_input_tokens`
@@ -162,7 +180,7 @@ options を指定しない `ai_complete`、`ai_custom_query`、`ai_embed`、`ai_
 
 `ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter` も、モデルを明示するオーバーロードを含めて推定できます。組み込みユーザープロンプトテンプレートの UTF-8 バイト数と、サポートされる各入力のサイズを加算します。定数文字列配列には JSON の引用符、エスケープ、区切り文字も含めます。`ai_translate` の入力元言語が NULL または空文字列の場合は、リクエストを省略せず自動検出テンプレートを使用します。入力元言語を統計から推定する場合は、二つのテンプレートのうち大きい固定サイズを予約します。これらもプロバイダーの正確なトークン数ではありません。
 
-複雑な式、定数文字列に解決できない補助配列、options、JOIN、CTE、未対応または欠落した統計、およびローカル TopN プランでは `UNKNOWN` になる場合があります。アドミッションチェックを有効にする前や上限を決める前に、代表的なクエリの `EXPLAIN VERBOSE` または `EXPLAIN COSTS` で `AI INPUT TOKENS` を確認してください。これはクエリごとの事前確認であり、ワークロード全体の観測モードではありません。`EXPLAIN ANALYZE` はステートメントを実行し、アドミッションチェックを適用します。`SCHEDULER` を含むその他の `EXPLAIN` レベルでは、説明対象のステートメントにアドミッションチェックを適用しません。
+FILE 入力は推定対象外で、結果は `UNKNOWN` になります。複雑な式、定数文字列に解決できない補助配列、options、JOIN、CTE、未対応または欠落した統計、およびローカル TopN プランでは `UNKNOWN` になる場合があります。アドミッションチェックを有効にする前や上限を決める前に、代表的なクエリの `EXPLAIN VERBOSE` または `EXPLAIN COSTS` で `AI INPUT TOKENS` を確認してください。これはクエリごとの事前確認であり、ワークロード全体の観測モードではありません。`EXPLAIN ANALYZE` はステートメントを実行し、アドミッションチェックを適用します。`SCHEDULER` を含むその他の `EXPLAIN` レベルでは、説明対象のステートメントにアドミッションチェックを適用しません。
 
 この設定は、1 回のプラン実行における推定入力処理量を制御します。正確なトークナイザー、課金クォータ、出力トークン数の上限ではなく、追加の HTTP 再試行も計上しません。
 
@@ -1191,6 +1209,15 @@ options を指定しない `ai_complete`、`ai_custom_query`、`ai_embed`、`ai_
 - 変更可能：Yes
 - 説明：トランザクション完了中の db およびテーブルロック取得のデフォルトタイムアウト。
 - 導入時期：v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- デフォルト：10000
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：FE がメモリに保持し、SHOW ALTER TABLE に表示する、完了またはキャンセルされた ALTER ジョブの最大数。スキーマ変更ジョブと最適化ジョブは 1 つの上限を共有し、ロールアップジョブには別の上限が適用されます。上限を超えると、`history_job_keep_max_second` で設定された保持期間内であっても、完了時刻が早いジョブから順に削除されます。実行中のロードがジョブの変更前のスキーマをまだ使用している可能性がある間、または共有データクラスターでクラスタースナップショットがジョブをまだ必要とする間は、そのジョブは保持されます。そのため、ジョブ数が一時的に上限を超えることがあります。`0` 以下の値を指定すると、この上限は無効になります。
+- 導入時期：-
 
 ### `history_job_keep_max_second`
 

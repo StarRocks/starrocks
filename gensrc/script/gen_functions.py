@@ -110,6 +110,7 @@ import static com.starrocks.type.DecimalType.DECIMAL256;
 import static com.starrocks.type.DecimalType.DECIMAL32;
 import static com.starrocks.type.DecimalType.DECIMAL64;
 import static com.starrocks.type.DecimalType.DECIMALV2;
+import static com.starrocks.type.FileType.FILE;
 import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.FunctionType.FUNCTION;
@@ -153,7 +154,7 @@ public class VectorizedBuiltinFunctions {
         }
     }
 
-    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument,
+    public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument, int fileArgument,
                                        AIPromptKind promptKind, List<Integer> inputArguments,
                                        List<Integer> nullAsEmptyArguments, List<Integer> blankAsNullArguments) {
         public AIFunctionDescriptor {
@@ -255,7 +256,7 @@ AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
 }
-AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY'}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'ANY_MAP': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
 
 
 def validate_ai_metadata(fn_data):
@@ -266,7 +267,8 @@ def validate_ai_metadata(fn_data):
         invalid('semantic metadata is required')
     metadata = dict(fn_data[7])
     required = {'model_source', 'capability', 'prompt_kind', 'result_kind', 'input_arguments'}
-    optional = {'model_argument', 'provider_argument', 'null_as_empty_arguments', 'blank_as_null_arguments'}
+    optional = {'model_argument', 'provider_argument', 'file_argument',
+                'null_as_empty_arguments', 'blank_as_null_arguments'}
     if not required <= metadata.keys() or metadata.keys() - required - optional:
         invalid('missing or unknown semantic metadata fields')
     if metadata['model_source'] not in ('SYSTEM', 'PROVIDER'):
@@ -279,7 +281,7 @@ def validate_ai_metadata(fn_data):
         invalid('result decoder must match SQL return type')
     if (metadata['capability'] == 'TEXT_EMBEDDING') != (metadata['result_kind'] == 'EMBEDDING'):
         invalid('embedding capability and result decoder must agree')
-    if metadata['capability'] == 'TEXT_EMBEDDING' and metadata['prompt_kind'] != 'PASSTHROUGH':
+    if metadata['capability'] == 'TEXT_EMBEDDING' and metadata['prompt_kind'] not in ('PASSTHROUGH', 'NONE'):
         invalid('embedding input must not use a chat prompt builder')
 
     args = fn_data[5]
@@ -305,12 +307,22 @@ def validate_ai_metadata(fn_data):
     if metadata['provider_argument'] >= 0 and metadata['model_argument'] >= 0:
         invalid('Provider selector is not an explicit provider model')
 
+    file_argument = metadata.setdefault('file_argument', -1)
+    if type(file_argument) is not int or file_argument < -1 or file_argument >= len(args):
+        invalid('file_argument is out of range')
+    if file_argument >= 0 and args[file_argument] != 'FILE':
+        invalid('file_argument must refer to a FILE')
+    if metadata['prompt_kind'] == 'NONE' and (metadata['capability'] != 'TEXT_EMBEDDING' or file_argument < 0):
+        invalid('NONE prompt requires a FILE embedding input')
+    if metadata['capability'] == 'TEXT_EMBEDDING' and file_argument >= 0 and metadata['prompt_kind'] != 'NONE':
+        invalid('FILE embedding input must not use a text prompt builder')
+
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
     if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
         invalid('input arguments must match the prompt builder contract')
-    roles = selectors + options + inputs
+    roles = selectors + options + inputs + ([file_argument] if file_argument >= 0 else [])
     if len(roles) != len(args) or sorted(roles) != list(range(len(args))):
         invalid('every SQL argument must have exactly one semantic role')
     for field in ('null_as_empty_arguments', 'blank_as_null_arguments'):
@@ -423,10 +435,10 @@ ${default_values}
         prompt_kinds.append(f'{kind}({fixed}, {auto_detect})')
     value["ai_prompt_kinds"] = ',\n        '.join(prompt_kinds)
     value['ai_descriptors'] = '\n'.join(
-        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d,\n'
+        '                    .put(%dL, new AIFunctionDescriptor(AICapability.%s, %d, %d, %d,\n'
         '                            AIPromptKind.%s, List.of(%s), List.of(%s), List.of(%s)))' % (
             fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'],
-            fn['ai']['prompt_kind'],
+            fn['ai']['file_argument'], fn['ai']['prompt_kind'],
             *(', '.join(str(index) for index in fn['ai'][policy]) for policy in (
                 'input_arguments', 'null_as_empty_arguments', 'blank_as_null_arguments')))
         for fn in function_list if fn.get('binary_type') == 'AI')
@@ -455,6 +467,7 @@ struct AIFunctionDescriptor {
     std::array<AIArgumentType, %d> argument_types;
     int model_argument;
     int provider_argument;
+    int file_argument;
     std::array<int, %d> input_arguments;
     size_t input_count;
     std::array<bool, %d> null_as_empty_arguments;
@@ -478,6 +491,7 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
             ('argument_types', '{' + ', '.join(arg_types) + '}'),
             ('model_argument', str(metadata['model_argument'])),
             ('provider_argument', str(metadata['provider_argument'])),
+            ('file_argument', str(metadata['file_argument'])),
             ('input_arguments', '{' + ', '.join(str(i) for i in inputs) + '}'),
             ('input_count', str(len(metadata['input_arguments']))),
         ]
@@ -487,7 +501,7 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
         content += '    {\n' + ''.join('        .%s = %s,\n' % field for field in fields) + '    },\n'
     content += '}};\n\n'
     for kind, template in AI_PROMPT_TEMPLATES.items():
-        if kind != 'PASSTHROUGH':
+        if kind not in ('NONE', 'PASSTHROUGH'):
             name = 'kAI' + kind.title().replace('_', '') + 'Prompt'
             content += f'static constexpr char {name}[] = {json.dumps(template, ensure_ascii=False)};\n'
     content += ('static constexpr char kAITranslateAutoDetectPrompt[] = '

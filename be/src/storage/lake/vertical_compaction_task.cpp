@@ -457,13 +457,13 @@ Status VerticalCompactionTask::compact_column_group(
             source_masks->clear();
         }
 
+        const auto& read_stats = reader.compaction_stats();
         if (_total_num_rows > 0 && column_group_size > 0) {
-            _context->progress.update(
-                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                    column_group_size);
+            _context->progress.update((100 * column_group_index + 100 * read_stats.raw_rows_read / _total_num_rows) /
+                                      column_group_size);
         }
         CompactionTaskStats temp_stats;
-        temp_stats.collect(reader.stats());
+        temp_stats.collect(read_stats);
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
         *_context->stats = *_context->stats + diff_stats;
         prev_stats = temp_stats;

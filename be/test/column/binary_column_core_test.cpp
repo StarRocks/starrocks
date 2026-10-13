@@ -53,20 +53,6 @@ TEST(BinaryColumnCoreTest, BinaryAppendSelectiveAndSerialize) {
     EXPECT_EQ("gamma", slice_to_string(restored->get_slice(0)));
 }
 
-TEST(BinaryColumnCoreTest, LargeBinaryAppendSelective) {
-    auto src = LargeBinaryColumn::create();
-    src->append("long-value-1");
-    src->append("long-value-2");
-    src->append("long-value-3");
-
-    auto dst = LargeBinaryColumn::create();
-    const uint32_t indexes[] = {2, 0, 1};
-    dst->append_selective(*src, indexes, 0, 2);
-    ASSERT_EQ(2, dst->size());
-    EXPECT_EQ("long-value-3", slice_to_string(dst->get_slice(0)));
-    EXPECT_EQ("long-value-1", slice_to_string(dst->get_slice(1)));
-}
-
 TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     auto src = BinaryColumn::create();
     src->append("a");
@@ -75,7 +61,6 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     src->get_offset().ensure_width_for_value(kLargeOffset);
     ASSERT_TRUE(src->get_offset().is_large());
     EXPECT_TRUE(src->is_binary());
-    EXPECT_FALSE(src->is_large_binary());
     EXPECT_EQ(6, src->byte_size(1));
 
     auto dst = BinaryColumn::create();
@@ -90,12 +75,6 @@ TEST(BinaryColumnCoreTest, StickyLargeOffsetsRemainBinaryAndAppend) {
     ASSERT_EQ(2, selected->size());
     EXPECT_EQ("ccc", slice_to_string(selected->get_slice(0)));
     EXPECT_EQ("a", slice_to_string(selected->get_slice(1)));
-
-    auto large_dst = LargeBinaryColumn::create();
-    large_dst->append(*src, 0, 2);
-    ASSERT_EQ(2, large_dst->size());
-    EXPECT_EQ("a", slice_to_string(large_dst->get_slice(0)));
-    EXPECT_EQ("bb", slice_to_string(large_dst->get_slice(1)));
 
     Buffer<uint32_t> repeats = {0, 2, 2, 3};
     auto replicated = src->replicate(repeats);

@@ -135,16 +135,6 @@ TEST_F(ColumnHelperTest, get_container_varchar) {
     EXPECT_EQ(data[1].to_string(), "world");
 }
 
-TEST_F(ColumnHelperTest, get_container_large_binary) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("abc");
-    col->append_string("def");
-    auto data = GetContainer<TYPE_VARCHAR>::get_data(col.get());
-    ASSERT_EQ(data.size(), 2);
-    EXPECT_EQ(data[0].to_string(), "abc");
-    EXPECT_EQ(data[1].to_string(), "def");
-}
-
 // GetContainer::get_data(column, row)
 TEST_F(ColumnHelperTest, get_container_get_data_with_row_fixed_length) {
     auto col = ColumnTestHelper::build_column<int32_t>({10, 20, 30});
@@ -202,8 +192,8 @@ TEST_F(ColumnHelperTest, append_column_value_varchar) {
     EXPECT_EQ(col->debug_string(), "['hello', 'world']");
 }
 
-TEST_F(ColumnHelperTest, append_column_value_large_binary) {
-    auto col = LargeBinaryColumn::create();
+TEST_F(ColumnHelperTest, append_column_value_varbinary) {
+    auto col = BinaryColumn::create();
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("foo"));
     ColumnHelper::append_column_value<TYPE_VARBINARY>(col.get(), Slice("bar"));
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
@@ -219,18 +209,6 @@ TEST_F(ColumnHelperTest, build_slices_binary_column) {
     EXPECT_EQ(slices[0].to_string(), "foo");
     EXPECT_EQ(slices[1].to_string(), "bar");
     EXPECT_EQ(slices[2].to_string(), "baz");
-}
-
-TEST_F(ColumnHelperTest, build_slices_large_binary_column) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("hello");
-    col->append_string("world");
-
-    Buffer<Slice> slices;
-    ColumnHelper::build_slices(col.get(), slices);
-    ASSERT_EQ(slices.size(), 2);
-    EXPECT_EQ(slices[0].to_string(), "hello");
-    EXPECT_EQ(slices[1].to_string(), "world");
 }
 
 TEST_F(ColumnHelperTest, build_slices_nullable_column) {
@@ -287,16 +265,6 @@ TEST_F(ColumnHelperTest, get_storage_container_varchar) {
     ASSERT_EQ(data.size(), 2);
     EXPECT_EQ(data[0].to_string(), "hello");
     EXPECT_EQ(data[1].to_string(), "world");
-}
-
-TEST_F(ColumnHelperTest, get_storage_container_large_binary) {
-    auto col = LargeBinaryColumn::create();
-    col->append_string("abc");
-    col->append_string("def");
-    auto data = GetStorageContainer<TYPE_VARCHAR>::get_data(col.get());
-    ASSERT_EQ(data.size(), 2);
-    EXPECT_EQ(data[0].to_string(), "abc");
-    EXPECT_EQ(data[1].to_string(), "def");
 }
 
 TEST_F(ColumnHelperTest, get_storage_container_nullable_varchar) {

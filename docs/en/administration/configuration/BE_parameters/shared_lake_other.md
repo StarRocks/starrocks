@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_enable_tablet_location_handoff
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the nodes that write a load's data hand the storage location of their tablets over to the node that coordinates the load, in a shared-data cluster. For a table with `file_bundling` enabled, the coordinating node writes one combined transaction log per partition, and it usually owns no tablet of most partitions. When this item is `true`, the nodes that own the tablets return the storage location of one tablet per partition together with their transaction logs, and the coordinating node writes the combined transaction log without requesting the location from StarMgr; the requests avoided are counted in `lake_tablet_location_handoff_hits_total`. When it is `false`, the coordinating node requests the location from StarMgr once per such partition per load, which is counted in `starrocks_be_staros_shard_info_fallback_total`. The returned location includes the credentials of the storage volume.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -314,6 +323,15 @@ This topic introduces the following types of BE configurations:
 - Unit: Bytes
 - Is mutable: Yes
 - Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
+### s3_multipart_equal_part_size
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every part of a multipart upload to S3 or an S3-compatible object store, except the last one, has exactly the same size. Some S3-compatible object stores, such as Cloudflare R2, reject a multipart upload whose non-trailing parts differ in length with the error `InvalidPart: All non-trailing parts must have the same length`. Enable this item when you use such a store. When it is enabled, every part except the last one is exactly the configured part size: `starlet_fslib_s3_min_upload_part_size` for starlet uploads in a shared-data cluster, and `experimental_s3_min_upload_part_size` for other buffered S3 uploads from BE. The default `false` keeps the existing behavior, which uploads the whole buffer as one part whenever it reaches the part size, so part sizes vary. Files written by the Parquet, ORC, and CSV file writers, for example by `INSERT INTO FILES` or by Hive and Iceberg sinks, are uploaded part by part as they are produced and are not affected by this item. A change takes effect on uploads started afterwards. S3 allows at most 10,000 parts per upload, so an object uploaded in equal parts cannot exceed 10,000 times the part size, about 48.8 GiB with the default 5 MiB starlet part size. Raise the part size to write larger objects.
 - Introduced in: -
 
 ### starlet_filesystem_instance_cache_capacity

@@ -37,47 +37,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 查询引擎
 
-### H3 资源限制
-
-以下可修改的 BE 正数配置限制单行 H3 函数。超过限制会报错，不返回部分结果。函数签名与中心填充模型参见 [H3 函数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md)。
-
-#### h3_max_cells_per_row
-
-- Default: 100000
-- Is mutable: Yes
-- Limit: cells / pre-deduplication expansion slots.
-
-#### h3_max_grid_disk_k
-
-- Default: 128
-- Is mutable: Yes
-- Limit: grid steps.
-
-#### h3_max_polygon_vertices
-
-- Default: 10000
-- Is mutable: Yes
-- Limit: coordinate positions including ring closure.
-
-#### h3_max_polygon_components
-
-- Default: 256
-- Is mutable: Yes
-- Limit: polygon components including empty components.
-
-#### h3_max_working_bytes
-
-- Default: 67108864
-- Is mutable: Yes
-- Limit: bytes of per-worker preparation and temporary buffers.
-
-#### h3_max_estimated_work_per_row
-
-- Default: 10000000
-- Is mutable: Yes
-- Limit: sum of estimated slots times (component positions + 1).
-
-
 ### ai_function_request_timeout_ms
 
 - 默认值：600000
@@ -106,6 +65,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 有效值：正整数
 - 是否动态：是
 - 描述：单次 AI HTTP attempt 可接受的 response body 最大大小。超过限制的响应会在 Provider 解析前被拒绝，以限制 BE 内存消耗。仅在模型确实会返回更大响应时调高。新打开的 AI fragment/operator 会将该值作为一个完整 immutable runtime snapshot 的一部分捕获；已经打开的 fragment 继续使用原 snapshot。修改无需重启 BE。
+- 引入版本：-
+
+### ai_function_max_input_file_bytes
+
+- 默认值：10485760
+- 类型：Int
+- 单位：字节
+- 有效值：正整数
+- 是否动态：是
+- 描述：传入 `ai_complete` 或 `ai_embed` 的每个 inline FILE 的原始字节数上限，在 AI 自身复制载荷和进行 Base64 编码前检查。默认值为 10 MiB。仅在所选提供商和模型支持更大输入时调高。该参数不控制扫描或 Chunk 物化；这些内存分配与 AI 载荷仍受查询内存跟踪约束。无效或超限的 inline 输入遵循 `ai_function_on_error`。新打开的 AI fragment/operator 将该值捕获到不可变运行时快照中；已打开的 fragment 继续使用原快照。修改无需重启 BE。
 - 引入版本：-
 
 ### ai_function_worker_thread_num

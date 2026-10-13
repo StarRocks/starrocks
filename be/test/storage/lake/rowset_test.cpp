@@ -2305,6 +2305,7 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_segment_metadata_filter_skips_s
     ASSERT_EQ(stats.segment_metadata_filtered, 22);
     // Only 1 segment should be read
     ASSERT_EQ(stats.segments_read_count, 1);
+    ASSERT_EQ(stats.phy_segments_count, 1);
 }
 
 // Test: Segment metadata filter disabled by config
@@ -2336,6 +2337,7 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_segment_metadata_filter_disable
     ASSERT_EQ(stats.segment_metadata_filtered, 0);
     // All 3 segments should be read
     ASSERT_EQ(stats.segments_read_count, 3);
+    ASSERT_EQ(stats.phy_segments_count, 3);
 }
 
 // Test: load_segments with skip_segment_idxs in serial mode

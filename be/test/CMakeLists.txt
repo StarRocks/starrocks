@@ -55,6 +55,7 @@ set(EXEC_FILES
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
+        ./exec/coverage_analytor_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -133,6 +134,7 @@ set(EXEC_FILES
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/update_config_action_redaction_test.cpp
         ./http/action/pprof_actions_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/s3_output_stream_test.cpp

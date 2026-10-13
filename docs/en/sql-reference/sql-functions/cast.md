@@ -12,6 +12,12 @@ Converts an input into the specified type. For example, `cast (input as BIGINT)`
 
 From v2.4, StarRocks supports conversion to the ARRAY type.
 
+:::note
+
+`CAST(input AS CHAR(N))` truncates the result to the first `N` characters, consistent with MySQL. For example, `CAST(1775580223839 AS CHAR(10))` returns `1775580223`. `CAST(input AS CHAR)` without a length and `CAST(input AS VARCHAR(N))` are not truncated.
+
+:::
+
 ## Syntax
 
 ```Haskell

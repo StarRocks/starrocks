@@ -39,6 +39,8 @@ import com.starrocks.statistic.base.PrimitiveTypeColumnStats;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -64,6 +66,25 @@ class AIInputTokenEstimatorTest {
         assertTokens("16", estimate(200100, values, ConstantOperator.createVarchar("")));
         assertTokens("0", estimate(200100, scan(100, ColumnStatistic.unknown()),
                 ConstantOperator.createNull(VarcharType.VARCHAR)));
+    }
+
+    @Test
+    void testFileInputsRemainUnknown() {
+        ScalarOperator text = ConstantOperator.createVarchar("hello");
+        ScalarOperator model = ConstantOperator.createVarchar("model");
+        ScalarOperator file = new ColumnRefOperator(3, FileType.FILE, "file", false);
+        ScalarOperator options = new ColumnRefOperator(4,
+                new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR), "options", false);
+        // Cover no-options calls explicitly: FILE tokens must not be estimated as only the text, or as zero.
+        Assertions.assertAll(
+                () -> assertUnknown(estimate(200104, values(), text, file)),
+                () -> assertUnknown(estimate(200105, values(), text, file, options)),
+                () -> assertUnknown(estimate(200106, values(), model, text, file)),
+                () -> assertUnknown(estimate(200107, values(), model, text, file, options)),
+                () -> assertUnknown(estimate(200134, values(), file)),
+                () -> assertUnknown(estimate(200135, values(), file, options)),
+                () -> assertUnknown(estimate(200136, values(), model, file)),
+                () -> assertUnknown(estimate(200137, values(), model, file, options)));
     }
 
     @Test

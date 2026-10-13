@@ -684,6 +684,17 @@ public class Config extends ConfigBase {
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
 
     /**
+     * The max number of finished or cancelled alter jobs kept per alter handler (schema change and
+     * optimize jobs share one budget, rollup jobs have another). Beyond it, the jobs that finished
+     * earliest are removed first, regardless of {@link #history_job_keep_max_second}. A job is kept
+     * while a running transaction may still be bound to its history schema or, in shared-data mode,
+     * while a cluster snapshot still needs it, so the count can temporarily exceed this limit.
+     * A value <= 0 disables the limit.
+     */
+    @ConfField(mutable = true)
+    public static int history_job_keep_max_num = 10000;
+
+    /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted
      * we should make this interval as short as possible and each clean cycle as soon as possible
      */
@@ -4638,6 +4649,25 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean ranger_user_ugi = false;
 
+    /**
+     * Default for the catalog property `ranger.plugin.hive.catalog_prefix.enabled` on external catalogs
+     * that use a Ranger hive service (`ranger.plugin.hive.service.name`). When true, the `database`
+     * resource sent to Ranger is `<catalog><ranger_hive_catalog_prefix_separator><schema>` instead of
+     * the bare schema name, so catalogs sharing one Ranger service do not collide on same-named schemas.
+     * A catalog-level property, when set, overrides this value.
+     */
+    @ConfField(mutable = true, comment = "Default of catalog property ranger.plugin.hive.catalog_prefix.enabled: " +
+            "prefix the Ranger hive `database` resource with the catalog name")
+    public static boolean ranger_hive_catalog_prefix_enabled = false;
+
+    /**
+     * Separator between catalog name and schema name when ranger_hive_catalog_prefix_enabled applies.
+     * Must be identical for every catalog that shares one Ranger service, hence global only.
+     */
+    @ConfField(mutable = true, comment = "Separator between catalog and schema in the Ranger hive `database` " +
+            "resource when the catalog prefix is enabled")
+    public static String ranger_hive_catalog_prefix_separator = "_";
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
@@ -5464,18 +5494,18 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
     public static String ai_default_chat_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_complete calls without an explicit model")
     public static String ai_default_chat_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; openai_compatible or qwen_compatible")
     public static String ai_default_chat_provider = "";
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
     public static String ai_default_embedding_endpoint = "";
 
-    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    @ConfField(mutable = true, comment = "Default model for SYSTEM ai_embed calls without an explicit model")
     public static String ai_default_embedding_model = "";
 
-    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; openai_compatible or dashscope_multimodal")
     public static String ai_default_embedding_provider = "";
 
     /**

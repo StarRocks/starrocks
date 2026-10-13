@@ -333,10 +333,6 @@ TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
     auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
     ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
 
-    auto large_binary = LargeBinaryColumn::create();
-    large_binary->append_strings(strings.data(), strings.size());
-    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
-
     auto overlimit_binary = make_unrepresentable_binary_column();
     ASSERT_FALSE(overlimit_binary->is_payload_size_representable().ok());
     auto overlimit_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*overlimit_binary);

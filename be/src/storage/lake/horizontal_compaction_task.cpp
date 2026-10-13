@@ -222,10 +222,11 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         chunk->reset();
         rssid_rowids.clear();
 
+        const auto& read_stats = reader.compaction_stats();
         if (total_num_rows > 0) {
-            _context->progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
+            _context->progress.update(100 * read_stats.raw_rows_read / total_num_rows);
         }
-        _context->stats->collect(reader.stats());
+        _context->stats->collect(read_stats);
     }
 
     {

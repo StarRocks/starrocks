@@ -831,6 +831,10 @@ Status DeltaWriterImpl::finish() {
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(merge_blocks_to_segments());
+    // Merging spilled blocks can take long and does not observe cancel(). A cancel that arrived meanwhile must
+    // still fail the load before the tablet writer is marked finished: close() deletes the files of an unfinished
+    // writer only, and nothing else deletes them when the load is aborted before its txn log is persisted.
+    RETURN_IF_ERROR(current_cancel_status());
     RETURN_IF_ERROR(_tablet_writer->finish());
     if (_bundle_writable_file_context) {
         RETURN_IF_ERROR(_bundle_writable_file_context->decrease_active_writers());

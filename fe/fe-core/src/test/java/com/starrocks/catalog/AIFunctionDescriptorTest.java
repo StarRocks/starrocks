@@ -32,13 +32,34 @@ class AIFunctionDescriptorTest {
             AIFunctionDescriptor descriptor = VectorizedBuiltinFunctions.getAIFunctionDescriptor(id);
             Assertions.assertEquals(AIPromptKind.PASSTHROUGH, descriptor.promptKind());
             Assertions.assertEquals(List.of(0), descriptor.inputArguments());
+            Assertions.assertEquals(-1, descriptor.fileArgument());
         }
         // Explicit-model and named-provider overloads keep only their semantic input.
         for (long id : List.of(200102L, 200103L, 200132L, 200133L, 200140L, 200141L, 200142L, 200143L)) {
             AIFunctionDescriptor descriptor = VectorizedBuiltinFunctions.getAIFunctionDescriptor(id);
             Assertions.assertEquals(AIPromptKind.PASSTHROUGH, descriptor.promptKind());
             Assertions.assertEquals(List.of(1), descriptor.inputArguments());
+            Assertions.assertEquals(-1, descriptor.fileArgument());
         }
+    }
+
+    @Test
+    void testFileInputRolesPreserveTextPromptContracts() {
+        for (long id : List.of(200104L, 200105L, 200106L, 200107L)) {
+            AIFunctionDescriptor descriptor = VectorizedBuiltinFunctions.getAIFunctionDescriptor(id);
+            int textArgument = id < 200106L ? 0 : 1;
+            Assertions.assertEquals(AIPromptKind.PASSTHROUGH, descriptor.promptKind());
+            Assertions.assertEquals(List.of(textArgument), descriptor.inputArguments());
+            Assertions.assertEquals(textArgument + 1, descriptor.fileArgument());
+        }
+        for (long id : List.of(200134L, 200135L, 200136L, 200137L)) {
+            AIFunctionDescriptor descriptor = VectorizedBuiltinFunctions.getAIFunctionDescriptor(id);
+            Assertions.assertEquals(AIPromptKind.NONE, descriptor.promptKind());
+            Assertions.assertEquals(List.of(), descriptor.inputArguments());
+            Assertions.assertEquals(id < 200136L ? 0 : 1, descriptor.fileArgument());
+        }
+        Assertions.assertEquals(0, AIPromptKind.NONE.fixedBytes());
+        Assertions.assertEquals(0, AIPromptKind.NONE.autoDetectFixedBytes());
     }
 
     @Test
@@ -64,7 +85,7 @@ class AIFunctionDescriptorTest {
         List<Integer> nullAsEmpty = new ArrayList<>(List.of(2));
         List<Integer> blankAsNull = new ArrayList<>(List.of(3));
         AIFunctionDescriptor descriptor = new AIFunctionDescriptor(
-                AICapability.CHAT, 0, -1, AIPromptKind.TRANSLATE, inputs, nullAsEmpty, blankAsNull);
+                AICapability.CHAT, 0, -1, -1, AIPromptKind.TRANSLATE, inputs, nullAsEmpty, blankAsNull);
         inputs.set(0, 0);
         nullAsEmpty.clear();
         blankAsNull.clear();

@@ -90,6 +90,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用户可以拥有的最大角色数量。
 - 引入版本: v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 使用 Ranger Hive Service（即设置了 `ranger.plugin.hive.service.name`）的 External Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled` 的默认值。生效值为 `true` 时，StarRocks 向 Ranger 发送的 `database` 资源为 `<catalog_name><separator><database_name>` 而不是裸库名，避免共用同一个 Ranger Hive Service 的多个 Catalog 在同名库上互相命中。Catalog 显式设置了该属性时以属性为准。修改后对收到该修改的所有 FE 立即生效。
+- 引入版本: v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- 默认值: _
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: `ranger_hive_catalog_prefix_enabled`（或 Catalog 属性 `ranger.plugin.hive.catalog_prefix.enabled`）为 `true` 时，拼接在 Catalog 名与库名之间的分隔符。共用同一个 Ranger Hive Service 的所有 Catalog 必须使用相同的分隔符，因此该项只在全局配置。
+- 引入版本: v4.2
+
 ## 查询引擎
 
 ### `ai_default_chat_endpoint`
@@ -107,7 +125,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 仅传入 prompt 的调用形式所使用的默认模型。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 未显式指定模型时使用的默认模型，包括 FILE 重载。该值不能包含 C0 控制字符（`U+0000` 至 `U+001F`）或 DEL（`U+007F`）。如果每次调用都显式传入非空白模型，该值可以保持为空。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_chat_provider`
@@ -115,9 +133,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`qwen_compatible`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible` 或 `qwen_compatible`；空值或其他值都会导致分析失败。两种协议均支持文本和 inline 图片 FILE 输入；只有 `qwen_compatible` 支持 inline MP4 视频。所选模型必须支持输入模态。协议不会根据 endpoint 或模型名称推断。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
 - 引入版本: -
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +161,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 空字符串
 - 类型: String
 - 单位: -
-- 有效值: `openai_compatible`
+- 有效值: `openai_compatible`、`dashscope_multimodal`
 - 是否可变: Yes
-- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为用于文本的 `openai_compatible`，或用于文本以及 inline JPEG、PNG、WebP 图片 FILE 的 `dashscope_multimodal`。所选模型必须支持输入模态。不支持视频 FILE 向量化。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置，也不会根据 endpoint 或模型名称推断协议。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
 ### `ai_query_admission_max_estimated_input_tokens`
@@ -162,7 +180,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 还支持估计 `ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize` 和 `ai_filter`，包括显式指定模型的重载。估算会累加内置用户提示词模板的 UTF-8 字节数与各个受支持输入的大小。常量字符串数组计入 JSON 引号、转义和分隔符。对于 `ai_translate`，源语言为 NULL 或空串时使用自动检测模板，而不是跳过请求；源语言通过统计信息估算时，按两个模板中较大的固定开销预留。这些规则并不使估算成为精确的提供商 token 计数。
 
-复杂表达式、无法解析为常量字符串的辅助数组、options、JOIN、CTE、不支持或缺失的统计信息，以及局部 TopN 计划，都可能导致 `UNKNOWN`。启用准入检查或设置上限前，可通过 `EXPLAIN VERBOSE` 或 `EXPLAIN COSTS` 查看代表性查询的 `AI INPUT TOKENS`。这是逐查询的预检查，不是覆盖整个工作负载的观察模式。`EXPLAIN ANALYZE` 会执行语句并进行准入检查；其他 `EXPLAIN` 级别（包括 `SCHEDULER`）不对被解释的语句进行准入检查。
+不估算 FILE 输入，其结果为 `UNKNOWN`。复杂表达式、无法解析为常量字符串的辅助数组、options、JOIN、CTE、不支持或缺失的统计信息，以及局部 TopN 计划，都可能导致 `UNKNOWN`。启用准入检查或设置上限前，可通过 `EXPLAIN VERBOSE` 或 `EXPLAIN COSTS` 查看代表性查询的 `AI INPUT TOKENS`。这是逐查询的预检查，不是覆盖整个工作负载的观察模式。`EXPLAIN ANALYZE` 会执行语句并进行准入检查；其他 `EXPLAIN` 级别（包括 `SCHEDULER`）不对被解释的语句进行准入检查。
 
 此配置用于控制一次计划执行的预估输入工作量，并非精确分词器、计费配额或输出 token 上限，也不计入额外的 HTTP 重试请求。
 
@@ -1209,6 +1227,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 完成事务期间获取数据库和表锁的默认超时。
 - 引入版本: v4.0.0, v3.5.8
+
+### `history_job_keep_max_num`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 内存中保留的已完成或已取消 ALTER 作业的最大数量，这些作业可通过 SHOW ALTER TABLE 查看。schema 变更作业与优化作业共用一个上限，rollup 作业单独计数。超出上限时，按完成时间从早到晚删除作业，即使作业尚未超过 `history_job_keep_max_second` 设定的保留时长。以下两种情况下作业会继续保留，作业数因此可能暂时超过上限：一是正在进行的导入可能还在使用该作业变更前的 schema；二是存算分离集群中仍有集群快照依赖该作业。设为 `0` 或负数表示不限制。
+- 引入版本: -
 
 ### `history_job_keep_max_second`
 
