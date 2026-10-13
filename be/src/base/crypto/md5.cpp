@@ -17,13 +17,6 @@
 
 #include "base/crypto/md5.h"
 
-// TODO: The low-level MD5_* APIs are deprecated since OpenSSL 3.0. Migrate to EVP
-// (EVP_DigestInit_ex/EVP_DigestUpdate/EVP_DigestFinal_ex with EVP_md5()) after benchmarking the
-// per-row callers in exprs/encryption_functions.cpp, since EVP adds a heap-allocated context per
-// digest. Until then only silence the deprecation warnings here.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 namespace starrocks {
 
 Md5Digest::Md5Digest() {
@@ -50,5 +43,3 @@ void Md5Digest::digest() {
 }
 
 } // namespace starrocks
-
-#pragma GCC diagnostic pop

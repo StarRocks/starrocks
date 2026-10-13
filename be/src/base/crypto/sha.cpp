@@ -19,14 +19,6 @@
 #include <sstream>
 #include <string>
 
-// TODO: The low-level SHA*_ APIs are deprecated since OpenSSL 3.0. Migrate to EVP
-// (EVP_DigestInit_ex/EVP_DigestUpdate/EVP_DigestFinal_ex with EVP_sha224()/EVP_sha256()/
-// EVP_sha384()/EVP_sha512()) after benchmarking the per-row callers in
-// exprs/encryption_functions.cpp, since EVP adds a heap-allocated context per digest.
-// Until then only silence the deprecation warnings here.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 namespace starrocks {
 
 SHA224Digest::SHA224Digest() {
@@ -110,5 +102,3 @@ std::string SHA512Digest::hex() const {
 }
 
 } // namespace starrocks
-
-#pragma GCC diagnostic pop
