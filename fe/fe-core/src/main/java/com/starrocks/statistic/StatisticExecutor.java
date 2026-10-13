@@ -728,7 +728,13 @@ public class StatisticExecutor {
 
     private static boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
+<<<<<<< HEAD
         try {
+=======
+        // Nested analysis and error reporting must use the internal session, not the caller's catalog or state.
+        try (var guard = context.bindScope()) {
+            Stopwatch watch = Stopwatch.createStarted();
+>>>>>>> c9011f8 ([BugFix] Bind the internal context for statistics DML (#80473))
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
