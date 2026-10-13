@@ -107,7 +107,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：FILE オーバーロードを含む、モデルを明示しない SYSTEM `ai_complete` 呼び出しで使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_chat_provider`
@@ -115,9 +115,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`qwen_compatible`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。正確に `openai_compatible` または `qwen_compatible` を指定する必要があり、空または未対応の値は解析に失敗します。両方のプロトコルがテキストと inline 画像 FILE に対応し、inline MP4 動画は `qwen_compatible` のみが対応します。選択したモデルは入力のモダリティに対応している必要があります。プロトコルを endpoint やモデル名から推定することはありません。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +143,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`dashscope_multimodal`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。テキスト用の `openai_compatible`、またはテキストと inline JPEG、PNG、WebP 画像 FILE 用の `dashscope_multimodal` を正確に指定します。選択したモデルは入力のモダリティに対応している必要があります。動画 FILE の埋め込みは未対応です。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。プロトコルを endpoint やモデル名から推定することはありません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`

@@ -294,6 +294,7 @@
         "ai_function_request_timeout_ms",
         "ai_function_connect_timeout_ms",
         "ai_function_max_response_bytes",
+        "ai_function_max_input_file_bytes",
         "ai_function_worker_thread_num",
         "ai_function_sub_chunk_size",
         "ai_function_max_retries",

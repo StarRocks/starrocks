@@ -125,6 +125,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_response_bytes(config::ai_function_max_response_bytes);
     });
+    registry->register_callback("ai_function_max_input_file_bytes", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_max_input_file_bytes(config::ai_function_max_input_file_bytes);
+    });
     registry->register_callback("ai_function_worker_thread_num", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_worker_thread_num(config::ai_function_worker_thread_num);

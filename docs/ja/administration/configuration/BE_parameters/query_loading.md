@@ -112,6 +112,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 1 回の AI HTTP attempt から受け付ける response body の最大サイズです。この上限を超えたレスポンスは Provider による解析前に拒否され、BE のメモリ消費を制限します。モデルが正当に大きなレスポンスを返す場合にのみ値を増やしてください。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
 - 導入バージョン: -
 
+### ai_function_max_input_file_bytes
+
+- デフォルト: 10485760
+- タイプ: Int
+- 単位: バイト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: `ai_complete` または `ai_embed` に渡す各 inline FILE の生バイト数の上限です。AI が保持するペイロードのコピーと Base64 エンコードの前に検査します。デフォルトは 10 MiB です。選択したプロバイダーとモデルが大きな入力に対応する場合にのみ増やしてください。この上限はスキャンや Chunk の実体化を制御しません。これらのメモリ割り当てと AI ペイロードには、引き続きクエリのメモリ追跡が適用されます。不正または上限超過の inline 入力は `ai_function_on_error` に従います。新しく開かれた AI fragment/operator は不可変のランタイムスナップショットにこの値を取り込み、すでに開かれた fragment は既存のスナップショットを保持します。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
 ### ai_function_worker_thread_num
 
 - デフォルト: 16
