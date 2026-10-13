@@ -113,10 +113,66 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog) {
         PartitionSpec spec = Mockito.mock(PartitionSpec.class);
         Mockito.when(spec.isUnpartitioned()).thenReturn(false);
         Table nativeTable = createBaseTableWithManifests(1, 0, spec);
+=======
+    public void testAsyncListPartitionNamesAfterExecutorShutdown(@Mocked IcebergCatalog icebergCatalog,
+                                                                 @Mocked PartitionSpec spec) {
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Mockito.when(meta.metadataFileLocation()).thenReturn("hdfs://path/to/table");
+        Mockito.when(meta.spec()).thenReturn(spec);
+        Mockito.when(meta.uuid()).thenReturn("test-uuid");
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+        BaseTable nativeTable = new BaseTable(ops, "db.test");
+        new Expectations() {
+            {
+                spec.isUnpartitioned();
+                result = false;
+                minTimes = 0;
+
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = new HashMap<String, Partition>();
+                minTimes = 0;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        executor.shutdown();
+        IcebergTable table = IcebergTable.builder().setSrTableName("test")
+                .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
+        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        boolean previous = sv.isEnableConnectorAsyncListPartitions();
+        sv.setEnableConnectorAsyncListPartitions(true);
+        requestContext.setQueryMVRewrite(true);
+        try {
+            // A rejected background refresh falls back to the synchronous path instead of failing the query.
+            Assertions.assertEquals(0, cachingIcebergCatalog.listPartitionNames(table, requestContext, null).size());
+        } finally {
+            sv.setEnableConnectorAsyncListPartitions(previous);
+        }
+    }
+
+    @Test
+    public void testListPartitionNames(@Mocked IcebergCatalog icebergCatalog, @Mocked PartitionSpec spec) {
+        // Create a real BaseTable instance instead of using a mocked Table
+        // This is necessary because IcebergTable.getTableIdentifier() casts to BaseTable
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Mockito.when(meta.metadataFileLocation()).thenReturn("hdfs://path/to/table");
+        Mockito.when(meta.spec()).thenReturn(spec);
+        Mockito.when(meta.uuid()).thenReturn("test-uuid");
+
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+
+        BaseTable nativeTable = new BaseTable(ops, "db.test");
+
+>>>>>>> 3462b5d235a... [BugFix][RB-366] Shut down the Iceberg metadata cache background executor on catalog shutdown (#65141)
         new Expectations() {
             {
                 icebergCatalog.getTable((ConnectContext) any, "db", "test");
