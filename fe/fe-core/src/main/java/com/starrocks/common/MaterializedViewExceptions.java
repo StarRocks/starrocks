@@ -15,7 +15,9 @@
 package com.starrocks.common;
 
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.Set;
 
@@ -105,11 +107,22 @@ public class MaterializedViewExceptions {
 
     /**
      * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
+<<<<<<< HEAD
      * refresh (vs. a transient error). Covers the FE-detected non-append-only change and a stored schema
      * that no longer matches the maintenance query, so a single caller can inactivate the MV. Walks the
      * cause chain since the marker may be wrapped by the refresh pipeline.
+=======
+     * refresh (as opposed to a transient error). Covers the FE-detected non-append-only change, a
+     * BE-detected non-trackable CHANGES failure, and a stored schema that no longer matches the
+     * maintenance query, so a single caller handles OLAP and external tables the same way. Walks the
+     * cause chain because the marker may be wrapped by the refresh pipeline. A refresh that stopped on an already-inactive
+     * view broke nothing, though its message -- and its retry wrapper's -- quotes an inactive reason that may carry a marker.
+>>>>>>> ecb3600aac2... [BugFix][RB-374] Do not take a refresh of an inactive MV for a broken incremental refresh (#65176)
      */
     public static boolean isIncrementalBreakingFailure(Throwable e) {
+        if (ExceptionUtils.indexOfType(e, MVInactiveException.class) >= 0) {
+            return false;
+        }
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
             String msg = t.getMessage();
             if (msg != null && (msg.contains(FE_NON_APPEND_ONLY_MARKER)
