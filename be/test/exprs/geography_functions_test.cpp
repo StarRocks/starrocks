@@ -2281,7 +2281,6 @@ TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
     auto res3 = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
     auto k1 = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
-    auto k2 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
     EXPECT_FALSE(GeoFunctions::h3_resolution(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1)}).ok());
     EXPECT_FALSE(GeoFunctions::h3_from_geo(
                          nullptr, {geography({"POINT (0 0)"}), ColumnHelper::create_const_column<TYPE_INT>(16, 1)})
@@ -2305,48 +2304,56 @@ TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
                          nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(vertex), 1)})
                          .ok());
 
-    struct SavedLimits {
-        int64_t cells = config::h3_max_cells_per_row;
-        int32_t k = config::h3_max_grid_disk_k;
-        int64_t vertices = config::h3_max_polygon_vertices;
-        int32_t components = config::h3_max_polygon_components;
-        int64_t bytes = config::h3_max_working_bytes;
-        int64_t work = config::h3_max_estimated_work_per_row;
-        ~SavedLimits() {
-            config::h3_max_cells_per_row = cells;
-            config::h3_max_grid_disk_k = k;
-            config::h3_max_polygon_vertices = vertices;
-            config::h3_max_polygon_components = components;
-            config::h3_max_working_bytes = bytes;
-            config::h3_max_estimated_work_per_row = work;
-        }
-    } saved;
-    config::h3_max_cells_per_row = 1;
+    auto negative_k = GeoFunctions::h3_grid_disk(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(-1, 1)});
+    ASSERT_FALSE(negative_k.ok());
+    EXPECT_EQ("H3_GridDisk requires non-negative k", negative_k.status().message());
     EXPECT_TRUE(GeoFunctions::h3_grid_disk(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(0, 1)}).ok());
-    EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, k1}).ok());
-    config::h3_max_cells_per_row = saved.cells;
-    config::h3_max_grid_disk_k = 1;
     EXPECT_TRUE(GeoFunctions::h3_grid_disk(nullptr, {cell, k1}).ok());
-    EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, k2}).ok());
-    config::h3_max_grid_disk_k = saved.k;
-
     auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
-    config::h3_max_polygon_vertices = 4;
-    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
-    config::h3_max_polygon_vertices = 5;
     EXPECT_TRUE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
-    config::h3_max_polygon_vertices = saved.vertices;
-    config::h3_max_working_bytes = 1;
-    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
-    config::h3_max_working_bytes = saved.bytes;
-    config::h3_max_estimated_work_per_row = 1;
-    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
-    config::h3_max_estimated_work_per_row = saved.work;
-    auto multi =
-            geography({"MULTIPOLYGON (((-5 -5, -4 -5, -4 -4, -5 -4, -5 -5)), "
-                       "((4 4, 5 4, 5 5, 4 5, 4 4)))"});
-    config::h3_max_polygon_components = 1;
-    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {multi, res3}).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3ArraySizeLimits) {
+    constexpr int64_t cell_value = 0x83754efffffffffLL;
+    auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
+    auto k1 = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    auto res4 = ColumnHelper::create_const_column<TYPE_INT>(4, 1);
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_INT)},
+                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
+    context->set_max_array_length(6);
+    auto disk = GeoFunctions::h3_grid_disk(context.get(), {cell, k1});
+    ASSERT_FALSE(disk.ok());
+    EXPECT_EQ("max_array_length exceeded by H3 result", disk.status().message());
+    auto children = GeoFunctions::h3_to_children(context.get(), {cell, res4});
+    ASSERT_FALSE(children.ok());
+    EXPECT_EQ("max_array_length exceeded by H3 result", children.status().message());
+    context->set_max_array_length(7);
+    auto accepted_disk = GeoFunctions::h3_grid_disk(context.get(), {cell, k1});
+    ASSERT_TRUE(accepted_disk.ok()) << accepted_disk.status();
+    EXPECT_EQ(7, (*accepted_disk)->get(0).get_array().size());
+    auto accepted_children = GeoFunctions::h3_to_children(context.get(), {cell, res4});
+    ASSERT_TRUE(accepted_children.ok()) << accepted_children.status();
+    EXPECT_EQ(7, (*accepted_children)->get(0).get_array().size());
+
+    auto huge_disk = GeoFunctions::h3_grid_disk(
+            nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(std::numeric_limits<int32_t>::max(), 1)});
+    ASSERT_FALSE(huge_disk.ok());
+    EXPECT_EQ("H3 array offset limit exceeded", huge_disk.status().message());
+    auto huge_children =
+            GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(15, 1)});
+    ASSERT_FALSE(huge_children.ok());
+    EXPECT_EQ("H3 array offset limit exceeded", huge_children.status().message());
+
+    std::unique_ptr<FunctionContext> polygon_context(
+            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)},
+                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
+    polygon_context->set_max_array_length(1);
+    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
+    auto limited_polygon = GeoFunctions::h3_polygon_to_cells(
+            polygon_context.get(), {polygon, ColumnHelper::create_const_column<TYPE_INT>(3, 1)});
+    ASSERT_FALSE(limited_polygon.ok());
+    EXPECT_EQ("max_array_length exceeded by H3 result", limited_polygon.status().message());
 }
 
 TEST_F(geographyFunctionsTest, h3SeamPolarAndPentagon) {
