@@ -39,6 +39,7 @@ import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.OdpsScanNode;
+import com.starrocks.planner.PaimonIndexScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.CandidateWorkerProvider;
@@ -139,6 +140,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 LanceScanNode node = (LanceScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getLanceTable().getTableLocation();
+            } else if (scanNode instanceof PaimonIndexScanNode) {
+                PaimonIndexScanNode node = (PaimonIndexScanNode) scanNode;
+                predicates = new HDFSScanNodePredicates();
+                basePath = node.getTablePath();
             } else if (scanNode instanceof FlussScanNode) {
                 FlussScanNode node = (FlussScanNode) scanNode;
                 predicates = node.getScanNodePredicates();

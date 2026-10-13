@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -48,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
@@ -232,13 +234,20 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalTableScan(OptExpression optExpression, Integer step) {
-            if (!isPrintColumnRef) {
-                return new OperatorStr("logical scan", step, Collections.emptyList());
-            }
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
+            String suffix = "";
+            if (scanOperator instanceof LogicalPaimonScanOperator) {
+                LogicalPaimonScanOperator paimonScan = (LogicalPaimonScanOperator) scanOperator;
+                if (paimonScan.getIndexCondition() != null) {
+                    suffix = " index[" + paimonScan.getIndexCondition() + "]";
+                }
+            }
+            if (!isPrintColumnRef) {
+                return new OperatorStr("logical scan" + suffix, step, Collections.emptyList());
+            }
             return new OperatorStr("logical scan(" +
                     scanOperator.getColRefToColumnMetaMap().keySet().stream().map(col -> "" + col).collect(
-                            Collectors.joining(", ")) + ")", step, Collections.emptyList());
+                            Collectors.joining(", ")) + ")" + suffix, step, Collections.emptyList());
         }
 
         @Override
@@ -459,10 +468,15 @@ public class LogicalPlanPrinter {
         }
 
         private OperatorStr visitScanCommon(OptExpression optExpression, Integer step, String scanName) {
+            return visitScanCommon(optExpression, step, scanName, "");
+        }
+
+        private OperatorStr visitScanCommon(OptExpression optExpression, Integer step, String scanName, String suffix) {
             PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder(scanName + " (");
             sb.append("columns").append(scan.getUsedColumns());
-            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(" predicate[").append(scan.getPredicate()).append("]")
+                    .append(suffix);
             sb.append(")");
             if (scan.getLimit() >= 0) {
                 sb.append(" Limit ").append(scan.getLimit());
@@ -508,12 +522,19 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
-            return visitScanCommon(optExpression, step, "PAIMON SCAN");
+            PhysicalPaimonScanOperator scan = optExpression.getOp().cast();
+            String suffix = scan.getIndexCondition() == null ? "" : " index[" + scan.getIndexCondition() + "]";
+            return visitScanCommon(optExpression, step, "PAIMON SCAN", suffix);
         }
 
         @Override
         public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "FLUSS SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIndexScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "CONNECTOR INDEX SCAN");
         }
 
         @Override

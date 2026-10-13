@@ -147,9 +147,15 @@ public class SimpleExecutor {
      * so they never outlive the outer user query.
      */
     public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+        return executeDQL(sql, queryTimeoutSeconds, null);
+    }
+
+    /** Runs a serving-path query whose cancellation follows the explicit parent query. */
+    public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds, ConnectContext parent) {
         ConnectContext prev = ConnectContext.get();
         try {
             ConnectContext context = createConnectContext();
+            context.setParentConnectContext(parent);
             context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
             context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
             return executeDQL(sql, context);

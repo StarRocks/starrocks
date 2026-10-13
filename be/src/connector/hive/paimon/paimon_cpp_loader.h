@@ -27,4 +27,7 @@ class HdfsScanner;
 // with an actionable error instead of failing BE startup.
 StatusOr<HdfsScanner*> create_paimon_cpp_scanner();
 
+// Creates the Paimon Global Index scanner through the same optional shim.
+StatusOr<HdfsScanner*> create_paimon_global_index_scanner();
+
 } // namespace starrocks
