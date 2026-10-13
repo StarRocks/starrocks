@@ -321,13 +321,24 @@ TEST_F(FragmentExecutorPartitionTest, DriverAdmissionPrecedesInstantiation) {
             executor._fragment_ctx->set_runtime_state(std::move(state));
             auto* runtime_state = executor._fragment_ctx->runtime_state();
             runtime_state->set_fragment_ctx(executor._fragment_ctx.get());
-            DescriptorTbl desc;
+            // Older ExecNode constructs a RowDescriptor and requires at least one tuple.
+            TDescriptorTable thrift_desc;
+            TTupleDescriptor tuple_desc;
+            tuple_desc.__set_id(0);
+            tuple_desc.__set_byteSize(0);
+            thrift_desc.tupleDescriptors.push_back(tuple_desc);
+            DescriptorTbl* desc = nullptr;
+            ASSERT_OK(DescriptorTbl::create(runtime_state, runtime_state->obj_pool(), thrift_desc, &desc,
+                                            config::vector_chunk_size));
+            runtime_state->set_desc_tbl(desc);
             TPlanNode node;
             node.__set_node_id(0);
             node.__set_node_type(TPlanNodeType::EMPTY_SET_NODE);
+            node.__set_row_tuples({0});
+            node.__set_nullable_tuples({false});
             node.__set_limit(-1);
             executor._fragment_ctx->plan() = runtime_state->obj_pool()->add(
-                    new DriverLimitPlanNode(runtime_state->obj_pool(), node, desc, sources, scenario.colocate));
+                    new DriverLimitPlanNode(runtime_state->obj_pool(), node, *desc, sources, scenario.colocate));
 
             TExecPlanFragmentParams params;
             params.__set_backend_num(0);
