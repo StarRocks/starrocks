@@ -4042,7 +4042,9 @@ TEST_F(TabletUpdatesTest, test_size_tiered_compaction) {
     for (const auto& rowset : rowsets) {
         remaining_original_empty_rowsets += original_empty_rowset_ids.count(rowset->rowset_meta()->get_rowset_seg_id());
     }
-    ASSERT_EQ(1, remaining_original_empty_rowsets);
+    // The overwritten key-9 rowset is also level -1 (all its rows are deleted),
+    // so the batch includes it and three of the five physically empty rowsets.
+    ASSERT_EQ(2, remaining_original_empty_rowsets);
     ASSERT_EQ(10 + N * 2, read_tablet(_tablet, version - 1));
 }
 
