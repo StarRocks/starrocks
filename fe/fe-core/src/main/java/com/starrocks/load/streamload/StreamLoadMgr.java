@@ -447,18 +447,14 @@ public class StreamLoadMgr {
 
     public static StreamLoadMgr loadStreamLoadManager(DataInput in) throws IOException {
         int size = in.readInt();
-        long currentMs = System.currentTimeMillis();
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         streamLoadManager.init();
+        // NOTE: do not drop expired tasks here. saveStreamLoadManager() computes the checksum stored in
+        // the image over the whole live map, so the state has to be loaded as-is; the retention policy
+        // is applied afterwards by the caller (GlobalStateMgr.loadStreamLoadManager()).
         for (int i = 0; i < size; i++) {
             StreamLoadTask loadTask = StreamLoadTask.read(in);
             loadTask.init();
-            // discard expired task right away
-            if (loadTask.checkNeedRemove(currentMs)) {
-                LOG.info("discard expired task: {}", loadTask.getLabel());
-                continue;
-            }
-
             streamLoadManager.addLoadTask(loadTask);
         }
         return streamLoadManager;

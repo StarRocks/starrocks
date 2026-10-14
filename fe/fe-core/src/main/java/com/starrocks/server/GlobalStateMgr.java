@@ -1784,7 +1784,12 @@ public class GlobalStateMgr {
 
     public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
         streamLoadMgr = StreamLoadMgr.loadStreamLoadManager(in);
+        // Verify the image against the state exactly as loaded: the checksum in the image covers every
+        // task that was serialized. Expired tasks are dropped only after this, otherwise the computed
+        // checksum would depend on Config.label_keep_max_second and on how long the image sat on disk,
+        // and an existing image could no longer be loaded (checkpoint deadlock).
         checksum ^= streamLoadMgr.getChecksum();
+        streamLoadMgr.cleanOldStreamLoadTasks();
         return checksum;
     }
 
