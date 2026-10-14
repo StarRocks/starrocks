@@ -103,6 +103,14 @@ public class IcebergRESTCatalogTest {
     }
 
     @Test
+    public void testGetSecurityTypeDefaultsToNone(@Mocked RESTSessionCatalog restCatalog) {
+        // The test-only constructor sets securityType = NONE; the getter exposes it so
+        // callers (CachingIcebergCatalog, IcebergMetadata) can gate JWT-only behavior.
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(restCatalog, new Configuration());
+        Assertions.assertEquals(IcebergRESTCatalog.Security.NONE, icebergRESTCatalog.getSecurityType());
+    }
+
+    @Test
     public void testListAllDatabasesWithException(@Mocked RESTSessionCatalog restCatalog) {
         new Expectations() {
             {

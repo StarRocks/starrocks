@@ -98,6 +98,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     private final boolean viewEndpointsEnabled;
     private final boolean authRecoveryEnabled;
     private long lastAuthRecoveryMillis;
+    private final Security securityType;
 
 
     public IcebergRESTCatalog(String name, Configuration conf, Map<String, String> properties) {
@@ -136,6 +137,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         // only an OAuth2 client credential lets us mint a new token; per-user JWTs cannot be renewed by the FE
         authRecoveryEnabled = restCatalogProperties.containsKey(OAuth2Properties.CREDENTIAL)
                 && securityConfig.getSecurity() != Security.JWT;
+        securityType = securityConfig.getSecurity();
 
         // initialize() below performs a GET /v1/config against the REST service, and an OAuth
         // exchange when configured, so construction is itself a remote call -- reached before any
@@ -160,11 +162,17 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         this.viewEndpointsEnabled = true;
         this.restCatalogProperties = Maps.newHashMap();
         this.authRecoveryEnabled = false;
+        this.securityType = Security.NONE;
     }
 
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return IcebergCatalogType.REST_CATALOG;
+    }
+
+    @Override
+    public Security getSecurityType() {
+        return securityType;
     }
 
     @Override
@@ -531,8 +539,7 @@ public class IcebergRESTCatalog implements IcebergCatalog {
         String sessionId = format("%s-%s", context.getQualifiedUser(), context.getSessionId());
 
         // only pass user's auth token to REST Catalog when security mode is JWT
-        boolean isJwtSecurity = Security.JWT.name().equalsIgnoreCase(
-                restCatalogProperties.getOrDefault(ICEBERG_CATALOG_SECURITY, "NONE"));
+        boolean isJwtSecurity = securityType == Security.JWT;
         if (!isJwtSecurity || Strings.isNullOrEmpty(context.getAuthToken())) {
             return SessionCatalog.SessionContext.createEmpty();
         }
