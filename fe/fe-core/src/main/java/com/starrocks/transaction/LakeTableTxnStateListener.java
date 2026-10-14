@@ -95,7 +95,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         List<Long> tabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
-        Map<Long, List<Long>> ignoredTabletsByPartition = Maps.newHashMap();
+        Map<Long, Set<Long>> ignoredTabletsByPartition = Maps.newHashMap();
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
             if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
@@ -107,8 +107,9 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
                 // Rows written into those tablets are dropped while this transaction still succeeds, record
-                // them so that the loss leaves a trace, see TxnStateLogUtils.
-                ignoredTabletsByPartition.computeIfAbsent(tabletMeta.getPhysicalPartitionId(), id -> Lists.newArrayList())
+                // them so that the loss leaves a trace, see TxnStateLogUtils. A set, so that a tablet reported
+                // more than once is recorded once.
+                ignoredTabletsByPartition.computeIfAbsent(tabletMeta.getPhysicalPartitionId(), id -> Sets.newLinkedHashSet())
                         .add(tabletIds.get(i));
                 continue;
             }

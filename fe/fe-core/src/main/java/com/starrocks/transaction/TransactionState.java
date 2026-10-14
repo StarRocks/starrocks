@@ -74,6 +74,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -1103,12 +1104,15 @@ public class TransactionState implements Writable, GsonPreProcessable {
      *
      * @param ignoredTabletsByPartition physical partition id -> tablet ids, empty when nothing was skipped
      */
-    public void setIgnoredTablets(long tableId, Map<Long, List<Long>> ignoredTabletsByPartition) {
+    public void setIgnoredTablets(long tableId, Map<Long, ? extends Collection<Long>> ignoredTabletsByPartition) {
         if (ignoredTabletsByPartition.isEmpty()) {
             getIgnoredTablets().remove(tableId);
-        } else {
-            getIgnoredTablets().put(tableId, ignoredTabletsByPartition);
+            return;
         }
+        Map<Long, List<Long>> tabletIdsByPartition = Maps.newHashMap();
+        ignoredTabletsByPartition.forEach((physicalPartitionId, tabletIds) ->
+                tabletIdsByPartition.put(physicalPartitionId, Lists.newArrayList(tabletIds)));
+        getIgnoredTablets().put(tableId, tabletIdsByPartition);
     }
 
     /**
