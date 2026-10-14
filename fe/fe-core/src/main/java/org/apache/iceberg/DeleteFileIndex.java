@@ -405,11 +405,17 @@ class DeleteFileIndex {
         // 1.11.0 resolves equality-delete field IDs against ALL table schemas rather than
         // spec.schema(). A partition spec carries the schema as of its own creation, so after
         // schema evolution spec.schema() could miss or misresolve an equality field ID.
+        //
+        // Neither map is set by builderFor(Iterable<DeleteFile>) callers that only need an empty index,
+        // e.g. StarRocksIcebergTableScan.refreshDataFileCache()'s sentinel. There is nothing to resolve
+        // then, and build() must not fail on it: it calls this unconditionally.
         private Collection<Schema> schemas() {
             if (schemasById != null) {
                 return schemasById.values();
-            } else {
+            } else if (specsById != null) {
                 return specsById.values().stream().map(PartitionSpec::schema).collect(Collectors.toList());
+            } else {
+                return Collections.emptyList();
             }
         }
 
