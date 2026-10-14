@@ -50,6 +50,23 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     private static final Logger LOG = LogManager.getLogger(OptimizeJobV2Test.class);
 
+<<<<<<< HEAD
+=======
+    @BeforeAll
+    public static void beforeAll() {
+        DDLTestBase.beforeAll();
+        // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
+        // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
+        // the spy, so its failure cancels the job and drops the spy's temp partitions.
+        try {
+            UtFrameUtils.stopBackgroundSchemaChangeHandler(60000);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+>>>>>>> 54ad6cc ([UT] Fix flaky OptimizeJobV2Test by stopping the background schema change scheduler (#80729))
     @BeforeEach
     public void setUp() throws Exception {
         super.setUp();
@@ -728,9 +745,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     private OptimizeJobV2 spyPreviousTxnFinished(OptimizeJobV2 job) {
-        // Detach the job from schema change handler to prevent the background scheduler
-        // from mutating its state in parallel with the UT driven state machine, which
-        // occasionally drops temp partitions and leads to flaky failures.
+        // The test drives the spy from here on, so the handler must not hold the original. Detaching alone does
+        // not keep the scheduler away from it, which is why beforeAll() stops the scheduler.
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.getAlterJobsV2().remove(job.getJobId());
 
