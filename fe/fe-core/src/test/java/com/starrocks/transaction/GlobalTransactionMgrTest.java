@@ -1681,6 +1681,26 @@ public class GlobalTransactionMgrTest {
                 GlobalStateMgrTestUtil.testTableId1, physicalPartitionId));
     }
 
+    // The per partition lookup that partition replacement runs over all its source partitions at once: each
+    // partition gets the transactions that target it, and a partition without any is left out.
+    @Test
+    public void testGetConflictingTxnIdsByPartitionReportsEachPartition() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        long physicalPartitionId = GlobalStateMgrTestUtil.testPartitionId1 + 100;
+        long otherPhysicalPartitionId = physicalPartitionId + 1;
+
+        long transactionId = beginTxnTargeting(physicalPartitionId);
+
+        Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
+                masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
+                        GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId, otherPhysicalPartitionId)));
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet()).isEmpty());
+        // a database without any transaction
+        Assertions.assertTrue(masterTransMgr.getConflictingTxnIdsByPartition(GlobalStateMgrTestUtil.testDbId1 + 1,
+                GlobalStateMgrTestUtil.testTableId1, Sets.newHashSet(physicalPartitionId)).isEmpty());
+    }
+
     /**
      * Begin a transaction and register the given physical partition as a write target, which is what the
      * tablet sink does when a load plan is built, before any row reaches a backend.

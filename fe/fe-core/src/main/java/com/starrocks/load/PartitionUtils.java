@@ -15,7 +15,9 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -51,8 +53,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -64,20 +68,35 @@ public class PartitionUtils {
     private static final int MAX_REPORTED_CONFLICTING_TXNS = 5;
 
     /**
-     * Find the running transactions that may write to the given partition.
+     * Find, for each of the given partitions, the running transactions that may write to it.
      * <p>
-     * Jobs that replace a partition with a rewritten one (optimize, merge partition, insert overwrite)
-     * must call this while holding the table write lock, right before the replacement: replacing a
-     * partition that has concurrent ingestion silently discards the loaded rows, because the tablets of
-     * the source partition are force deleted while the load transaction still reports success.
+     * Jobs that replace partitions with rewritten ones (optimize, merge partition) must call this while
+     * holding the table write lock, right before the replacement: replacing a partition that has concurrent
+     * ingestion silently discards the loaded rows, because the tablets of the source partition are force
+     * deleted while the load transaction still reports success. All the partitions are checked in one pass
+     * over the running transactions, see {@link GlobalTransactionMgr#getConflictingTxnIdsByPartition}.
      *
-     * @return ids of the conflicting transactions, empty if this partition has no concurrent ingestion
+     * @return partition id -> ids of the conflicting transactions, empty for a partition without concurrent
+     *         ingestion
      */
-    public static List<Long> getConflictingIngestionTxnIds(long dbId, long tableId, Partition partition) {
-        Set<Long> physicalPartitionIds = partition.getSubPartitions().stream()
+    public static Map<Long, List<Long>> getConflictingIngestionTxnIds(long dbId, long tableId,
+                                                                      Collection<Partition> partitions) {
+        Set<Long> physicalPartitionIds = partitions.stream()
+                .flatMap(partition -> partition.getSubPartitions().stream())
                 .map(PhysicalPartition::getId).collect(Collectors.toSet());
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .getConflictingTxnIds(dbId, tableId, physicalPartitionIds);
+        Map<Long, List<Long>> txnIdsByPhysicalPartition = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getConflictingTxnIdsByPartition(dbId, tableId, physicalPartitionIds);
+        Map<Long, List<Long>> txnIdsByPartition = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            // a transaction that writes into several sub partitions of the partition is reported once
+            Set<Long> txnIds = Sets.newLinkedHashSet();
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                txnIds.addAll(txnIdsByPhysicalPartition.getOrDefault(physicalPartition.getId(),
+                        Collections.emptyList()));
+            }
+            txnIdsByPartition.put(partition.getId(), Lists.newArrayList(txnIds));
+        }
+        return txnIdsByPartition;
     }
 
     /**

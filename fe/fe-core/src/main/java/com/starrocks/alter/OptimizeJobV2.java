@@ -63,6 +63,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -493,12 +494,12 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     /**
-     * Find the transactions that may still write to the given partition, see
-     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Partition)}.
+     * Find, for each of the given partitions, the transactions that may still write to it, see
+     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Collection)}.
      * Must be called while holding the table write lock. Overridable for testability.
      */
-    protected List<Long> getConflictingTxnIds(Partition partition) {
-        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partition);
+    protected Map<Long, List<Long>> getConflictingTxnIds(Collection<Partition> partitions) {
+        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partitions);
     }
 
     /**
@@ -528,13 +529,17 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             // appending: entries left over from a previous pass would no longer line up one to one with
             // tmpPartitionNames, and the removals below only drop a single occurrence each.
             sourcePartitionNames.clear();
-            optimizeClause.getSourcePartitionIds().stream()
-                    .map(partitionId -> targetTable.getPartition(partitionId)).forEach(
+            List<Partition> allSourcePartitions = optimizeClause.getSourcePartitionIds().stream()
+                    .map(partitionId -> targetTable.getPartition(partitionId)).collect(Collectors.toList());
+            // all the source partitions at once, a load can target every partition of the table
+            Map<Long, List<Long>> conflictingTxnIdsByPartition = getConflictingTxnIds(allSourcePartitions);
+            allSourcePartitions.forEach(
                         partition -> {
                             sourcePartitionNames.add(partition.getName());
                             partitionLastVersion.put(partition.getName(), partition.getSubPartitions().stream()
                                     .mapToLong(PhysicalPartition::getVisibleVersion).sum());
-                            partitionConflictingTxnIds.put(partition.getName(), getConflictingTxnIds(partition));
+                            partitionConflictingTxnIds.put(partition.getName(),
+                                    conflictingTxnIdsByPartition.getOrDefault(partition.getId(), Lists.newArrayList()));
                         }
             );
 

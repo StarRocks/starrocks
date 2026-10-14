@@ -706,12 +706,12 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
     }
 
     /**
-     * Find the transactions that may still write to the given partition, see
-     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Partition)}.
+     * Find, for each of the given partitions, the transactions that may still write to it, see
+     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Collection)}.
      * Must be called while holding the table write lock. Overridable for testability.
      */
-    protected List<Long> getConflictingTxnIds(Partition partition) {
-        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partition);
+    protected Map<Long, List<Long>> getConflictingTxnIds(Collection<Partition> partitions) {
+        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partitions);
     }
 
     /**
@@ -769,13 +769,20 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             // below, so a source partition that any transaction can still write to must not be replaced.
             // The visible version covers already published transactions, the conflicting transaction ids
             // cover the ones that are committed but not published yet, and the in flight ones.
+            // all the source partitions of all the groups at once, a load can target every partition of the table
+            List<Partition> allSourcePartitions = tempPartitionNameToSourcePartitionNames.values().stream()
+                    .map(sourcePartitionName -> targetTable.getPartition(sourcePartitionName))
+                    .filter(sourcePartition -> sourcePartition != null)
+                    .collect(Collectors.toList());
+            Map<Long, List<Long>> conflictingTxnIdsByPartition = getConflictingTxnIds(allSourcePartitions);
             Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
             tempPartitionNameToSourcePartitionNames.asMap().forEach((tempPartitionName, sourcePartitionNames) -> {
                 List<Long> conflictingTxnIds = Lists.newArrayList();
                 for (String sourcePartitionName : sourcePartitionNames) {
                     Partition sourcePartition = targetTable.getPartition(sourcePartitionName);
                     if (sourcePartition != null) {
-                        conflictingTxnIds.addAll(getConflictingTxnIds(sourcePartition));
+                        conflictingTxnIds.addAll(conflictingTxnIdsByPartition.getOrDefault(sourcePartition.getId(),
+                                Collections.emptyList()));
                     }
                 }
                 partitionConflictingTxnIds.put(tempPartitionName, conflictingTxnIds);

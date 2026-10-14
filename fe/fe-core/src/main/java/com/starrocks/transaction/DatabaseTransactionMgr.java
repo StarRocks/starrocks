@@ -979,35 +979,74 @@ public class DatabaseTransactionMgr {
             return Collections.emptyList();
         }
 
-        // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
-        // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),
-        // so holding both at the same time would invert the lock order.
-        List<TransactionState> candidates;
-        readLock();
-        try {
-            candidates = idToRunningTransactionState.values().stream()
-                    .filter(txn -> txn.isRunning() && txn.getTableIdList().contains(tableId))
-                    .collect(Collectors.toList());
-        } finally {
-            readUnlock();
-        }
-
         List<Long> conflictingTxnIds = Lists.newArrayList();
-        for (TransactionState txn : candidates) {
-            if (touchesPartitions(txn, tableId, physicalPartitionIds)) {
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            if (!getTouchedPartitions(txn, tableId, physicalPartitionIds).isEmpty()) {
                 conflictingTxnIds.add(txn.getTransactionId());
             }
         }
         return conflictingTxnIds;
     }
 
-    private static boolean touchesPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
-        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
-        if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null
-                && !Collections.disjoint(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds)) {
-            return true;
+    /**
+     * Same as {@link #getConflictingTxnIds(long, Set)}, but per partition: each running transaction is looked at
+     * once whatever the number of partitions, so the cost stays linear even when a load targets every one of the
+     * thousands of partitions that a whole table optimize replaces. Callers must hold the table write lock too.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     * @return physical partition id -> ids of the conflicting transactions, only for the partitions that have any
+     */
+    public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyMap();
         }
-        return !Collections.disjoint(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds);
+
+        Map<Long, List<Long>> conflictingTxnIds = Maps.newHashMap();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            for (Long physicalPartitionId : getTouchedPartitions(txn, tableId, physicalPartitionIds)) {
+                conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList())
+                        .add(txn.getTransactionId());
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    private List<TransactionState> getRunningTxnsOfTable(long tableId) {
+        // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
+        // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),
+        // so holding both at the same time would invert the lock order.
+        readLock();
+        try {
+            return idToRunningTransactionState.values().stream()
+                    .filter(txn -> txn.isRunning() && txn.getTableIdList().contains(tableId))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * The given physical partitions that the transaction committed into or registered as write targets.
+     */
+    private static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
+        Set<Long> touched = Sets.newHashSet();
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {
+            addIntersection(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds, touched);
+        }
+        addIntersection(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds, touched);
+        return touched;
+    }
+
+    // Iterates the smaller set, so a load that targets every partition costs one pass over its targets
+    private static void addIntersection(Set<Long> left, Set<Long> right, Set<Long> intersection) {
+        Set<Long> smaller = left.size() <= right.size() ? left : right;
+        Set<Long> larger = smaller == left ? right : left;
+        for (Long id : smaller) {
+            if (larger.contains(id)) {
+                intersection.add(id);
+            }
+        }
     }
 
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {

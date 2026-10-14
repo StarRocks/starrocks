@@ -884,6 +884,18 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     /**
+     * Find, per physical partition, the running transactions that may write to it.
+     * See {@link DatabaseTransactionMgr#getConflictingTxnIdsByPartition(long, Set)}.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long dbId, long tableId, Set<Long> physicalPartitionIds) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        return dbTransactionMgr == null ? Collections.emptyMap()
+                : dbTransactionMgr.getConflictingTxnIdsByPartition(tableId, physicalPartitionIds);
+    }
+
+    /**
      * if the table is deleted between commit and publish version, then should ignore the partition
      *
      * @param transactionId
