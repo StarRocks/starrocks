@@ -167,6 +167,35 @@ public class TaskRunHistoryTest {
     }
 
     @Test
+    public void testLookupHistorySkipsArchiveForUnfinishedState() {
+        List<String> lookedUpStates = Lists.newArrayList();
+        new MockUp<TaskRunHistoryTable>() {
+            @Mock
+            public List<TaskRunStatus> lookup(TGetTasksParams params) {
+                lookedUpStates.add(params.getState());
+                return Lists.newArrayList();
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+        TGetTasksParams params = new TGetTasksParams();
+        for (String state : List.of("PENDING", "running")) {
+            params.setState(state);
+            history.lookupHistory(params);
+        }
+        Assertions.assertTrue(lookedUpStates.isEmpty());
+
+        for (String state : List.of("SUCCESS", "failed", "MERGED", "SKIPPED", "UNKNOWN")) {
+            params.setState(state);
+            history.lookupHistory(params);
+        }
+        params.unsetState();
+        history.lookupHistory(params);
+        Assertions.assertEquals(Lists.newArrayList("SUCCESS", "failed", "MERGED", "SKIPPED", "UNKNOWN", null),
+                lookedUpStates);
+    }
+
+    @Test
     public void testKeeper(@Mocked SimpleExecutor repo) {
         TableKeeper keeper = TaskRunHistoryTable.createKeeper();
         assertEquals(StatsConstants.STATISTICS_DB_NAME, keeper.getDatabaseName());
