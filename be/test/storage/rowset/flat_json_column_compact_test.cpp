@@ -2407,4 +2407,44 @@ TEST_F(FlatJsonColumnCompactTest, testCompactionReadLayoutKeepsValuesAcrossSegme
         }
     }
 }
+// A query that extracts a path as JSON from a VARCHAR sub-column (json_length(j->'$.a'), j->'$.a[0]') must get
+// each string back as a JSON string, not parsed as JSON text.
+TEST_F(FlatJsonColumnCompactTest, testReadVarcharSubColumnAsJsonKeepsStrings) {
+    const bool saved_lazy = config::enable_lazy_dynamic_flat_json;
+    DeferOp restore([&]() { config::enable_lazy_dynamic_flat_json = saved_lazy; });
+    config::enable_lazy_dynamic_flat_json = false;
+
+    const std::vector<std::string> strings = {"[1, 2]", "[oops", R"({"x": 1})", R"("q")", "plain"};
+    MutableColumns cols;
+    for (const auto& str : strings) {
+        vpack::Builder builder;
+        builder.openObject();
+        builder.add("a", vpack::Value(str));
+        builder.add("k", vpack::Value(1));
+        builder.close();
+        cols.emplace_back(normal_json(JsonValue(builder.slice()).to_string_uncheck(), false));
+    }
+    auto handle = write_segment(cols, /*need_flat=*/true, "/read_varchar_as_json.data", /*is_compaction=*/false);
+    ASSERT_TRUE(handle.meta->json_meta().is_flat());
+
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "root", 0));
+    ColumnAccessPath::insert_json_path(root.get(), LogicalType::TYPE_JSON, "a");
+
+    for (auto mode : {ReadMode::kBatch, ReadMode::kRange, ReadMode::kByRowid}) {
+        MutableColumnPtr col = JsonColumn::create();
+        ASSERT_OK(read_segment(handle, mode, col.get(), root.get()));
+        auto* json_col = down_cast<JsonColumn*>(col.get());
+        ASSERT_TRUE(json_col->is_flat_json());
+        const auto& a = json_col->get_flat_field("a");
+        ASSERT_EQ(strings.size(), a->size());
+        const auto* a_json =
+                down_cast<const JsonColumn*>(down_cast<const NullableColumn*>(a.get())->data_column().get());
+        for (size_t row = 0; row < strings.size(); row++) {
+            ASSERT_FALSE(a->is_null(row)) << "mode=" << static_cast<int>(mode) << " row " << row;
+            EXPECT_EQ(0, JsonValue::from_string(strings[row]).compare(*a_json->get_object(row)))
+                    << "mode=" << static_cast<int>(mode) << " row " << row << ": "
+                    << a_json->get_object(row)->to_string_uncheck();
+        }
+    }
+}
 } // namespace starrocks
