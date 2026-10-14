@@ -20,6 +20,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
@@ -140,6 +141,7 @@ public class TaskRunHistoryTable {
                 // To be compatible with old task runs, filter out unnecessary properties to avoid json content too large
                 // and deserialize error.
                 removeUnnecessaryProperties(status);
+                redactCredentials(status);
 
                 // Since the content is stored in JSON format and insert into the starrocks olap table, we need to escape the
                 // content to make it safer in deserializing the json.
@@ -182,6 +184,16 @@ public class TaskRunHistoryTable {
 
     private static String shrinkPartitionValues(String partitionValues) {
         return PListCell.shrinkBatchForDisplay(partitionValues, Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    /**
+     * Mask credentials in the definition before it is archived, the same way information_schema.task_runs masks
+     * it on read. This must run on the field: once serialized, Gson escapes the quotes the redactor matches on.
+     */
+    private void redactCredentials(TaskRunStatus status) {
+        if (Config.enable_task_info_mask_credential) {
+            status.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
+        }
     }
 
     /**

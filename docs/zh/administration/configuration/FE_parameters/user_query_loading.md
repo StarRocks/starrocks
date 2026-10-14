@@ -68,7 +68,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 当为 true 时，StarRocks 会在将凭据从任务 SQL 定义返回到 `information_schema.tasks` 和 `information_schema.task_runs` 之前，通过对 DEFINITION 列应用 SqlCredentialRedactor.redact 来屏蔽凭据。在 `information_schema.task_runs` 中，无论定义是来自任务运行状态还是在为空时来自任务定义查找，都应用相同的屏蔽。当为 false 时，返回原始任务定义（可能会暴露凭据）。屏蔽是 CPU/字符串处理工作，当任务或 `task_runs` 数量很大时可能非常耗时；仅当您需要未屏蔽的定义并接受安全风险时才禁用。
+- 描述: 当为 true 时，StarRocks 会在将凭据从任务 SQL 定义返回到 `information_schema.tasks` 和 `information_schema.task_runs` 之前，通过对 DEFINITION 列应用 SqlCredentialRedactor.redact 来屏蔽凭据。在 `information_schema.task_runs` 中，无论定义是来自任务运行状态还是在为空时来自任务定义查找，都应用相同的屏蔽。任务运行结束、归档到 `_statistics_.task_run_history` 之前，也会先屏蔽定义中的凭据，历史表里不会保存明文凭据。当为 false 时，返回并归档原始任务定义（可能会暴露凭据）。屏蔽是 CPU/字符串处理工作，当任务或 `task_runs` 数量很大时可能非常耗时；仅当您需要未屏蔽的定义并接受安全风险时才禁用。
 - 引入版本: v3.5.6
 
 ### `privilege_max_role_depth`

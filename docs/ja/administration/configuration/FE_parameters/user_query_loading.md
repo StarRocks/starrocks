@@ -68,7 +68,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
+- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。完了したタスク実行を `_statistics_.task_run_history` にアーカイブする前にも同じ編集が適用されるため、履歴テーブルに資格情報が平文で保存されることはありません。false の場合、生のタスク定義が返され、そのままアーカイブされます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
 - 導入時期：v3.5.6
 
 ### `privilege_max_role_depth`
