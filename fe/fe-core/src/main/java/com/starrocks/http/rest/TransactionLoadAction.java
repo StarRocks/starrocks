@@ -39,6 +39,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -267,12 +268,15 @@ public class TransactionLoadAction extends RestBaseAction {
                     coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName()) :
                     coordinatorMgr.get(label, txnOperationParams.getDbName());
 
-            redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
+            int redirectPort = Config.stream_load_redirect_port > 0
+                    ? Config.stream_load_redirect_port : node.getHttpPort();
+            redirectAddress = new TNetworkAddress(node.getHost(), redirectPort);
         }
 
-        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
-        redirectTo(request, response, redirectAddress);
+        LOG.info("Redirect transaction action to destination={}, scheme: {}, db: {}, table: {}, op: {}, label: {}",
+                redirectAddress, Config.stream_load_redirect_scheme, txnOperationParams.getDbName(),
+                txnOperationParams.getTableName(), txnOperation, label);
+        redirectTo(request, response, redirectAddress, Config.stream_load_redirect_scheme, redirectAddress.getPort());
     }
 
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws

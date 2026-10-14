@@ -1571,6 +1571,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 已完成或取消的 Stream Load 任务的保留窗口。当任务达到最终状态且其结束时间戳早于此阈值（`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`）时，它就有资格由 `StreamLoadMgr.cleanOldStreamLoadTasks` 删除，并在加载持久化状态时被丢弃。适用于 `StreamLoadTask` 和 `StreamLoadMultiStmtTask`。如果总任务计数超过 `stream_load_task_keep_max_num`，清理可能会更早触发（同步任务由 `cleanSyncStreamLoadTasks` 优先处理）。设置此值以平衡历史/可调试性与内存使用。
 - 引入版本: v3.2.0
 
+### `stream_load_redirect_scheme`
+
+- 默认值: http
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的 URI scheme，用于将客户端重定向到 BE/CN 节点。默认值 `http` 保持原有行为。设置为 `https` 可将客户端重定向到 TLS 端点（例如运行在 BE/CN HTTP 服务前面、负责 TLS 终止的 sidecar 或反向代理），从而在不要求 BE/CN HTTP 服务本身提供 TLS 的情况下，实现 Stream Load 数据传输的加密。该参数仅影响 Stream Load 重定向；FE leader 重定向不受影响。通常与 `stream_load_redirect_port` 配合使用。
+- 引入版本: -
+
+### `stream_load_redirect_port`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的端口。默认值 `0` 表示 FE 使用 BE 的真实 `be_http_port`（原有行为）。设置为非零端口可将客户端重定向到负责 TLS 终止并转发到 BE/CN HTTP 端口的 sidecar/代理端口。通常与 `stream_load_redirect_scheme = https` 配合使用。
+- 引入版本: -
+
 ### `transaction_clean_interval_second`
 
 - 默认值: 30

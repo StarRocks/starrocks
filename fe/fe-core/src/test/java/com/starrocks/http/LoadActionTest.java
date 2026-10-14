@@ -116,14 +116,48 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testStreamLoadRedirectSchemeAndPortConfigurable() throws Exception {
-        // When stream_load_redirect_scheme/port are set, the FE 307 Location must use the
-        // configured https scheme and port (e.g. a TLS sidecar/proxy in front of BE/CN),
-        // instead of the hardcoded http + the backend's real be_http_port.
+        // https scheme + custom port => the FE 307 Location uses them (e.g. a TLS sidecar/proxy
+        // in front of BE/CN), instead of the hardcoded http + the backend's real be_http_port.
+        assertBatchWriteRedirect("https", 8050, "https", 8050);
+    }
+
+    @Test
+    public void testRedirectDefaultsUnchanged() throws Exception {
+        // Defaults (http + port 0 => backend's real be_http_port 8040) reproduce original behavior.
+        assertBatchWriteRedirect("http", 0, "http", 8040);
+    }
+
+    @Test
+    public void testRedirectHttpsSchemeOnly() throws Exception {
+        // https scheme, port unset => https on the backend's real be_http_port.
+        assertBatchWriteRedirect("https", 0, "https", 8040);
+    }
+
+    @Test
+    public void testRedirectInvalidSchemeFallsBackToHttp() throws Exception {
+        // An unknown/empty scheme must not break Stream Load; it falls back to http.
+        assertBatchWriteRedirect("ftp", 0, "http", 8040);
+        assertBatchWriteRedirect("", 8050, "http", 8050);
+    }
+
+    @Test
+    public void testRedirectInvalidPortFallsBackToBackendPort() throws Exception {
+        // Out-of-range ports (> 65535 or negative) must fall back to the backend's real port (8040).
+        assertBatchWriteRedirect("https", 70000, "https", 8040);
+        assertBatchWriteRedirect("https", -5, "https", 8040);
+    }
+
+    /**
+     * Helper: run a batch-write Stream Load against 3 mocked compute nodes (http port 8040) with the
+     * given redirect scheme/port config, and assert the 307 Location matches expectedScheme/expectedPort.
+     */
+    private void assertBatchWriteRedirect(String cfgScheme, int cfgPort,
+                                          String expectedScheme, int expectedPort) throws Exception {
         String originalScheme = Config.stream_load_redirect_scheme;
         int originalPort = Config.stream_load_redirect_port;
         try {
-            Config.stream_load_redirect_scheme = "https";
-            Config.stream_load_redirect_port = 8050;
+            Config.stream_load_redirect_scheme = cfgScheme;
+            Config.stream_load_redirect_port = cfgPort;
 
             Map<String, String> map = new HashMap<>();
             map.put(HTTP_ENABLE_BATCH_WRITE, "true");
@@ -134,11 +168,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                 String host = "192.0.0." + i;
                 computeNodes.add(new ComputeNode(i, host, 9050));
                 computeNodes.get(i - 1).setHttpPort(8040);
-                // expect the configured scheme + configured port, NOT http + 8040
                 expectedLocations.add(String.format(
-                        "https://%s:%d/api/%s/%s/_stream_load", host, 8050, DB_NAME, TABLE_NAME));
+                        "%s://%s:%d/api/%s/%s/_stream_load", expectedScheme, host, expectedPort, DB_NAME, TABLE_NAME));
             }
-
             new MockUp<BatchWriteMgr>() {
                 @Mock
                 public RequestCoordinatorBackendResult requestCoordinatorBackends(
@@ -146,18 +178,20 @@ public class LoadActionTest extends StarRocksHttpTestCase {
                     return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
                 }
             };
-
             try (Response response = noRedirectClient.newCall(request).execute()) {
                 assertEquals(307, response.code(), response.message());
                 String location = response.header("Location");
                 assertTrue(expectedLocations.contains(location),
-                        "unexpected redirect Location: " + location);
+                        "cfgScheme=" + cfgScheme + " cfgPort=" + cfgPort + " -> unexpected Location: " + location);
             }
         } finally {
             Config.stream_load_redirect_scheme = originalScheme;
             Config.stream_load_redirect_port = originalPort;
         }
     }
+
+    @Test
+    public void testBatchWriteStreamLoadFailure() throws Exception {
         Map<String, String> map = new HashMap<>();
         map.put(HTTP_ENABLE_BATCH_WRITE, "true");
         Request request = buildRequest(map);

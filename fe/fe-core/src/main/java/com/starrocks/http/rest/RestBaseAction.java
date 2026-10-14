@@ -318,17 +318,31 @@ public class RestBaseAction extends BaseAction {
      * Scheme/port-aware redirect. Lets callers (e.g. Stream Load) emit an https:// Location
      * and/or a different port (e.g. a TLS-terminating sidecar/proxy in front of the BE/CN),
      * without changing the default behavior for other callers.
+     * Defensively sanitizes the scheme/port so an invalid runtime config value cannot break
+     * the redirect: an unknown scheme falls back to "http", and an out-of-range port falls
+     * back to the address's own port.
      */
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr,
                            String scheme, int port)
             throws DdlException {
+        String effectiveScheme = scheme;
+        if (effectiveScheme == null
+                || !("http".equalsIgnoreCase(effectiveScheme) || "https".equalsIgnoreCase(effectiveScheme))) {
+            LOG.warn("Invalid redirect scheme '{}', falling back to 'http'", scheme);
+            effectiveScheme = "http";
+        }
+        int effectivePort = port;
+        if (effectivePort <= 0 || effectivePort > 65535) {
+            LOG.warn("Invalid redirect port '{}', falling back to '{}'", port, addr.getPort());
+            effectivePort = addr.getPort();
+        }
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI(scheme, null, addr.getHostname(),
-                    port, urlObj.getPath(), urlObj.getQuery(), null);
+            resultUriObj = new URI(effectiveScheme, null, addr.getHostname(),
+                    effectivePort, urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());
