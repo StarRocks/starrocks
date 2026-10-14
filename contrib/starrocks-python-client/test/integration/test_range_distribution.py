@@ -14,8 +14,9 @@
 
 """Reflection, autogenerate comparison and CREATE TABLE for RANGE distribution.
 
-In shared-data mode StarRocks 4.1+ gives RANGE distribution to a table that declares
-a key type or ORDER BY but no DISTRIBUTED BY clause. There is no DISTRIBUTED BY RANGE
+With range distribution enabled (opt-in on StarRocks 4.1; the shared-data default in
+newer releases), a table that declares a key type or ORDER BY but no DISTRIBUTED BY
+clause gets RANGE distribution. There is no DISTRIBUTED BY RANGE
 syntax, so a model that leaves DISTRIBUTED BY unset (or sets it to 'RANGE') matches such
 a table, and CREATE TABLE omits the clause.
 

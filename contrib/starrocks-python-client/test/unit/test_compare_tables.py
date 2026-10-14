@@ -25,6 +25,7 @@ from starrocks.common.params import (
     AlterTableEnablement,
     DialectName,
     SRKwargsPrefix,
+    TableInfoKey,
     TableInfoKeyWithPrefix,
     TablePropertyForFuturePartitions,
 )
@@ -1087,7 +1088,7 @@ class TestDistributionChanges:
 class TestRangeDistribution:
     """DISTRIBUTED_BY comparisons where either side is RANGE distribution.
 
-    Range distribution (StarRocks 4.1+, the shared-data default) has no DISTRIBUTED BY
+    Range distribution (StarRocks 4.1+, opt-in on 4.1) has no DISTRIBUTED BY
     syntax, so no ALTER is ever generated for it.
     """
 
@@ -1138,6 +1139,32 @@ class TestRangeDistribution:
     def test_other_to_range_raises(self, conn_distribution):
         with pytest.raises(NotImplementedError, match="no DISTRIBUTED BY RANGE syntax"):
             self._compare(conn_distribution, "RANGE")
+
+    def test_other_to_range_error_points_to_cluster_config(self):
+        """Metadata RANGE vs a non-RANGE table usually means the cluster didn't apply RANGE."""
+        with pytest.raises(NotImplementedError) as exc_info:
+            self._compare("RANDOM", "RANGE")
+        message = str(exc_info.value)
+        assert "did not apply range distribution" in message
+        assert "'enable_range_distribution' defaults to false" in message
+        assert "shared-nothing clusters do not use it by default" in message
+        assert "leave DISTRIBUTED BY unset" in message
+        assert "enable_mv_range_distribution" not in message
+
+    def test_mv_other_to_range_error_mentions_mv_config(self):
+        from starrocks.alembic.compare import _compare_table_distribution
+        with pytest.raises(NotImplementedError) as exc_info:
+            _compare_table_distribution(
+                [], "test_db", "test_mv",
+                {TableInfoKey.DISTRIBUTED_BY: "HASH(id) BUCKETS 4"},
+                {TableInfoKey.DISTRIBUTED_BY: "RANGE"},
+                ddl_object="MATERIALIZED VIEW",
+                object_label="Materialized view",
+            )
+        message = str(exc_info.value)
+        assert message.startswith("Materialized view 'test_db.test_mv'")
+        assert "'enable_mv_range_distribution' (default false)" in message
+        assert "leave DISTRIBUTED BY unset" in message
 
 
 class TestOrderByChanges:
