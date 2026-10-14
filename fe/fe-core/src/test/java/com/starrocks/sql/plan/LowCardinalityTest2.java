@@ -1245,6 +1245,69 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testNestedDictExprKeepsIntermediateDict() throws Exception {
+        // The outer expression is not NULL-sensitive, but the inner CASE result has dictionary codes
+        // of its own (BE builds them from the CASE define). Folding the outer IF onto S_ADDRESS would
+        // make the fragment that receives the CASE codes after the exchange look them up in a mapping
+        // built for S_ADDRESS codes ("Dict Decode failed"), so the IF must stay over the CASE dict.
+        String sql = "select distinct if(subq.x = subq.x, subq.x, '-') as y "
+                + "from (select distinct case when S_ADDRESS = 'a' then 'A' else 'B' end as x "
+                + "from supplier_nullable) subq";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "if(<place-holder> = 'a', 'A', 'B')");
+        assertContains(plan, "if(<place-holder> = <place-holder>, <place-holder>, '-')");
+        assertNotContains(plan, "if(if(");
+    }
+
+    @Test
+    public void testAggregateOverDerivedDictKeepsIntermediateDict() throws Exception {
+        // max over a derived dict: the aggregate wrapper is still stripped from the define, but the
+        // mapping is defined over the derived (upper) dict instead of being folded onto S_ADDRESS.
+        String sql = "select max(x) from (select distinct upper(S_ADDRESS) as x from supplier_nullable) t";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "Global Dict Exprs:\n" +
+                "    12: DictDefine(11: S_ADDRESS, [upper(<place-holder>)])\n" +
+                "    13: DictDefine(upper, [<place-holder>])");
+        assertNotContains(plan, "max(<place-holder>)");
+    }
+
+    @Test
+    public void testAliasChainOverDerivedDictStaysFolded() throws Exception {
+        // An alias (identity define) shares the codes of its source, so folding through it is safe
+        // and the plan keeps the flat DictDefine over the base column.
+        String sql = "select distinct upper(y) from (select x as y from (select S_ADDRESS as x " +
+                "from supplier_nullable) a) b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "DictDefine(10: S_ADDRESS, [upper(<place-holder>)])");
+    }
+
+    @Test
+    public void testDictMappingGroupByNumericResultHasNoDictRange() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            // A dict-mapping group-by key that returns a number yields the expression's values,
+            // not dict codes, so the dict-size range must not be used as its min/max.
+            String sql = "select count(*) from supplier group by "
+                    + "case when S_ADDRESS = 'a' then 1001 when S_ADDRESS = 'b' then 1002 else 1003 end";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "group by: [9: case, SMALLINT, true]");
+            assertContains(plan, "9 <-> DictDecode(");
+            assertNotContains(plan, "group by min-max stats");
+
+            sql = "select count(*) from supplier group by cast(S_ADDRESS as int)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "group by: [9: cast, INT, true]");
+            assertContains(plan, "9 <-> DictDecode(");
+            assertNotContains(plan, "group by min-max stats");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
+>>>>>>> b80f424 ([BugFix] Fix wrong GROUP BY results on numeric expressions over low-cardinality columns (#80527))
     public void testDictMappingGroupByReservesExtraCode() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
