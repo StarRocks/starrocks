@@ -14,6 +14,7 @@
 
 package com.starrocks.http;
 
+import okhttp3.HttpUrl;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.jupiter.api.Assertions;
@@ -61,5 +62,24 @@ public class SystemActionTest extends StarRocksHttpTestCase {
         sendHttp("//backends/aaa/aaa");
         sendHttp("//backends//aaa////");
         sendHttp("//backends///aaa/aaa///");
+    }
+
+    @Test
+    public void testPathIsHtmlEncoded() throws IOException {
+        String payload = "/<img src=x onerror=\"alert(1)\">";
+        HttpUrl url = HttpUrl.parse("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI).newBuilder()
+                .addQueryParameter("path", payload)
+                .build();
+        Request request = new Request.Builder()
+                .get()
+                .addHeader("Authorization", rootAuth)
+                .url(url)
+                .build();
+        Response response = networkClient.newCall(request).execute();
+        String body = response.body().string();
+        assertTrue(response.isSuccessful(), body);
+        Assertions.assertFalse(body.contains(payload), body);
+        // shown in "Current path" and in the "No such proc path" error
+        Assertions.assertTrue(body.contains("/&lt;img src=x onerror=&#34;alert(1)&#34;&gt;"), body);
     }
 }
