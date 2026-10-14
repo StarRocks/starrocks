@@ -78,16 +78,16 @@ Lance は Rust SDK 12.0.0 を使用し、ビルド時は**デフォルトで無�
 
 ```bash
 ./thirdparty/build-lance.sh -j 2
-WITH_CONNECTOR_LANCE=ON ./build.sh --fe --be
+./build.sh --fe --be --with-connector-lance
 ```
 
 Connector の対象テストを実行するには、次のコマンドを使用します。
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --with-connector-lance --build-target connector_lance_test --module connector_lance_test --without-java-ext
 ```
 
-CMake で直接ビルドする場合は `-DWITH_CONNECTOR_LANCE=ON` を使用します。`WITH_CONNECTOR_LANCE=OFF` で明示的に無効にできます。デフォルトまたは明示的に無効なビルドでは、以前ビルドした Lance 共有ライブラリも BE パッケージから除外されます。有効な FE パッケージには `fe/lib/lance-metadata-lib` が含まれます。デフォルトの FE パッケージにはこれらの SDK ライブラリが含まれないため、ディレクトリの一覧表示とスキーマ検出には Lance を有効にした FE パッケージが必要です。クエリの実行には、有効にした BE パッケージも必要です。
+CMake で直接ビルドする場合は `-DWITH_CONNECTOR_LANCE=ON` を使用します。`--without-connector-lance` または `WITH_CONNECTOR_LANCE=OFF` で明示的に無効にできます。デフォルトまたは明示的に無効なビルドでは、以前ビルドした Lance 共有ライブラリも BE パッケージから除外されます。有効な FE パッケージには `fe/lib/lance-metadata-lib` が含まれます。デフォルトの FE パッケージにはこれらの SDK ライブラリが含まれないため、ディレクトリの一覧表示とスキーマ検出には Lance を有効にした FE パッケージが必要です。クエリの実行には、有効にした BE パッケージも必要です。
 
 読み取り処理はデータセットを一度だけ開き、1 回のスキャンのすべてのバッチで同じ不変スナップショットを維持します。FE はまだ、自己結合を含む別々のスキャンオペレーター間で共通のバージョンを固定しません。
 

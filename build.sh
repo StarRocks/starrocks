@@ -153,6 +153,9 @@ Usage: $0 <options>
                         build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
+     --with-connector-lance   enable the Lance connector (requires the Lance thirdparty package)
+     --without-connector-lance
+                        build Backend without the Lance connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --with-glibc-compat
@@ -225,6 +228,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
+  -l 'with-connector-lance' \
+  -l 'without-connector-lance' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
@@ -402,6 +407,8 @@ else
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
             --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+            --with-connector-lance) WITH_CONNECTOR_LANCE=ON; shift ;;
+            --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
@@ -478,6 +485,7 @@ echo "Get params:
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
     WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
+    WITH_CONNECTOR_LANCE        -- $WITH_CONNECTOR_LANCE
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
@@ -559,6 +567,8 @@ if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
     # Add checkstyle.skip parameter to disable Java checkstyle
     addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
 fi
+
+java_ext_mvn_opts="${addon_mvn_opts}"
 
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
@@ -684,9 +694,9 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "Build Java Extensions"
         cd ${STARROCKS_HOME}/java-extensions
         if [ ${CLEAN} -eq 1 ]; then
-            ${MVN_CMD} clean
+            ${MVN_CMD} ${java_ext_mvn_opts} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+        ${MVN_CMD} ${java_ext_mvn_opts} package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
