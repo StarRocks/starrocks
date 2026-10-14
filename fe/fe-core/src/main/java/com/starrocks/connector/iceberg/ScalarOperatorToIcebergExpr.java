@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -38,9 +39,9 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
-import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.iceberg.exceptions.ValidationException;
 import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
@@ -51,6 +52,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -410,30 +412,122 @@ public class ScalarOperatorToIcebergExpr {
                     res = operator.castTo(BooleanType.BOOLEAN);
                     break;
                 case DATE:
+                    // Reject literal with non-zero time-of-day when the iceberg column is DATE.
+                    // After visitCastOperator peels the column-side cast, two literal shapes
+                    // can reach here: DATETIME literal (analyzer promoted DATE vs DATETIME to
+                    // a common DATETIME type) or STRING literal (user wrote an explicit
+                    // CAST(date_col AS STRING) that the analyzer kept intact).
+                    // For both, ConstantOperator.castTo(DATE) silently truncates the
+                    // time-of-day, so a predicate like
+                    //     WHERE date_col >= TIMESTAMP '2024-01-01 12:00:00'
+                    // would be pushed down as `date_col >= DATE '2024-01-01'` and return
+                    // wrong rows. A pure-date / 00:00:00 literal is lossless and falls
+                    // through to castTo(DATE).
+                    if (operator.getType().isDatetime()) {
+                        LocalDateTime dt = operator.getDatetime();
+                        if (dt.getHour() != 0 || dt.getMinute() != 0
+                                || dt.getSecond() != 0 || dt.getNano() != 0) {
+                            return null;
+                        }
+                    } else if (operator.getType().getPrimitiveType().isStringType()) {
+                        // Mirror ConstantOperator.castTo(DATE/DATETIME)'s parsing: strip the same
+                        // 4 ASCII whitespace chars and call DateUtils.parseStrictDateTime, so the
+                        // guard sees exactly the same LocalDateTime that castTo would see.
+                        try {
+                            String dateStr = StringUtils.strip(operator.getVarchar(), "\r\n\t ");
+                            LocalDateTime dt = DateUtils.parseStrictDateTime(dateStr);
+                            if (dt.getHour() != 0 || dt.getMinute() != 0
+                                    || dt.getSecond() != 0 || dt.getNano() != 0) {
+                                return null;
+                            }
+                        } catch (Exception ignored) {
+                            // Unparseable string (e.g. '2024/01/01'): we cannot prove the
+                            // time-of-day is zero, so conservatively refuse pushdown.
+                            return null;
+                        }
+                    }
                     res = operator.castTo(DateType.DATE);
                     break;
                 case TIMESTAMP:
+                    // Reject DATE literal when the iceberg column is DATETIME.
+                    // The DATE -> DATETIME literal cast itself is lossless (fills 00:00:00),
+                    // but it is unsafe AFTER visitCastOperator unconditionally peels the outer
+                    // cast on the column side. Concretely, consider:
+                    //     WHERE CAST(datetime_col AS DATE) = DATE '2024-01-01'
+                    // The original semantics is "truncate the column to day, then compare", so a
+                    // row with datetime_col = '2024-01-01 12:00:00' MUST match. After peeling the
+                    // column side becomes plain `datetime_col` (DATETIME) and the literal is the
+                    // DATE '2024-01-01'; lifting the literal to DATETIME 00:00:00 would push down
+                    //     datetime_col = TIMESTAMP '2024-01-01 00:00:00'
+                    // which evaluates to FALSE on that row -> we silently drop matching rows.
+                    // From the literal-side view, this dangerous case and the legitimate
+                    //     WHERE datetime_col = DATE '2024-01-01'
+                    // share the exact same (literal=DATE, columnType=TIMESTAMP) input, so we
+                    // cannot tell them apart and must conservatively refuse pushdown for both.
+                    // Non-DATE literals (e.g. STRING) fall through to castTo(DATETIME) as usual.
+                    if (operator.getType().isDate()) {
+                        return null;
+                    }
                     res = operator.castTo(DateType.DATETIME);
                     break;
                 case STRING:
                 case UUID:
-                    // num and string has different comparator
-                    if (operator.getType().isNumericType()) {
+                    // Reject non-character literal when the iceberg column is STRING/UUID.
+                    // After visitCastOperator peels the outer cast on the column side, the
+                    // remaining comparison is `string_col <op> castTo(VARCHAR, literal)`, which
+                    // compares by lexicographic order while the original predicate compared by
+                    // the literal's native order. The two orders disagree for every non-string
+                    // literal type, so pushdown may return a wrong row set:
+                    //
+                    // 1) NUMERIC: WHERE CAST(string_col AS INT) > 10
+                    //    Pushed down as `string_col > '10'`. A row with string_col = '9' is
+                    //    wrongly returned because '9' > '10' under string ordering, even though
+                    //    9 < 10 numerically.
+                    //
+                    // 2) DATE: WHERE CAST(string_col AS DATE) = DATE '2024-01-01'
+                    //    Pushed down as `string_col = '2024-01-01'`. A row with
+                    //    string_col = '2024-1-1' is silently dropped, even though it parses to
+                    //    the same DATE value as the literal.
+                    //
+                    // 3) DATETIME: WHERE CAST(string_col AS DATETIME) = TIMESTAMP '2024-01-01 00:00:00'
+                    //    Pushed down as `string_col = '2024-01-01 00:00:00'`. A row with
+                    //    string_col = '2024-01-01' is silently dropped, even though it parses to
+                    //    the same DATETIME value (time-of-day defaults to 00:00:00).
+                    //
+                    // 4) BOOLEAN: WHERE CAST(string_col AS BOOLEAN) = FALSE
+                    //    Note: `= TRUE` is normally folded away by the optimizer
+                    //    (SimplifyCastRule etc.) into a bare `CAST(string_col AS BOOLEAN)`,
+                    //    so in practice only `= FALSE` reaches this branch. We still guard
+                    //    by type (not by value) for defence in depth, in case future
+                    //    rule changes let a `= TRUE` slip through.
+                    //    ConstantOperator.castTo(VARCHAR) on a BOOLEAN literal is hard-coded
+                    //    to "1" / "0" (see ConstantOperator.castTo: `getBoolean() ? "1" : "0"`),
+                    //    so without this guard the predicate would be pushed down as
+                    //    `string_col = '0'`. But the BE-side CAST(string AS BOOLEAN)
+                    //    (StringParser::string_to_bool_internal) recognizes a wider set of
+                    //    inputs: "1"/"0" plus case-insensitive "true"/"false" (with optional
+                    //    trailing whitespace). Rows like 'false' / 'FALSE' evaluate to FALSE
+                    //    at the engine but do NOT equal the string literal "0", and would be
+                    //    silently dropped once Iceberg file/row-group min-max pruning kicks in.
+                    // Only true string-class literals fall through to castTo(VARCHAR).
+                    PrimitiveType lt = operator.getType().getPrimitiveType();
+                    if (lt.isNumericType()
+                            || lt == PrimitiveType.DATE
+                            || lt == PrimitiveType.DATETIME
+                            || lt == PrimitiveType.BOOLEAN) {
                         return null;
-                    } else {
-                        res = operator.castTo(VarcharType.VARCHAR);
                     }
+                    res = operator.castTo(VarcharType.VARCHAR);
                     break;
                 case BINARY:
                     res = operator.castTo(VarbinaryType.VARBINARY);
                     break;
-                // num usually don't need cast, and num and string has different comparator
-                // cast is dangerous.
-                case DECIMAL:
-                    res = operator.castTo(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL128, 9, 0));
-                    break;
+                    // num usually don't need cast, and num and string has different comparator
+                    // cast is dangerous.
                 case INTEGER:
                 case LONG:
+                    // usually not used as partition column, don't do much work
+                case DECIMAL:
                 case FLOAT:
                 case DOUBLE:
                 case STRUCT:
