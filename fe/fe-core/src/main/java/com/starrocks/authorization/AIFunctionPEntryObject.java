@@ -22,7 +22,7 @@ import java.util.Objects;
 
 /** A public built-in AI function family or all such families, independent of overload signatures. */
 public class AIFunctionPEntryObject implements PEntryObject {
-    @SerializedName("n")
+    @SerializedName("name")
     private final String name;
 
     private AIFunctionPEntryObject(String name) {

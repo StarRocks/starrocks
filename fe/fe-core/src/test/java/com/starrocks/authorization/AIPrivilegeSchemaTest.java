@@ -118,8 +118,9 @@ public class AIPrivilegeSchemaTest {
             Assertions.assertTrue(object.validate());
             Assertions.assertFalse(object.isFuzzyMatching());
             Assertions.assertEquals(family, object.toString());
-            Assertions.assertEquals(object, GsonUtils.GSON.fromJson(
-                    GsonUtils.GSON.toJson(object, PEntryObject.class), PEntryObject.class));
+            String json = GsonUtils.GSON.toJson(object, PEntryObject.class);
+            Assertions.assertTrue(json.contains("\"name\":\"" + family + "\""));
+            Assertions.assertEquals(object, GsonUtils.GSON.fromJson(json, PEntryObject.class));
         }
         for (List<String> tokens : List.of(List.of("lower"), List.of("ai_query"), List.of("AI_QUERY"),
                 List.of("missing_ai_function"), List.of("db", "ai_complete"))) {
@@ -144,7 +145,7 @@ public class AIPrivilegeSchemaTest {
         Assertions.assertEquals(0, wildcard.compareTo(wildcard.clone()));
         Assertions.assertEquals(wildcard.hashCode(), wildcard.clone().hashCode());
         String json = GsonUtils.GSON.toJson(wildcard, PEntryObject.class);
-        Assertions.assertTrue(json.contains("\"n\":\"*\""));
+        Assertions.assertTrue(json.contains("\"name\":\"*\""));
         Assertions.assertEquals(wildcard, GsonUtils.GSON.fromJson(json, PEntryObject.class));
     }
 
