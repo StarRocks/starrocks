@@ -34,6 +34,7 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.http.ActionController;
@@ -125,7 +126,8 @@ public class IndexAction extends WebBaseAction {
     }
 
     // Hardware info carries text from the host, such as process names, so each line is HTML-encoded.
-    private static String joinEncodedLines(List<String> lines) {
+    @VisibleForTesting
+    static String joinEncodedLines(List<String> lines) {
         return lines.stream().map(Encode::forHtml).collect(Collectors.joining("<br/>"));
     }
 
