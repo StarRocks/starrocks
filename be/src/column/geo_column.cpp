@@ -58,8 +58,7 @@ GeoColumn::GeoColumn(size_t size)
     resize(size);
 }
 
-GeoColumn::GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits)
-        : _descriptor(std::move(descriptor)), _limits(limits) {
+GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(descriptor)) {
     if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
         throw std::invalid_argument("GeoColumn requires WKB encoding");
 }
@@ -115,7 +114,7 @@ void GeoColumn::append_wkb(Slice wkb) {
 StatusOr<GeoWkbInfo> GeoColumn::inspect_wkb(size_t row) {
     if (row >= size()) return Status::InvalidArgument("GeoColumn row out of range");
     if (_cache && _cache->row == row) return _cache->info;
-    ASSIGN_OR_RETURN(auto info, inspect_geo_wkb(get_wkb(row), _limits));
+    ASSIGN_OR_RETURN(auto info, inspect_geo_wkb(get_wkb(row)));
     _cache = CachedWkb{row, info};
     return info;
 }
@@ -218,11 +217,11 @@ size_t GeoColumn::filter_range(const Filter& filter, size_t from, size_t to) {
 }
 
 MutableColumnPtr GeoColumn::clone_empty() const {
-    return create(_descriptor, _limits);
+    return create(_descriptor);
 }
 
 MutableColumnPtr GeoColumn::clone() const {
-    auto result = create(_descriptor, _limits);
+    auto result = create(_descriptor);
     result->_data->append(*_data, 0, size());
     result->_delete_state = _delete_state;
     return result;
@@ -232,7 +231,6 @@ void GeoColumn::swap_column(Column& rhs) {
     auto& geo = down_cast<GeoColumn&>(rhs);
     using std::swap;
     swap(_descriptor, geo._descriptor);
-    swap(_limits, geo._limits);
     swap(_data, geo._data);
     swap(_delete_state, geo._delete_state);
     clear_wkb_cache();
