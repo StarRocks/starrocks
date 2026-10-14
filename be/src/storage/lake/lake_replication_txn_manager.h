@@ -128,6 +128,10 @@ public:
     // Decide whether to use parallel copy for current tablet files.
     static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
 
+    // Execute file copies through the CN-wide dedicated pool using at most max_workers for this tablet.
+    static Status execute_file_copy_tasks(std::vector<ReplicationTask> tasks, ThreadPool* thread_pool,
+                                          size_t max_workers);
+
 private:
     ThreadPool* get_replicate_file_thread_pool();
 

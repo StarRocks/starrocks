@@ -536,11 +536,29 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_replication_file_copy_threads
 
-- デフォルト: 0
+- デフォルト: 16
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する専用スレッドプールのサイズ。`0` は `cpu_cores * 4`（`replication_threads` と同じデフォルトセマンティクス）を意味し、負の値は `-value * cpu_cores` を意味します。このプールはエージェントタスクの `replicate_snapshot` プールと意図的に分離されており、外部タスクが `ThreadPoolToken::wait()` を通じてファイルごとのコピーサブタスクを安全に待機でき、スレッドプールのセルフデッドロックガードをトリガーしません。このプールは起動時に一度だけ作成され、ランタイムのリサイズフックはないため、サイズ変更には CN の再起動が必要です。
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する CN 全体の専用スレッドプールのサイズ。デフォルト値は、CPU コア数に関係なく、同時コピータスク数とその読み取りバッファを制限します。`0` は `cpu_cores * 4` を意味し、負の値は `-value * cpu_cores` を意味します。このプールは起動時に一度だけ作成されるため、サイズ変更には CN の再起動が必要です。
+- 導入バージョン: v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）で、1 つの tablet に対して同時にコピーするファイルの最大数。すべての tablet が CN 全体の `lake_replication_file_copy_threads` プールを共有するため、この設定により 1 つの tablet がプールを占有することを防ぎます。値が `1` 以下の場合、各 tablet 内のファイルコピーは直列化されます。
+- 導入バージョン: v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）で、tablet 内のファイルを並列にコピーするために必要な最小ファイル数。このパラメータを `0` に設定すると専用ファイルコピープールが無効になり、呼び出し元のレプリケーションタスクでファイルコピーが実行されます。
 - 導入バージョン: v4.1.2
 
 ### lake_service_max_concurrency
