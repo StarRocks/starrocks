@@ -3,6 +3,7 @@ Version history
 
 **Unreleased**
 
+- Autogenerate no longer resets a table or materialized view property the model omits back to a hardcoded default; it is left as the database has it. Many defaults depend on the StarRocks version or FE config (`replication_num`, `fast_schema_evolution`, `bucket_size`), so the reset was often spurious. To manage a property, declare it in the model (by @chris-celerdata)
 - Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (by @chris-celerdata)
 - Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate

@@ -33,17 +33,22 @@ from starrocks.engine.interfaces import ReflectedMVState, ReflectedTableKeyInfo,
 class ReflectionTableDefaults(ReflectionDefaults):
     """StarRocks table reflection default values management."""
 
-    # StarRocks default properties that are automatically set
-    # Note: These values should match StarRocks documentation defaults
-    # Different defaults for different run modes
+    # Properties StarRocks fills in when a table does not set them. Different defaults for
+    # different run modes.
+    #
+    # Autogenerate never resets one of these when the model omits it: many depend on the
+    # StarRocks version or FE config (default_replication_num, default_automatic_bucket_size,
+    # ...), so a hardcoded value cannot tell a user-set value from one StarRocks filled in.
+    # The values here are only used when the model sets a property the database does not
+    # report, as the database's effective value and as the downgrade target.
     _DEFAULT_PROPERTIES = {
         'compression': 'LZ4',
         'fast_schema_evolution': 'true',
         'replicated_storage': 'true',
         'storage_format': 'DEFAULT',
         # FE default_automatic_bucket_size: 4294967296 before 4.0, 1073741824 from 4.0 (#63168).
-        # Version- and config-dependent, and a table keeps its value across upgrades, so it is
-        # also in _SKIP_IMPLICIT_RESET_PROPERTIES.
+        # StarRocks reports it for every RANDOM-distributed table, so this value only matters
+        # when a model sets bucket_size on a HASH-distributed table.
         'bucket_size': '4294967296',
         'storage_medium': 'HDD',
 
@@ -51,8 +56,7 @@ class ReflectionTableDefaults(ReflectionDefaults):
         'enable_persistent_index': 'true',
         # tables_config only records this when explicitly set to false; absent means true.
         # Must be 'true' here: ALTER SET true clears the override (→ absent) → decodes back
-        # to 'true', converging. Also in _SKIP_IMPLICIT_RESET_PROPERTIES so an unmanaged
-        # DB value never triggers a spurious reset.
+        # to 'true', converging.
         'enable_statistic_collect_on_first_load': 'true',
         # 'bloom_filter_columns': None,
         # 'colocate_with': None,
@@ -64,15 +68,6 @@ class ReflectionTableDefaults(ReflectionDefaults):
     _DEFAULT_PROPERTIES_SHARED_DATA = {**{
         'replication_num': '1',  # Different for shared-data
     }, **_DEFAULT_PROPERTIES}
-
-    # Properties never implicitly reset when absent from metadata. Needed for properties
-    # whose DB representation is asymmetric (e.g. only stored when false), or whose default
-    # depends on the StarRocks version or FE config, so a missing metadata entry should leave
-    # the DB value alone rather than reset it to the default.
-    _SKIP_IMPLICIT_RESET_PROPERTIES: frozenset = frozenset({
-        'enable_statistic_collect_on_first_load',
-        'bucket_size',
-    })
 
     # Default table options
     # engine -> key -> comment -> partition -> distribution -> order by -> properties
@@ -137,13 +132,6 @@ class ReflectionTableDefaults(ReflectionDefaults):
             return cls._DEFAULT_PROPERTIES_SHARED_DATA
         else:
             return cls._DEFAULT_PROPERTIES_SHARED_NOTHING
-
-    @classmethod
-    def skip_implicit_reset_properties(cls) -> set:
-        """Property names (lowercase) that must never be implicitly reset to their default
-        when absent from the metadata. See ``_SKIP_IMPLICIT_RESET_PROPERTIES``.
-        """
-        return cls._SKIP_IMPLICIT_RESET_PROPERTIES
 
 
 class ReflectionViewDefaults(ReflectionTableDefaults):
