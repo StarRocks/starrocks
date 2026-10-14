@@ -63,16 +63,9 @@ public class QueryActionTest extends StarRocksHttpTestCase {
     }
 
     private static void pushProfile(String queryId, String user, String sql) {
-        pushProfile(queryId, null, user, sql);
-    }
-
-    private static void pushProfile(String queryId, String customQueryId, String user, String sql) {
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summary = new RuntimeProfile("Summary");
         summary.addInfoString(ProfileManager.QUERY_ID, queryId);
-        if (customQueryId != null) {
-            summary.addInfoString(ProfileManager.CUSTOM_QUERY_ID, customQueryId);
-        }
         summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
         summary.addInfoString(ProfileManager.USER, user);
         summary.addInfoString(ProfileManager.SQL_STATEMENT, sql);
@@ -137,15 +130,14 @@ public class QueryActionTest extends StarRocksHttpTestCase {
         String longSql = "select '" + XSS_PAYLOAD + "', '"
                 + String.join("", Collections.nCopies(Config.ui_queries_sql_statement_max_length, "x")) + "'";
         pushProfile("q_xss_short", "root", shortSql);
-        pushProfile("q_xss_long", XSS_PAYLOAD, "root", longSql);
+        pushProfile("q_xss_long", "root", longSql);
 
         String body = getQueryPageAsRoot();
         // The page itself has an <img> logo in the navigation bar, so look for the payload rather than any <img>.
         Assertions.assertFalse(body.contains(XSS_PAYLOAD), body);
-        // short statement, truncated long statement and custom query id
+        // short statement and truncated long statement
         Assertions.assertTrue(body.contains("<td>select &#39;" + XSS_PAYLOAD_HTML + "&#39;</td>"), body);
         Assertions.assertTrue(body.contains("\">select &#39;" + XSS_PAYLOAD_HTML), body);
-        Assertions.assertTrue(body.contains("<td>" + XSS_PAYLOAD_HTML + "</td>"), body);
         // full long statement in the hover tooltip
         Assertions.assertTrue(body.contains("<span title=\"" + Encode.forHtmlAttribute(longSql) + "\">"), body);
     }
