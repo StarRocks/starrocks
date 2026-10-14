@@ -43,10 +43,10 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
 #include "storage/lake/pk_index_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
@@ -118,7 +118,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
 
 Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -185,7 +185,7 @@ bool LakePersistentIndex::is_memtable_full() const {
     const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
-            _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+            _tablet_mgr->primary_key_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
     return mem_size_exceed || mem_tracker_exceed;
 }
@@ -231,7 +231,7 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -647,7 +647,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     //    ignore. max_rss_rowid = del_rssid<<32|UINT32_MAX (delete-row sentinel; del_rssid uses this
     //    publish's largest rowset id) makes the tombstone sstable the newest fileset layer so it shadows
     //    the existing rows -- ordering identical to a memtable-flushed tombstone.
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -802,7 +802,7 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
     if (op_compaction.input_sstables().empty()) {
         return Status::OK();
     }
-    auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
+    auto* block_cache = _tablet_mgr->primary_key_mgr()->block_cache();
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
@@ -949,7 +949,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder, int64_t generation_
         }
     }
     // generation_version == 0 means "use this publish's version"; a non-zero override is passed by
-    // the reshard flush (see UpdateManager::flush_pk_memtable). The builder still holds the
+    // the reshard flush (see PrimaryKeyManager::flush_pk_memtable). The builder still holds the
     // previous persisted sstable_meta here (before finalize_sstable_meta below), which
     // assign_generation_versions uses to carry existing versions forward.
     if (generation_version == 0) {

@@ -25,17 +25,17 @@
 
 namespace starrocks::lake {
 class Rowset;
-class UpdateManager;
+class PrimaryKeyManager;
 
-class CompactionState {
+class PrimaryKeyCompactionState {
 public:
-    CompactionState() = default;
-    ~CompactionState();
+    PrimaryKeyCompactionState() = default;
+    ~PrimaryKeyCompactionState();
 
-    CompactionState(const CompactionState&) = delete;
-    CompactionState& operator=(const CompactionState&) = delete;
+    PrimaryKeyCompactionState(const PrimaryKeyCompactionState&) = delete;
+    PrimaryKeyCompactionState& operator=(const PrimaryKeyCompactionState&) = delete;
 
-    Status load_segments(Rowset* rowset, UpdateManager* update_manager, const TabletSchemaCSPtr& tablet_schema,
+    Status load_segments(Rowset* rowset, PrimaryKeyManager* primary_key_manager, const TabletSchemaCSPtr& tablet_schema,
                          uint32_t segment_id);
     void release_segments(uint32_t segment_id);
 
@@ -48,7 +48,7 @@ public:
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
 
-    UpdateManager* _update_manager = nullptr;
+    PrimaryKeyManager* _primary_key_manager = nullptr;
     size_t _memory_usage = 0;
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
@@ -57,7 +57,7 @@ private:
     std::mutex _state_lock;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
+inline std::ostream& operator<<(std::ostream& os, const PrimaryKeyCompactionState& o) {
     os << o.to_string();
     return os;
 }

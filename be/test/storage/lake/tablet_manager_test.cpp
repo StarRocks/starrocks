@@ -40,7 +40,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/rowset/segment.h"
 #include "storage/storage_metrics.h"
@@ -71,8 +71,9 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = new starrocks::lake::TabletManager(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                new starrocks::lake::TabletManager(_location_provider, _primary_key_manager.get(), 1024 * 1024);
     }
 
     void TearDown() override {
@@ -84,7 +85,7 @@ public:
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider{nullptr};
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
 };
 
 namespace {

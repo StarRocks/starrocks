@@ -55,7 +55,7 @@ class PersistentIndexSstableFileset;
 
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
-// UpdateManager's index cache holds one of these per tablet, by value.
+// PrimaryKeyManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
@@ -76,7 +76,7 @@ class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // PrimaryKeyManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
     //
     // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for

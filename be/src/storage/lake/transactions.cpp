@@ -25,6 +25,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -32,7 +33,6 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
 
@@ -89,9 +89,9 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
                              const std::span<const TxnInfoPB>& txns) {
     int64_t version = base_version;
 
-    auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
+    auto index_version = tablet_mgr->primary_key_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > new_version) {
-        tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+        tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         return version;
     }
     if (index_version > version) {
@@ -110,7 +110,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
         if (res.ok()) {
             version = index_version;
         } else {
-            tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+            tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         }
     }
 
@@ -922,7 +922,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     } else {
         tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
     }
-    tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
+    tablet_mgr->primary_key_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
 }
 
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns) {
