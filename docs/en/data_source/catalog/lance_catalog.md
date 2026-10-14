@@ -77,16 +77,16 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 Lance uses Rust SDK 12.0.0 and is **disabled by default**. Default builds skip Cargo, Rust toolchain downloads, and Lance SDK packaging. Enable it explicitly for the FE metadata libraries and every BE/CN that will execute Lance scans:
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./build.sh --fe --be
+./build.sh --fe --be --with-connector-lance
 ```
 
 For focused connector tests:
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --with-connector-lance --build-target connector_lance_test --module connector_lance_test --without-java-ext
 ```
 
-Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Set `WITH_CONNECTOR_LANCE=OFF` to explicitly disable it. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. The enabled FE package includes `fe/lib/lance-metadata-lib`. Default FE packages omit these SDK libraries; directory listing and schema discovery require an enabled FE package. Query execution also requires an enabled BE package.
+Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Use `--without-connector-lance` or set `WITH_CONNECTOR_LANCE=OFF` to explicitly disable it. Explicit command-line flags override the environment. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. The enabled FE package includes `fe/lib/lance-metadata-lib`. Default FE packages omit these SDK libraries; directory listing and schema discovery require an enabled FE package. Query execution also requires an enabled BE package.
 
 The reader opens a dataset once and keeps that immutable snapshot for all batches of a scan. The FE does not yet pin a common version across separate scan operators, including self-joins.
 

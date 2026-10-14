@@ -10,7 +10,7 @@ The reader has no JVM dependency.
 ```sh
 cargo test --locked --manifest-path be/src/connector/lance/rust/Cargo.toml
 cargo clippy --locked --manifest-path be/src/connector/lance/rust/Cargo.toml --tests -- -D warnings
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --with-connector-lance --without-java-ext
 ```
 
 BE CMake builds the shared library with `build-support/build_lance.py`. It uses
@@ -21,8 +21,9 @@ directory on Linux x86-64/AArch64. `Cargo.lock` pins dependencies. Configure
 
 Lance is disabled by default in CMake, `build.sh`, and `run-be-ut.sh`. Default
 builds do not invoke Cargo or download a Rust toolchain. Enable the connector
-with `WITH_CONNECTOR_LANCE=ON` in the environment; direct CMake builds use
-`-DWITH_CONNECTOR_LANCE=ON`. The scripts pass
+with `--with-connector-lance` (or `WITH_CONNECTOR_LANCE=ON` in the environment);
+direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. `--without-connector-lance`
+explicitly disables it even when the environment enables it. The scripts pass
 the selected value to CMake on every invocation so an old CMake cache cannot
 silently keep Lance enabled. Switching off also omits a previously built Lance
 shared library from the BE package.

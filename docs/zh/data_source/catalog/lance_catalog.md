@@ -77,16 +77,16 @@ SAS Token 和临时 S3 凭据属于静态 Catalog 配置，Connector 不会从�
 Lance 使用 Rust SDK 12.0.0，构建时**默认关闭**。默认构建跳过 Cargo、Rust 工具链下载和 Lance SDK 打包。需要为 FE 元数据依赖库以及执行 Lance 扫描的每个 BE/CN 显式启用：
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./build.sh --fe --be
+./build.sh --fe --be --with-connector-lance
 ```
 
 运行 Connector 的定向测试：
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --with-connector-lance --build-target connector_lance_test --module connector_lance_test --without-java-ext
 ```
 
-直接使用 CMake 构建时，设置 `-DWITH_CONNECTOR_LANCE=ON`。设置 `WITH_CONNECTOR_LANCE=OFF` 可显式关闭。默认构建或显式关闭的构建会从 BE 安装包中排除之前构建的 Lance 动态库。启用后的 FE 安装包包含 `fe/lib/lance-metadata-lib`。默认 FE 安装包不包含这些 SDK 库，因此目录列举和 Schema 发现需要启用了 Lance 的 FE 安装包，查询执行还需要启用了 Lance 的 BE 安装包。
+直接使用 CMake 构建时，设置 `-DWITH_CONNECTOR_LANCE=ON`。使用 `--without-connector-lance` 或设置 `WITH_CONNECTOR_LANCE=OFF` 可显式关闭。命令行中显式指定的开关优先于环境变量。默认构建或显式关闭的构建会从 BE 安装包中排除之前构建的 Lance 动态库。启用后的 FE 安装包包含 `fe/lib/lance-metadata-lib`。默认 FE 安装包不包含这些 SDK 库，因此目录列举和 Schema 发现需要启用了 Lance 的 FE 安装包，查询执行还需要启用了 Lance 的 BE 安装包。
 
 读取器只打开一次数据集，在一次扫描的所有批次中保持同一个不可变快照。FE 尚未在多个独立扫描算子之间固定共同版本，自连接也存在此限制。
 
