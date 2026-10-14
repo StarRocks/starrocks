@@ -14,7 +14,14 @@
 
 package com.starrocks.http;
 
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Credentials;
@@ -33,16 +40,59 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
 
+    private static final String NON_ADMIN_USER = "dump_non_admin";
+    private static final String NON_ADMIN_PASSWORD = "dump_non_admin_pwd";
+
     private final AtomicInteger dumpCount = new AtomicInteger();
+    private final String nonAdminAuth = Credentials.basic(NON_ADMIN_USER, NON_ADMIN_PASSWORD);
+    // Whether the non-admin user holds SYSTEM NODE, the privilege needAdmin() checks first.
+    private volatile boolean nonAdminHasNode = false;
 
     @BeforeEach
-    public void mockDumpImage() {
+    public void mockDumpAndNonAdminUser() {
         dumpCount.set(0);
+        nonAdminHasNode = false;
         new MockUp<GlobalStateMgr>() {
             @Mock
             public String dumpImage() {
                 dumpCount.incrementAndGet();
                 return "/mock/image.1";
+            }
+        };
+
+        // Authenticate the non-admin user with valid credentials; every other login goes through the real path.
+        new MockUp<AuthenticationHandler>() {
+            @Mock
+            public UserIdentity authenticateWithClearPassword(Invocation inv, ConnectContext context, String user,
+                                                              String remoteHost, String password) {
+                if (NON_ADMIN_USER.equals(user) && NON_ADMIN_PASSWORD.equals(password)) {
+                    return UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
+                }
+                return inv.proceed();
+            }
+        };
+
+        // The non-admin user owns no admin role and holds NODE only when nonAdminHasNode is set.
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(Invocation inv, ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                if (NON_ADMIN_USER.equals(context.getCurrentUserIdentity().getUser())) {
+                    if (privilegeType == PrivilegeType.NODE && nonAdminHasNode) {
+                        return;
+                    }
+                    throw new AccessDeniedException("NODE on SYSTEM required");
+                }
+                inv.proceed();
+            }
+        };
+        new MockUp<BaseAction>() {
+            @Mock
+            public void checkUserOwnsAdminRole(Invocation inv, UserIdentity currentUser) throws AccessDeniedException {
+                if (NON_ADMIN_USER.equals(currentUser.getUser())) {
+                    throw new AccessDeniedException();
+                }
+                inv.proceed();
             }
         };
     }
@@ -83,6 +133,28 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
             Assertions.assertEquals(200, response.code(), body);
             // The UT cluster runs in shared-nothing mode.
             Assertions.assertTrue(body.contains("does not support dump starmgr meta"), body);
+        }
+    }
+
+    @Test
+    public void testNonAdminUserIsRejected() throws IOException {
+        // Valid credentials of a user without NODE privilege or an admin role must not pass needAdmin().
+        try (Response response = get("/dump", nonAdminAuth)) {
+            Assertions.assertEquals(401, response.code(), response.body().string());
+        }
+        Assertions.assertEquals(0, dumpCount.get());
+        try (Response response = get("/dump_starmgr", nonAdminAuth)) {
+            Assertions.assertEquals(401, response.code(), response.body().string());
+        }
+
+        // The same credentials pass once the user holds NODE, so the rejection above came from the admin check.
+        nonAdminHasNode = true;
+        try (Response response = get("/dump", nonAdminAuth)) {
+            Assertions.assertEquals(200, response.code(), response.body().string());
+        }
+        Assertions.assertEquals(1, dumpCount.get());
+        try (Response response = get("/dump_starmgr", nonAdminAuth)) {
+            Assertions.assertEquals(200, response.code(), response.body().string());
         }
     }
 }
