@@ -159,7 +159,9 @@ public class LeaderOpExecutor {
                 if (state != null) {
                     ctx.getState().setStateType(state);
                     if (result.isSetErrorMsg()) {
-                        ctx.getState().setMsg(result.getErrorMsg());
+                        ctx.getState().setMsg("Statement was forwarded to leader FE ["
+                                + ipAndPort.first + ":" + ipAndPort.second
+                                + "] and failed there: " + result.getErrorMsg());
                     }
                     if (state == MysqlStateType.EOF || state == MysqlStateType.OK) {
                         afterForward();
@@ -365,6 +367,10 @@ public class LeaderOpExecutor {
         }
 
         params.setTxn_id(ctx.getTxnId());
+
+        if (ctx.getAuthToken() != null) {
+            params.setAuth_token(ctx.getAuthToken());
+        }
 
         params.setWarehouse_id(ctx.getCurrentWarehouseId());
 

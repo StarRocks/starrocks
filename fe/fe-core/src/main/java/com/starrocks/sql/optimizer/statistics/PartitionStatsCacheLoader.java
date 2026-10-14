@@ -48,7 +48,7 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
         return CompletableFuture.supplyAsync(() -> {
             Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = new HashMap<>();
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
 
                 long tableId = -1;

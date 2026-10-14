@@ -52,7 +52,7 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
         return CompletableFuture.supplyAsync(() -> {
             Map<TableStatsCacheKey, Optional<Long>> result = new HashMap<>();
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
                 List<Long> pids = Lists.newArrayList();
                 long tableId = -1;

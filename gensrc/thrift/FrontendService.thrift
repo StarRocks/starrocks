@@ -968,6 +968,8 @@ struct TMasterOpRequest {
 
     40: optional list<string> user_groups;
 
+    41: optional string auth_token;
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
 }
 

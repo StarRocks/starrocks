@@ -155,5 +155,15 @@ public class LeaderOpExecutorTest {
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
         Assertions.assertEquals(catalog, request.getCatalog());
         Assertions.assertEquals(database, request.getDb());
+
+        // auth token absent when not set — follower must not forward a null token
+        Assertions.assertFalse(request.isSetAuth_token());
+
+        // auth token propagated when present in context
+        String token = "test-jwt-token";
+        connectContext.setAuthToken(token);
+        TMasterOpRequest requestWithToken = executor.createTMasterOpRequest(connectContext, 1);
+        Assertions.assertTrue(requestWithToken.isSetAuth_token());
+        Assertions.assertEquals(token, requestWithToken.getAuth_token());
     }
 }
