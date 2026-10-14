@@ -52,8 +52,7 @@ private:
 
     void _record(int64_t bytes) {
         const auto now = std::chrono::steady_clock::now();
-        const double elapsed_hours =
-                std::chrono::duration<double, std::ratio<3600>>(now - _last_change_time).count();
+        const double elapsed_hours = std::chrono::duration<double, std::ratio<3600>>(now - _last_change_time).count();
         _total_gib_hours += static_cast<double>(_last_bytes) / (1ULL << 30) * elapsed_hours;
         _last_change_time = now;
         _last_bytes = std::max<int64_t>(bytes, 0);

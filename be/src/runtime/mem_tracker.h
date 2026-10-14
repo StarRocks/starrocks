@@ -520,7 +520,7 @@ private:
 
     bool _try_add_consumption(int64_t bytes, int64_t limit) {
         return UNLIKELY(_memory_usage_meter != nullptr) ? _metered_try_add(bytes, limit)
-                                                       : _consumption->try_add(bytes, limit);
+                                                        : _consumption->try_add(bytes, limit);
     }
 
     void _metered_set(int64_t bytes);
