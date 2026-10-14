@@ -49,8 +49,9 @@ public class SystemActionProcPathTest {
         Assertions.assertEquals("/", SystemAction.encodeProcPathForUrl("/"));
         Assertions.assertEquals("//backends", SystemAction.encodeProcPathForUrl("//backends"));
         Assertions.assertEquals("/dbs/10001", SystemAction.encodeProcPathForUrl("/dbs/10001"));
-        Assertions.assertEquals("/catalog/hive/tbl_a%26b%20c%23d",
-                SystemAction.encodeProcPathForUrl("/catalog/hive/tbl_a&b c#d"));
+        // Whitespace is not covered: ProcService.open treats it as the end of the path.
+        Assertions.assertEquals("/catalog/hive/tbl_a%26b%2Bc%23d",
+                SystemAction.encodeProcPathForUrl("/catalog/hive/tbl_a&b+c#d"));
         Assertions.assertEquals("/dbs/a%22%3E%3Cimg", SystemAction.encodeProcPathForUrl("/dbs/a\"><img"));
     }
 }
