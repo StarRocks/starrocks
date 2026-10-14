@@ -68,6 +68,7 @@ message PQueryStatistics {
     optional int64 read_local_cnt = 12;
     optional int64 read_remote_cnt = 13;
     optional AIExecutionStatisticsPB ai_statistics = 14;
+    optional double mem_usage_gib_hours = 15;
 }
 
 message QueryStatisticsItemPB {

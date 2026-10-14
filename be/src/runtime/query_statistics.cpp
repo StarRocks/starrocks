@@ -36,6 +36,15 @@
 
 namespace starrocks {
 
+void QueryStatistics::add_mem_usage_gib_hours(double gib_hours) {
+    if (gib_hours == 0) {
+        return;
+    }
+    double current = mem_usage_gib_hours.load();
+    while (!mem_usage_gib_hours.compare_exchange_weak(current, current + gib_hours)) {
+    }
+}
+
 void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     DCHECK(statistics != nullptr);
     statistics->set_scan_rows(scan_rows);
@@ -43,6 +52,7 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     statistics->set_returned_rows(returned_rows);
     statistics->set_cpu_cost_ns(cpu_ns);
     statistics->set_mem_cost_bytes(mem_cost_bytes);
+    statistics->set_mem_usage_gib_hours(mem_usage_gib_hours.load());
     statistics->set_spill_bytes(spill_bytes);
     statistics->set_read_local_cnt(read_local_cnt);
     statistics->set_read_remote_cnt(read_remote_cnt);
@@ -92,6 +102,7 @@ void QueryStatistics::to_params(TAuditStatistics* params) {
     params->__set_returned_rows(returned_rows);
     params->__set_cpu_cost_ns(cpu_ns);
     params->__set_mem_cost_bytes(mem_cost_bytes);
+    params->__set_mem_usage_gib_hours(mem_usage_gib_hours.load());
     params->__set_spill_bytes(spill_bytes);
     params->__set_read_local_cnt(read_local_cnt);
     params->__set_read_remote_cnt(read_remote_cnt);
@@ -130,6 +141,7 @@ void QueryStatistics::clear() {
     scan_bytes = 0;
     cpu_ns = 0;
     mem_cost_bytes = 0;
+    mem_usage_gib_hours = 0;
     returned_rows = 0;
     spill_bytes = 0;
     read_local_cnt = 0;
@@ -220,6 +232,7 @@ void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
 
     int64_t mem_cost_bytes = other.mem_cost_bytes.load();
     this->mem_cost_bytes = std::max<int64_t>(this->mem_cost_bytes, mem_cost_bytes);
+    add_mem_usage_gib_hours(other.mem_usage_gib_hours.exchange(0));
 
     int64_t spill_bytes = other.spill_bytes.load();
     if (other.spill_bytes.compare_exchange_strong(spill_bytes, 0)) {
@@ -317,6 +330,9 @@ void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     }
     if (statistics.has_mem_cost_bytes()) {
         mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
+    }
+    if (statistics.has_mem_usage_gib_hours()) {
+        add_mem_usage_gib_hours(statistics.mem_usage_gib_hours());
     }
     if (statistics.has_transmitted_bytes()) {
         transmitted_bytes += statistics.transmitted_bytes();

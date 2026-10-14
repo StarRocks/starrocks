@@ -913,6 +913,7 @@ struct TAuditStatistics {
     11: optional i64 read_local_cnt
     12: optional i64 read_remote_cnt
     13: optional TAIExecutionStatistics ai_statistics
+    14: optional double mem_usage_gib_hours
 }
 
 struct TReportAuditStatisticsParams {

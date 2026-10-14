@@ -134,6 +134,29 @@ public class StmtExecutorTest {
     private static final List<ExecPlan> PLANNED_PLANS = Lists.newArrayList();
     private static final List<ExecPlan> PROFILED_PLANS = Lists.newArrayList();
     @Test
+    public void testRecordExecStatsIntoContextAddsMemoryGiBHours() {
+        ConnectContext ctx = new ConnectContext();
+        StatementBase stmt = SqlParser.parseSingleStatement("select 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        executor.setQueryStatistics(new PQueryStatistics());
+        executor.recordExecStatsIntoContext();
+        Assertions.assertEquals(-1, ctx.getAuditEventBuilder().buildSnapshot().memUsageGiBHours);
+
+        PQueryStatistics first = new PQueryStatistics();
+        first.memUsageGibHours = 0.25;
+        executor.setQueryStatistics(first);
+        executor.recordExecStatsIntoContext();
+        Assertions.assertEquals(0.25, ctx.getAuditEventBuilder().buildSnapshot().memUsageGiBHours, 1e-12);
+
+        PQueryStatistics second = new PQueryStatistics();
+        second.memUsageGibHours = 0.5;
+        executor.setQueryStatistics(second);
+        executor.recordExecStatsIntoContext();
+        Assertions.assertEquals(0.75, ctx.getAuditEventBuilder().buildSnapshot().memUsageGiBHours, 1e-12);
+    }
+
+    @Test
     public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
         MysqlSerializer serializer = MysqlSerializer.newInstance();
         GlobalStateMgr state = Deencapsulation.newInstance(GlobalStateMgr.class);
