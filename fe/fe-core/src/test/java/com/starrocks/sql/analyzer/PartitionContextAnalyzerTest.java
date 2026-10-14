@@ -106,7 +106,7 @@ public class PartitionContextAnalyzerTest {
                     + "test.partition_context_random(v1), "
                     + "test.partition_context_external(v1) FROM t0");
             analyzeSuccess("CREATE TABLE test.partition_context_ordinary (k BIGINT NOT NULL, "
-                    + "g BIGINT AS test.partition_context_stable(k)) DUPLICATE KEY(k) "
+                    + "g LARGEINT AS test.partition_context_stable(k)) DUPLICATE KEY(k) "
                     + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1')");
         } finally {
             try {
