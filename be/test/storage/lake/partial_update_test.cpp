@@ -250,7 +250,7 @@ public:
         ASSIGN_OR_ABORT(auto old_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
         ASSERT_EQ(1, old_metadata->rowsets_size());
         ASSERT_EQ(1, old_metadata->rowsets(0).segment_metas_size());
-        ASSERT_EQ(2, _update_mgr->get_primary_index_data_version(tablet_id));
+        ASSERT_EQ(2, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 
         // Pin the pre-DROP query's version and schema, but defer its segment open until publish finishes.
         auto old_reader = std::make_shared<TabletReader>(_tablet_mgr.get(), old_metadata, *_schema);
@@ -295,7 +295,7 @@ public:
             ASSERT_EQ(new_tablet_schema->id(), altered_metadata->schema().id());
             ASSERT_TRUE(altered_metadata->historical_schemas().empty());
             ASSERT_TRUE(altered_metadata->rowset_to_schema().empty());
-            ASSERT_EQ(3, _update_mgr->get_primary_index_data_version(tablet_id));
+            ASSERT_EQ(3, _primary_key_mgr->get_primary_index_data_version(tablet_id));
             EXPECT_EQ(0, index_load_count.load());
             base_version = 3;
         }
@@ -338,11 +338,11 @@ public:
         // Clear only metacache: a PK rebuild can open the full base schema first and hide the bug.
         _tablet_mgr->prune_metacache();
         ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
-        ASSERT_EQ(base_version, _update_mgr->get_primary_index_data_version(tablet_id));
+        ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
         ASSERT_GE(_tablet_mgr->metacache()->capacity(), 2 * 1024);
         ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
         EXPECT_EQ(0, index_load_count.load()) << "PK index rebuild must not seed the base segment cache";
-        ASSERT_EQ(base_version + 1, _update_mgr->get_primary_index_data_version(tablet_id));
+        ASSERT_EQ(base_version + 1, _primary_key_mgr->get_primary_index_data_version(tablet_id));
         ASSERT_EQ(new_tablet_schema->id(), new_metadata->schema().id());
         if (legacy_schema_change) {
             ASSERT_TRUE(new_metadata->historical_schemas().empty());
@@ -1937,10 +1937,10 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_preserves_old_schema_
 //   - It observes the decision through a sync point, not the resulting cache contents. An undersized
 //     cache drops oversized inserts by itself, so "the segment is not cached" holds with or without
 //     the gate and would make the test unable to fail.
-//   - The two measurements need independent base segments. A partial update rewrites every row it
-//     touches into one new segment, so measuring twice over the same keys would leave the second
-//     measurement with a single base segment to read.
-TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_when_working_set_exceeds_cache) {
+//   - The measurements need independent base segments. A partial update rewrites every row it
+//     touches into one new segment, so repeating a measurement over the same keys would leave the
+//     later measurement with a single base segment to read.
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_working_set_cache_limits) {
     if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
         GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
     }
@@ -1950,7 +1950,8 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_when_wo
     constexpr int kRanges = 6;
     constexpr int kRangeSize = kChunkSize / kRanges;
     static_assert(kChunkSize % kRanges == 0);
-    constexpr int kHalfKeys = kChunkSize / 2;
+    constexpr int kThirdKeys = kChunkSize / 3;
+    static_assert(kChunkSize % 3 == 0);
 
     const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
     std::vector<bool> fill_decisions;
@@ -1998,16 +1999,27 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_stops_filling_when_wo
 
     // Room to spare: every base segment this publish reads is cached.
     fill_decisions.clear();
-    write_and_publish(generate_data(kHalfKeys, 0, true, 5), /*row_mode_partial_update=*/true);
-    ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
+    write_and_publish(generate_data(kThirdKeys, 0, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::all_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+
+    // The whole working set fits in 64 KiB, but each three-column segment is estimated at 3 KiB
+    // while a shard gets only 2 KiB. An aggregate-only gate incorrectly enables caching here.
+    constexpr int64_t kSmallMetacacheLimit = 64 * 1024;
+    ASSERT_LT(base_metadata->rowsets_size() * _tablet_schema->num_columns() * 1024, kSmallMetacacheLimit);
+    _tablet_mgr->update_metacache_limit(kSmallMetacacheLimit);
+    fill_decisions.clear();
+    write_and_publish(generate_data(kThirdKeys, 1, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
+    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }))
+            << "a segment larger than its cache shard must use the static-open fallback";
 
     // No room: every segment is skipped, the first one included -- nothing has to be cached before
     // the gate can decide.
     _tablet_mgr->update_metacache_limit(0);
     fill_decisions.clear();
-    write_and_publish(generate_data(kHalfKeys, 1, true, 5), /*row_mode_partial_update=*/true);
-    ASSERT_EQ(kRanges / 2, fill_decisions.size()) << "expected one decision per base segment read";
+    write_and_publish(generate_data(kThirdKeys, 2, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
     _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);

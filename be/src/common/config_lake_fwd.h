@@ -99,10 +99,11 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 // neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
 // reader for every column of the tablet schema, a cost paid again on each publish for base segments
 // that a high frequency update stream keeps touching. The cache is used only while the tablet's base
-// segments fit in lake_metadata_cache_limit; past that, publish falls back to the static open rather
-// than thrash. The auto-increment branch always uses the static open: it reads this transaction's own
-// segment through a schema restricted to the partial-update columns, which must never be published
-// into the cache. Set to false to restore the static open everywhere.
+// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
+// always uses the static open: it reads this transaction's own segment through a schema restricted
+// to the partial-update columns, which must never be published into the cache. Set to false to
+// restore the static open everywhere.
 CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");

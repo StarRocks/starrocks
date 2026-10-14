@@ -1913,7 +1913,12 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
             //
             // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
             // evicts to stay under capacity, so it reports room even while it thrashes.
-            use_segment_cache = publish_segment_count * estimated_segment_bytes <= tablet_mgr->metacache()->capacity();
+            const size_t cache_capacity = tablet_mgr->metacache()->capacity();
+            const size_t shard_capacity = cache_capacity / kNumShards + (cache_capacity % kNumShards != 0);
+            // Even a single segment can fit the aggregate capacity yet exceed its shard's budget.
+            // Such an entry evicts itself as its charge grows and cannot be reused by later publishes.
+            use_segment_cache = estimated_segment_bytes > 0 && estimated_segment_bytes <= shard_capacity &&
+                                publish_segment_count <= cache_capacity / estimated_segment_bytes;
         }
         TEST_SYNC_POINT_CALLBACK("UpdateManager::get_column_values:fill_meta_cache", &use_segment_cache);
         if (use_segment_cache) {
