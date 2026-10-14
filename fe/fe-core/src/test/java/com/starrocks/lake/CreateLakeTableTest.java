@@ -44,6 +44,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
 import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletMetadataRequest;
@@ -67,6 +70,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
@@ -432,6 +437,124 @@ public class CreateLakeTableTest {
 
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testConcurrentCreateWithRollupWaitsForEveryTablet() throws Exception {
+        int savedMaxSerialReplicas = Config.create_table_max_serial_replicas;
+        int savedTabletCreateTimeout = Config.tablet_create_timeout_second;
+        int savedMaxCreateTableTimeout = Config.max_create_table_timeout_second;
+        // The first create task never finishes; every other one finishes as soon as it is sent.
+        AtomicInteger sentTasks = new AtomicInteger();
+        new MockUp<TabletTaskExecutor>() {
+            @Mock
+            CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
+                for (AgentTask task : agentBatchTask) {
+                    if (sentTasks.incrementAndGet() > 1) {
+                        ((CreateReplicaTask) task).countDownLatch(task.getBackendId(), task.getTabletId());
+                    }
+                }
+                return CompletableFuture.completedFuture(true);
+            }
+        };
+        try {
+            Config.create_table_max_serial_replicas = 1;
+            Config.tablet_create_timeout_second = 1;
+            Config.max_create_table_timeout_second = 1;
+            // file_bundling turns the tablet creation optimization on, and the rollup turns it off again, so
+            // every tablet of both indexes gets its own task.
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> createTable(
+                    "create table lake_test.concurrent_create_with_rollup\n" +
+                            "(c0 int, c1 string, c2 int)\n" +
+                            "DUPLICATE KEY(c0)\n" +
+                            "distributed by hash(c0) buckets 4\n" +
+                            "ROLLUP (mv1 (c0, c1))\n" +
+                            "properties('file_bundling' = 'true')"));
+            Assertions.assertTrue(e.getMessage().contains("Table creation timed out"), e.getMessage());
+            Assertions.assertEquals(8, sentTasks.get());
+        } finally {
+            Config.create_table_max_serial_replicas = savedMaxSerialReplicas;
+            Config.tablet_create_timeout_second = savedTabletCreateTimeout;
+            Config.max_create_table_timeout_second = savedMaxCreateTableTimeout;
+        }
+    }
+
+    @Test
+    public void testRangeDistributionDefault() throws Exception {
+        // The shipped default is on in shared-data mode; assert that is what we are exercising.
+        Assertions.assertTrue(Config.enable_range_distribution);
+        boolean savedConfig = Config.enable_range_distribution;
+        try {
+            // Default on: a bare CREATE (no DISTRIBUTED BY) defaults to RANGE for every keys type
+            // except a derived DUPLICATE key with no ORDER BY (the common "t(k, v)" case).
+            createTable("create table lake_test.rd_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_pk").isRangeDistribution());
+
+            createTable("create table lake_test.rd_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup").isRangeDistribution());
+
+            createTable("create table lake_test.rd_derived_dup (c0 int, c1 int) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "rd_derived_dup").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.rd_dup_orderby (c0 int, c1 int) order by(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_dup_orderby").isRangeDistribution());
+
+            createTable("create table lake_test.rd_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_agg").isRangeDistribution());
+
+            createTable("create table lake_test.rd_uniq (c0 int, c1 int) unique key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertTrue(getLakeTable("lake_test", "rd_uniq").isRangeDistribution());
+
+            // Kill switch: disabling the config reverts to the previous per-keys-type default.
+            Config.enable_range_distribution = false;
+
+            createTable("create table lake_test.ks_pk (c0 int, c1 int) primary key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.HASH,
+                    getLakeTable("lake_test", "ks_pk").getDefaultDistributionInfo().getType());
+
+            createTable("create table lake_test.ks_dup (c0 int, c1 int) duplicate key(c0) " +
+                    "properties('replication_num' = '1');");
+            Assertions.assertEquals(DistributionInfo.DistributionInfoType.RANDOM,
+                    getLakeTable("lake_test", "ks_dup").getDefaultDistributionInfo().getType());
+
+            // AGG/UNIQUE without a DISTRIBUTED BY clause have no default distribution when range is off.
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_agg (c0 int, c1 bigint sum) aggregate key(c0) " +
+                            "properties('replication_num' = '1');"));
+            ExceptionChecker.expectThrowsWithMsg(Exception.class, "not support default distribution",
+                    () -> createTable("create table lake_test.ks_uniq (c0 int, c1 int) unique key(c0) " +
+                            "properties('replication_num' = '1');"));
+        } finally {
+            Config.enable_range_distribution = savedConfig;
+        }
+    }
+
+    @Test
+    public void testRangeDistributionDefaultWithRollup() throws Exception {
+        Assertions.assertTrue(Config.enable_range_distribution);
+        // A bare CREATE (no DISTRIBUTED BY) with a ROLLUP defaults the base index to RANGE and still
+        // creates the rollup index.
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.rd_table_with_rollup\n" +
+                        "(c0 int, c1 string, c2 int, c3 bigint)\n" +
+                        "DUPLICATE KEY(c0)\n" +
+                        "ROLLUP (mv1 (c0, c1));"));
+        LakeTable lakeTable = getLakeTable("lake_test", "rd_table_with_rollup");
+        Assertions.assertTrue(lakeTable.isRangeDistribution());
+        Assertions.assertEquals(2, lakeTable.getAllPartitions().stream().findAny().get()
+                .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL).size());
+    }
+
+>>>>>>> 550294c ([BugFix] Count every create task when a partition has several indexes (#80640))
     @Test
     public void testRestoreColumnUniqueId() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
