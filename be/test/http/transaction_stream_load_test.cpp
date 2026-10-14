@@ -1205,7 +1205,7 @@ TEST_F(TransactionStreamLoadActionTest, on_header_invalid_partial_update_rejecte
     for (const char* value : invalid_values) {
         k_response_str = "";
         TransactionStreamLoadAction action(&_env);
-        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        auto ctx = new StreamLoadContext(&_env);
         ctx->ref();
         ctx->db = "db";
         ctx->table = "tbl";
