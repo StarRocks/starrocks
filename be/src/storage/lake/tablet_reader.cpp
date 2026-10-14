@@ -996,16 +996,18 @@ Status TabletReader::refine_initial_coarse_split_and_append_refined_tasks(const 
         if (seed_split.row_id_range != nullptr) {
             SparseRange<> seed_scan_range = *seed_split.row_id_range;
             seed_scan_range &= pruned_scan_range;
-            // The segment still has surviving rows, so keep its seed as the statistics owner even
-            // when the seed's own coarse range was pruned away. An empty SparseRange entry opens
-            // the segment iterator for its first-split statistics without returning any rows.
-            // Coarse siblings can scan eagerly and keep is_first_split_of_segment=false.
-            if (seed_scan_range.span_size() > 0 || seed_split.is_first_split_of_segment) {
+            if (seed_scan_range.span_size() > 0) {
                 auto rowid_range = std::make_shared<RowidRangeOption>();
                 rowid_range->add(rowset.get(), segment.get(),
                                  std::make_shared<SparseRange<>>(std::move(seed_scan_range)),
                                  seed_split.is_first_split_of_segment);
                 *local_rowid_range = std::move(rowid_range);
+            } else if (seed_split.is_first_split_of_segment) {
+                // The segment survives, but its statistics owner has no rows to read. Account for
+                // the first-split contributions without opening an empty iterator. Other splits
+                // subtract their row counts from rows_key_range_filtered as usual.
+                _stats.phy_segments_count++;
+                _stats.rows_key_range_filtered += segment->num_rows();
             }
         }
     }

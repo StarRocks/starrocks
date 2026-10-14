@@ -1994,6 +1994,17 @@ TEST_F(LakeTabletReaderSpit, test_prepared_split_seed_statistics_and_eager_coars
         EXPECT_EQ(expected, actual);
         EXPECT_EQ(mode == 2 ? 0 : 1, phy_segments);
         EXPECT_EQ(mode == 2 ? 0 : 1, seed_child->stats().phy_segments_count);
+        if (mode != 1) {
+            // An empty seed accounts for statistics only. Preparation reads are reported
+            // separately; no read iterator or additional column I/O is needed here.
+            const auto& stats = seed_child->stats();
+            EXPECT_EQ(0, stats.segments_read_count);
+            EXPECT_EQ(0, stats.lake_reusable_segment_iter_created);
+            EXPECT_EQ(0, stats.segment_init_ns);
+            EXPECT_EQ(0, stats.column_iterator_init_ns);
+            EXPECT_EQ(0, stats.io_count);
+            EXPECT_EQ(0, stats.compressed_bytes_read);
+        }
         if (mode != 2) {
             EXPECT_EQ(baseline->stats().rows_key_range_filtered, key_range_filtered);
         }
