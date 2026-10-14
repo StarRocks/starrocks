@@ -959,9 +959,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入時期：v4.2.0
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
-  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
 
-  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+  `/dump`、`/dump_starmgr` は除外されません：この設定にかかわらず、認証済みの管理者のみがアクセスできます。認証には HTTP Basic 認証、または FE Web コンソールへのログインで取得したセッション Cookie を使用できます。次のいずれかを満たすユーザーが管理者として扱われます：SYSTEM レベルの `NODE` 権限を持つ（ユーザーに直接付与されているか、ログイン時に有効なロール、つまりユーザーのデフォルトロール、または `activate_all_roles_on_login` が `true` の場合は付与されている任意のロールを通じて付与されている）；`root` ユーザーである、または `root` ロールを持つ；`db_admin` ロールと `user_admin` ロールの両方を持つ。
+
+  この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
 ### `http_web_page_display_hardware`
 
