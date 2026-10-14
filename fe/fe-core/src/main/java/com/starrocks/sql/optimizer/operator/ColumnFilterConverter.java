@@ -420,6 +420,48 @@ public class ColumnFilterConverter {
             rewritten.setChild(1, mapped.get());
             return rewritten;
         }
+
+        // `a IN (c1, ..., cn)` is `a = c1 OR ... OR a = cn`, and `a = c` implies `f(a) = f(c)` for
+        // any f, so these literals may be mapped through the partition expression whether or not it
+        // preserves order -- the same exemption the equality case above takes. What comes out is a
+        // necessary condition on the partition value, which is all pruning asks for; the original
+        // predicate stays in the plan, and the filter is not marked as licensing its removal.
+        //
+        // Until this was done the raw source literals were handed to RangePartitionPruner as though
+        // they were partition keys. They carry the source column's type, so the pruner threw and
+        // OptOlapPartitionPruner swallowed that into a full partition scan: on a table partitioned
+        // by `cast(substr(code, 3, 4) as bigint)`, `code = 'AB1000x'` pruned to one partition of
+        // three while `code IN ('AB1000x', 'AB3000x')` read all three.
+        if (predicate instanceof InPredicateOperator inPredicate
+                && !(predicate instanceof LargeInPredicateOperator)
+                && !inPredicate.isNotIn()
+                && inPredicate.getChild(0) instanceof ColumnRefOperator columnRef) {
+            List<ScalarOperator> mappedChildren = Lists.newArrayList();
+            mappedChildren.add(columnRef);
+            for (int i = 1; i < inPredicate.getChildren().size(); i++) {
+                if (!(inPredicate.getChild(i) instanceof ConstantOperator constant)) {
+                    return predicate;
+                }
+                Optional<ConstantOperator> mapped =
+                        evaluatePartitionExpr(firstPartitionExpr, columnRef, constant, false);
+                if (mapped.isEmpty() || mapped.get().isNull()) {
+                    // All or nothing. Dropping one literal from an IN list drops the partitions the
+                    // rows carrying it live in, which loses rows; leaving the whole predicate
+                    // unmapped only costs pruning.
+                    //
+                    // A literal the expression sends to NULL is dropped the same way. Rows carrying
+                    // it land on a NULL partition value, which is not a point in the range map, so
+                    // a NULL key would prune by comparing against bounds it was never ordered
+                    // against.
+                    return predicate;
+                }
+                mappedChildren.add(mapped.get());
+            }
+            InPredicateOperator rewritten = (InPredicateOperator) inPredicate.clone();
+            rewritten.getChildren().clear();
+            rewritten.getChildren().addAll(mappedChildren);
+            return rewritten;
+        }
         return predicate;
     }
 
