@@ -23,6 +23,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/flat_json/flat_json_internal.h"
 #include "column/flat_json/json_flattener.h"
 #include "column/flat_json/json_merger.h"
 #include "column/json_column.h"
@@ -219,10 +220,17 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
                 mk.dst_index = i;
                 if (_dst_types[i] != _src_types[j]) {
                     mk.need_cast = true;
-                    SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[j]));
-                    ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-                    mk.cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(_src_types[j]),
-                                                                        TypeDescriptor(_dst_types[i]), col_ref, &_pool);
+                    if (_dst_types[i] == TYPE_JSON && flat_json::JSON_MERGE_FUNC.contains(_src_types[j])) {
+                        // A cast to JSON parses a VARCHAR that looks like JSON text and renders LARGEINT
+                        // differently; rebuild each value the way JsonMerger does instead.
+                        mk.to_json = true;
+                        mk.src_type = _src_types[j];
+                    } else {
+                        SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[j]));
+                        ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
+                        mk.cast_expr = VectorizedCastExprFactory::from_type(
+                                TypeDescriptor(_src_types[j]), TypeDescriptor(_dst_types[i]), col_ref, &_pool);
+                    }
                 }
                 break;
             }
@@ -329,6 +337,9 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
 
 Status HyperJsonTransformer::_equals(const MergeTask& task, const Columns& columns) {
     DCHECK(task.src_index.size() == 1);
+    if (task.to_json) {
+        return _to_json(task, columns[task.src_index[0]]);
+    }
     if (task.need_cast) {
         auto& col = columns[task.src_index[0]];
         return _cast(task, col);
@@ -358,6 +369,36 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, const ColumnPtr& col) 
         DCHECK_EQ(_dst_columns[task.dst_index]->is_nullable(), res->is_nullable());
         _dst_columns[task.dst_index].swap(res);
     }
+    return Status::OK();
+}
+
+Status HyperJsonTransformer::_to_json(const MergeTask& task, const ColumnPtr& col) {
+    DCHECK(task.to_json);
+    const auto merge_func = flat_json::JSON_MERGE_FUNC.at(task.src_type);
+    // The merge functions take a nullable source and add a keyed value to an open object.
+    ColumnPtr src = NullableColumn::wrap_if_necessary(col);
+    auto json = JsonColumn::create();
+    auto nulls = NullColumn::create();
+    json->reserve(src->size());
+    nulls->reserve(src->size());
+    constexpr const char* kKey = "v";
+    vpack::Builder builder;
+    for (size_t row = 0; row < src->size(); row++) {
+        if (src->is_null(row)) {
+            json->append_default();
+            nulls->append(1);
+            continue;
+        }
+        builder.clear();
+        builder.openObject();
+        merge_func(&builder, kKey, src.get(), row);
+        builder.close();
+        json->append(JsonValue(builder.slice().get(kKey)));
+        nulls->append(0);
+    }
+    auto res = NullableColumn::create(std::move(json), std::move(nulls));
+    res->set_delete_state(col->delete_state());
+    _dst_columns[task.dst_index] = std::move(res);
     return Status::OK();
 }
 
