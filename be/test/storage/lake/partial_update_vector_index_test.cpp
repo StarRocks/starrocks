@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
@@ -33,6 +35,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/vector_search_option.h"
 
 namespace starrocks::lake {
 
@@ -211,7 +214,8 @@ protected:
 
     // Row-mode partial update write only (no publish); returns the txn id so a test can mutate
     // state (e.g. drop a column from the tablet metadata) before publishing.
-    int64_t partial_update_txn(std::vector<SlotDescriptor*>* slots, Chunk& chunk, bool miss_auto_increment) {
+    int64_t partial_update_txn(std::vector<SlotDescriptor*>* slots, Chunk& chunk, bool miss_auto_increment,
+                               PartialUpdateMode mode = PartialUpdateMode::ROW_MODE) {
         auto indexes = std::vector<uint32_t>(kChunkSize);
         std::iota(indexes.begin(), indexes.end(), 0);
         auto txn_id = next_id();
@@ -223,7 +227,7 @@ protected:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(slots)
-                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .set_partial_update_mode(mode)
                                                    .set_miss_auto_increment_column(miss_auto_increment)
                                                    .set_table_id(next_id())
                                                    .build());
@@ -287,6 +291,45 @@ protected:
             chunk->reset();
         }
         ASSERT_EQ(rows, kChunkSize);
+    }
+
+    // ANN top-k (l2) scan over the tablet at `version`: key -> the distance the scan reports for each row it
+    // returns. A brute-force fallback returns every row and leaves the cut to the TopN above the scan.
+    std::map<int, float> ann_distances(int64_t version, const std::vector<float>& query, int k) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto option = std::make_shared<VectorSearchOption>();
+        option->use_vector_index = true;
+        option->query_vector = query;
+        option->k = k;
+        option->k_factor = 1.0;
+        option->vector_distance_column_name = "__vector_approx_l2_distance";
+        option->vector_column_id = _tablet_schema->num_columns();
+        option->vector_slot_id = 100;
+        option->refine_distance = false;
+        option->vector_range = -1.0;
+        option->result_order = 0;
+        option->pq_refine_factor = 1.0;
+        TabletReaderParams params;
+        params.use_vector_index = true;
+        params.vector_search_option = option;
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(params));
+        auto chunk = ChunkFactory::new_chunk(reader->output_schema(), 128);
+        std::map<int, float> distances;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            const auto& distance = chunk->columns().back();
+            for (int i = 0; i < chunk->num_rows(); ++i) {
+                distances[chunk->columns()[0]->get(i).get_int32()] = distance->get(i).get_float();
+            }
+            chunk->reset();
+        }
+        return distances;
     }
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -429,6 +472,39 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_carries_vi_for_update
     check_vector_data(version, /*bias=*/0.5f);
 }
 
+// The carry case below the build threshold (StarRocksTest#12391): the partial segment carries the
+// vector column but is too small for a .vi, so it has no ids and its footer says NONE. The dest
+// segment written by the rewrite has no .vi either, so its footer must say NONE too; a footer with
+// the flag missing sends every ANN read after a .vi that does not exist, and the query fails.
+TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_below_threshold_of_updated_vector_column) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1000);
+    create_tablet(/*auto_increment=*/false, /*async_threshold=*/0);
+
+    auto version = write_full(1);
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
+    array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
+    slots.emplace_back(1, "c2", array_type);
+    std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
+    std::vector<int> v0(kChunkSize);
+    std::iota(v0.begin(), v0.end(), 0);
+    auto c0 = Int32Column::create();
+    c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk({std::move(c0), build_vector_column(kChunkSize, /*bias=*/0.5f)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    version = partial_update(version, &slot_ptrs, chunk, /*miss_auto_increment=*/false);
+
+    auto seg_meta = rewritten_segment_meta(version);
+    ASSERT_EQ(seg_meta.vector_index_ids_size(), 0);
+    ASSERT_FALSE(fs::path_exist(vi_location(seg_meta.filename())));
+    auto footer = read_footer(seg_meta.filename());
+    ASSERT_TRUE(footer.has_vector_index_storage_type())
+            << "the rewritten segment's footer lost vector_index_storage_type, so readers look for a .vi";
+    ASSERT_EQ(footer.vector_index_storage_type(), VECTOR_INDEX_STORAGE_NONE);
+    check_vector_data(version, /*bias=*/0.5f);
+}
+
 // Auto-increment rewrite branch (rewrite_auto_increment_lake), async mode: the dest segment is a
 // full rewrite re-materializing the vector column, so the id must survive publish — the publish
 // path previously cleared it, dropping the FE-scheduled build for the rewritten data.
@@ -567,6 +643,119 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_copy_only_rewrite_keeps_sche
     // The rewrite records the writing tablet as the .vi owner (split-stable naming).
     ASSERT_TRUE(seg_meta.has_segment_vector_index_uid());
     ASSERT_EQ(seg_meta.segment_vector_index_uid(), _tablet_metadata->id());
+}
+
+// Column-mode partial update of the vector column (StarRocksTest#12464): the .cols writer is not
+// given a .vi path, so a segment big enough for an index tried to build one at "/_0_<id>.vi" and
+// the publish failed on every retry.
+TEST_F(LakePartialUpdateVectorIndexTest, test_column_mode_update_of_vector_column_publishes) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+    create_tablet(/*auto_increment=*/false, /*async_threshold=*/0);
+
+    auto version = write_full(1);
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
+    array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
+    slots.emplace_back(1, "c2", array_type);
+    std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
+    std::vector<int> v0(kChunkSize);
+    std::iota(v0.begin(), v0.end(), 0);
+    auto c0 = Int32Column::create();
+    c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk({std::move(c0), build_vector_column(kChunkSize, /*bias=*/0.5f)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    auto txn_id =
+            partial_update_txn(&slot_ptrs, chunk, /*miss_auto_increment=*/false, PartialUpdateMode::COLUMN_UPDATE_MODE);
+    auto res = publish_single_version(_tablet_metadata->id(), version + 1, txn_id);
+    ASSERT_OK(res.status());
+    check_vector_data(version + 1, /*bias=*/0.5f);
+}
+
+// The ANN side of StarRocksTest#12464: after a column-mode update moves the vector column into a .cols
+// file, the base segment's .vi still indexes the old vectors. Every row is moved far away, so a search
+// that still trusts the .vi reports near-zero distances for vectors that are now ~1000 apart per dim.
+TEST_F(LakePartialUpdateVectorIndexTest, test_ann_after_column_mode_update_of_vector_column) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+    create_tablet(/*auto_increment=*/false, /*async_threshold=*/0);
+
+    auto version = write_full(1);
+    ASSERT_TRUE(fs::path_exist(vi_location(rewritten_segment_meta(version).filename())));
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
+    array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
+    slots.emplace_back(1, "c2", array_type);
+    std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
+    std::vector<int> v0(kChunkSize);
+    std::iota(v0.begin(), v0.end(), 0);
+    auto c0 = Int32Column::create();
+    c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+    constexpr float kNewBias = 1000.5f;
+    Chunk chunk({std::move(c0), build_vector_column(kChunkSize, kNewBias)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    auto txn_id =
+            partial_update_txn(&slot_ptrs, chunk, /*miss_auto_increment=*/false, PartialUpdateMode::COLUMN_UPDATE_MODE);
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    version += 1;
+
+    // Key 0's old vector; build_vector_column puts key i at (i + bias + d / 10) in dim d.
+    const std::vector<float> query{0.1f, 0.2f, 0.3f};
+    constexpr int kTopK = 3;
+    auto distances = ann_distances(version, query, kTopK);
+    for (int key = 0; key < kTopK; ++key) {
+        ASSERT_TRUE(distances.count(key)) << "key " << key << " is among the nearest by the current vectors";
+    }
+    for (const auto& [key, distance] : distances) {
+        float expected = 0;
+        for (int d = 0; d < 3; ++d) {
+            const float diff = static_cast<float>(key) + kNewBias + static_cast<float>(d) / 10.0f - query[d];
+            expected += diff * diff;
+        }
+        EXPECT_NEAR(expected, distance, expected * 1e-4) << "key " << key;
+    }
+}
+
+// The column-upsert path of StarRocksTest#12464: a column-mode load whose keys are new writes those rows to a new
+// segment, again without a .vi path, so publish failed on "/_0_<id>.vi". The rows must then be searchable.
+TEST_F(LakePartialUpdateVectorIndexTest, test_column_mode_upsert_of_new_keys_publishes) {
+    ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 1);
+    create_tablet(/*auto_increment=*/false, /*async_threshold=*/0);
+
+    auto version = write_full(1);
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
+    array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
+    slots.emplace_back(1, "c2", array_type);
+    std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
+    // Keys kChunkSize.. are new; build_vector_column puts row i at (i + bias + d / 10), so shift by kChunkSize.
+    std::vector<int> v0(kChunkSize);
+    std::iota(v0.begin(), v0.end(), kChunkSize);
+    auto c0 = Int32Column::create();
+    c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+    constexpr float kOldBias = 0.1f;
+    constexpr float kNewBias = kChunkSize + 0.5f;
+    Chunk chunk({std::move(c0), build_vector_column(kChunkSize, kNewBias)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    auto txn_id =
+            partial_update_txn(&slot_ptrs, chunk, /*miss_auto_increment=*/false, PartialUpdateMode::COLUMN_UPSERT_MODE);
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    version += 1;
+
+    // The first new key's own vector: it must be found, and every row scored against its current vector.
+    const std::vector<float> query{kChunkSize + 0.5f, kChunkSize + 0.6f, kChunkSize + 0.7f};
+    auto distances = ann_distances(version, query, /*k=*/3);
+    ASSERT_TRUE(distances.count(kChunkSize)) << "the new key nearest to the query is missing";
+    for (const auto& [key, distance] : distances) {
+        const float bias = key < kChunkSize ? kOldBias : kNewBias - kChunkSize;
+        float expected = 0;
+        for (int d = 0; d < 3; ++d) {
+            const float diff = static_cast<float>(key) + bias + static_cast<float>(d) / 10.0f - query[d];
+            expected += diff * diff;
+        }
+        EXPECT_NEAR(expected, distance, std::max(expected * 1e-4f, 1e-3f)) << "key " << key;
+    }
 }
 
 } // namespace starrocks::lake

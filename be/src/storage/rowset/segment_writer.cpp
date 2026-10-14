@@ -182,6 +182,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+        // The vector column may be one of the copied columns, and only its writer knew whether a .vi was
+        // built. Losing the flag sends readers after a .vi that does not exist.
+        if (footer->has_vector_index_storage_type()) {
+            _footer.set_vector_index_storage_type(footer->vector_index_storage_type());
+        }
         _verify_footer();
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
@@ -291,6 +296,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             auto it = _opts.vector_index_file_paths.find(index_id);
             if (it != _opts.vector_index_file_paths.end()) {
                 opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
+            } else if (_opts.segment_file_mark.rowset_path_prefix.empty()) {
+                // Same as the GIN case above: a writer given neither a .vi path nor a segment file mark (the
+                // column-mode .cols writer, the column-upsert new-row writer) would build "/_0_<id>.vi".
+                // Skip the index; the footer then says NONE and readers fall back to brute force.
+                opts.need_vector_index = false;
             } else {
                 opts.standalone_index_file_paths.emplace(
                         IndexType::VECTOR, IndexDescriptor::vector_index_file_path(

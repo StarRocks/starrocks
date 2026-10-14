@@ -1312,8 +1312,14 @@ Status SegmentIterator::_init_ann_reader() {
                 fmt::format("vector index is missing from the schema of segment {}", _segment->file_name()));
     }
 
-    if (_segment->skip_vector_index()) {
-        // Footer marks no .vi for this segment.
+    // A column-mode partial update moves the vector column into a .cols file, which this segment's .vi does
+    // not index: searching the .vi would rank rows by their old vectors.
+    const ColumnUID vector_col_uid = tablet_index_meta->col_unique_ids()[0];
+    const bool vector_column_in_dcg = std::any_of(_dcgs.begin(), _dcgs.end(), [&](const auto& dcg) {
+        return dcg->get_column_idx(vector_col_uid).first >= 0;
+    });
+    if (_segment->skip_vector_index() || vector_column_in_dcg) {
+        // Footer marks no .vi for this segment, or the .vi is stale.
         _vector_index_ctx->use_vector_index = false;
     } else {
 #ifdef WITH_TENANN
