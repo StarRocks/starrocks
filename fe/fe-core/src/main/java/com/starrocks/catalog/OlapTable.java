@@ -2879,10 +2879,19 @@ public class OlapTable extends Table {
     }
 
     public void setHasDelete() {
+<<<<<<< HEAD
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
         tableProperty.setHasDelete(true);
+=======
+        if (!hasDelete()) {
+            tableProperty.setHasDelete(true);
+            // Query copies retain the old flag but share physical partitions. Invalidate those
+            // plans before a DELETE visible version can be published on the shared partitions.
+            lastSchemaUpdateTime.set(System.nanoTime());
+        }
+>>>>>>> 9e4fdae ([BugFix] Restore hasDelete when applying visible DELETE transactions (#80592))
     }
 
     public void setDataCachePartitionDuration(PeriodDuration duration) {

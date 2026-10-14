@@ -64,6 +64,24 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+<<<<<<< HEAD
+=======
+        applyVisibleLog(txnState, commitInfo, db, null);
+    }
+
+    /**
+     * @param deferredPublishes when non-null, the mutations a reader could pair inconsistently - the visible
+     *                          version and the UNSHARE query-layout cutover - are not applied here but recorded
+     *                          per physical partition id, for {@link #applyVisibleLogBatch} to apply, in that
+     *                          order, once the whole batch has been applied.
+     */
+    private void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db,
+                                 @Nullable Map<Long, DeferredPublish> deferredPublishes) {
+        // Also runs on replay and batch publish, when the original DeleteJob callback may be absent.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+            table.setHasDelete();
+        }
+>>>>>>> 9e4fdae ([BugFix] Restore hasDelete when applying visible DELETE transactions (#80592))
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
