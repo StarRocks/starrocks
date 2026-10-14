@@ -305,6 +305,9 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
     // inherited sstables (already present in the pre-commit sstable_meta) keep their
     // recorded versions. The metadata version is left untouched.
     RETURN_IF_ERROR(index_entry->value().commit(&builder, generation_version));
+    // The flush turned memtable bytes into sstable index and filter bytes. Recharge the entry, as the publish path
+    // does after its commit.
+    update_index_cache_size(index_entry);
 
     // Success: dismiss the failure cleanup and release the cache entry.
     // write_guard is released when it goes out of scope at function return.
@@ -2262,6 +2265,8 @@ bool PrimaryKeyManager::try_remove_primary_index_cache(uint32_t tablet_id) {
 void PrimaryKeyManager::unload_primary_index(int64_t tablet_id) {
     auto index_entry = _index_cache.get_or_create(tablet_id);
     index_entry->value().unload();
+    // The entry stays in the cache, so stop charging it for the memory unload() just freed.
+    update_index_cache_size(index_entry);
     _index_cache.release(index_entry);
 }
 

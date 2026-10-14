@@ -2413,8 +2413,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
 }
 
 // A publish that finds the tablet's index in the cache counts a hit; one that has to build it counts a load. The
-// memory gauges follow the cache entry: they rise by exactly what the entry is charged, and fall back once the
-// entry leaves the cache.
+// memory gauges follow the cache entry: they rise by exactly what the entry is charged, follow it through a reshard
+// flush and an unload, and fall back once the entry leaves the cache.
 TEST_P(LakePrimaryKeyPublishTest, test_index_cache_metrics) {
     auto* metrics = StorageMetrics::instance();
     auto charged_gauges = [&]() {
@@ -2462,13 +2462,32 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_cache_metrics) {
     EXPECT_GT(charged, 0);
     EXPECT_EQ(charged_before + charged, charged_gauges());
 
+    // A reshard flush moves the memtable into sstables; the entry is recharged at what the index holds now.
+    // Preparing the already loaded index for the flush counts as a hit.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_OK(_primary_key_mgr->flush_pk_memtable(metadata, version).status());
+    EXPECT_EQ(hits_before + 2, metrics->lake_pk_index_cache_hit_total.value());
+    auto* entry = _primary_key_mgr->index_cache().get(tablet_id);
+    ASSERT_NE(nullptr, entry);
+    const int64_t flushed_usage = entry->value().memory_usage();
+    _primary_key_mgr->index_cache().release(entry);
+    EXPECT_EQ(flushed_usage, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before + flushed_usage, charged_gauges());
+
+    // Unloading keeps the entry but frees the index, so neither the entry nor the gauges charge for it.
+    _primary_key_mgr->unload_primary_index(tablet_id);
+    EXPECT_EQ(0, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before, charged_gauges());
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 2, metrics->lake_pk_index_load_total.value());
+
     // Evicting the entry takes its bytes back out, and the next publish has to load the index again.
     EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
     EXPECT_EQ(0, _primary_key_mgr->get_index_memory_size(tablet_id));
     EXPECT_EQ(charged_before, charged_gauges());
     ASSERT_NO_FATAL_FAILURE(write_and_publish());
-    EXPECT_EQ(loads_before + 2, metrics->lake_pk_index_load_total.value());
-    EXPECT_EQ(hits_before + 1, metrics->lake_pk_index_cache_hit_total.value());
+    EXPECT_EQ(loads_before + 3, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before + 2, metrics->lake_pk_index_cache_hit_total.value());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
