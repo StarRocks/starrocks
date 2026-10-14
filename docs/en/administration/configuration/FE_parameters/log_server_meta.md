@@ -1206,7 +1206,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: No
-- Description: The length of time after which idle client connections time out.
+- Description: The length of time after which idle client connections time out. The FE Thrift server closes a client connection once it has been idle for this long. An FE therefore replaces its own pooled connections to other FEs once they have been idle for 80% of this value, instead of sending a request on a connection that the other FE may already have closed. Set the same value on all FEs.
 - Introduced in: -
 
 ### `thrift_rpc_max_body_size`

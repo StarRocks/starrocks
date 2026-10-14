@@ -68,8 +68,9 @@ public class ThriftRPCRequestExecutor {
                     isConnValid = true;
                     return t;
                 } catch (TTransportException te) {
-                    // The connection pool may return a broken conn,
-                    // because there is no validation of the connection in the connection pool.
+                    // The connection pool may still return a broken conn: it only replaces connections
+                    // idle past what the peer allows (see ThriftConnectionPool.frontendPool), not ones
+                    // the peer dropped for another reason, such as a restart.
                     // In this case we should reopen the connection and retry the rpc call,
                     // but we do not retry for the timeout exception, because it may be a network timeout
                     // or the target server may be running slow.
