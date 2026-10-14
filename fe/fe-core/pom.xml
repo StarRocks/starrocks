@@ -279,9 +279,9 @@ under the License.
             <artifactId>commons-io</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+        <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
         <dependency>
-            <groupId>com.baidu</groupId>
+            <groupId>com.starrocks</groupId>
             <artifactId>jprotobuf-rpc-core</artifactId>
         </dependency>
 

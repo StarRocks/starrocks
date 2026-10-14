@@ -81,10 +81,6 @@ dependencies {
         exclude(group = "junit", module = "junit")
     }
     implementation("com.baidu:jprotobuf-rpc-common")
-    implementation("com.baidu:jprotobuf-rpc-core") {
-        exclude(group = "com.baidu", module = "jprotobuf")
-        exclude(group = "junit", module = "junit")
-    }
     implementation("com.clickhouse:clickhouse-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     implementation("com.fasterxml.jackson.core:jackson-core")
@@ -113,6 +109,9 @@ dependencies {
     implementation("com.qcloud:chdfs_hadoop_plugin_network")
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okio:okio")
+    implementation("com.starrocks:jprotobuf-rpc-core") {
+        exclude(group = "junit", module = "junit")
+    }
     implementation("com.starrocks:spark-dpp")
     implementation("com.starrocks:starclient")
     implementation("com.starrocks:starmanager")
