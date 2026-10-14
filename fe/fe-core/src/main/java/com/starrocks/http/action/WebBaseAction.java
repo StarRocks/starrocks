@@ -289,8 +289,8 @@ public class WebBaseAction extends BaseAction {
 
     protected void getPageHeader(BaseRequest request, StringBuilder sb) {
         String newPageHeaderString = PAGE_HEADER;
-        newPageHeaderString = newPageHeaderString.replaceAll("<title>StarRocks</title>",
-                "<title>" + Config.cluster_name + "</title>");
+        newPageHeaderString = newPageHeaderString.replace("<title>StarRocks</title>",
+                "<title>" + Encode.forHtml(Config.cluster_name) + "</title>");
 
         sb.append(newPageHeaderString);
         sb.append(NAVIGATION_BAR_PREFIX);

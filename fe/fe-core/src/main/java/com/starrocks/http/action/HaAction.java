@@ -46,6 +46,7 @@ import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.owasp.encoder.Encode;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -111,7 +112,7 @@ public class HaAction extends WebBaseAction {
         buffer.append("<h2>Electable nodes</h2>");
         buffer.append("<pre>");
         for (InetSocketAddress node : electableNodes) {
-            buffer.append("<p>" + node.getAddress() + "</p>");
+            buffer.append("<p>" + Encode.forHtml(String.valueOf(node.getAddress())) + "</p>");
 
         }
         buffer.append("</pre>");
@@ -123,7 +124,7 @@ public class HaAction extends WebBaseAction {
         buffer.append("<h2>Observer nodes</h2>");
         buffer.append("<pre>");
         for (InetSocketAddress node : observerNodes) {
-            buffer.append("<p>" + node.getHostString() + "</p>");
+            buffer.append("<p>" + Encode.forHtml(node.getHostString()) + "</p>");
         }
         buffer.append("</pre>");
     }
@@ -176,7 +177,7 @@ public class HaAction extends WebBaseAction {
         buffer.append("<h2>Allowed Frontends</h2>");
         buffer.append("<pre>");
         for (Frontend fe : fes) {
-            buffer.append("<p>" + fe.toString() + "</p>");
+            buffer.append("<p>" + Encode.forHtml(fe.toString()) + "</p>");
         }
         buffer.append("</pre>");
     }
@@ -186,7 +187,7 @@ public class HaAction extends WebBaseAction {
         buffer.append("<h2>Removed Frontends</h2>");
         buffer.append("<pre>");
         for (String feName : feNames) {
-            buffer.append("<p>" + feName + "</p>");
+            buffer.append("<p>" + Encode.forHtml(feName) + "</p>");
         }
         buffer.append("</pre>");
     }
