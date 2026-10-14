@@ -591,7 +591,7 @@ public class MaterializedViewTest extends StarRocksTestBase {
             public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
                                                                 boolean enableAutoTabletDistribution) {
                 // MV specialization uses this 3-arg form on base tables.
-                return olapTable.getId() == base.getId() ? 42 : 1;
+                return 42;
             }
 
             @Mock
