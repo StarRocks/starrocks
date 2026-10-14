@@ -7,19 +7,19 @@ use db_${uuid0};
 -- !result
 create table agg_unix1(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts) distributed by hash(ts) properties('replication_num'='1');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The partition expr should not depend on the session time zone, but got from_unixtime(ts). Use from_unixtime with an explicit time zone argument.')
+E: (1064, 'The partition expr should not depend on the session time zone, but got from_unixtime(ts). Use from_unixtime with an explicit time zone argument.')
 -- !result
 create table agg_unix2(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts, '%Y%m%d') distributed by hash(ts) properties('replication_num'='1');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: The partition expr should not depend on the session time zone, but got from_unixtime(ts, '%Y%m%d'). Use from_unixtime with an explicit time zone argument.")
+E: (1064, "The partition expr should not depend on the session time zone, but got from_unixtime(ts, '%Y%m%d'). Use from_unixtime with an explicit time zone argument.")
 -- !result
 create table unique_unix2(ts bigint not null, pv bigint) unique key(ts) partition by from_unixtime(ts, '%Y%m%d') distributed by hash(ts) properties('replication_num'='1');
 -- result:
-E: (1064, "Getting analyzing error. Detail message: The partition expr should not depend on the session time zone, but got from_unixtime(ts, '%Y%m%d'). Use from_unixtime with an explicit time zone argument.")
+E: (1064, "The partition expr should not depend on the session time zone, but got from_unixtime(ts, '%Y%m%d'). Use from_unixtime with an explicit time zone argument.")
 -- !result
 create table agg_unix_ms(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime_ms(ts) distributed by hash(ts) properties('replication_num'='1');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The partition expr should not depend on the session time zone, but got from_unixtime_ms(ts). Use from_unixtime with an explicit time zone argument.')
+E: (1064, 'The partition expr should not depend on the session time zone, but got from_unixtime_ms(ts). Use from_unixtime with an explicit time zone argument.')
 -- !result
 create table agg_fixed(ts bigint not null, pv bigint sum) aggregate key(ts) partition by from_unixtime(ts, '%Y%m%d', 'UTC') distributed by hash(ts) properties('replication_num'='1');
 -- result:
