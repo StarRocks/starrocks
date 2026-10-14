@@ -571,23 +571,52 @@ TEST(AIExecutorTest, AllFragmentSnapshotFieldsHaveTypedMutationPaths) {
     ASSERT_TRUE(executor->update_request_timeout_ms(1).ok());
     ASSERT_TRUE(executor->update_connect_timeout_ms(2).ok());
     ASSERT_TRUE(executor->update_max_response_bytes(3).ok());
+    ASSERT_TRUE(executor->update_max_input_file_bytes(10).ok());
     ASSERT_TRUE(executor->update_sub_chunk_size(4).ok());
     ASSERT_TRUE(executor->update_max_retries(5).ok());
     ASSERT_TRUE(executor->update_max_retries_on_throttle(6).ok());
     ASSERT_TRUE(executor->update_on_error("fail").ok());
     ASSERT_TRUE(executor->update_rate_limit_qps_chat(7).ok());
+    ASSERT_TRUE(executor->update_rate_limit_qps_embedding(9).ok());
     ASSERT_TRUE(executor->update_max_inflight(8).ok());
 
     AIRuntimeConfig snapshot = executor->config_snapshot();
     EXPECT_EQ(1, snapshot.request_timeout_ms);
     EXPECT_EQ(2, snapshot.connect_timeout_ms);
     EXPECT_EQ(3, snapshot.max_response_bytes);
+    EXPECT_EQ(10, snapshot.max_input_file_bytes);
     EXPECT_EQ(4, snapshot.sub_chunk_size);
     EXPECT_EQ(5, snapshot.max_retries);
     EXPECT_EQ(6, snapshot.max_retries_on_throttle);
     EXPECT_EQ("fail", snapshot.on_error);
     EXPECT_EQ(7, snapshot.rate_limit_qps_chat);
+    EXPECT_EQ(9, snapshot.rate_limit_qps_embedding);
     EXPECT_EQ(8, snapshot.max_inflight);
+}
+
+TEST(AIExecutorTest, EmbeddingLimitRejectsInvalidUpdatesAndShutdown) {
+    auto executor = create_executor();
+    ASSERT_NE(nullptr, executor);
+    ASSERT_TRUE(executor->update_rate_limit_qps_embedding(17).ok());
+    for (int invalid : {0, -1}) {
+        EXPECT_TRUE(executor->update_rate_limit_qps_embedding(invalid).is_invalid_argument());
+        EXPECT_EQ(17, executor->config_snapshot().rate_limit_qps_embedding);
+    }
+    executor->shutdown();
+    EXPECT_TRUE(executor->update_rate_limit_qps_embedding(8).is_shutdown());
+}
+
+TEST(AIExecutorTest, InputFileLimitRejectsInvalidUpdatesAndShutdown) {
+    auto executor = create_executor();
+    ASSERT_NE(nullptr, executor);
+    ASSERT_TRUE(executor->update_max_input_file_bytes(17).ok());
+    for (int64_t invalid : {0, -1}) {
+        EXPECT_TRUE(executor->update_max_input_file_bytes(invalid).is_invalid_argument());
+        EXPECT_EQ(17, executor->config_snapshot().max_input_file_bytes);
+    }
+    executor->shutdown();
+    EXPECT_TRUE(executor->update_max_input_file_bytes(8).is_shutdown());
+    EXPECT_EQ(17, executor->config_snapshot().max_input_file_bytes);
 }
 
 } // namespace

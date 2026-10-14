@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <ostream>
@@ -38,6 +39,7 @@ struct ParallelPublishSlot;
 namespace lake {
 
 class MetaFileBuilder;
+class ParallelTaskRunner;
 class SegmentPKIterator;
 struct SegmentPKChunkRef;
 
@@ -53,7 +55,7 @@ class PersistentIndexSstableFileset;
 
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
-// UpdateManager's index cache holds one of these per tablet, by value.
+// PrimaryKeyManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
@@ -74,7 +76,7 @@ class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // PrimaryKeyManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
     //
     // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
@@ -384,6 +386,16 @@ private:
     // contiguous range never materializes one giant KeyIndexSet. Shared by erase() and bulk_erase().
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
+
+    using DelFilter = std::vector<std::atomic<uint64_t>>;
+    static constexpr size_t kDelFilterBitsPerWord = 64;
+
+    // Submit disjoint filter lookups without waiting. Keep one packed bitmap per file; atomic
+    // words allow batches to share boundary words without allocating a bitmap per tiny batch.
+    // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
+    // and filter_words until runner joins, after all producers sharing its pool have finished.
+    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                        DelFilter* filter_words);
 
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);

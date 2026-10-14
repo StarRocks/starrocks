@@ -290,6 +290,8 @@ std::string Status::code_as_string() const {
         return "Table not exist";
     case TStatusCode::QUERY_NOT_EXIST:
         return "Query not exist";
+    case TStatusCode::LAKE_META_VERSION_NOT_FOUND:
+        return "Lake metadata version not found";
     }
     return {};
 }

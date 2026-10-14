@@ -95,6 +95,10 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
         }
+        // Persisted source type survives a timed-out client or loss of the DeleteJob callback.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+            table.setHasDelete();
+        }
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 

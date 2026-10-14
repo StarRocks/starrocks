@@ -872,6 +872,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
     }
 
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * temp and source partition lists and the optimize clause. getInfo reads none of them, and a done job never runs
+     * again (the leader handoff reset skips it too), so nothing reads the clause either. The lists are replaced, not
+     * cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tmpPartitionIds = Lists.newArrayList();
+        sourcePartitionNames = Lists.newArrayList();
+        tmpPartitionNames = Lists.newArrayList();
+        optimizeClause = null;
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         List<Comparable> info = Lists.newArrayList();

@@ -1,0 +1,166 @@
+-- name: test_broker_load_pre_split @cloud @sequential
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_tablet_pre_split/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_vk/",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x + 1000000000 as v, x as k from table(generate_series(1, 100000)) as g(x);
+-- result:
+-- !result
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_kv/",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x as k, x + 1000000000 as v from table(generate_series(1, 100000)) as g(x);
+-- result:
+-- !result
+insert into files (
+    "path" = "oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/parquet_vk/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}")
+select x + 1000000000 as v, x as k from table(generate_series(1, 100000)) as g(x);
+-- result:
+-- !result
+set enable_range_distribution = true;
+-- result:
+-- !result
+create table t_csv_schema (v bigint, k int) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+create table t_csv_columns (v bigint, k int) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+create table t_parquet (k int, v bigint) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+set enable_range_distribution = false;
+-- result:
+-- !result
+SELECT TABLE_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' ORDER BY TABLE_NAME;
+-- result:
+t_csv_columns	1
+t_csv_schema	1
+t_parquet	1
+-- !result
+LOAD LABEL label_csv_schema_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_vk/*")
+    INTO TABLE t_csv_schema
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "csv"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+function: wait_load_finish("label_csv_schema_${uuid0}")
+-- result:
+None
+-- !result
+select state, error_msg from information_schema.loads where label = "label_csv_schema_${uuid0}";
+-- result:
+FINISHED	None
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_csv_schema bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+-- result:
+0
+widened=1 empty_tablets=0
+-- !result
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_csv_schema;
+-- result:
+100000	100000	1	100000	5000050000	1000000001	1000100000
+-- !result
+LOAD LABEL label_csv_columns_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/csv_kv/*")
+    INTO TABLE t_csv_columns
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "csv"
+    (k, v)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+function: wait_load_finish("label_csv_columns_${uuid0}")
+-- result:
+None
+-- !result
+select state, error_msg from information_schema.loads where label = "label_csv_columns_${uuid0}";
+-- result:
+FINISHED	None
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_csv_columns bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+-- result:
+0
+widened=1 empty_tablets=0
+-- !result
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_csv_columns;
+-- result:
+100000	100000	1	100000	5000050000	1000000001	1000100000
+-- !result
+LOAD LABEL label_parquet_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_tablet_pre_split/${uuid0}/parquet_vk/*")
+    INTO TABLE t_parquet
+    FORMAT AS "parquet"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+function: wait_load_finish("label_parquet_${uuid0}")
+-- result:
+None
+-- !result
+select state, error_msg from information_schema.loads where label = "label_parquet_${uuid0}";
+-- result:
+FINISHED	None
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} table=t_parquet bash ${root_path}/sql/test_tablet_pre_split/T/check_pre_split_tablets.sh
+-- result:
+0
+widened=1 empty_tablets=0
+-- !result
+select count(*), count(distinct k), min(k), max(k), sum(k), min(v), max(v) from t_parquet;
+-- result:
+100000	100000	1	100000	5000050000	1000000001	1000100000
+-- !result
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_tablet_pre_split/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

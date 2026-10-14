@@ -19,6 +19,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
+import com.starrocks.authorization.ranger.RangerAccessResourceBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableName;
 import com.starrocks.qe.ConnectContext;
@@ -29,15 +30,27 @@ import java.util.Locale;
 import java.util.Map;
 
 public class RangerHiveAccessController extends RangerAccessController {
-    public RangerHiveAccessController(String serviceName) {
+    // Value of RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED on this catalog; null = follow the FE config.
+    private final Boolean catalogPrefixEnabled;
+
+    public RangerHiveAccessController(String serviceName, Boolean catalogPrefixEnabled) {
         super("hive", serviceName);
+        this.catalogPrefixEnabled = catalogPrefixEnabled;
+    }
+
+    /**
+     * Every check goes through here, so the catalog prefix applies to all of them or none.
+     * The controller is registered per catalog, so {@code catalogName} is always this catalog.
+     */
+    private RangerAccessResourceBuilder resourceOf(String catalogName, String db) {
+        return RangerHiveResource.builder()
+                .setDatabase(RangerHiveCatalogProperties.resolveDatabase(catalogPrefixEnabled, catalogName, db));
     }
 
     @Override
     public void checkDbAction(ConnectContext context, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
-        hasPermission(RangerHiveResource.builder()
-                        .setDatabase(db)
+        hasPermission(resourceOf(catalogName, db)
                         .build(),
                 context.getCurrentUserIdentity(),
                 context.getGroups(),
@@ -47,8 +60,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnDb(ConnectContext context, String catalogName, String db)
             throws AccessDeniedException {
-        hasPermission(RangerHiveResource.builder()
-                        .setDatabase(db)
+        hasPermission(resourceOf(catalogName, db)
                         .build(),
                 context.getCurrentUserIdentity(),
                 context.getGroups(),
@@ -58,8 +70,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     @Override
     public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        hasPermission(RangerHiveResource.builder()
-                        .setDatabase(tableName.getDb())
+        hasPermission(resourceOf(tableName.getCatalog(), tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
                 context.getCurrentUserIdentity(),
@@ -70,8 +81,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnTable(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        hasPermission(RangerHiveResource.builder()
-                        .setDatabase(tableName.getDb())
+        hasPermission(resourceOf(tableName.getCatalog(), tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
                 context.getCurrentUserIdentity(),
@@ -82,8 +92,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     @Override
     public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
-        hasPermission(RangerHiveResource.builder()
-                        .setDatabase(tableName.getDb())
+        hasPermission(resourceOf(tableName.getCatalog(), tableName.getDb())
                         .setTable(tableName.getTbl())
                         .setColumn(column)
                         .build(),
@@ -96,8 +105,7 @@ public class RangerHiveAccessController extends RangerAccessController {
     public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
         Map<String, Expr> maskingExprMap = Maps.newHashMap();
         for (Column column : columns) {
-            Expr columnMaskingExpression = getColumnMaskingExpression(RangerHiveResource.builder()
-                    .setDatabase(tableName.getDb())
+            Expr columnMaskingExpression = getColumnMaskingExpression(resourceOf(tableName.getCatalog(), tableName.getDb())
                     .setTable(tableName.getTbl())
                     .setColumn(column.getName())
                     .build(), column, context);
@@ -119,8 +127,7 @@ public class RangerHiveAccessController extends RangerAccessController {
         if (RejectedRecordsRowAccessPolicy.matches(tableName)) {
             return RejectedRecordsRowAccessPolicy.buildPolicy(context, tableName);
         }
-        return getRowAccessExpression(RangerHiveResource.builder()
-                .setDatabase(tableName.getDb())
+        return getRowAccessExpression(resourceOf(tableName.getCatalog(), tableName.getDb())
                 .setTable(tableName.getTbl())
                 .build(), context);
     }

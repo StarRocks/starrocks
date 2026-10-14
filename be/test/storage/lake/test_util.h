@@ -42,10 +42,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/storage_env.h"
 
@@ -96,12 +96,12 @@ protected:
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit,
+              _primary_key_mgr(std::make_unique<PrimaryKeyManager>(_lp, _mem_tracker.get())),
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit,
                                                           PlatformEnv::GetInstance()->store_path_registry())) {
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
-            _update_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
+            _primary_key_mgr->set_parallel_compact_mgr(parallel_compact_mgr);
             parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_mgr.get());
         }
         PFailPointTriggerMode trigger_mode;
@@ -139,7 +139,7 @@ protected:
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _lp;
-    std::unique_ptr<UpdateManager> _update_mgr;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
 };
 

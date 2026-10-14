@@ -1232,4 +1232,225 @@ TEST_F(TransactionStreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     }
 }
 
+// The partial_update header used to be compared byte-exactly against "true", so "TRUE" (the
+// casing the docs list as valid) or any other casing of true silently turned a partial update
+// into a full upsert.
+TEST_F(TransactionStreamLoadActionTest, partial_update_header_case_insensitive) {
+    struct TestCase {
+        const char* label;
+        const char* header_value; // nullptr means the header is absent
+        bool expected_partial_update;
+    };
+    TestCase test_cases[] = {
+            {"partial_update_absent", nullptr, false},      {"partial_update_lower_true", "true", true},
+            {"partial_update_upper_true", "TRUE", true},    {"partial_update_mixed_true", "True", true},
+            {"partial_update_lower_false", "false", false}, {"partial_update_upper_false", "FALSE", false},
+    };
+
+    for (const auto& tc : test_cases) {
+        TransactionManagerAction txn_action(&_env, _transaction_mgr.get());
+        HttpRequest begin_req(_evhttp_req);
+        begin_req._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        begin_req._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        begin_req._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        begin_req._params.emplace(HTTP_TXN_OP_KEY, TXN_BEGIN);
+        txn_action.handle(&begin_req);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.label;
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        bool captured = false;
+        bool captured_partial_update = !tc.expected_partial_update;
+        SyncPoint::GetInstance()->SetCallBack("TransactionStreamLoadAction::_exec_plan_fragment::rpc_timeout",
+                                              [&](void* arg) {
+                                                  auto* request = static_cast<TStreamLoadPutRequest*>(arg);
+                                                  captured = true;
+                                                  captured_partial_update = request->partial_update;
+                                              });
+
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "16");
+        request._headers.emplace(HTTP_LABEL_KEY, tc.label);
+        if (tc.header_value != nullptr) {
+            request._headers.emplace(HTTP_PARTIAL_UPDATE, tc.header_value);
+        }
+        action.on_header(&request);
+        action.handle(&request);
+
+        EXPECT_TRUE(captured) << tc.label;
+        EXPECT_EQ(tc.expected_partial_update, captured_partial_update) << tc.label;
+    }
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_partial_update_rejected) {
+    const char* invalid_values[] = {"1", "yes", "on", "partial"};
+
+    for (const char* value : invalid_values) {
+        k_response_str = "";
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        ctx->ref();
+        ctx->db = "db";
+        ctx->table = "tbl";
+        ctx->label = "invalid_partial_update";
+        ctx->body_sink = std::make_shared<StreamLoadPipe>();
+        bool remove_from_stream_context_mgr = false;
+        DeferOp defer([&]() {
+            if (remove_from_stream_context_mgr) {
+                _env.stream_context_mgr()->remove(ctx->label);
+            }
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        });
+        ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+        remove_from_stream_context_mgr = true;
+
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+        request._headers.emplace(HTTP_DB_KEY, ctx->db);
+        request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+        request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        request._headers.emplace(HTTP_PARTIAL_UPDATE, value);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << value;
+        ASSERT_NE(nullptr,
+                  std::strstr(doc["Message"].GetString(), "Invalid partial update flag format. Must be bool type"))
+                << value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// channel_id is parsed before the transaction context is even looked up, so a
+// malformed value used to throw out of the libevent callback with nothing above
+// it to catch the exception.
+TEST_F(TransactionStreamLoadActionTest, on_header_channel_id_rejected) {
+    struct TestCase {
+        std::string value;
+        std::string expected_message;
+    };
+    TestCase test_cases[] = {
+            {"not-a-number", "The value must be an integer"},
+            {"1abc", "The value must be an integer"},
+            {"99999999999999999999", "must be between 0 and 2147483647"},
+            {"-1", "must be between 0 and 2147483647"},
+            {"2147483648", "must be between 0 and 2147483647"},
+    };
+
+    for (const auto& tc : test_cases) {
+        k_response_str = "";
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_DB_KEY, "db");
+        request._headers.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HTTP_LABEL_KEY, "channel_id_rejected");
+        request._headers.emplace(HTTP_CHANNEL_ID, tc.value);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString()) << tc.value;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
+                << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// A channel_id the parser accepts is used for the channel lookup, which fails
+// here only because no such transaction was ever opened.
+TEST_F(TransactionStreamLoadActionTest, on_header_channel_id_accepted) {
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_DB_KEY, "db");
+    request._headers.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HTTP_LABEL_KEY, "channel_id_accepted");
+    request._headers.emplace(HTTP_CHANNEL_ID, "3");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Transaction with label channel_id_accepted"))
+            << doc["Message"].GetString();
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
+    struct TestCase {
+        std::string header;
+        std::string value;
+        std::string expected_message;
+    };
+    TestCase test_cases[] = {
+            {HttpHeaders::CONTENT_LENGTH, "not-a-number", "The value must be an integer"},
+            {HttpHeaders::CONTENT_LENGTH, "99999999999999999999", "must be between 0 and"},
+            {HttpHeaders::CONTENT_LENGTH, "-1", "must be between 0 and"},
+            {HTTP_LOAD_DOP, "not-a-number", "The value must be an integer"},
+            // load_dop is an i32 on the wire; a wider value used to be truncated.
+            {HTTP_LOAD_DOP, "2147483648", "must be between -2147483648 and 2147483647"},
+    };
+
+    for (const auto& tc : test_cases) {
+        k_response_str = "";
+        TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+        auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+        ctx->ref();
+        ctx->db = "db";
+        ctx->table = "tbl";
+        ctx->label = "numeric_headers_rejected";
+        ctx->body_sink = std::make_shared<StreamLoadPipe>();
+        bool remove_from_stream_context_mgr = false;
+        DeferOp defer([&]() {
+            if (remove_from_stream_context_mgr) {
+                _env.stream_context_mgr()->remove(ctx->label);
+            }
+            if (ctx->unref()) {
+                delete ctx;
+            }
+        });
+        ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+        remove_from_stream_context_mgr = true;
+
+        HttpRequest request(_evhttp_req);
+        request.set_handler(&action);
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HTTP_DB_KEY, ctx->db);
+        request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+        request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+        if (tc.header != HttpHeaders::CONTENT_LENGTH) {
+            request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+            request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        }
+        request._headers.emplace(tc.header, tc.value);
+
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.header << ": " << tc.value;
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
+                << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
 } // namespace starrocks

@@ -90,6 +90,7 @@ import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.KuduScanNode;
+import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MergeJoinNode;
 import com.starrocks.planner.MetaScanNode;
@@ -197,6 +198,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalLanceScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
@@ -222,6 +224,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
@@ -783,7 +786,7 @@ public class PlanFragmentBuilder {
             if (aiProject) {
                 projectNode = new AIProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap,
-                        context.getOrCreateSystemChatConfig());
+                        context.bindAIModelConfigs(projectMap));
             } else {
                 projectNode = new ProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap);
@@ -1883,6 +1886,50 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalLanceScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalLanceScanOperator node = (PhysicalLanceScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            LanceScanNode lanceScanNode =
+                    new LanceScanNode(context.getNextNodeId(), tupleDescriptor, "LanceScanNode");
+            lanceScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            lanceScanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(lanceScanNode, true);
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    lanceScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                lanceScanNode.setupScanRangeLocations();
+                // Lance uses the complete scan predicate above; partition pruning is not supported yet.
+            } catch (Exception e) {
+                LOG.warn("Lance scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            lanceScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            registerScanNode(node, lanceScanNode, context);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), lanceScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalFlussScan(OptExpression optExpression, ExecPlan context) {
             PhysicalFlussScanOperator node = (PhysicalFlussScanOperator) optExpression.getOp();
 
@@ -2429,7 +2476,7 @@ public class PlanFragmentBuilder {
 
             final ComputeResource computeResource = context.getConnectContext().getCurrentComputeResource();
             EsScanNode scanNode = new EsScanNode(context.getNextNodeId(), tupleDescriptor, "EsScanNode",
-                    computeResource);
+                    computeResource, node.getMetaSnapshot());
             currentExecGroup.add(scanNode, true);
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -4302,8 +4349,16 @@ public class PlanFragmentBuilder {
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
 
+            // Several consume columns can map to one produced column, e.g. when the CTE outputs a column under
+            // two names and is force-reused. The project node would then put one column object into several
+            // slots, and the consume predicate below filters a chunk in place, once per slot. Clone every
+            // repeated reference so each slot owns its column.
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-            projectMap.putAll(consume.getCteOutputColumnRefMap());
+            Set<ColumnRefOperator> projected = Sets.newHashSet();
+            consume.getCteOutputColumnRefMap().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(Comparator.comparingInt(ColumnRefOperator::getId)))
+                    .forEach(e -> projectMap.put(e.getKey(),
+                            projected.add(e.getValue()) ? e.getValue() : new CloneOperator(e.getValue())));
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
             consumeFragment.setQueryGlobalDictExprs(getGlobalDictsExprs(consume.getGlobalDictsExpr(), context));

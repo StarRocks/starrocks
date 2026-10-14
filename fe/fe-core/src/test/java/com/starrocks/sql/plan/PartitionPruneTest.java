@@ -208,6 +208,52 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneIsNullOnLeadingColumnKeepsItsPartition() throws Exception {
+        // A NULL sorts below every value of its own column, so (NULL, 100) lives in the partition
+        // whose lower endpoint is the -infinity sentinel. Looking the key up as (MIN, 100) asks for
+        // a partition above it instead -- here there is none, so the scan came back empty.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_lead` (\n" +
+                "  `id1` tinyint NULL,\n" +
+                "  `id2` tinyint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id1`)\n" +
+                "PARTITION BY RANGE(`id1`, `id2`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('-128', '10'),\n" +
+                "  PARTITION p1 VALUES LESS THAN ('-128', '20'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 = 100")
+                .explainContains("partitions=1/2");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 > 50")
+                .explainContains("partitions=1/2");
+        // Without a predicate on the second column nothing narrows it, which is the case that
+        // already worked; it must keep working.
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null")
+                .explainContains("partitions=1/2");
+        starRocksAssert.dropTable("t_null_range_lead");
+    }
+
+    @Test
+    public void testPruneIsNullOnTrailingColumnKeepsItsPartition() throws Exception {
+        // Same defect one column in: (5, NULL) sits just below the boundary (5, MIN), so it belongs
+        // to the partition that ends there, not to whatever starts there.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_trail` (\n" +
+                "  `a` tinyint NOT NULL,\n" +
+                "  `b` tinyint NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`a`)\n" +
+                "PARTITION BY RANGE(`a`, `b`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('5', '-128'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_trail where a = 5 and b is null")
+                .explainContains("partitions=1/1");
+        starRocksAssert.dropTable("t_null_range_trail");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
@@ -449,6 +495,33 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsNotIn() throws Exception {
+        // date_trunc() maps many source values onto one partition value, so NOT IN on the source column
+        // says nothing about the partition value: '2024-01-02 13:00:00' is not in the list below, yet
+        // its partition value '2024-01-02' is the image of a listed value. Deducing c2 NOT IN (...)
+        // pruned p0102 and p0103 with matching rows still in them. A single-value NOT IN is rewritten
+        // to NOT EQUAL, which was never deduced, so it takes two values to reach the IN branch.
+        starRocksAssert.withTable("CREATE TABLE t_gen_not_in (" +
+                " c1 datetime NOT NULL," +
+                " c2 datetime NULL AS date_trunc('day', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2) " +
+                " PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0101 VALUES IN ('2024-01-01 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0102 VALUES IN ('2024-01-02 00:00:00')");
+        starRocksAssert.ddl("ALTER TABLE t_gen_not_in ADD PARTITION p0103 VALUES IN ('2024-01-03 00:00:00')");
+
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 not in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=3/3");
+        // IN still maps through the function and prunes
+        starRocksAssert.query("select * from t_gen_not_in " +
+                        "where c1 in ('2024-01-02 12:00:00', '2024-01-03 12:00:00')")
+                .explainContains("partitions=2/3");
+    }
+
+    @Test
     public void testGeneratedColumnPruneSkipsCaseWhen() throws Exception {
         // A guard, not a regression test: nothing here is known to be broken today.
         //
@@ -605,13 +678,14 @@ public class PartitionPruneTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 1\n" +
                 "PROPERTIES (\"replication_num\" = \"1\");");
 
-        // Documents a known gap rather than a fix. str2date() strips leading and trailing blanks and
-        // a blank sorts below every digit, so " 20210104" is a smaller string landing on the same day
-        // as "20210104" and this bound prunes the partition holding it. Widening the bound is not the
-        // fix: on a DATE partition column the last selected partition's range ends exactly on the
-        // widened bound, and OptOlapPartitionPruner.prunePartitionPredicates then reads the partitions
-        // as implying the predicate and drops it, turning the missing rows into extra ones. The bound
-        // stays strict until that interaction is handled.
+        // Documents a known gap rather than a fix. str2date() strips leading and trailing blanks and a
+        // blank sorts below every digit, so " 20210104" is a smaller string landing on the same day as
+        // "20210104" and this bound prunes the partition holding it. Closing it costs more than it
+        // buys: widening the bound loosens pruning for every str2date() partition, and the widened
+        // bound then has to be declared a plateau -- which withdraws predicate elimination from those
+        // tables as well, since the probe cannot tell a blank-padded value from an ordinary one. Both
+        // prices are paid by every table using str2date(), to guard against data that is padded with
+        // whitespace. The bound stays strict.
         starRocksAssert.query("select * from t_plateau_s2d where b < '20210104'")
                 .explainContains("partitions=3/9");
         starRocksAssert.query("select * from t_plateau_s2d where b = '20210104'")
@@ -783,6 +857,76 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsReversedExpression() throws Exception {
+        // A partition expression that runs *backwards* from its column (100 - c1, datediff(const, c1))
+        // still passes isMonotonicFunction(), because that check only asks whether the function
+        // preserves order -- not in which direction. Rewriting `c1 < 20` to `c2 < 80` then keeps the
+        // wrong side of the partition list and silently drops rows, so those expressions must not be
+        // rewritten at all.
+        starRocksAssert.withTable("CREATE TABLE t_reversed (c1 int NOT NULL, c2 bigint NULL AS (100 - c1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z0 VALUES IN ('90')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z1 VALUES IN ('80')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z2 VALUES IN ('70')");
+
+        starRocksAssert.withTable("CREATE TABLE t_days_until (c1 datetime NOT NULL,"
+                + " c2 int NULL AS (datediff('2021-01-10', c1)))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z0 VALUES IN ('9')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z1 VALUES IN ('7')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z2 VALUES IN ('5')");
+
+        // The column sits in the leading argument, so the expression still grows with it: prunable.
+        starRocksAssert.withTable("CREATE TABLE t_minus_const (c1 int NOT NULL, c2 bigint NULL AS (c1 - 7))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z0 VALUES IN ('3')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z1 VALUES IN ('13')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z2 VALUES IN ('23')");
+
+        starRocksAssert.withTable("CREATE TABLE t_increasing (c1 int NOT NULL, c2 bigint NULL AS (c1 + 1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z0 VALUES IN ('11')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z1 VALUES IN ('21')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z2 VALUES IN ('31')");
+
+        // c1 < 20 covers partitions 90 and 80; c1 > 20 covers 80 and 70. Deducing either way round
+        // from a reversed expression would be wrong, so no range predicate may prune here.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 < 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 > 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 <= 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_days_until where c1 < '2021-01-03 00:00:00'"),
+                "partitions=3/3");
+
+        // Equality is unaffected: 100 - 10 = 90 is exact whichever way the expression runs.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 = 10"), "partitions=1/3");
+
+        // No collateral damage: expressions that do grow with the column still prune.
+        assertContains(getFragmentPlan("select c1 from t_minus_const where c1 < 20"), "partitions=2/3");
+        assertContains(getFragmentPlan("select c1 from t_increasing where c1 < 20"), "partitions=2/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsArgumentSensitiveExpression() throws Exception {
+        // Running backwards is not the only way a monotonic function fails its callers. next_day()
+        // is registered monotonic and is monotonic in its date, but its day-of-week argument orders
+        // results arbitrarily: 'Friday' sorts before 'Monday' as a string while next_day() sends them
+        // the other way. A rewrite that keeps the comparison operator is unsound over that argument
+        // just as it is over a decreasing one.
+        starRocksAssert.withTable("CREATE TABLE t_next_day (dow varchar(10) NOT NULL,"
+                + " p date NULL AS (next_day('2024-01-01 00:00:00', dow)))"
+                + " DUPLICATE KEY(dow) PARTITION BY (p) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z0 VALUES IN ('2024-01-07')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z1 VALUES IN ('2024-01-08')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z2 VALUES IN ('2024-01-02')");
+        // 'Monday' < 'Sunday' holds as a string, but next_day('2024-01-01','Monday') is 2024-01-08,
+        // which sits ABOVE next_day('2024-01-01','Sunday') = 2024-01-07. Deducing p < '2024-01-07'
+        // would drop the partition holding the matching row.
+        assertContains(getFragmentPlan("select dow from t_next_day where dow < 'Sunday'"), "partitions=3/3");
+        assertContains(getFragmentPlan("select dow from t_next_day where dow = 'Sunday'"), "partitions=1/3");
+
+    }
+
+    @Test
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
@@ -916,14 +1060,14 @@ public class PartitionPruneTest extends PlanTestBase {
                 " partition p4 values in ('4', '5')" +
                 ")" +
                 "properties('replication_num'='1')");
+        // A partition's values say what its rows may hold, not what they do: p1 may hold only 10, so MIN cannot be
+        // read off the definitions. The value ranges interleave, so no partition can be skipped either.
         starRocksAssert.query("select min(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select max(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         10\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select min(c1), max(c1) from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1 | 10\n");
-        starRocksAssert.query("select min(c1)+1, max(c1)-1 from t1_list_multi_values")
-                .explainContains("     constant exprs: \n         1 | 10\n");
+                .explainContains("partitions=4/4");
         starRocksAssert.query("select min(c1-1)+1, max(c1-1)-1 from t1_list_multi_values")
                 .explainContains("OlapScanNode");
 
@@ -946,6 +1090,70 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.ddl("alter table t2_list add partition p1 values in (('1', '2'))");
         starRocksAssert.query("select min(c1)+1, max(c1)-1 from t2_list")
                 .explainContains("OlapScanNode");
+    }
+
+    @Test
+    public void testMinMaxPrune_ListValuesNotAllPresent() throws Exception {
+        UtFrameUtils.mockDML();
+        // Each partition holds several values and its rows only one of them, so MAX is 5, not p3's 6. The ranges do
+        // not interleave, so the extreme partition alone still decides it.
+        starRocksAssert.withTable("create table t_list_partial " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p1 values in ('1', '2'), " +
+                " partition p2 values in ('3', '4'), " +
+                " partition p3 values in ('5', '6')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_partial values(1, 1), (3, 3), (5, 5)");
+        starRocksAssert.query("select max(c1) from t_list_partial").explainContains("partitions=1/3");
+        starRocksAssert.query("select max(c1) from t_list_partial").explainWithout("constant exprs");
+        starRocksAssert.query("select min(c1) from t_list_partial").explainContains("partitions=1/3");
+        starRocksAssert.query("select min(c1) from t_list_partial").explainWithout("constant exprs");
+        starRocksAssert.query("select min(c1), max(c1) from t_list_partial")
+                .explainContains("partitions=2/3");
+
+        // p1 reaches the highest value but may hold only 1; p2 can still hold the maximum.
+        starRocksAssert.withTable("create table t_list_interleaved " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p1 values in ('1', '10'), " +
+                " partition p2 values in ('5', '6')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_interleaved values(1, 1), (5, 5)");
+        starRocksAssert.query("select max(c1) from t_list_interleaved").explainContains("partitions=2/2");
+
+        // A partition of NULL only never decides MIN or MAX; single-value partitions still fold to constants.
+        starRocksAssert.withTable("create table t_list_null_only " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition pn values in (NULL), " +
+                " partition p1 values in ('1'), " +
+                " partition p2 values in ('2')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_null_only values(NULL, 0), (1, 1), (2, 2)");
+        starRocksAssert.query("select min(c1), max(c1) from t_list_null_only")
+                .explainContains("     constant exprs: \n         1 | 2\n");
+
+        // p0 reaches 7 but may hold only NULL, so MAX cannot be 7 by definition and p1 must be read too.
+        starRocksAssert.withTable("create table t_list_null_mixed " +
+                "(c1 int, c2 int) " +
+                "partition by list(c1) (" +
+                " partition p0 values in (NULL, '7'), " +
+                " partition p1 values in ('1')" +
+                ")" +
+                "properties('replication_num'='1')");
+        starRocksAssert.getCtx().executeSql("insert into t_list_null_mixed values(NULL, 0), (1, 1)");
+        starRocksAssert.query("select max(c1) from t_list_null_mixed").explainContains("partitions=2/2");
+        starRocksAssert.query("select min(c1) from t_list_null_mixed")
+                .explainContains("     constant exprs: \n         1\n");
+
+        starRocksAssert.dropTable("t_list_partial");
+        starRocksAssert.dropTable("t_list_interleaved");
+        starRocksAssert.dropTable("t_list_null_only");
+        starRocksAssert.dropTable("t_list_null_mixed");
     }
 
     @Test

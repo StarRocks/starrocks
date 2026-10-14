@@ -28,7 +28,8 @@ struct TypeDescriptor;
 
 // Standalone physical column; not a VARBINARY SQL type or a TypeDescriptor attachment.
 // Semantic metadata is immutable; transport restores storage metadata after validation.
-// Column-to-column copies require identical descriptors;
+// A typed materialization placeholder binds its storage metadata on the first payload copy.
+// Populated columns and concrete physical descriptors require identical storage metadata;
 // SQL assignment/coercion belongs to FE, not to these physical copy operations.
 // NULL is represented by NullableColumn. Empty bytes are only a default/null placeholder,
 // not an OGC EMPTY geometry. Payload ingestion preserves bytes without eager parsing.
@@ -42,7 +43,7 @@ public:
     // Untyped physical placeholders, not an inferred CRS or a native SQL value.
     explicit GeoColumn(size_t size = 0);
     GeoColumn(const TypeDescriptor& type, size_t size);
-    explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
+    explicit GeoColumn(GeoColumnDescriptor descriptor);
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
@@ -53,6 +54,8 @@ public:
     void append_wkb(Slice wkb);
     // Batch ingestion from external buffers (must not alias this column).
     void append_wkb_batch(const Slice* values, size_t count);
+    // Copies source bytes; source and this column must not alias.
+    void append_wkb_column(const BinaryColumn& source);
     // Whole-column transport. WKB remains opaque; no parsed cache crosses the wire.
     int64_t serialized_column_size() const;
     StatusOr<uint8_t*> serialize_column(uint8_t* dst) const;
@@ -100,9 +103,6 @@ public:
     size_t reference_memory_usage(size_t from, size_t count) const override { return 0; }
     Status capacity_limit_reached() const override { return _data->capacity_limit_reached(); }
     void check_or_die() const override { _data->check_or_die(); }
-    bool has_large_column() const override { return _data->has_large_column(); }
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-    StatusOr<MutableColumnPtr> downgrade() override { return MutableColumnPtr{}; }
 
     // Dedicated GEO visitors only; never fall back to binary equality/order/hash.
     Status accept(ColumnVisitor* visitor) const override;
@@ -121,13 +121,13 @@ public:
                                                bool& has_null) override;
 
 private:
-    const GeoColumn& _source(const Column& src) const;
+    bool _is_storage_placeholder() const;
+    const GeoColumn& _source(const Column& src);
     struct CachedWkb {
         size_t row;
         GeoWkbInfo info;
     };
     GeoColumnDescriptor _descriptor;
-    GeoWkbLimits _limits;
     // Exclusive ownership: no mutable BinaryColumn escape hatch or shared backing buffers.
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
     // One fixed-size entry; no heap allocation, geometry objects or source-buffer references.

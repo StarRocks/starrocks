@@ -41,6 +41,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.http.WebUtils;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -153,14 +154,14 @@ public class StaticResourceAction extends WebBaseAction {
         String resourcePath = request.getSingleParameter("res");
         if (Strings.isNullOrEmpty(resourcePath)) {
             LOG.error("Wrong request without 'res' parameter. url: {}",
-                    request.getRequest().uri());
+                    WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
         resourcePath = sanitizePath(resourcePath);
         if (resourcePath == null) {
             LOG.error("Close this request because of risk factor in 'res' parameter.url: {}",
-                    request.getRequest().uri());
+                    WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
             writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
             return;
         }
@@ -170,12 +171,13 @@ public class StaticResourceAction extends WebBaseAction {
         LOG.debug("resAbsolutePath: {}", resourceAbsolutePath);
 
         if (!resFile.exists() || resFile.isHidden() || resFile.isDirectory()) {
-            LOG.error("Request with wrong path. url: {}", request.getRequest().uri());
+            LOG.error("Request with wrong path. url: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
             writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
             return;
         }
         if (!resFile.isFile()) {
-            LOG.error("Wrong request: not normal file. url: {}", request.getRequest().uri());
+            LOG.error("Wrong request: not normal file. url: {}",
+                    WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
             writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
             return;
         }

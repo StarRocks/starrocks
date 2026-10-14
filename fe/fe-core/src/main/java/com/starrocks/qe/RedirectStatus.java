@@ -248,6 +248,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1298,6 +1299,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitDropGroupProviderStatement(DropGroupProviderStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
+        public RedirectStatus visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
 

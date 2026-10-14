@@ -92,7 +92,7 @@ void starrocks_format_shutdown(void) {
         SAFE_DELETE(_lake_tablet_manager);
         starrocks::close_s3_clients();
         _aws_sdk_guard.reset();
-        // SAFE_DELETE(_lake_update_manager);
+        // SAFE_DELETE(_lake_primary_key_manager);
         LOG(INFO) << "starrocks format module has been deinitialized successfully";
     } else {
         LOG(INFO) << "starrocks format module has already been deinitialized";

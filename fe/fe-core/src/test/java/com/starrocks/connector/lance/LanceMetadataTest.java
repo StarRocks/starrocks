@@ -101,8 +101,11 @@ public class LanceMetadataTest {
         Assertions.assertTrue(discovered.isLanceTable());
         LanceTable lanceDiscovered = (LanceTable) discovered;
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
+        Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
+        Assertions.assertEquals("vectors_db", lanceDiscovered.getCatalogDBName());
+        Assertions.assertEquals("vectors_db", lanceDiscovered.toThrift(List.of()).getDbName());
+        Assertions.assertFalse(lanceDiscovered.isSupported());
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
-        Assertions.assertFalse(lanceDiscovered.isSupported()); // verified unsupported in planning
 
         Table events = metadata.getTable(null, "vectors_db", "events");
         Assertions.assertNotNull(events);
@@ -141,7 +144,7 @@ public class LanceMetadataTest {
                 new Column("id", INT),
                 new Column("embedding", LanceApiConverter.parseType("fixed_size_list<float32, 128>"))
         );
-        LanceTable table = new LanceTable(20001, "vectors_table", columns, "s3://bucket/vectors");
+        LanceTable table = new LanceTable(20001, "lance_catalog", "vectors_table", columns, "s3://bucket/vectors");
         metadata.addTable("db1", table);
 
         // Assert discovery API
@@ -155,6 +158,9 @@ public class LanceMetadataTest {
         LanceTable lanceDiscovered = (LanceTable) discovered;
         Assertions.assertEquals("s3://bucket/vectors", lanceDiscovered.getUri());
         Assertions.assertEquals(2, lanceDiscovered.getColumns().size());
+        // A catalog table: it names its own catalog, so it is no meta lock target.
+        Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
+        Assertions.assertFalse(lanceDiscovered.isMetaLockTarget());
         Column embeddingCol = lanceDiscovered.getColumn("embedding");
         Assertions.assertNotNull(embeddingCol);
         Assertions.assertTrue(embeddingCol.getType().isArrayType());

@@ -68,6 +68,9 @@ import static org.joda.time.DateTimeConstants.MILLIS_PER_MINUTE;
 import static org.joda.time.DateTimeConstants.MILLIS_PER_SECOND;
 
 public interface LakeService {
+    // Default for the annotations below, which can only carry a compile-time constant. The publish
+    // paths override it per call from Config.lake_publish_version_timeout_ms, see
+    // com.starrocks.lake.Utils#publishVersionBatch.
     long TIMEOUT_PUBLISH_VERSION = MILLIS_PER_MINUTE;
     long TIMEOUT_GET_TABLET_STATS = 15 * MILLIS_PER_MINUTE;
     long TIMEOUT_COMPACT = MILLIS_PER_DAY;

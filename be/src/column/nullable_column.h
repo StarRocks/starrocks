@@ -96,6 +96,7 @@ public:
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
     bool is_variant() const override { return _data_column->is_variant(); }
+    bool is_file() const override { return _data_column->is_file(); }
     bool is_array() const override { return _data_column->is_array(); }
     bool is_array_view() const override { return _data_column->is_array_view(); }
 
@@ -153,12 +154,6 @@ public:
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
     bool append_nulls(size_t count) override;
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data_column->has_large_column(); }
 
     bool append_strings(const Slice* data, size_t size) override;
 

@@ -43,14 +43,16 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
  */
 public class EsMajorVersion {
 
-    public static final EsMajorVersion V_0_X = new EsMajorVersion((byte) 0, "0.x");
-    public static final EsMajorVersion V_1_X = new EsMajorVersion((byte) 1, "1.x");
-    public static final EsMajorVersion V_2_X = new EsMajorVersion((byte) 2, "2.x");
-    public static final EsMajorVersion V_5_X = new EsMajorVersion((byte) 5, "5.x");
-    public static final EsMajorVersion V_6_X = new EsMajorVersion((byte) 6, "6.x");
-    public static final EsMajorVersion V_7_X = new EsMajorVersion((byte) 7, "7.x");
-    public static final EsMajorVersion V_8_X = new EsMajorVersion((byte) 8, "8.x");
-    public static final EsMajorVersion LATEST = V_7_X;
+    public static final EsMajorVersion V_0_X  = new EsMajorVersion((byte) 0,  "0.x");
+    public static final EsMajorVersion V_1_X  = new EsMajorVersion((byte) 1,  "1.x");
+    public static final EsMajorVersion V_2_X  = new EsMajorVersion((byte) 2,  "2.x");
+    public static final EsMajorVersion V_5_X  = new EsMajorVersion((byte) 5,  "5.x");
+    public static final EsMajorVersion V_6_X  = new EsMajorVersion((byte) 6,  "6.x");
+    public static final EsMajorVersion V_7_X  = new EsMajorVersion((byte) 7,  "7.x");
+    public static final EsMajorVersion V_8_X  = new EsMajorVersion((byte) 8,  "8.x");
+    public static final EsMajorVersion V_9_X  = new EsMajorVersion((byte) 9,  "9.x");
+    public static final EsMajorVersion V_10_X = new EsMajorVersion((byte) 10, "10.x");
+    public static final EsMajorVersion LATEST = V_9_X;
 
     public final byte major;
     private final String version;
@@ -103,9 +105,15 @@ public class EsMajorVersion {
         if (version.startsWith("7.")) {
             return new EsMajorVersion((byte) 7, version);
         }
-        // used for the next released ES version
         if (version.startsWith("8.")) {
             return new EsMajorVersion((byte) 8, version);
+        }
+        if (version.startsWith("9.")) {
+            return new EsMajorVersion((byte) 9, version);
+        }
+        // used for the next released ES version
+        if (version.startsWith("10.")) {
+            return new EsMajorVersion((byte) 10, version);
         }
         throw new StarRocksConnectorException("Unsupported/Unknown ES Cluster version [" + version + "]." +
                 "Highest supported version is [" + LATEST.version + "].");
