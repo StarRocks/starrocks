@@ -640,6 +640,21 @@ public class LakeRollupJobTest {
         }
     }
 
+    @Test
+    public void testFailedAddRollupRemovesTabletsOfBuiltClauses() throws Exception {
+        OlapTable baseTable = createBaseTable("base_table_add_rollup_fails");
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        long tabletCountBefore = invertedIndex.getTabletCount();
+
+        // r1 is built (its shadow tablets are registered in the inverted index) before r2 fails.
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE base_table_add_rollup_fails ADD ROLLUP r1(k2, k1), r2(k2, no_such_col)"));
+        Assertions.assertTrue(e.getMessage().contains("no_such_col"), e.getMessage());
+
+        Assertions.assertEquals(tabletCountBefore, invertedIndex.getTabletCount());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
+    }
+
     private static OlapTable createBaseTable(String tableName) throws Exception {
         starRocksAssert.withTable("CREATE TABLE " + tableName + "\n" +
                 "(\n" +
