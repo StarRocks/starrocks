@@ -178,10 +178,7 @@ public class CompactionSchedulerTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testStartCompactionSuppressesRollup() {
-        final boolean[] rangeDistributed = {true};
         final boolean[] partitionAccessed = {false};
         OlapTable table = new LakeTable();
         CompactionMgr compactionManager = new CompactionMgr();
@@ -209,10 +206,6 @@ public class CompactionSchedulerTest {
         };
         new MockUp<OlapTable>() {
             @Mock
-            public boolean isRangeDistribution() {
-                return rangeDistributed[0];
-            }
-            @Mock
             public PhysicalPartition getPhysicalPartition(long physicalPartitionId) {
                 partitionAccessed[0] = true;
                 return null;
@@ -221,18 +214,11 @@ public class CompactionSchedulerTest {
         CompactionWarehouseInfo info = new CompactionWarehouseInfo("aaa", WarehouseManager.DEFAULT_RESOURCE, 0, 0);
         table.setState(OlapTable.OlapTableState.ROLLUP);
 
-        // A range-distribution rollup takes the online-rewrite path, whose flip replays a contiguous shadow vlog
-        // sequence; compaction must be suppressed at the guard, before the partition lookup is ever reached.
-        partitionAccessed[0] = false;
+        // A lake rollup (LakeRollupJob, also used by sync MVs) publishes by replaying the rollup tablets' per-version
+        // vlogs, so a compaction version inside its range would wedge the publish (RB-320); compaction must be
+        // suppressed at the guard, before the partition lookup is ever reached.
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
-        Assertions.assertFalse(partitionAccessed[0], "range-distribution rollup compaction must be suppressed");
-
-        // A hash-distribution rollup (LakeRollupJob, also used by sync MVs) publishes by replaying the same per-version
-        // vlogs, so a compaction version inside its range would wedge the publish too (RB-320); it must be suppressed.
-        rangeDistributed[0] = false;
-        partitionAccessed[0] = false;
-        Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
-        Assertions.assertFalse(partitionAccessed[0], "hash-distribution rollup compaction must be suppressed");
+        Assertions.assertFalse(partitionAccessed[0], "rollup compaction must be suppressed");
 
         // Once the rollup is done the table returns to NORMAL, and execution proceeds past the guard to the
         // partition lookup.
@@ -379,7 +365,6 @@ public class CompactionSchedulerTest {
     }
 
     @Test
->>>>>>> f717ece ([BugFix] Skip lake compaction during every lake rollup job (#80655))
     public void testStartCompactionWithFileBundling() throws RpcException {
         LakeTable table = new LakeTable();
         table.setFileBundling(true);

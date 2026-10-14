@@ -359,25 +359,18 @@ public class CompactionScheduler extends Daemon {
             table = (OlapTable) stateMgr.getLocalMetastore()
                         .getTable(db.getId(), tableId);
 
-<<<<<<< HEAD
-            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
-            // will not be used after the schema change job finished.
-            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
-=======
             // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
             //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
-            //   - ROLLUP: both lake rollup paths (LakeRollupJob for hash tables and sync MVs, LakeRangeRollupJob
-            //     for range-distribution tables) publish the new index by replaying the rollup tablets' per-version
-            //     txn vlogs over [alter_version + 1, commit_version). A compaction only writes the visible (base)
-            //     index tablets, so a compaction version inside that range has no rollup vlog and the rollup
-            //     publish fails on every retry, wedging the job forever (RB-320).
+            //   - ROLLUP: a lake rollup job (LakeRollupJob, for ADD ROLLUP and sync MVs) publishes the new index by
+            //     replaying the rollup tablets' per-version txn vlogs over [alter_version + 1, commit_version). A
+            //     compaction only writes the visible (base) index tablets, so a compaction version inside that
+            //     range has no rollup vlog and the rollup publish fails on every retry, wedging the job forever
+            //     (RB-320).
             if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
                     || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
                 long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
                 compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
                 logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
->>>>>>> f717ece ([BugFix] Skip lake compaction during every lake rollup job (#80655))
                 return null;
             }
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
@@ -385,36 +378,6 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
             }
-<<<<<<< HEAD
-=======
-            // Only for the shape whose split drags a full UNSHARE rewrite: that rewrite has to be the
-            // one compaction on the partition, because runCleaningJob cancels and then waits on the
-            // resharded partitions' compactions and a stream of new ones keeps it from settling. Every
-            // other table -- including an ordinary range split -- keeps compacting through its reshard,
-            // as it did before this feature existed; pausing those was collateral, and on a wide table
-            // it meant every partition stopped compacting for the life of one tablet's split.
-            if (!unshare && table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
-                    && TabletReshardUtils.splitRewritesEveryShard(table)) {
-                compactionManager.enableCompactionAfter(partitionIdentifier,
-                        Config.lake_compaction_interval_ms_on_failure);
-                return null;
-            }
-            if (unshare && (table.getState() != OlapTable.OlapTableState.TABLET_RESHARD
-                    || !partition.isUnsharing() || !table.isFileBundling())) {
-                // Clear the marker before dropping the request. Priority is otherwise only reset for
-                // partitions that made it into runningCompactions, and this one never will -- while
-                // the retained priority would route every retry back here as UNSHARE, so the partition
-                // would be refused on each retry and its ordinary compaction would never resume.
-                // Reachable across a leader switch: a new leader can retrigger
-                // UNSHARE while the committed transaction is still becoming visible, and the cutover
-                // returns the table to NORMAL before this request is served.
-                compactionManager.resetPriority(partitionIdentifier);
-                compactionManager.enableCompactionAfter(partitionIdentifier,
-                        Config.lake_compaction_interval_ms_on_failure);
-                LOG.warn("Ignore stale UNSHARE compaction request for partition {}", partitionIdentifier);
-                return null;
-            }
->>>>>>> f717ece ([BugFix] Skip lake compaction during every lake rollup job (#80655))
 
             currentVersion = partition.getVisibleVersion();
 
@@ -475,8 +438,6 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-<<<<<<< HEAD
-=======
     // While an alter pauses compaction, the partition's compaction score keeps climbing under ingestion, and
     // loads get delayed or rejected with a hint to raise compaction concurrency, which cannot help. Log each
     // skip so an operator can tie the score to the running alter job. The partition id and score match
@@ -493,15 +454,6 @@ public class CompactionScheduler extends Daemon {
                 retryAfterMs);
     }
 
-    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
-        // An explicit manual request is an operator override. The forbidden
-        // ranges only limit automatic base compaction.
-        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
-                !CompactionControlScheduler.isBaseCompactionForbidden(
-                        table.getBaseCompactionForbiddenTimeRanges(), new Date());
-    }
-
->>>>>>> f717ece ([BugFix] Skip lake compaction during every lake rollup job (#80655))
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
             boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority, OlapTable table)
