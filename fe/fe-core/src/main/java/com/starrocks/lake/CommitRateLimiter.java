@@ -84,6 +84,22 @@ public class CommitRateLimiter {
     }
 
     /**
+     * Whether a commit into a partition with this compaction score is delayed or rejected right now, i.e. whether
+     * loads already feel the score. Mirrors the commit path: the limiter only runs when lake_enable_ingest_slowdown
+     * is on (LakeTableTxnStateListener.preCommit), a commit is delayed only above the slowdown threshold with a
+     * positive slowdown ratio, and rejected only above a positive upper bound.
+     */
+    public static boolean throttlesIngestion(double compactionScore) {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return false;
+        }
+        boolean delayed = compactionScore > slowdownThreshold() && slowdownRatio() > 0;
+        long upperBound = compactionScoreUpperBound();
+        boolean rejected = upperBound > 0 && compactionScore > upperBound;
+        return delayed || rejected;
+    }
+
+    /**
      * Checks the commit rate for the given partition IDs and throws a CommitRateExceededException if necessary.
      *
      * @param partitionIds the set of partition IDs to check. Must not be null.

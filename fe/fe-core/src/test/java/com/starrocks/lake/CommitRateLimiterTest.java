@@ -387,4 +387,43 @@ public class CommitRateLimiterTest {
         Assertions.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
     }
+
+    @Test
+    public void testThrottlesIngestion() {
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        long oldThreshold = Config.lake_ingest_slowdown_threshold;
+        double oldMinScore = Config.lake_compaction_score_selector_min_score;
+        double oldRatio = Config.lake_ingest_slowdown_ratio;
+        long oldUpperBound = Config.lake_compaction_score_upper_bound;
+        try {
+            Config.lake_enable_ingest_slowdown = true;
+            Config.lake_ingest_slowdown_threshold = 100;
+            Config.lake_compaction_score_selector_min_score = 10;
+            Config.lake_ingest_slowdown_ratio = 0.1;
+            Config.lake_compaction_score_upper_bound = 2000;
+            // Commits are delayed only above the slowdown threshold.
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(100));
+            Assertions.assertTrue(CommitRateLimiter.throttlesIngestion(101));
+
+            // Without a positive ratio nothing is delayed, but commits are still rejected above the upper bound.
+            Config.lake_ingest_slowdown_ratio = 0;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(101));
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(2000));
+            Assertions.assertTrue(CommitRateLimiter.throttlesIngestion(2001));
+            Config.lake_compaction_score_upper_bound = 0;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(5000));
+
+            // With ingestion slowdown disabled the limiter does not run at all.
+            Config.lake_ingest_slowdown_ratio = 0.1;
+            Config.lake_compaction_score_upper_bound = 2000;
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertFalse(CommitRateLimiter.throttlesIngestion(5000));
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+            Config.lake_ingest_slowdown_threshold = oldThreshold;
+            Config.lake_compaction_score_selector_min_score = oldMinScore;
+            Config.lake_ingest_slowdown_ratio = oldRatio;
+            Config.lake_compaction_score_upper_bound = oldUpperBound;
+        }
+    }
 }
