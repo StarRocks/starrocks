@@ -55,6 +55,8 @@ import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -625,14 +627,22 @@ public class PartitionDescAnalyzer {
     }
 
     private static void checkPartitionExprDeterminism(Expr expr) throws AnalysisException {
+        // Dictionary lookups bind the current table/cache version again when a load is planned.
+        // Even with key-only arguments, the same key can therefore acquire a different partition
+        // value after the dictionary changes. Check nested and identifier-based expressions too.
+        if (expr.contains(e -> e instanceof DictQueryExpr || e instanceof DictionaryGetExpr)) {
+            throw new AnalysisException("The partition expr should not depend on mutable dictionary state, but got "
+                    + ExprToSql.toSql(expr));
+        }
         Pair<Boolean, String> nonDeterministic = AnalyzerUtils.containsNonDeterministicFunction(expr);
         if (nonDeterministic.first) {
             throw new AnalysisException("The partition expr should be deterministic, but got "
                     + nonDeterministic.second);
         }
 
-        // These overloads are functions of the session/load time zone, not just the row. Keep this
-        // partition-specific: ordinary calls and from_unixtime's explicit-time-zone overload stay valid.
+        // These overloads are functions of the session/load time zone, not just the row. The second
+        // to_datetime argument is a timestamp scale, not a time zone. Keep this partition-specific:
+        // ordinary calls, to_datetime_ntz and from_unixtime's explicit-time-zone overload stay valid.
         List<FunctionCallExpr> functions = new ArrayList<>();
         expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, functions);
         for (FunctionCallExpr function : functions) {
@@ -640,10 +650,16 @@ public class PartitionDescAnalyzer {
             int argumentCount = function.getChildren().size();
             boolean sessionTimezoneDependent =
                     (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
-                            || (FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(name) && argumentCount == 1);
+                            || (FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(name) && argumentCount == 1)
+                            || (FunctionSet.TO_DATETIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
+                            || (FunctionSet.HOUR_FROM_UNIXTIME.equalsIgnoreCase(name) && argumentCount == 1);
             if (sessionTimezoneDependent) {
+                String hint = FunctionSet.TO_DATETIME.equalsIgnoreCase(name)
+                        || FunctionSet.HOUR_FROM_UNIXTIME.equalsIgnoreCase(name)
+                        ? ". Use to_datetime_ntz or from_unixtime with an explicit time zone argument"
+                        : ". Use from_unixtime with an explicit time zone argument";
                 throw new AnalysisException("The partition expr should not depend on the session time zone, but got "
-                        + ExprToSql.toSql(function) + ". Use from_unixtime with an explicit time zone argument");
+                        + ExprToSql.toSql(function) + hint);
             }
         }
     }

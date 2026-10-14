@@ -35,7 +35,12 @@ public class PartitionTimezoneAnalyzerTest {
             for (String expression : new String[] {
                     "from_unixtime(ts)",
                     "from_unixtime(ts, '%Y%m%d')",
-                    "from_unixtime_ms(ts)"
+                    "from_unixtime_ms(ts)",
+                    "to_datetime(ts)",
+                    "to_datetime(ts, 0)",
+                    "to_datetime(ts, 3)",
+                    "to_datetime(ts, 6)",
+                    "hour_from_unixtime(ts)"
             }) {
                 analyzeFail(createTableSql(keysType, "BIGINT", expression), TIMEZONE_ERROR);
             }
@@ -43,6 +48,9 @@ public class PartitionTimezoneAnalyzerTest {
         // The INT overloads are session-dependent too; an implicit cast must not bypass the check.
         analyzeFail(createTableSql(KeysType.DUP_KEYS, "INT", "from_unixtime(ts)"), TIMEZONE_ERROR);
         analyzeFail(createTableSql(KeysType.DUP_KEYS, "INT", "from_unixtime(ts, '%Y%m%d')"), TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.DUP_KEYS, "INT", "to_datetime(ts)"), TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.DUP_KEYS, "INT", "to_datetime(ts, 0)"), TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.DUP_KEYS, "INT", "hour_from_unixtime(ts)"), TIMEZONE_ERROR);
     }
 
     @Test
@@ -55,11 +63,47 @@ public class PartitionTimezoneAnalyzerTest {
     }
 
     @Test
+    public void testTimezoneIndependentDatetimeOverloadsRetainedForEveryKeysType() {
+        for (KeysType keysType : KeysType.values()) {
+            for (String expression : new String[] {
+                    "to_datetime_ntz(ts)",
+                    "to_datetime_ntz(ts, 0)",
+                    "to_datetime_ntz(ts, 3)",
+                    "to_datetime_ntz(ts, 6)"
+            }) {
+                analyzeSuccess(createTableSql(keysType, "BIGINT", expression));
+            }
+        }
+        analyzeSuccess(createTableSql(KeysType.DUP_KEYS, "INT", "to_datetime_ntz(ts)"));
+        analyzeSuccess(createTableSql(KeysType.AGG_KEYS, "BIGINT", "date_format(to_datetime_ntz(ts), '%Y%m%d')"));
+    }
+
+    @Test
+    public void testUnixTimestampRetainsExistingNondeterminismRejection() {
+        for (KeysType keysType : KeysType.values()) {
+            for (String expression : new String[] {
+                    "unix_timestamp(to_datetime_ntz(ts))",
+                    "unix_timestamp(CAST(to_datetime_ntz(ts) AS DATE))",
+                    "unix_timestamp(date_format(to_datetime_ntz(ts), '%Y%m%d'), '%Y%m%d')"
+            }) {
+                analyzeFail(createTableSql(keysType, "BIGINT", expression),
+                        "The partition expr should be deterministic");
+            }
+        }
+    }
+
+    @Test
     public void testNestedTimezoneDependentFunctionsRejected() {
         analyzeFail(createTableSql(KeysType.AGG_KEYS, "BIGINT", "substr(from_unixtime(ts), 1, 10)"), TIMEZONE_ERROR);
         analyzeFail(createTableSql(KeysType.UNIQUE_KEYS, "BIGINT", "substr(from_unixtime_ms(ts), 1, 10)"),
                 TIMEZONE_ERROR);
         analyzeFail(createTableSql(KeysType.DUP_KEYS, "BIGINT", "FrOm_UnIxTiMe(ts, '%Y%m%d')"), TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.AGG_KEYS, "BIGINT", "date_format(to_datetime(ts), '%Y%m%d')"),
+                TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.UNIQUE_KEYS, "BIGINT", "date_format(to_datetime(ts, 0), '%Y%m%d')"),
+                TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.DUP_KEYS, "BIGINT", "To_DaTeTiMe(ts)"), TIMEZONE_ERROR);
+        analyzeFail(createTableSql(KeysType.AGG_KEYS, "BIGINT", "abs(hour_from_unixtime(ts))"), TIMEZONE_ERROR);
         analyzeSuccess(createTableSql(KeysType.AGG_KEYS, "BIGINT", "substr(from_unixtime(ts, '%Y%m%d', 'UTC'), 1, 4)"));
     }
 
@@ -67,15 +111,23 @@ public class PartitionTimezoneAnalyzerTest {
     public void testGeneratedPartitionColumnUsesItsRealExpression() {
         analyzeFail(generatedPartitionTableSql("VARCHAR(32)", "from_unixtime(ts, '%Y%m%d')"), TIMEZONE_ERROR);
         analyzeFail(generatedPartitionTableSql("VARCHAR(32)", "substr(from_unixtime_ms(ts), 1, 10)"), TIMEZONE_ERROR);
+        analyzeFail(generatedPartitionTableSql("DATETIME", "to_datetime(ts)"), TIMEZONE_ERROR);
+        analyzeFail(generatedPartitionTableSql("DATETIME", "to_datetime(ts, 0)"), TIMEZONE_ERROR);
+        analyzeFail(generatedPartitionTableSql("INT", "hour_from_unixtime(ts)"), TIMEZONE_ERROR);
         analyzeFail(generatedPartitionTableSql("BIGINT", "ts + CAST(rand() * 2 AS BIGINT)"),
                 "The partition expr should be deterministic");
         analyzeSuccess(generatedPartitionTableSql("VARCHAR(32)", "from_unixtime(ts, '%Y%m%d', 'UTC')"));
+        analyzeSuccess(generatedPartitionTableSql("DATETIME", "to_datetime_ntz(ts)"));
+        analyzeSuccess(generatedPartitionTableSql("DATETIME", "to_datetime_ntz(ts, 0)"));
     }
 
     @Test
     public void testOrdinaryCallsStillAllowed() {
         analyzeSuccess("SELECT from_unixtime(v1), from_unixtime(v1, '%Y%m%d'), "
-                + "from_unixtime(v1, '%Y%m%d', 'UTC'), from_unixtime_ms(v1) FROM t0");
+                + "from_unixtime(v1, '%Y%m%d', 'UTC'), from_unixtime_ms(v1), "
+                + "to_datetime(v1), to_datetime(v1, 0), to_datetime(v1, 3), to_datetime(v1, 6), "
+                + "to_datetime_ntz(v1), to_datetime_ntz(v1, 0), hour_from_unixtime(v1), "
+                + "unix_timestamp(to_datetime_ntz(v1)) FROM t0");
     }
 
     private static String createTableSql(KeysType keysType, String timestampType, String expression) {

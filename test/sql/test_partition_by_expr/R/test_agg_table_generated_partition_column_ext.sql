@@ -61,6 +61,10 @@ select event_day, city, pv, uv from agg_compact order by event_day, city;
 alter table agg_compact compact;
 -- result:
 -- !result
+function: wait_compaction_finish("agg_compact", 2)
+-- result:
+None
+-- !result
 select event_day, city, pv, uv from agg_compact order by event_day, city;
 -- result:
 2026-07-13 01:00:00	sh	5	50

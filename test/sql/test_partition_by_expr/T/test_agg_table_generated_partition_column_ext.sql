@@ -32,8 +32,10 @@ insert into agg_compact values ('2026-07-13 01:00:00', 'sh', 1, 30), ('2026-07-2
 insert into agg_compact values ('2026-07-13 01:00:00', 'sh', 1, 40), ('2026-07-20 01:00:00', 'bj', 1, 40);
 insert into agg_compact values ('2026-07-13 01:00:00', 'sh', 1, 50), ('2026-07-20 01:00:00', 'bj', 1, 50);
 select event_day, city, pv, uv from agg_compact order by event_day, city;
--- merging five rowsets must not change the answer
+-- Five separate loads provide multiple input rowsets. Wait for the two nonempty partition/bucket
+-- combinations to converge to one segment each before checking the post-compaction answer.
 alter table agg_compact compact;
+function: wait_compaction_finish("agg_compact", 2)
 select event_day, city, pv, uv from agg_compact order by event_day, city;
 select count(*), sum(pv), max(uv) from agg_compact;
 
