@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Version Release Guide
 
-Version naming is detailed in the [versioning](../introduction/versioning.md) documentation. Read that page first to understand **major**, **minor**, and **patch** versioning.
+Version naming is detailed in the [versioning](../maturity/release_numbering.md) documentation. Read that page first to understand **major**, **minor**, and **patch** versioning.
 
 ## Release Plan
 - Release a minor version approximately every four months.

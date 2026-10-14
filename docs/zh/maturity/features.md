@@ -1,5 +1,5 @@
 ---
-sidebar_position: 60
+sidebar_position: 10
 description: "Explains StarRocks feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
 ---
 
