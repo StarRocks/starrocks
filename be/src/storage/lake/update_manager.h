@@ -62,8 +62,13 @@ private:
 class RssidFileInfoContainer {
 public:
     void add_rssid_to_file(const TabletMetadata& metadata);
-    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
-                           const std::map<int, SegmentFileInfo>& replace_segments);
+    // Register the segment at position `segment_pos` of `meta`, a rowset whose id is `rowset_id`,
+    // taking its file from `replace_segments` (keyed by segment position) when it was rewritten.
+    // `segment_idx_base` is where the rowset's segment indexes start inside the rowset `rowset_id`
+    // names: non-zero for an op_write batch-applied after other op_writes of the same transaction,
+    // whose segments MetaFileBuilder appends at assigned_segment_idx() of the merged rowset.
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_pos,
+                           const std::map<int, SegmentFileInfo>& replace_segments, uint32_t segment_idx_base = 0);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
     const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
