@@ -188,6 +188,7 @@
         "agg_hash_map_prefetch_dist",
         "agg_prefetch_l2_ratio",
         "sink_buffer_mem_limit_per_driver",
+        "exchange_sink_buffer_flush_threshold_bytes",
         "default_mv_resource_group_memory_limit",
         "default_mv_resource_group_cpu_limit",
         "default_mv_resource_group_concurrency_limit",
