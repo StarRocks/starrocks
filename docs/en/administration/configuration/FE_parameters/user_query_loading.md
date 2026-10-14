@@ -1572,6 +1572,24 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Retention window for finished or cancelled Stream Load tasks. After a task reaches a final state and its end timestamp is ealier than this threshold (`currentMs - endTimeMs > stream_load_task_keep_max_second * 1000`), it becomes eligible for removal by `StreamLoadMgr.cleanOldStreamLoadTasks` and is discarded when loading persisted state. Applies to both `StreamLoadTask` and `StreamLoadMultiStmtTask`. If total task count exceeds `stream_load_task_keep_max_num`, cleanup may be triggered earlier (synchronous tasks are prioritized by `cleanSyncStreamLoadTasks`). Set this to balance history/debugability against memory usage.
 - Introduced in: v3.2.0
 
+### `stream_load_redirect_scheme`
+
+- Default: http
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The URI scheme used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client, pointing it to the BE/CN node. The default `http` preserves the original behavior. Set it to `https` to redirect clients to a TLS endpoint (for example, a TLS-terminating sidecar or reverse proxy running in front of the BE/CN HTTP server), enabling an encrypted Stream Load data hop without the BE/CN HTTP server having to serve TLS itself. This parameter affects only the Stream Load redirect; the FE leader redirect is not affected. Typically used together with `stream_load_redirect_port`.
+- Introduced in: -
+
+### `stream_load_redirect_port`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The port used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client. The default `0` means the FE uses the backend's real `be_http_port` (original behavior). Set it to a non-zero port to redirect clients to a sidecar/proxy port that terminates TLS and forwards to the BE/CN HTTP port. Typically used together with `stream_load_redirect_scheme = https`.
+- Introduced in: -
+
 ### `transaction_clean_interval_second`
 
 - Default: 30
