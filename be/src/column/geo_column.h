@@ -43,7 +43,7 @@ public:
     // Untyped physical placeholders, not an inferred CRS or a native SQL value.
     explicit GeoColumn(size_t size = 0);
     GeoColumn(const TypeDescriptor& type, size_t size);
-    explicit GeoColumn(GeoColumnDescriptor descriptor, GeoWkbLimits limits = {});
+    explicit GeoColumn(GeoColumnDescriptor descriptor);
     DISALLOW_COPY(GeoColumn);
 
     const GeoColumnDescriptor& descriptor() const { return _descriptor; }
@@ -128,7 +128,6 @@ private:
         GeoWkbInfo info;
     };
     GeoColumnDescriptor _descriptor;
-    GeoWkbLimits _limits;
     // Exclusive ownership: no mutable BinaryColumn escape hatch or shared backing buffers.
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
     // One fixed-size entry; no heap allocation, geometry objects or source-buffer references.
