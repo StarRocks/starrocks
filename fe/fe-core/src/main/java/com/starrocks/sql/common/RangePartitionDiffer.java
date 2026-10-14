@@ -87,9 +87,17 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Diff considering refresh range and TTL
+     *
+     * @param applyAtomicReplacement when {@code true}, a bounded refresh replaces a partition set
+     *                               atomically: a component that contains both additions and deletions
+     *                               and is not entirely inside the refresh range is left untouched.
+     *                               This is only needed for the mirror mapper, which re-shapes base
+     *                               partitions into a different granularity; the default mappings are
+     *                               granularity-preserving and keep the previous behavior.
      */
     public PartitionDiff diff(PCellSortedSet srcRangeMap,
-                              PCellSortedSet dstRangeMap) {
+                              PCellSortedSet dstRangeMap,
+                              boolean applyAtomicReplacement) {
         Map<String, PCell> adds = null;
         try {
             PCellSortedSet prunedAdd = pruneAddedPartitions(srcRangeMap);
@@ -101,7 +109,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
         // A bounded refresh (PARTITION START/END) must replace a partition set atomically; see
         // excludePartiallyReplacedComponents for the reason.
-        if (rangeToInclude != null) {
+        if (rangeToInclude != null && applyAtomicReplacement) {
             excludePartiallyReplacedComponents(srcRangeMap, dstRangeMap, adds, deletes);
         }
         return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes));

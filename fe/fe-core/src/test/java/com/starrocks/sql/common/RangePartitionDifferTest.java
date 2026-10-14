@@ -88,7 +88,7 @@ public class RangePartitionDifferTest {
     @Test
     public void testFineToCoarseKeepsOutOfRangeHistory() throws Exception {
         RangePartitionDiffer differ = differ(range("2021-06-01", "2021-07-01"));
-        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst());
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
 
         Assertions.assertEquals(Collections.singleton("p20210601_20210701"), diff.getAdds().getPartitionNames());
         // in-range June days are still migrated
@@ -111,7 +111,7 @@ public class RangePartitionDifferTest {
         PCellSortedSet dst = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
 
         RangePartitionDiffer differ = differ(range("2021-05-15", "2021-05-16"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         // the whole replacement component is left untouched: no day created, month not dropped
         Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
@@ -129,7 +129,7 @@ public class RangePartitionDifferTest {
         PCellSortedSet dst = cells(Map.of("p20210501_20210502", range("2021-05-01", "2021-05-02")));
 
         RangePartitionDiffer differ = differ(range("2021-05-02", "2021-05-03"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         Assertions.assertEquals(Collections.singleton("p20210502_20210503"), diff.getAdds().getPartitionNames());
         Assertions.assertEquals(Collections.singleton("p20210501_20210502"), diff.getDeletes().getPartitionNames());
@@ -144,7 +144,7 @@ public class RangePartitionDifferTest {
                 "p20210502_20210503", range("2021-05-02", "2021-05-03")));
 
         RangePartitionDiffer differ = differ(range("2021-05-01", "2021-06-01"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         Assertions.assertEquals(Collections.singleton("p20210501_20210601"), diff.getAdds().getPartitionNames());
         Assertions.assertEquals(2, diff.getDeletes().size());
@@ -161,7 +161,7 @@ public class RangePartitionDifferTest {
                 "p20210502_20210503", range("2021-05-02", "2021-05-03")));
 
         RangePartitionDiffer differ = differ(range("2021-05-01", "2021-05-02"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
         Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
@@ -174,7 +174,7 @@ public class RangePartitionDifferTest {
         PCellSortedSet dst = cells(Map.of("p20210501_20210502", range("2021-05-01", "2021-05-02")));
 
         RangePartitionDiffer differ = differ(range("2021-01-01", "2022-01-01"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty());
         Assertions.assertEquals(Collections.singleton("p20210501_20210502"), diff.getDeletes().getPartitionNames());
@@ -187,17 +187,36 @@ public class RangePartitionDifferTest {
         PCellSortedSet dst = PCellSortedSet.of();
 
         RangePartitionDiffer differ = differ(range("2021-05-01", "2021-06-01"));
-        PartitionDiff diff = differ.diff(src, dst);
+        PartitionDiff diff = differ.diff(src, dst, true);
 
         Assertions.assertEquals(Collections.singleton("p20210502_20210503"), diff.getAdds().getPartitionNames());
         Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty());
+    }
+
+    /**
+     * With the default (granularity-preserving) mapping, a bounded refresh keeps the previous
+     * behavior: out-of-range legacy partitions are still deleted even when their replacement is
+     * pruned. This is the semantics relied on by {@code PARTITION BY (col)} / {@code str2date} MVs,
+     * so the mirror-specific atomic-replacement rule must not apply there.
+     */
+    @Test
+    public void testDefaultMappingDoesNotPreserveOutOfRangeReplacement() throws Exception {
+        RangePartitionDiffer differ = differ(range("2021-06-01", "2021-07-01"));
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), false);
+
+        Assertions.assertEquals(Collections.singleton("p20210601_20210701"), diff.getAdds().getPartitionNames());
+        // default mapping keeps the old behavior: the out-of-range May day partitions are deleted
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210501_20210502"));
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210502_20210503"));
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210601_20210602"));
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210602_20210603"));
     }
 
     /** A full refresh (no range) keeps the existing migration behavior. */
     @Test
     public void testFullRefreshUnaffected() throws Exception {
         RangePartitionDiffer differ = differ(null);
-        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst());
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
 
         Assertions.assertEquals(
                 Set.of("p20210501_20210601", "p20210601_20210701"), diff.getAdds().getPartitionNames());
