@@ -88,11 +88,7 @@ void HyperJsonTransformer::init_read_task(const std::vector<std::string>& paths,
             mk.src_index.emplace_back(equals[0]);
             mk.dst_index = i;
             if (_dst_types[i] != _src_types[equals[0]]) {
-                mk.need_cast = true;
-                SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[equals[0]]));
-                ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-                mk.cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(_src_types[equals[0]]),
-                                                                    TypeDescriptor(_dst_types[i]), col_ref, &_pool);
+                _init_conversion(&mk, i, _src_types[equals[0]]);
             }
         } else if (!merges.empty()) {
             check_dst.emplace(i);
@@ -219,18 +215,7 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
                 mk.src_index.emplace_back(j);
                 mk.dst_index = i;
                 if (_dst_types[i] != _src_types[j]) {
-                    mk.need_cast = true;
-                    if (_dst_types[i] == TYPE_JSON && flat_json::JSON_MERGE_FUNC.contains(_src_types[j])) {
-                        // A cast to JSON parses a VARCHAR that looks like JSON text and renders LARGEINT
-                        // differently; rebuild each value the way JsonMerger does instead.
-                        mk.to_json = true;
-                        mk.src_type = _src_types[j];
-                    } else {
-                        SlotDescriptor source_slot(i, "mock_solt", TypeDescriptor(_src_types[j]));
-                        ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
-                        mk.cast_expr = VectorizedCastExprFactory::from_type(
-                                TypeDescriptor(_src_types[j]), TypeDescriptor(_dst_types[i]), col_ref, &_pool);
-                    }
+                    _init_conversion(&mk, i, _src_types[j]);
                 }
                 break;
             }
@@ -333,6 +318,21 @@ Status HyperJsonTransformer::trans(const Columns& columns) {
     }
 
     return Status::OK();
+}
+
+void HyperJsonTransformer::_init_conversion(MergeTask* task, int dst_index, LogicalType src_type) {
+    task->need_cast = true;
+    if (_dst_types[dst_index] == TYPE_JSON && flat_json::JSON_MERGE_FUNC.contains(src_type)) {
+        // A cast to JSON parses a VARCHAR that looks like JSON text ("[1,2]" becomes an array) and renders
+        // LARGEINT differently; rebuild each value the way JsonMerger does instead.
+        task->to_json = true;
+        task->src_type = src_type;
+        return;
+    }
+    SlotDescriptor source_slot(dst_index, "mock_solt", TypeDescriptor(src_type));
+    ColumnRef* col_ref = _pool.add(new ColumnRef(&source_slot));
+    task->cast_expr = VectorizedCastExprFactory::from_type(TypeDescriptor(src_type),
+                                                           TypeDescriptor(_dst_types[dst_index]), col_ref, &_pool);
 }
 
 Status HyperJsonTransformer::_equals(const MergeTask& task, const Columns& columns) {

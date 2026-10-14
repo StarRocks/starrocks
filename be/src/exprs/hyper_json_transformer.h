@@ -79,7 +79,7 @@ private:
 
         bool is_merge = false;
         bool need_cast = false;
-        // Compaction only: convert a scalar sub-column of src_type to JSON value by value (see _to_json).
+        // Convert a scalar sub-column of src_type to JSON value by value (see _to_json).
         bool to_json = false;
         LogicalType src_type = TYPE_UNKNOWN;
 
@@ -97,6 +97,8 @@ private:
         std::unique_ptr<JsonFlattener> flattener;
     };
 
+    // Sets up the conversion of a source sub-column of src_type to the destination type at dst_index.
+    void _init_conversion(MergeTask* task, int dst_index, LogicalType src_type);
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
     Status _to_json(const MergeTask& task, const ColumnPtr& col);
