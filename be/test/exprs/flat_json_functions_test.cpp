@@ -146,9 +146,77 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonQueryTest, FlatJsonQueryTestFixture2,
 
         // array result
         std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*].k2", R"( [1, 2] )"),
-        std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*]", R"( [{"k2": 1}, {"k2": 2}] )")
+        std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*]", R"( [{"k2": 1}, {"k2": 2}] )"),
+
+        // the root rebuilds the document from every flat path
+        std::make_tuple(R"( {"k1":1, "k2":"hehe"} )", std::vector<std::string>{"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_VARCHAR}, "$", R"( {"k1": 1, "k2": "hehe"} )"),
+        std::make_tuple(R"( {"k1": {"k2": 1}, "k3": true} )", std::vector<std::string>{"k1.k2", "k3"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}, "$", R"( {"k1": {"k2": 1}, "k3": true} )"),
+        std::make_tuple(R"( {"k1": {"k2": 1}} )", std::vector<std::string>{"k1.k2"}, std::vector<LogicalType> {TYPE_BIGINT}, "$.k1", R"( {"k2": 1} )")
         ));
 // clang-format on
+
+// json_query(j, '$') over a flat column rebuilds the document: from the flat paths, from the remain, or from both. A
+// row is NULL exactly where the input row is, also when none of the flat paths occurs in it.
+TEST(FlatJsonQueryRootTest, rebuild_root_from_flat_paths_and_remain) {
+    const std::vector<std::string> docs = {R"({"a": 1, "b": {"c": true}})", R"({"a": "str"})",
+                                           R"({"b": {"c": false}, "d": [1, 2]})", ""};
+    struct Layout {
+        std::vector<std::string> paths;
+        std::vector<LogicalType> types;
+        bool has_remain;
+        std::vector<std::string> expected;
+    };
+    const std::vector<Layout> layouts = {
+            // only the flat paths were read: the rebuilt document holds just them
+            {{"a"}, {TYPE_JSON}, false, {R"({"a": 1})", R"({"a": "str"})", "{}", ""}},
+            // only the remain was read
+            {{}, {}, true, docs},
+            {{"a", "b.c"}, {TYPE_JSON, TYPE_JSON}, true, docs},
+    };
+
+    for (const auto& layout : layouts) {
+        auto json_col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        for (const auto& doc : docs) {
+            if (doc.empty()) {
+                json_col->append_nulls(1);
+                continue;
+            }
+            JsonValue json;
+            ASSERT_TRUE(JsonValue::parse(doc, &json).ok());
+            json_col->append_datum(Datum(&json));
+        }
+
+        JsonFlattener jf(layout.paths, layout.types, layout.has_remain);
+        jf.flatten(json_col.get());
+        auto flat_json = JsonColumn::create();
+        flat_json->set_flat_columns(layout.paths, layout.types, jf.mutable_result());
+        ASSERT_EQ(layout.has_remain, flat_json->has_remain());
+        ColumnPtr input = NullableColumn::create(std::move(flat_json), json_col->null_column()->clone());
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnBuilder<TYPE_VARCHAR> path(1);
+        path.append("$");
+        Columns columns{input, path.build(true)};
+        ctx->set_constant_columns(columns);
+        ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+        ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+        ASSERT_EQ(docs.size(), result->size());
+        for (size_t i = 0; i < docs.size(); i++) {
+            Datum datum = result->get(i);
+            if (layout.expected[i].empty()) {
+                ASSERT_TRUE(datum.is_null()) << "row " << i;
+                continue;
+            }
+            ASSERT_FALSE(datum.is_null()) << "row " << i;
+            JsonValue expected;
+            ASSERT_TRUE(JsonValue::parse(layout.expected[i], &expected).ok());
+            ASSERT_EQ(0, datum.get_json()->compare(expected))
+                    << "row " << i << ": " << datum.get_json()->to_string_uncheck() << " vs " << layout.expected[i];
+        }
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
 
 class FlatJsonQueryErrorTestFixture
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {
