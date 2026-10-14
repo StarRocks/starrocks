@@ -495,16 +495,12 @@ under the License.
                 <version>2.16.1</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+            <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
             <dependency>
-                <groupId>com.baidu</groupId>
+                <groupId>com.starrocks</groupId>
                 <artifactId>jprotobuf-rpc-core</artifactId>
-                <version>4.2.1</version>
+                <version>1.0.0</version>
                 <exclusions>
-                    <exclusion>
-                        <groupId>com.baidu</groupId>
-                        <artifactId>jprotobuf</artifactId>
-                    </exclusion>
                     <exclusion>
                         <groupId>junit</groupId>
                         <artifactId>junit</artifactId>
