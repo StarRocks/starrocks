@@ -287,8 +287,8 @@ Reusable connector sink/file-writer helpers above connector contracts, including
 ### ModuleBootstrap (`modulebootstrap`)
 Default BE module bootstrap composition for built-in module registration, including filesystem provider registry installation and connector registration.
 - Targets: `ModuleBootstrap`
-- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/file/`, `connector/hive/`, `connector/iceberg/`, `connector/lake/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
-- Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorFile`, `ConnectorHive`, `ConnectorIceberg`, `ConnectorLake`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Allowed internal include prefixes: `module/`, `connector/benchmark/`, `connector/cache_stats/`, `connector/file/`, `connector/hive/`, `connector/iceberg/`, `connector/lake/`, `connector/jdbc/`, `connector/elasticsearch/`, `connector/mysql/`, `connector/lance/`, `connector_primitive/`, `connector/connector_registry.h`, `fs/`, `fs_ext/hdfs/`, `compute_env/staros/starlet_filesystem.h`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FileSystem`, `HdfsFileSystem`, `ComputeEnv`, `Connector`, `ConnectorFile`, `ConnectorHive`, `ConnectorIceberg`, `ConnectorLake`, `ConnectorBenchmark`, `ConnectorCacheStats`, `ConnectorJDBC`, `ConnectorElasticsearch`, `ConnectorMySQL`, `ConnectorLance`, `ConnectorPrimitive`, `Common`, `Base`, `Gutil`, `StarRocksGen`
 - Core tests: `module_bootstrap_test`
 - Remediation: Keep ModuleBootstrap as top-level default module composition; module implementations should expose registration hooks here instead of depending on service startup directly.
 
