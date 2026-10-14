@@ -94,8 +94,8 @@ TEST_P(AddSegmentLockTimeoutServiceTest, channel_lock_timeout_completes_rpc_once
             _load_channel_mgr.get(), nullptr, runtime->diagnose_daemon(), cache, load_id, request.txn_id(), "", 60,
             std::make_unique<MemTracker>(-1, "segment_lock_test", runtime->load_mem_tracker()));
     const TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
-    auto tablets_channel = new_local_tablets_channel(channel.get(), key, channel->mem_tracker(),
-                                                   channel->_root_profile.get(), cache);
+    auto tablets_channel =
+            new_local_tablets_channel(channel.get(), key, channel->mem_tracker(), channel->_root_profile.get(), cache);
     channel->_tablets_channels.emplace(key, tablets_channel);
     {
         std::lock_guard lock(_load_channel_mgr->_lock);
@@ -112,9 +112,8 @@ TEST_P(AddSegmentLockTimeoutServiceTest, channel_lock_timeout_completes_rpc_once
     } else {
         m_holder.lock();
     }
-    auto call = std::async(std::launch::async, [&] {
-        service.tablet_writer_add_segment(&cntl, &request, &response, &done);
-    });
+    auto call = std::async(std::launch::async,
+                           [&] { service.tablet_writer_add_segment(&cntl, &request, &response, &done); });
     const auto ready = call.wait_for(std::chrono::seconds(5));
     if (m_holder.owns_lock()) m_holder.unlock();
     if (r_holder.owns_lock()) r_holder.unlock();

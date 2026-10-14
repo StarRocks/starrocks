@@ -14,13 +14,13 @@
 
 #include "storage/segment_flush_executor.h"
 
+#include <butil/time.h>
+#include <fmt/format.h>
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
 #include <utility>
-
-#include <butil/time.h>
-#include <fmt/format.h>
 
 #include "base/brpc/brpc.h"
 #include "common/config_compaction_fwd.h"

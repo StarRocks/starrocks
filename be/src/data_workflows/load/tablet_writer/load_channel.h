@@ -91,7 +91,8 @@ public:
     void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done, const timespec& deadline);
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                     const timespec& deadline);
 
     void cancel(const std::string& reason);
 

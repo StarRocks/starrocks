@@ -1038,7 +1038,8 @@ TEST_F(LocalTabletsChannelTest, timed_channel_lookup_times_out_and_recovers) {
     const TabletsChannelKey key(_load_id, _sink_id, _index_id);
     std::unique_lock holder(_load_channel->_lock);
     const auto deadline = butil::milliseconds_from_now(20);
-    auto lookup = std::async(std::launch::async, [&] { return _load_channel->get_tablets_channel_until(key, deadline); });
+    auto lookup =
+            std::async(std::launch::async, [&] { return _load_channel->get_tablets_channel_until(key, deadline); });
     const auto ready = lookup.wait_for(std::chrono::seconds(5));
     holder.unlock();
     auto result = lookup.get();
@@ -1060,9 +1061,8 @@ TEST_F(LocalTabletsChannelTest, add_segment_m_timeout_reports_once) {
     const auto previous_segments = _load_channel->_num_segment;
     std::unique_lock holder(_load_channel->_lock);
     const auto deadline = butil::milliseconds_from_now(20);
-    auto call = std::async(std::launch::async, [&] {
-        _load_channel->add_segment(&cntl, &request, &response, &done, deadline);
-    });
+    auto call = std::async(std::launch::async,
+                           [&] { _load_channel->add_segment(&cntl, &request, &response, &done, deadline); });
     const auto ready = call.wait_for(std::chrono::seconds(5));
     holder.unlock();
     call.get();
@@ -1089,9 +1089,8 @@ TEST_F(LocalTabletsChannelTest, add_segment_r_timeout_reports_once_and_recovers)
         brpc::Controller cntl;
         std::unique_lock holder(_tablets_channel->_rw_mtx);
         const auto deadline = butil::milliseconds_from_now(timeout_ms);
-        auto call = std::async(std::launch::async, [&] {
-            _load_channel->add_segment(&cntl, &request, &response, &done, deadline);
-        });
+        auto call = std::async(std::launch::async,
+                               [&] { _load_channel->add_segment(&cntl, &request, &response, &done, deadline); });
         const auto ready = call.wait_for(std::chrono::seconds(5));
         holder.unlock();
         call.get();

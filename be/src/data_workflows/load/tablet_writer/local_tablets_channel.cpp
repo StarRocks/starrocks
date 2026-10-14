@@ -200,8 +200,8 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
 }
 
 void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
-                                     const timespec& deadline) const {
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                                      const timespec& deadline) const {
     // NOTE: This entrypoint does NOT deduplicate duplicate RPCs (unlike
     // add_chunk below, which dedups by packet_seq sliding window).
     // Duplicate tablet_writer_add_segment requests - whether from brpc
@@ -237,8 +237,8 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
         auto message = fmt::format(
                 "failed to acquire LocalTabletsChannel::_rw_mtx shared lock for segment replication, txn_id: {}, "
                 "load_id: {}, sink_id: {}, index_id: {}, tablet_id: {}, error code: {}",
-                request->txn_id(), print_id(request->id()), request->sink_id(), request->index_id(), request->tablet_id(),
-                rc);
+                request->txn_id(), print_id(request->id()), request->sink_id(), request->index_id(),
+                request->tablet_id(), rc);
         auto st = rc == ETIMEDOUT ? Status::TimedOut(message) : Status::InternalError(message);
         LOG(WARNING) << st;
         st.to_protobuf(response->mutable_status());

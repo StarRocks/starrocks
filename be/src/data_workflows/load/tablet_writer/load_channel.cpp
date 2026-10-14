@@ -290,8 +290,8 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                             PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
-                             const timespec& deadline) {
+                              PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                              const timespec& deadline) {
     ClosureGuard closure_guard(done);
     _num_segment++;
     TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());

@@ -244,8 +244,8 @@ void LoadChannelMgr::add_chunks(const PTabletWriterAddChunksRequest& request, PT
 }
 
 void LoadChannelMgr::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
-                                const timespec& deadline) {
+                                 PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done,
+                                 const timespec& deadline) {
     ClosureGuard closure_guard(done);
     UniqueId load_id(request->id());
     auto channel = _find_load_channel(load_id);
