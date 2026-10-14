@@ -45,6 +45,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.TabletMeta;
+>>>>>>> 9e4fdae ([BugFix] Restore hasDelete when applying visible DELETE transactions (#80592))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -60,15 +65,35 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.OptimisticVersion;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
+import mockit.Invocation;
+>>>>>>> 9e4fdae ([BugFix] Restore hasDelete when applying visible DELETE transactions (#80592))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
@@ -128,6 +153,280 @@ public class DatabaseTransactionMgrTest {
     @AfterEach
     public void tearDown() {
         Config.enable_metric_calculator = origin_enable_metric_calculator_value;
+    }
+
+    private OlapTable hasDeleteTable() {
+        return (OlapTable) masterGlobalStateMgr.getLocalMetastore().getTable(
+                GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1);
+    }
+
+    private DatabaseTransactionMgr hasDeleteTxnMgr(boolean lake) throws AnalysisException {
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return lake;
+            }
+        };
+        return masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+    }
+
+    private TransactionState hasDeleteTxn(long id, TransactionState.LoadJobSourceType source,
+                                          TransactionStatus status, long version) {
+        OlapTable table = hasDeleteTable();
+        TransactionState txn = new TransactionState(GlobalStateMgrTestUtil.testDbId1, List.of(table.getId()), id,
+                "has_delete_" + id, null, source, transactionSource, -1, 60_000);
+        txn.setPrepareTime(System.currentTimeMillis());
+        txn.setCommitTime(System.currentTimeMillis());
+        if (status == TransactionStatus.VISIBLE) {
+            txn.setFinishTime(System.currentTimeMillis());
+        }
+        txn.setTransactionStatus(status);
+        txn.setFinishState(new TxnFinishState());
+        addCommitInfo(txn, table.getId(), table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition().getId(), version, System.currentTimeMillis());
+        // Exercise the persisted transaction representation, with no DeleteJob callback registered.
+        TransactionState restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(txn), TransactionState.class);
+        assertEquals(source, restored.getSourceType());
+        for (long callbackId : restored.getCallbackId()) {
+            assertNull(masterTransMgr.getCallbackFactory().getCallback(callbackId));
+        }
+        return restored;
+    }
+
+    private static boolean hasDeletePlanAccepted(OlapTable table, long planStart) {
+        // The actual final check used by createQueryPlanWithReTry, not a timestamp comparison in the test.
+        return Deencapsulation.invoke(StatementPlanner.class, "checkOlapTableSchemaValid",
+                Sets.newHashSet(table), planStart);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testHasDeleteVisibleReplay(boolean lake) throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(lake);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        long planStart = OptimisticVersion.generate();
+        Assertions.assertFalse(table.hasDelete());
+        mgr.replayUpsertTransactionState(hasDeleteTxn(91001, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.VISIBLE, base + 1));
+        assertTrue(table.hasDelete());
+        assertEquals(base + 1, partition.getVisibleVersion());
+        Assertions.assertFalse(hasDeletePlanAccepted(table, planStart));
+        OlapTable image = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
+        assertTrue(image.hasDelete(), "the corrected flag survives a catalog image round trip");
+        long invalidation = table.lastSchemaUpdateTime.get();
+        mgr.replayUpsertTransactionState(hasDeleteTxn(91002, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.VISIBLE, base + 2));
+        assertTrue(table.hasDelete());
+        assertEquals(invalidation, table.lastSchemaUpdateTime.get(), "only the first DELETE invalidates plans");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testHasDeleteCommittedRecoveryAndAsyncFinish(boolean lake) throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(lake);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        TransactionState committed = hasDeleteTxn(92001, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.COMMITTED, base + 1);
+        mgr.replayUpsertTransactionState(committed);
+        Assertions.assertFalse(table.hasDelete());
+        assertEquals(base, partition.getVisibleVersion());
+        Assertions.assertFalse(new VisibleStateWaiter(committed).await(0, TimeUnit.MILLISECONDS));
+        assertEquals(TransactionStatus.COMMITTED, committed.getTransactionStatus());
+        // The client has stopped waiting. Publish completes without DeleteJob.commit/afterVisible.
+        TransactionState visible = mgr.finishTransactionNew(committed, Sets.newHashSet());
+        assertEquals(TransactionStatus.VISIBLE, visible.getTransactionStatus());
+        assertTrue(table.hasDelete());
+        assertEquals(base + 1, partition.getVisibleVersion());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testHasDeleteOtherSourcesAndAbort(boolean lake) throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(lake);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        long invalidation = table.lastSchemaUpdateTime.get();
+        mgr.replayUpsertTransactionState(hasDeleteTxn(93001, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.ABORTED, base + 1));
+        Assertions.assertFalse(table.hasDelete());
+        assertEquals(base, partition.getVisibleVersion());
+        mgr.replayUpsertTransactionState(hasDeleteTxn(93002, TransactionState.LoadJobSourceType.FRONTEND,
+                TransactionStatus.VISIBLE, base + 1));
+        Assertions.assertFalse(table.hasDelete());
+        assertEquals(invalidation, table.lastSchemaUpdateTime.get());
+        if (lake) {
+            mgr.replayUpsertTransactionState(hasDeleteTxn(93003, TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                    TransactionStatus.VISIBLE, base + 2));
+            Assertions.assertFalse(table.hasDelete());
+            assertEquals(invalidation, table.lastSchemaUpdateTime.get());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testHasDeleteConcurrentPlanInvalidation(boolean lake) throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(lake);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        TransactionState committed = hasDeleteTxn(94001, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.COMMITTED, base + 1);
+        mgr.replayUpsertTransactionState(committed);
+        long planStart = OptimisticVersion.generate();
+        OlapTable snapshot = new OlapTable();
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(committed.getDbId(), table.getId(), LockType.READ);
+        try {
+            table.copyOnlyForQuery(snapshot);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(committed.getDbId(), table.getId(), LockType.READ);
+        }
+        PhysicalPartition shared = snapshot.getPhysicalPartition(partition.getId());
+        Assertions.assertSame(partition, shared);
+        Assertions.assertFalse(snapshot.hasDelete());
+        assertTrue(hasDeletePlanAccepted(table, planStart));
+        CountDownLatch flagSet = new CountDownLatch(1);
+        CountDownLatch allowInvalidate = new CountDownLatch(1);
+        CountDownLatch beforePublish = new CountDownLatch(1);
+        CountDownLatch allowPublish = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        new MockUp<TableProperty>() {
+            @Mock
+            public void setHasDelete(Invocation invocation, boolean hasDelete) throws InterruptedException {
+                invocation.proceed(hasDelete);
+                flagSet.countDown();
+                assertTrue(allowInvalidate.await(10, TimeUnit.SECONDS));
+            }
+        };
+        // Both OLAP and lake ultimately invoke this publication method.
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void setVisibleVersion(Invocation invocation, long version, long time) throws InterruptedException {
+                assertTrue(table.hasDelete());
+                Assertions.assertFalse(hasDeletePlanAccepted(table, planStart),
+                        "old plans must be invalid before the DELETE version is published");
+                beforePublish.countDown();
+                assertTrue(allowPublish.await(10, TimeUnit.SECONDS));
+                invocation.proceed(version, time);
+            }
+        };
+        Thread publisher = new Thread(() -> {
+            try {
+                mgr.finishTransactionNew(committed, Sets.newHashSet());
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        }, "has-delete-publisher");
+        publisher.start();
+        try {
+            assertTrue(flagSet.await(10, TimeUnit.SECONDS));
+            assertTrue(table.hasDelete());
+            Assertions.assertFalse(snapshot.hasDelete());
+            assertEquals(base, shared.getVisibleVersion(), "flag mutation cannot publish the DELETE version");
+            assertTrue(hasDeletePlanAccepted(table, planStart), "invalidation follows flag mutation");
+            allowInvalidate.countDown();
+            assertTrue(beforePublish.await(10, TimeUnit.SECONDS));
+            assertEquals(base, shared.getVisibleVersion());
+            Assertions.assertFalse(hasDeletePlanAccepted(table, planStart));
+        } finally {
+            allowInvalidate.countDown();
+            allowPublish.countDown();
+            publisher.join(10_000);
+        }
+        Assertions.assertFalse(publisher.isAlive());
+        assertNull(failure.get());
+        // Model a stale planner building scan ranges after publication, then doing its final validation.
+        Assertions.assertFalse(snapshot.hasDelete());
+        assertEquals(base + 1, shared.getVisibleVersion());
+        Assertions.assertFalse(hasDeletePlanAccepted(table, planStart), "the stale plan must be retried");
+        long retryStart = OptimisticVersion.generate();
+        locker.lockTableWithIntensiveDbLock(committed.getDbId(), table.getId(), LockType.READ);
+        try {
+            table.copyOnlyForQuery(snapshot);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(committed.getDbId(), table.getId(), LockType.READ);
+        }
+        assertTrue(snapshot.hasDelete());
+        assertEquals(base + 1, snapshot.getPhysicalPartition(partition.getId()).getVisibleVersion());
+        assertTrue(hasDeletePlanAccepted(table, retryStart), "the refreshed plan is accepted");
+    }
+
+    @Test
+    public void testHasDeleteBatchPublishesOnlyFinalVersion() throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(true);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        long planStart = OptimisticVersion.generate();
+        TransactionState before = hasDeleteTxn(95001, TransactionState.LoadJobSourceType.FRONTEND,
+                TransactionStatus.VISIBLE, base + 1);
+        TransactionState delete = hasDeleteTxn(95002, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.VISIBLE, base + 2);
+        TransactionState after = hasDeleteTxn(95003, TransactionState.LoadJobSourceType.FRONTEND,
+                TransactionStatus.VISIBLE, base + 3);
+        AtomicInteger publishes = new AtomicInteger();
+        new MockUp<PhysicalPartition>() {
+            @Mock
+            public void setVisibleVersion(Invocation invocation, long version, long time) {
+                assertEquals(base + 3, version, "no intermediate version may escape the batch");
+                assertTrue(table.hasDelete());
+                Assertions.assertFalse(hasDeletePlanAccepted(table, planStart));
+                publishes.incrementAndGet();
+                invocation.proceed(version, time);
+            }
+        };
+        mgr.replayUpsertTransactionStateBatch(new TransactionStateBatch(List.of(before, delete, after)));
+        assertEquals(1, publishes.get());
+        assertEquals(base + 3, partition.getVisibleVersion());
+        assertTrue(table.hasDelete());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testHasDeleteReplayDroppedObjects(boolean lake) throws Exception {
+        DatabaseTransactionMgr mgr = hasDeleteTxnMgr(lake);
+        OlapTable table = hasDeleteTable();
+        PhysicalPartition partition = table.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        long base = partition.getVisibleVersion();
+        TransactionState droppedTable = hasDeleteTxn(96001, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.VISIBLE, base + 1);
+        droppedTable.getIdToTableCommitInfos().clear();
+        addCommitInfo(droppedTable, -100L, partition.getId(), base + 1, System.currentTimeMillis());
+        mgr.replayUpsertTransactionState(droppedTable);
+        Assertions.assertFalse(table.hasDelete());
+        TransactionState droppedPartition = hasDeleteTxn(96002, TransactionState.LoadJobSourceType.DELETE,
+                TransactionStatus.VISIBLE, base + 1);
+        droppedPartition.getTableCommitInfo(table.getId()).getIdToPartitionCommitInfo().clear();
+        addCommitInfo(droppedPartition, table.getId(), -100L, base + 1, System.currentTimeMillis());
+        mgr.replayUpsertTransactionState(droppedPartition);
+        assertTrue(table.hasDelete());
+        assertEquals(base, partition.getVisibleVersion());
+    }
+
+    @Test
+    public void testHasDeleteLegacySetterInvalidatesPlan() {
+        OlapTable table = hasDeleteTable();
+        long planStart = OptimisticVersion.generate();
+        OlapTable snapshot = new OlapTable();
+        table.copyOnlyForQuery(snapshot);
+        table.setHasDelete();
+        Assertions.assertFalse(snapshot.hasDelete());
+        assertTrue(table.hasDelete());
+        Assertions.assertFalse(hasDeletePlanAccepted(table, planStart));
+        long invalidation = table.lastSchemaUpdateTime.get();
+        table.setHasDelete();
+        assertEquals(invalidation, table.lastSchemaUpdateTime.get());
     }
 
     public void prepareCommittedTransaction() throws StarRocksException {
@@ -803,8 +1102,422 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, transactionState8.getTransactionStatus());
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+<<<<<<< HEAD
         slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+=======
+        TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
+                fakeEditLog.getTransaction(txnId6),
+                fakeEditLog.getTransaction(txnId7),
+                fakeEditLog.getTransaction(txnId8)));
+        slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
+        assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+    }
+
+    private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {
+        return new TransactionState(GlobalStateMgrTestUtil.testDbId1, tableIds, txnId,
+                "replay_mt_" + txnId, UUIDUtil.genTUniqueId(),
+                TransactionState.LoadJobSourceType.FRONTEND,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
+                -1, 60 * 1000L);
+    }
+
+    private static void addCommitInfo(TransactionState txn, long tableId, long physicalPartitionId,
+                                      long version, long versionTime) {
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        if (tableCommitInfo == null) {
+            tableCommitInfo = new TableCommitInfo(tableId);
+            txn.putIdToTableCommitInfo(tableId, tableCommitInfo);
+        }
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(physicalPartitionId, version, versionTime));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testReplayMultiTableTransactionStateBatch(boolean deleteOnlySubset) throws StarRocksException {
+        long table2Id = 20000L;
+        long partition2Id = 20001L;
+
+        // Register a second lake-style table into the slave catalog only: replay is a
+        // follower-side path and must apply the visible logs of every table in the batch.
+        FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
+        MaterializedIndex index2 = new MaterializedIndex(table2Id, IndexState.NORMAL);
+        RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+        Partition partition2 = new Partition(partition2Id, partition2Id + 100, "testTable2",
+                index2, distributionInfo);
+        partition2.getDefaultPhysicalPartition().updateVisibleVersion(GlobalStateMgrTestUtil.testStartVersion);
+        partition2.getDefaultPhysicalPartition().setNextVersion(GlobalStateMgrTestUtil.testStartVersion + 1);
+        List<Column> columns = new ArrayList<>();
+        Column k1 = new Column("k1", IntegerType.INT);
+        k1.setIsKey(true);
+        columns.add(k1);
+        columns.add(new Column("v", FloatType.DOUBLE, false, AggregateType.SUM, "0", ""));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partition2Id, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partition2Id, (short) 3);
+        OlapTable table2 = new OlapTable(table2Id, "testTable2", columns, KeysType.AGG_KEYS,
+                partitionInfo, distributionInfo);
+        table2.addPartition(partition2);
+        table2.setIndexMeta(table2Id, "testTable2", columns, 0, GlobalStateMgrTestUtil.testSchemaHash1,
+                (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table2.setBaseIndexMetaId(table2Id);
+        Database slaveDb = slaveGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        slaveDb.registerTableUnlocked(table2);
+
+        OlapTable slaveTable1 = (OlapTable) slaveGlobalStateMgr.getLocalMetastore()
+                .getTable(slaveDb.getId(), GlobalStateMgrTestUtil.testTableId1);
+        PhysicalPartition slaveT1Partition = slaveTable1.getPartition(GlobalStateMgrTestUtil.testPartition1)
+                .getDefaultPhysicalPartition();
+        PhysicalPartition slaveT2Partition = partition2.getDefaultPhysicalPartition();
+        long t1BaseVersion = slaveT1Partition.getVisibleVersion();
+        long t2BaseVersion = slaveT2Partition.getVisibleVersion();
+
+        // txnA and txnB write both tables, txnC writes only table1 (a subset of the head set)
+        long versionTime = System.currentTimeMillis();
+        List<Long> bothTables = Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1, table2Id);
+        TransactionState txnA = makeVisibleBatchTxn(9001L, bothTables);
+        addCommitInfo(txnA, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 1, versionTime);
+        addCommitInfo(txnA, table2Id, slaveT2Partition.getId(), t2BaseVersion + 1, versionTime);
+        TransactionState txnB = makeVisibleBatchTxn(9002L, bothTables);
+        addCommitInfo(txnB, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 2, versionTime);
+        addCommitInfo(txnB, table2Id, slaveT2Partition.getId(), t2BaseVersion + 2, versionTime);
+        TransactionState txnC = new TransactionState(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), 9003L, "replay_subset", null,
+                deleteOnlySubset ? TransactionState.LoadJobSourceType.DELETE : TransactionState.LoadJobSourceType.FRONTEND,
+                transactionSource, -1, 60_000);
+        addCommitInfo(txnC, GlobalStateMgrTestUtil.testTableId1, slaveT1Partition.getId(),
+                t1BaseVersion + 3, versionTime);
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(Lists.newArrayList(txnA, txnB, txnC));
+        stateBatch.setTransactionVisibleInfo();
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
+
+        // both tables' visible versions advanced; table2 only by the two txns that write it
+        assertEquals(t1BaseVersion + 3, slaveT1Partition.getVisibleVersion());
+        assertEquals(t2BaseVersion + 2, slaveT2Partition.getVisibleVersion());
+        assertEquals(deleteOnlySubset, slaveTable1.hasDelete());
+        Assertions.assertFalse(table2.hasDelete(), "the DELETE does not write table2");
+
+        DatabaseTransactionMgr slaveDbTransMgr =
+                slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9001L).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9002L).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, slaveDbTransMgr.getTransactionState(9003L).getTransactionStatus());
+    }
+
+    @Test
+    public void testFinishTransactionBatchReturnsLatestStateBatch() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionState transactionState6 = masterDbTransMgr.getTransactionState(txnId6);
+        TransactionState transactionState7 = masterDbTransMgr.getTransactionState(txnId7);
+        TransactionState transactionState8 = masterDbTransMgr.getTransactionState(txnId8);
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        TransactionStateBatch stateBatch = new TransactionStateBatch(
+                List.of(transactionState6, transactionState7, transactionState8));
+        Map<ComputeNode, List<Long>> nodeToTablets = Maps.newHashMap();
+        nodeToTablets.put(new ComputeNode(10001L, "host", 9050), Lists.newArrayList(10002L));
+        stateBatch.putBeTablets(10003L, nodeToTablets);
+
+        TransactionStateBatch latestStateBatch =
+                masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
+
+        Assertions.assertNotSame(stateBatch, latestStateBatch);
+        assertEquals(TransactionStatus.COMMITTED, stateBatch.getTransactionStates().get(0).getTransactionStatus());
+        assertEquals(TransactionStatus.VISIBLE, latestStateBatch.getTransactionStates().get(0).getTransactionStatus());
+        Assertions.assertSame(stateBatch.getPartitionToTablets(), latestStateBatch.getPartitionToTablets());
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId6), latestStateBatch.getTransactionStates().get(0));
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId7), latestStateBatch.getTransactionStates().get(1));
+        Assertions.assertSame(masterDbTransMgr.getTransactionState(txnId8), latestStateBatch.getTransactionStates().get(2));
+    }
+
+    @Test
+    public void testFinishTransactionBatchEditLogException() throws StarRocksException {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+        long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+        long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(List.of(
+                masterDbTransMgr.getTransactionState(txnId6),
+                masterDbTransMgr.getTransactionState(txnId7),
+                masterDbTransMgr.getTransactionState(txnId8)));
+
+        new MockUp<Table>() {
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+        };
+
+        EditLog spyEditLog = spy(masterGlobalStateMgr.getEditLog());
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logInsertTransactionStateBatch(any(TransactionStateBatch.class), any());
+        EditLog originalEditLog = replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, spyEditLog);
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                    () -> masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null));
+            assertEditLogWriteFailed(exception);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
+        } finally {
+            replaceDatabaseTransactionMgrEditLog(masterDbTransMgr, originalEditLog);
+        }
+    }
+
+    @Test
+    public void testCommitPreparedTransactionCommitTimeIsStrictlyIncreasing() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long maxCommitTsBefore = System.currentTimeMillis() + TimeUnit.DAYS.toMillis(1);
+        Deencapsulation.setField(masterDbTransMgr, "maxCommitTs", maxCommitTsBefore);
+        long secondTableId = 20001L;
+        long secondPartitionId = 20002L;
+        long secondIndexId = secondTableId;
+        long secondTabletId = 20003L;
+        createSimpleOlapTable(db, secondTableId, "testTableCommitTime2", secondPartitionId,
+                "testPartitionCommitTime2", secondIndexId, "testIndexCommitTime2", secondTabletId,
+                GlobalStateMgrTestUtil.testStartVersion, 20004L, 20005L, 20006L);
+
+        long transactionId1 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_commit_prepared_commit_time_1",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long transactionId2 = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(secondTableId),
+                "test_commit_prepared_commit_time_2",
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId2, -1,
+                buildTabletCommitInfoList(secondTabletId), Lists.newArrayList(), null);
+
+        CountDownLatch firstPersistEntered = new CountDownLatch(1);
+        CountDownLatch releasePersist = new CountDownLatch(1);
+        CountDownLatch secondPersistEntered = new CountDownLatch(1);
+        AtomicInteger persistCallCount = new AtomicInteger(0);
+        try {
+            new MockUp<EditLog>() {
+                @Mock
+                public void logInsertTransactionState(TransactionState transactionState, WALApplier walApplier)
+                        throws InterruptedException {
+                    if (persistCallCount.incrementAndGet() == 1) {
+                        firstPersistEntered.countDown();
+                        assertTrue(releasePersist.await(10, TimeUnit.SECONDS));
+                    } else {
+                        secondPersistEntered.countDown();
+                    }
+                    if (walApplier != null) {
+                        walApplier.apply(transactionState);
+                    }
+                }
+            };
+
+            Throwable[] errors = new Throwable[2];
+            Thread thread1 = new Thread(() -> {
+                try {
+                    masterTransMgr.commitPreparedTransaction(db, transactionId1, 1000L);
+                } catch (Throwable t) {
+                    errors[0] = t;
+                }
+            });
+            Thread thread2 = new Thread(() -> {
+                try {
+                    masterTransMgr.commitPreparedTransaction(db, transactionId2, 1000L);
+                } catch (Throwable t) {
+                    errors[1] = t;
+                }
+            });
+
+            thread1.start();
+            assertTrue(firstPersistEntered.await(10, TimeUnit.SECONDS));
+            thread2.start();
+            assertTrue(secondPersistEntered.await(10, TimeUnit.SECONDS));
+
+            thread2.join(5000);
+            releasePersist.countDown();
+            thread1.join(5000);
+
+            assertPublishTimeoutOrNull(errors[0]);
+            assertPublishTimeoutOrNull(errors[1]);
+
+            TransactionState transactionState1 = masterDbTransMgr.getTransactionState(transactionId1);
+            TransactionState transactionState2 = masterDbTransMgr.getTransactionState(transactionId2);
+            assertEquals(TransactionStatus.COMMITTED, transactionState1.getTransactionStatus());
+            assertEquals(TransactionStatus.COMMITTED, transactionState2.getTransactionStatus());
+            assertEquals(2, Sets.newHashSet(transactionState1.getCommitTime(), transactionState2.getCommitTime()).size());
+            assertEquals(1, Math.abs(transactionState1.getCommitTime() - transactionState2.getCommitTime()));
+            assertTrue(transactionState1.getCommitTime() > maxCommitTsBefore);
+            assertTrue(transactionState2.getCommitTime() > maxCommitTsBefore);
+        } finally {
+            releasePersist.countDown();
+        }
+    }
+
+    // Race between commitPreparedTransaction and abortTransaction: abort holds a
+    // local reference to the original (PREPARED) TransactionState that it read
+    // outside the per-txn writeLock; if a concurrent commit upserts a fresh
+    // TransactionState object into idToRunningTransactionState before abort
+    // acquires the writeLock, abort must NOT proceed to COW from the stale
+    // local reference and overwrite the committed map entry with an ABORTED
+    // state carrying version=-1. See lake-mode-commit-abort race report.
+    @Test
+    public void testAbortRaceWithConcurrentCommitDoesNotOverwriteCommittedState() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        Database db = masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1);
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        long raceTxnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                "test_commit_abort_race_" + System.nanoTime(),
+                transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, raceTxnId, -1,
+                buildTabletCommitInfoList(), Lists.newArrayList(), null);
+
+        TransactionState objectA = masterDbTransMgr.getTransactionState(raceTxnId);
+        assertNotNull(objectA);
+        assertEquals(TransactionStatus.PREPARED, objectA.getTransactionStatus());
+
+        CountDownLatch abortReachedWriteLock = new CountDownLatch(1);
+        CountDownLatch commitCompleted = new CountDownLatch(1);
+        AtomicReference<Thread> abortThreadRef = new AtomicReference<>();
+        AtomicBoolean abortPastWriteLock = new AtomicBoolean(false);
+
+        // Intercept TransactionState.writeLock() only for the abort thread on
+        // the racing txn id, so the test can let the commit thread upsert a
+        // brand-new COMMITTED state object into the running map before abort
+        // acquires the per-txn writeLock and reads from its stale local ref.
+        // The mock signature must match the original (no `throws InterruptedException`)
+        // — wrap the latch wait in unchecked Exception. Maven surefire runs each
+        // test class in its own JVM (reuseForks=false), so MockUp lifetime is
+        // bounded by the JVM and does not leak to other classes.
+        new MockUp<TransactionState>() {
+            @Mock
+            public void writeLock(Invocation inv) {
+                TransactionState ts = (TransactionState) inv.getInvokedInstance();
+                if (Thread.currentThread() == abortThreadRef.get()
+                        && ts.getTransactionId() == raceTxnId
+                        && abortPastWriteLock.compareAndSet(false, true)) {
+                    abortReachedWriteLock.countDown();
+                    try {
+                        if (!commitCompleted.await(10, TimeUnit.SECONDS)) {
+                            throw new RuntimeException("commit did not complete within 10s");
+                        }
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(ie);
+                    }
+                }
+                inv.proceed();
+            }
+        };
+
+        Throwable[] abortError = new Throwable[1];
+        Thread abortThread = new Thread(() -> {
+            try {
+                masterDbTransMgr.abortTransaction(raceTxnId, true, "race-fake-timeout", null,
+                        Lists.newArrayList(), Lists.newArrayList());
+            } catch (Throwable t) {
+                abortError[0] = t;
+            }
+        }, "abort-race-thread");
+        abortThreadRef.set(abortThread);
+        try {
+            abortThread.start();
+
+            // Wait until abort thread has captured the local stale ref to object A
+            // (after readUnlock at the top of abortTransaction) and is parked just
+            // before transactionState.writeLock().
+            assertTrue(abortReachedWriteLock.await(10, TimeUnit.SECONDS),
+                    "abort thread did not reach writeLock in time");
+
+            // Run commit to completion on the main thread. After this returns,
+            // idToRunningTransactionState[raceTxnId] holds a brand-new
+            // TransactionState (status=COMMITTED), not the object A captured above.
+            // commitPreparedTransaction upserts the COMMITTED state into the running
+            // map before it waits for publish; in UT there is no publish daemon, so
+            // the publish-wait always times out with a "publish timeout" StarRocksException.
+            // That timeout is expected and harmless here — the COMMITTED map entry is
+            // already in place — so tolerate it exactly like the sibling commit-race test.
+            try {
+                masterTransMgr.commitPreparedTransaction(db, raceTxnId, 1000L);
+            } catch (Throwable t) {
+                assertPublishTimeoutOrNull(t);
+            }
+
+            TransactionState mapEntryAfterCommit = masterDbTransMgr.getTransactionState(raceTxnId);
+            assertNotNull(mapEntryAfterCommit);
+            assertEquals(TransactionStatus.COMMITTED, mapEntryAfterCommit.getTransactionStatus());
+            Assertions.assertNotSame(objectA, mapEntryAfterCommit,
+                    "commit should have upserted a new TransactionState object into the running map");
+
+            // Release abort: it will now acquire the writeLock and either
+            //   (fixed)   re-read idToRunningTransactionState, see COMMITTED, and
+            //             refuse to abort (throwing TransactionAlreadyCommitException), or
+            //   (buggy)   COW from the stale object A (status=PREPARED), flip to
+            //             ABORTED, and overwrite the committed map entry.
+            commitCompleted.countDown();
+            abortThread.join(10_000);
+            Assertions.assertFalse(abortThread.isAlive(), "abort thread should have terminated");
+
+            if (abortError[0] != null) {
+                Throwable cause = abortError[0];
+                while (cause != null && !(cause instanceof TransactionAlreadyCommitException)) {
+                    cause = cause.getCause();
+                }
+                assertNotNull(cause, "abort error must be (caused by) TransactionAlreadyCommitException, got "
+                        + abortError[0]);
+            }
+
+            // The committed map entry MUST NOT have been overwritten with ABORTED,
+            // and the partition commit version produced by commit MUST survive.
+            TransactionState finalState = masterDbTransMgr.getTransactionState(raceTxnId);
+            assertNotNull(finalState);
+            assertEquals(TransactionStatus.COMMITTED, finalState.getTransactionStatus(),
+                    "stale-ref race must not overwrite the committed entry with ABORTED");
+
+            TableCommitInfo tci = finalState.getIdToTableCommitInfos().get(GlobalStateMgrTestUtil.testTableId1);
+            assertNotNull(tci, "committed state must keep its table commit info");
+            Assertions.assertFalse(tci.getIdToPartitionCommitInfo().isEmpty(),
+                    "committed state must keep at least one partition commit info");
+            for (PartitionCommitInfo pci : tci.getIdToPartitionCommitInfo().values()) {
+                Assertions.assertTrue(pci.getVersion() > 0,
+                        "committed partition version must remain positive (not -1 from abort COW), got "
+                                + pci.getVersion());
+            }
+        } finally {
+            // Ensure no thread is left waiting on the latch if the test errored.
+            commitCompleted.countDown();
+            abortThread.join(5_000);
+        }
+>>>>>>> 9e4fdae ([BugFix] Restore hasDelete when applying visible DELETE transactions (#80592))
     }
 
     @Test
