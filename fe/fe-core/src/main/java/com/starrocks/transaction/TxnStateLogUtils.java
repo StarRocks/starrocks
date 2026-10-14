@@ -56,6 +56,17 @@ public class TxnStateLogUtils {
     }
 
     /**
+     * Report the tablets that the commit of the transaction skipped, see
+     * {@link TransactionState#setIgnoredTablets(long, Map)}. Called once the transaction is committed, so that a
+     * commit that is rejected, or a prepared transaction that is aborted, is not recorded as having dropped rows.
+     */
+    public static void logIgnoredTablets(TransactionState txnState) {
+        for (Map.Entry<Long, Map<Long, List<Long>>> entry : txnState.getIgnoredTablets().entrySet()) {
+            logIgnoredTablets(txnState, entry.getKey(), entry.getValue());
+        }
+    }
+
+    /**
      * Report a committed partition that disappeared before its transaction could be published.
      */
     public static void logDroppedCommittedPartition(TransactionState txnState, long tableId, long physicalPartitionId) {

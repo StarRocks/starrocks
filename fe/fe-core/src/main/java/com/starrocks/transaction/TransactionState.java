@@ -399,6 +399,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
     // no need to persist.
     private String errMsg = "";
 
+    // Tablets that the commit skipped because their physical partition no longer existed, reported under the
+    // TXN_ROWS_DROPPED marker only once the transaction is committed, see TxnStateLogUtils.
+    // table id -> (physical partition id -> tablet ids). Not persisted, the report is best effort.
+    private Map<Long, Map<Long, List<Long>>> ignoredTablets = Maps.newHashMap();
+
     private long lastErrTimeMs = 0;
 
     // used for PublishDaemon to check whether this txn can be published
@@ -595,6 +600,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.computeResource = txnState.computeResource;
         this.loadedTblPartitionIndexes = txnState.loadedTblPartitionIndexes;
         this.errMsg = txnState.errMsg;
+        this.ignoredTablets = Maps.newHashMap(txnState.getIgnoredTablets());
         this.lastErrTimeMs = txnState.lastErrTimeMs;
         this.finishChecker = txnState.finishChecker;
         this.txnSpan = txnState.txnSpan;
@@ -1089,6 +1095,31 @@ public class TransactionState implements Writable, GsonPreProcessable {
         Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.computeIfAbsent(
                 tableId, k -> Maps.newHashMap());
         loadedPartitionIndexes.putIfAbsent(physicalPartitionId, indexIds);
+    }
+
+    /**
+     * Remember the tablets of the given table that the commit skipped because their physical partition no longer
+     * exists, so that they can be reported once the transaction is committed.
+     *
+     * @param ignoredTabletsByPartition physical partition id -> tablet ids, empty when nothing was skipped
+     */
+    public void setIgnoredTablets(long tableId, Map<Long, List<Long>> ignoredTabletsByPartition) {
+        if (ignoredTabletsByPartition.isEmpty()) {
+            getIgnoredTablets().remove(tableId);
+        } else {
+            getIgnoredTablets().put(tableId, ignoredTabletsByPartition);
+        }
+    }
+
+    /**
+     * @return table id -> (physical partition id -> tablet ids) skipped by the commit
+     */
+    public Map<Long, Map<Long, List<Long>>> getIgnoredTablets() {
+        if (ignoredTablets == null) {
+            // not persisted, so absent from a state read back from the image or the journal
+            ignoredTablets = Maps.newHashMap();
+        }
+        return ignoredTablets;
     }
 
     public void addPartitionLoadedIndexes(long tableId, long physicalPartitionId, List<Long> indexIds) {

@@ -556,6 +556,8 @@ public class DatabaseTransactionMgr {
             } catch (Throwable t) {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
+            // the commit went through, so the rows of the tablets it skipped are lost now
+            TxnStateLogUtils.logIgnoredTablets(copiedState);
 
             // 6. update nextVersion because of the failure of persistent transaction resulting in error version
             Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);

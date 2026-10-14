@@ -165,9 +165,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         checkShadowIndexesLoaded(txnState);
 
-        // Reported only once this commit is going through, so that a commit rejected above is not
-        // recorded as having dropped rows.
-        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
+        // Reported only once the transaction is committed (DatabaseTransactionMgr#commitPreparedTransaction), so
+        // that a commit rejected later, or a prepared transaction that is aborted, is not recorded as having
+        // dropped rows.
+        txnState.setIgnoredTablets(table.getId(), ignoredTabletsByPartition);
     }
 
     /**
