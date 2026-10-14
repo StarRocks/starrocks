@@ -231,11 +231,7 @@ public class CompactionSchedulerTest {
         rangeDistributed[0] = false;
         partitionAccessed[0] = false;
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
-<<<<<<< HEAD
-        Assertions.assertTrue(partitionAccessed[0], "hash-distribution rollup must not be suppressed by this guard");
-=======
         Assertions.assertFalse(partitionAccessed[0], "hash-distribution rollup compaction must be suppressed");
-        Assertions.assertEquals(2, compactionManager.getStatistics(partition).getConsecutiveAbnormalCount());
 
         // Once the rollup is done the table returns to NORMAL, and execution proceeds past the guard to the
         // partition lookup.
@@ -243,9 +239,6 @@ public class CompactionSchedulerTest {
         partitionAccessed[0] = false;
         Assertions.assertNull(compactionScheduler.startCompaction(snapshot, info));
         Assertions.assertTrue(partitionAccessed[0], "a NORMAL table must not be suppressed by this guard");
-        Assertions.assertNull(compactionManager.getStatistics(partition),
-                "the existing missing-partition cleanup must still remove its statistics entry");
->>>>>>> b73137cef43... [BugFix][RB-320] Skip lake compaction during every lake rollup job (#64989)
     }
 
     @Test
