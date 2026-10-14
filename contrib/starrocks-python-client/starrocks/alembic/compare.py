@@ -1917,7 +1917,8 @@ def _compare_table_properties_impl(
         # The effective value in the metadata is meta_str if set, otherwise default_str
         effective_meta_str = meta_str if meta_str is not None else default_str
 
-        if effective_conn_str == effective_meta_str:
+        if (default_cls.normalize_property_value(key, effective_conn_str)
+                == default_cls.normalize_property_value(key, effective_meta_str)):
             # logger.debug("Property no changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
             continue
 
@@ -1936,6 +1937,17 @@ def _compare_table_properties_impl(
                     "value %r unchanged (default %r).",
                     key, full_name, conn_value, default_value,
                 )
+            continue
+
+        unreported_reason = default_cls.unreported_property_reason(key)
+        if conn_value is None and unreported_reason:
+            # The database does not report it, so the table cannot hold it: an ALTER would
+            # fail or repeat on every run.
+            logger.warning(
+                f"{object_label} '{full_name}': Property '{key}' is set to '{meta_value}' in metadata "
+                f"but the database does not report it ({unreported_reason}). It cannot be compared. "
+                f"No ALTER TABLE SET operation will be generated for this property."
+            )
             continue
 
         logger.debug("Property changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
