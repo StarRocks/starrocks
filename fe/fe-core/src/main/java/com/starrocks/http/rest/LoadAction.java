@@ -40,6 +40,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
@@ -278,11 +279,13 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend or compute node alive.");
         }
 
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        int redirectPort = Config.stream_load_redirect_port > 0
+                ? Config.stream_load_redirect_port : node.getHttpPort();
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
 
-        LOG.info("redirect load action to destination={}, db: {}, tbl: {}, label: {}, warehouse: {}",
-                redirectAddr.toString(), dbName, tableName, label, warehouseName);
-        redirectTo(request, response, redirectAddr);
+        LOG.info("redirect load action to destination={}, scheme: {}, db: {}, tbl: {}, label: {}, warehouse: {}",
+                redirectAddr.toString(), Config.stream_load_redirect_scheme, dbName, tableName, label, warehouseName);
+        redirectTo(request, response, redirectAddr, Config.stream_load_redirect_scheme, redirectPort);
     }
 
     private void processBatchWriteStreamLoad(
@@ -304,9 +307,12 @@ public class LoadAction extends RestBaseAction {
         List<ComputeNode> nodes = result.getValue();
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
-        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
-        redirectTo(request, response, redirectAddr);
+        int redirectPort = Config.stream_load_redirect_port > 0
+                ? Config.stream_load_redirect_port : node.getHttpPort();
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
+        LOG.info("redirect batch write to destination={}, scheme: {}, db: {}, tbl: {}",
+                redirectAddr, Config.stream_load_redirect_scheme, dbName, tableName);
+        redirectTo(request, response, redirectAddr, Config.stream_load_redirect_scheme, redirectPort);
     }
 
     public static class BatchWriteResponseResult extends RestBaseResult {

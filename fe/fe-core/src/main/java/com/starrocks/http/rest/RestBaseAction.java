@@ -309,13 +309,26 @@ public class RestBaseAction extends BaseAction {
 
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
+        // Default redirect: http scheme + the address's own port. Used by the FE leader
+        // redirect and any caller that does not need a custom scheme/port.
+        redirectTo(request, response, addr, "http", addr.getPort());
+    }
+
+    /**
+     * Scheme/port-aware redirect. Lets callers (e.g. Stream Load) emit an https:// Location
+     * and/or a different port (e.g. a TLS-terminating sidecar/proxy in front of the BE/CN),
+     * without changing the default behavior for other callers.
+     */
+    public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr,
+                           String scheme, int port)
+            throws DdlException {
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
-            resultUriObj = new URI("http", null, addr.getHostname(),
-                    addr.getPort(), urlObj.getPath(), urlObj.getQuery(), null);
+            resultUriObj = new URI(scheme, null, addr.getHostname(),
+                    port, urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());

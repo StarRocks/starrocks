@@ -17,6 +17,7 @@ package com.starrocks.http;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ProcResult;
@@ -114,7 +115,49 @@ public class LoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testBatchWriteStreamLoadFailure() throws Exception {
+    public void testStreamLoadRedirectSchemeAndPortConfigurable() throws Exception {
+        // When stream_load_redirect_scheme/port are set, the FE 307 Location must use the
+        // configured https scheme and port (e.g. a TLS sidecar/proxy in front of BE/CN),
+        // instead of the hardcoded http + the backend's real be_http_port.
+        String originalScheme = Config.stream_load_redirect_scheme;
+        int originalPort = Config.stream_load_redirect_port;
+        try {
+            Config.stream_load_redirect_scheme = "https";
+            Config.stream_load_redirect_port = 8050;
+
+            Map<String, String> map = new HashMap<>();
+            map.put(HTTP_ENABLE_BATCH_WRITE, "true");
+            Request request = buildRequest(map);
+            List<ComputeNode> computeNodes = new ArrayList<>();
+            List<String> expectedLocations = new ArrayList<>();
+            for (int i = 1; i <= 3; i++) {
+                String host = "192.0.0." + i;
+                computeNodes.add(new ComputeNode(i, host, 9050));
+                computeNodes.get(i - 1).setHttpPort(8040);
+                // expect the configured scheme + configured port, NOT http + 8040
+                expectedLocations.add(String.format(
+                        "https://%s:%d/api/%s/%s/_stream_load", host, 8050, DB_NAME, TABLE_NAME));
+            }
+
+            new MockUp<BatchWriteMgr>() {
+                @Mock
+                public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                        TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
+                    return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
+                }
+            };
+
+            try (Response response = noRedirectClient.newCall(request).execute()) {
+                assertEquals(307, response.code(), response.message());
+                String location = response.header("Location");
+                assertTrue(expectedLocations.contains(location),
+                        "unexpected redirect Location: " + location);
+            }
+        } finally {
+            Config.stream_load_redirect_scheme = originalScheme;
+            Config.stream_load_redirect_port = originalPort;
+        }
+    }
         Map<String, String> map = new HashMap<>();
         map.put(HTTP_ENABLE_BATCH_WRITE, "true");
         Request request = buildRequest(map);

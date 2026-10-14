@@ -615,6 +615,26 @@ public class Config extends ConfigBase {
     public static int stream_load_task_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Scheme used in the Stream Load FE->BE/CN 307 redirect Location header.
+     * Default "http" preserves the current behavior. Set to "https" to redirect
+     * clients to a TLS endpoint (e.g. a TLS-terminating sidecar/proxy in front of
+     * the BE/CN HTTP server), enabling an encrypted Stream Load data hop without
+     * requiring the BE/CN HTTP server itself to serve TLS.
+     * Only affects the Stream Load redirect; the FE leader redirect is unaffected.
+     */
+    @ConfField(mutable = true)
+    public static String stream_load_redirect_scheme = "http";
+
+    /**
+     * Port used in the Stream Load FE->BE/CN 307 redirect Location header.
+     * 0 (default) means use the backend's real be_http_port (current behavior).
+     * Set to a non-zero port to redirect clients to a sidecar/proxy port that
+     * terminates TLS and forwards to the BE/CN HTTP port.
+     */
+    @ConfField(mutable = true)
+    public static int stream_load_redirect_port = 0;
+
+    /**
      * The interval of the load history syncer.
      */
     @ConfField(mutable = true)
