@@ -46,6 +46,7 @@
 #include "storage/persistent_index.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
+#include "storage/row_source_mask.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -66,7 +67,6 @@
 #include "storage/union_iterator.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-<<<<<<< HEAD
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
@@ -74,14 +74,6 @@
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
-=======
-#include "storage_primitive/chunk_iterator.h"
-#include "storage_primitive/empty_iterator.h"
-#include "storage_primitive/merge_iterator.h"
-#include "storage_primitive/row_source_mask.h"
-#include "storage_primitive/tablet_basic_info.h"
-#include "storage_primitive/union_iterator.h"
->>>>>>> 540afac ([BugFix] Prevent row source overflow in PK compaction (#80472))
 
 namespace starrocks {
 
