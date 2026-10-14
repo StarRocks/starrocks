@@ -267,9 +267,9 @@ protected:
         window.__set_type(TAnalyticWindowType::ROWS);
         auto boundary = [](int64_t offset) {
             TAnalyticWindowBoundary result;
-            result.__set_type(offset < 0   ? TAnalyticWindowBoundaryType::PRECEDING
-                              : offset > 0 ? TAnalyticWindowBoundaryType::FOLLOWING
-                                           : TAnalyticWindowBoundaryType::CURRENT_ROW);
+            result.__set_type(offset < 0 ? TAnalyticWindowBoundaryType::PRECEDING
+                                         : offset > 0 ? TAnalyticWindowBoundaryType::FOLLOWING
+                                                      : TAnalyticWindowBoundaryType::CURRENT_ROW);
             if (offset != 0) result.__set_rows_offset_value(std::abs(offset));
             return result;
         };
