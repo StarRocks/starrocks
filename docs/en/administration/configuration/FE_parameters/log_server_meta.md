@@ -972,7 +972,7 @@ This topic introduces the following types of FE configurations:
 
   `/dump` and `/dump_starmgr` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege; the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
 
-  Privileged endpoints additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
+  Other privileged endpoints that this setting governs (this does not apply to `/dump` and `/dump_starmgr`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
 
 ### `http_web_page_display_hardware`
 
