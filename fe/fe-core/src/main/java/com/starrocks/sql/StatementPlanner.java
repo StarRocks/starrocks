@@ -394,9 +394,10 @@ public class StatementPlanner {
      *
      * <p>Two things move earlier because of this. The snapshot itself used to be taken by
      * {@link #collectOriginalOlapTables}, i.e. after the lock had been dropped and by taking it again; taking
-     * it here, while the lock is still held, is the same snapshot without the second acquisition. And the
-     * unlock now happens before the authorization check rather than after it, which is the point: see the
-     * caller.
+     * it here, while the lock is still held, saves that second acquisition whenever the lock already covers
+     * every table analysis left in the statement -- see {@link #copyOlapTablesAndUnlock} for when it does not.
+     * And the unlock now happens before the authorization check rather than after it, which is the point: see
+     * the caller.
      */
     private static PlanningSnapshot takePlanningSnapshotAndUnlock(StatementBase stmt, ConnectContext session,
                                                                   PlannerMetaLocker plannerMetaLocker) {
@@ -417,11 +418,55 @@ public class StatementPlanner {
         long planStartTime = OptimisticVersion.generate();
         // Captured before the copy, because copying replaces it on the statement.
         Table originalWriteTarget = writeTargetOf(stmt);
-        Set<OlapTable> originalOlapTables = Sets.newHashSet();
-        // The lock is still held, which is what makes the copy safe against a concurrent modification.
-        AnalyzerUtils.copyOlapTable(stmt, originalOlapTables);
-        unLock(plannerMetaLocker);
+        Set<OlapTable> originalOlapTables = copyOlapTablesAndUnlock(stmt, session, plannerMetaLocker);
         return new PlanningSnapshot(originalOlapTables, planStartTime, originalWriteTarget);
+    }
+
+    /**
+     * Copy every olap table of an analyzed statement under its read lock, then release {@code locker}.
+     *
+     * <p>{@code locker} was collected from the statement as parsed. It covers the tables behind a view, but not
+     * what only analysis brings in -- the tables a row access or column masking policy reads, or those of a view
+     * redefined since. Copying those without their lock races whatever modifies them -- INSERT OVERWRITE swapping
+     * partitions, on the leader or on a follower's replayer -- and fails the statement with a
+     * ConcurrentModificationException out of {@link OlapTable#copyOnlyForQuery}.
+     *
+     * <p>They are not locked on top of what {@code locker} holds: waiting for more while holding some takes locks
+     * out of the order everyone else takes them in, and LockManager queues a reader behind a waiting writer, so two
+     * such statements could wait on one another for good. Instead everything {@code locker} holds is dropped --
+     * every acquisition, as re-analysis is reached with the lock taken twice ({@code InsertPlanner#planWithRetry},
+     * {@link #planDmlOffSnapshots}) -- and the whole set taken in one ordered pass. A table the statement was
+     * bound to may have been dropped or replaced in between, and planning off its copy would read metadata no
+     * longer published, which no later check catches. That fails the statement, to be retried.
+     */
+    private static Set<OlapTable> copyOlapTablesAndUnlock(StatementBase stmt, ConnectContext session,
+                                                          PlannerMetaLocker locker) {
+        Set<OlapTable> copies = Sets.newHashSet();
+        if (locker.forTablesNotLockedOf(session, stmt).isEmpty()) {
+            try {
+                AnalyzerUtils.copyOlapTable(stmt, copies);
+            } catch (Throwable t) {
+                locker.close();
+                throw t;
+            }
+            unLock(locker);
+            return copies;
+        }
+        locker.close();
+        try (PlannerMetaLocker all = locker.forAllTablesOf(session, stmt)) {
+            try (Timer ignored = Tracers.watchScope("Lock")) {
+                lock(all);
+            }
+            // The names were resolved before the lock was taken, so a table dropped or swapped in between left a stale
+            // id in it. Resolve them again: under the database intention lock now held, no name can move.
+            PlannerMetaLocker current = locker.forAllTablesOf(session, stmt);
+            if (!all.locksAll(current) || !current.locksAll(AnalyzerUtils.collectOlapTablesToCopy(stmt))) {
+                throw new StarRocksPlannerException("A table the statement reads was dropped or replaced while it "
+                        + "was being planned, please retry", ErrorType.INTERNAL_ERROR);
+            }
+            AnalyzerUtils.copyOlapTable(stmt, copies);
+        }
+        return copies;
     }
 
     /** The table a writing statement writes into, or null for anything else. */
@@ -730,17 +775,16 @@ public class StatementPlanner {
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, ConnectContext session, PlannerMetaLocker locker) {
+        lock(locker);
         try {
-            lock(locker);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
-            // only copy the latest olap table
-            Set<OlapTable> copiedTables = Sets.newHashSet();
-            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
-            return copiedTables;
-        } finally {
+        } catch (Throwable t) {
             unLock(locker);
+            throw t;
         }
+        // only copy the latest olap table
+        return copyOlapTablesAndUnlock(queryStmt, session, locker);
     }
 
     // Lock all database before analyze

@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -35,17 +36,21 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
@@ -109,6 +114,56 @@ public class PlannerMetaLocker implements AutoCloseable {
         new TableCollector(session, dbs, tables).visit(statementBase);
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         this.queryId = session.getQueryId();
+    }
+
+    private PlannerMetaLocker(UUID queryId, long acquireTimeoutMs) {
+        this.queryId = queryId;
+        this.acquireTimeoutMs = acquireTimeoutMs;
+    }
+
+    /**
+     * A locker for every table {@code analyzedStatement} reads, including what analysis brought in: the tables
+     * behind a view, the ones a row access or column masking policy reads. The constructor, run on the statement
+     * as parsed, sees a view as a name and nothing more.
+     *
+     * <p>Unlike the constructor, this leaves the session's statement databases alone: they classify the query
+     * (resource groups and the like) and stay what the user wrote.
+     */
+    public PlannerMetaLocker forAllTablesOf(ConnectContext session, StatementBase analyzedStatement) {
+        PlannerMetaLocker all = new PlannerMetaLocker(queryId, acquireTimeoutMs);
+        new TableCollector(session, all.dbs, all.tables).visit(analyzedStatement);
+        return all;
+    }
+
+    /** {@link #forAllTablesOf}, less the tables this locker already locks. */
+    public PlannerMetaLocker forTablesNotLockedOf(ConnectContext session, StatementBase analyzedStatement) {
+        PlannerMetaLocker missing = forAllTablesOf(session, analyzedStatement);
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Set<Long> tableIds = missing.tables.get(entry.getKey());
+            if (tableIds == null) {
+                continue;
+            }
+            tableIds.removeAll(entry.getValue());
+            if (tableIds.isEmpty()) {
+                missing.tables.remove(entry.getKey());
+                missing.dbs.remove(entry.getKey());
+            }
+        }
+        return missing;
+    }
+
+    /** Whether every one of {@code boundTables} is among the tables this locker locks, by id. */
+    public boolean locksAll(Collection<? extends Table> boundTables) {
+        return boundTables.stream().allMatch(table -> locksTable(table.getId()));
+    }
+
+    /** Whether every table {@code other} locks is among the tables this locker locks. */
+    public boolean locksAll(PlannerMetaLocker other) {
+        return other.tables.values().stream().flatMap(Set::stream).allMatch(this::locksTable);
+    }
+
+    private boolean locksTable(long tableId) {
+        return tables.values().stream().anyMatch(tableIds -> tableIds.contains(tableId));
     }
 
     /**
@@ -324,6 +379,17 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         private final Map<Long, Database> dbs;
         private final Map<Long, Set<Long>> tables;
+<<<<<<< HEAD
+=======
+        private final Set<Long> statementDbIds = new HashSet<>();
+        // > 0 while inside what an AgentBase relation resolved to, or the body of a view
+        private int resolvedDepth = 0;
+        // The views whose bodies are being walked, so that a definition rewritten into a cycle cannot recurse forever
+        private final Set<Long> expandingViews = new HashSet<>();
+        // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
+        // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
+        private final Deque<Set<String>> cteNames = new ArrayDeque<>();
+>>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
             this.session = session;
@@ -377,13 +443,15 @@ public class PlannerMetaLocker implements AutoCloseable {
          */
         private void visitRawDmlClauses(List<CTERelation> cteRelations, List<Relation> relations,
                                         Expr wherePredicate) {
-            if (cteRelations != null) {
-                cteRelations.forEach(this::visitIfPresent);
-            }
-            if (relations != null) {
-                relations.forEach(this::visitIfPresent);
-            }
-            visitIfPresent(wherePredicate);
+            withCtes(cteRelations, () -> {
+                if (cteRelations != null) {
+                    cteRelations.forEach(this::visitIfPresent);
+                }
+                if (relations != null) {
+                    relations.forEach(this::visitIfPresent);
+                }
+                visitIfPresent(wherePredicate);
+            });
         }
 
         private void visitIfPresent(ParseNode node) {
@@ -435,13 +503,152 @@ public class PlannerMetaLocker implements AutoCloseable {
         }
 
         @Override
-        public Void visitTable(TableRelation node, Void context) {
-            Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
-            put(dbAndTable);
+        public Void visitSelect(SelectRelation node, Void context) {
+            withCtes(node.getCteRelations(), () -> super.visitSelect(node, context));
             return null;
         }
 
         @Override
+        public Void visitSetOp(SetOperationRelation node, Void context) {
+            withCtes(node.getCteRelations(), () -> super.visitSetOp(node, context));
+            return null;
+        }
+
+        /** Run {@code body} in a new with-clause scope, which {@link #visitCTE} fills as the CTEs are walked. */
+        private void withCtes(List<CTERelation> cteRelations, Runnable body) {
+            if (cteRelations == null || cteRelations.isEmpty()) {
+                body.run();
+                return;
+            }
+            cteNames.push(new HashSet<>());
+            try {
+                body.run();
+            } finally {
+                cteNames.pop();
+            }
+        }
+
+        /**
+         * A CTE's name is in scope only after its own definition, as the analyzer has it: in
+         * {@code WITH t0 AS (SELECT * FROM t0)} the inner {@code t0} is the table.
+         */
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            super.visitCTE(node, context);
+            if (!cteNames.isEmpty() && node.getName() != null) {
+                cteNames.peek().add(node.getName());
+            }
+            return null;
+        }
+
+        /** An unqualified name a with clause in scope declares: the analyzer reads the CTE, not a table. */
+        private boolean isCteReference(TableName name) {
+            return name != null && Strings.isNullOrEmpty(name.getCatalog()) && Strings.isNullOrEmpty(name.getDb())
+                    && cteNames.stream().anyMatch(names -> names.contains(name.getTbl()));
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+<<<<<<< HEAD
+=======
+            if (isCteReference(node.getName()) || visitResolved(node)) {
+                return null;
+            }
+>>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
+            Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
+            put(dbAndTable);
+            if (dbAndTable != null && dbAndTable.second instanceof View view) {
+                visitViewBody(view);
+            }
+            return null;
+        }
+
+        /**
+         * Before analysis a view is a name and nothing more, yet planning reads the tables behind it -- and copies
+         * them, when it runs off copies. Lock those too, by walking the body here.
+         */
+        private void visitViewBody(View view) {
+            if (!expandingViews.add(view.getId())) {
+                return;
+            }
+            // A view body is its own name scope: a CTE of the enclosing statement does not shadow a table in it.
+            Deque<Set<String>> enclosingCtes = new ArrayDeque<>(cteNames);
+            cteNames.clear();
+            resolvedDepth++;
+            try {
+                visit(view.getQueryStatement());
+            } catch (StarRocksPlannerException e) {
+                // A definition that does not parse is the analyzer's to report.
+            } finally {
+                resolvedDepth--;
+                expandingViews.remove(view.getId());
+                cteNames.clear();
+                cteNames.addAll(enclosingCtes);
+            }
+        }
+
+        @Override
+<<<<<<< HEAD
+=======
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            visitResolved(node);
+            return null;
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            // The call on the right, or once analyzed the relation it became; the left side is the dual row.
+            return visit(node.getRight(), context);
+        }
+
+        /**
+         * An analyzed statement (SPM analyzes before planning does; re-planning analyzes again) carries what an
+         * AgentBase relation resolved to in place of the call. It is still not something the statement named.
+         */
+        @Override
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
+            PreResolvedState state = PreResolvedState.of(session);
+            if (state == null || !state.isAgentBaseResolution(node)) {
+                return super.visitSubqueryRelation(node, context);
+            }
+            resolvedDepth++;
+            try {
+                return super.visitSubqueryRelation(node, context);
+            } finally {
+                resolvedDepth--;
+            }
+        }
+
+        /**
+         * Resolve an AgentBase relation here, before the lock is taken (see {@link AgentBaseRelations}), and
+         * collect the tables it reads.
+         *
+         * <p>Not inside a view body, which this walks on a parse of its own: the analyzer expands the view from another
+         * parse and so resolves the call again, under the lock. Resolving it here too would run its search twice, the
+         * second time with the tables it reads locked by this statement -- the deadlock resolving early avoids. Such a
+         * call is left to the analyzer, as it was before view bodies were walked.
+         *
+         * @return whether {@code node} was one
+         */
+        private boolean visitResolved(Relation node) {
+            if (!expandingViews.isEmpty()) {
+                return AgentBaseRelations.isAgentBaseRelation(node);
+            }
+            Relation resolved = AgentBaseRelations.resolve(session, node);
+            if (resolved == null) {
+                return false;
+            }
+            resolvedDepth++;
+            try {
+                visit(resolved);
+            } finally {
+                resolvedDepth--;
+            }
+            return true;
+        }
+
+        @Override
+>>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
         public Void visitView(ViewRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
