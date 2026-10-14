@@ -174,10 +174,10 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke
     EXPECT_EQ(baseline, signature);
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(current, current->version()));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(current, current->version()));
     ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
     ASSERT_OK(put_tablet_metadata(flushed));
-    _update_manager->unload_and_remove_primary_index(flushed->id());
+    _primary_key_manager->unload_and_remove_primary_index(flushed->id());
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(flushed->id(), flushed->version()));
     assert_published_sstables_reopen(cold);
@@ -188,7 +188,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke
     // retain SSTs or use the supported native rebuild representation; both must
     // honor the same delvec/DCG/IDG and point-lookup oracle after a cold reopen.
     auto resharded_sst = run_no_write_split_merge_cycle(cold, 2);
-    _update_manager->unload_and_remove_primary_index(resharded_sst->id());
+    _primary_key_manager->unload_and_remove_primary_index(resharded_sst->id());
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(resharded_sst->id(), resharded_sst->version()));
     assert_published_sstables_reopen(reopened);
@@ -2949,7 +2949,7 @@ TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_
     EXPECT_NE(batch->rowsets(0).id(), merged_batch->id()) << "the fixture must make the merge move the rowset";
     EXPECT_EQ(merged_batch->id(), merged_batch->del_files(0).origin_rowset_id());
     expect_lifecycle_oracle(merged, {{10, 300}, {150, 1500}}, {});
-    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _primary_key_manager->unload_and_remove_primary_index(merged_tablet);
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, kMergeVersion));
     const auto* cold_batch = find_batch(cold);
@@ -3042,7 +3042,7 @@ TEST_F(LakeTabletReshardTest, test_delete_only_zero_row_segment_survives_split_m
     auto merged = published.at(merged_tablet);
     expect_canonical_delete(merged);
     expect_lifecycle_oracle(merged, {}, {10});
-    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _primary_key_manager->unload_and_remove_primary_index(merged_tablet);
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, deleted->version() + 2));
     expect_canonical_delete(cold);
@@ -3051,7 +3051,7 @@ TEST_F(LakeTabletReshardTest, test_delete_only_zero_row_segment_survives_split_m
     auto second_cycle = run_no_write_split_merge_cycle(cold, /*child_count=*/3);
     expect_canonical_delete(second_cycle);
     expect_lifecycle_oracle(second_cycle, {}, {10});
-    _update_manager->unload_and_remove_primary_index(second_cycle->id());
+    _primary_key_manager->unload_and_remove_primary_index(second_cycle->id());
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto second_cold,
                     _tablet_manager->get_tablet_metadata(second_cycle->id(), second_cycle->version()));
@@ -3195,7 +3195,7 @@ TEST_F(LakeTabletReshardTest, test_mixed_zero_row_delete_slot_survives_split_mer
     EXPECT_EQ(mixed_bytes, merged_it->data_size());
     EXPECT_EQ(mixed_dels, merged_it->num_dels());
     expect_lifecycle_oracle(merged, {{10, 300}}, {});
-    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _primary_key_manager->unload_and_remove_primary_index(merged_tablet);
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, written->version() + 2));
     expect_lifecycle_oracle(cold, {{10, 300}}, {});
@@ -3436,7 +3436,7 @@ TEST_F(LakeTabletReshardTest, test_skewed_child_exact_deletes_survive_resplit_me
     for (int key = 60; key < 90; ++key) expected_rows.emplace_back(key, key * 10);
     for (int key = 1000; key < 1010; ++key) expected_rows.emplace_back(key, key * 10);
     expect_lifecycle_oracle(merged, expected_rows, deleted_keys);
-    _update_manager->unload_and_remove_primary_index(target_id);
+    _primary_key_manager->unload_and_remove_primary_index(target_id);
     _tablet_manager->prune_metacache();
     ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(target_id, kMergeVersion));
     expect_lifecycle_oracle(cold, expected_rows, deleted_keys);
@@ -4164,7 +4164,7 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_stamps_fresh_sstable_with_new_v
     auto meta = make_single_segment_pk_tablet(tablet_id, base_version, seg_name, seg_size, kNumRows);
     ASSERT_OK(put_tablet_metadata(meta));
 
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, new_version));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(meta, new_version));
 
     ASSERT_NE(flushed, nullptr);
     EXPECT_EQ(base_version, flushed->version());           // returned metadata keeps base_version (restore)
@@ -4193,7 +4193,7 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_uses_unpersisted_in_memory_meta
     // per-tablet aggregate-publish RPC before the coordinator writes the partition bundle.
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(tablet_id, in_memory_version).status().is_not_found());
 
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, in_memory_version));
+    ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(meta, in_memory_version));
     ASSERT_NE(flushed, nullptr);
     EXPECT_EQ(in_memory_version, flushed->version());
     ASSERT_EQ(1, flushed->sstable_meta().sstables_size());

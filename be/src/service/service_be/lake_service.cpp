@@ -51,13 +51,13 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_virtual_merge.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/lake/vector_index_build_task.h"
@@ -1506,8 +1506,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                             } else if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
                                 // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
-                                num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
+                                num_deletes =
+                                        static_cast<int64_t>(_tablet_mgr->primary_key_mgr()->get_rowset_num_deletes(
+                                                **tablet_metadata, rowset));
                             } else if (rowset.has_num_dels()) {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
@@ -1515,8 +1516,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                 num_deletes = rowset.num_dels();
                             } else {
                                 // Fallback for old metadata without num_dels.
-                                num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
+                                num_deletes =
+                                        static_cast<int64_t>(_tablet_mgr->primary_key_mgr()->get_rowset_num_deletes(
+                                                **tablet_metadata, rowset));
                             }
                         }
                         // For non-PK tablets, num_deletes stays 0: they have no delete vectors.
@@ -2335,7 +2337,7 @@ Status LakeServiceImpl::_cleanup_before_repair(const ::starrocks::RepairTabletMe
         // clear primary key index
         if (metadata_pb.schema().keys_type() == PRIMARY_KEYS) {
             // remove from memory
-            _tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+            _tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
             auto persistent_index_type = metadata_pb.persistent_index_type();
 
             // cloud native pk index does not need to rebuild

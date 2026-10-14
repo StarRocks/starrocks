@@ -21,10 +21,10 @@
 #include "runtime/runtime_fwd.h"
 #include "storage/del_vector.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/primary_key_compaction_state.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
-#include "storage/lake/update_compaction_state.h"
 
 namespace starrocks {
 
@@ -37,7 +37,7 @@ class LocationProvider;
 class LakePersistentIndexParallelCompactMgr;
 class Tablet;
 class MetaFileBuilder;
-class UpdateManager;
+class PrimaryKeyManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePersistentIndex>::Entry;
 
@@ -75,10 +75,11 @@ private:
     std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
 };
 
-class UpdateManager {
+// Manages primary-key indexes and the rowset update/compaction state used by shared-data tablets.
+class PrimaryKeyManager {
 public:
-    UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
-    ~UpdateManager();
+    PrimaryKeyManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
+    ~PrimaryKeyManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_parallel_compact_mgr(LakePersistentIndexParallelCompactMgr* parallel_compact_mgr) {
         _parallel_compact_mgr = parallel_compact_mgr;
@@ -192,7 +193,7 @@ public:
 
     MemTracker* index_mem_tracker() const { return _index_cache_mem_tracker.get(); }
 
-    MemTracker* mem_tracker() const { return _update_mem_tracker; }
+    MemTracker* mem_tracker() const { return _primary_key_mem_tracker; }
 
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
@@ -312,14 +313,14 @@ private:
     // rowset cache
     DynamicCache<string, RowsetUpdateState> _update_state_cache;
     // compaction cache
-    DynamicCache<string, CompactionState> _compaction_cache;
+    DynamicCache<string, PrimaryKeyCompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
     LakePersistentIndexParallelCompactMgr* _parallel_compact_mgr = nullptr;
 
     // memory checkers
-    MemTracker* _update_mem_tracker = nullptr;
+    MemTracker* _primary_key_mem_tracker = nullptr;
     std::unique_ptr<MemTracker> _index_cache_mem_tracker;
     std::unique_ptr<MemTracker> _update_state_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;

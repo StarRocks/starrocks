@@ -38,9 +38,9 @@
 #include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h" // kUnknownDelOpOffset
-#include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "storage/rowset/page_io.h"
 #include "storage/storage_metrics.h"
@@ -218,7 +218,7 @@ static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unor
 }
 
 MetaFileBuilder::MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata)
-        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
+        : _tablet(tablet), _tablet_meta(std::move(metadata)), _primary_key_mgr(_tablet.primary_key_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
@@ -1360,8 +1360,8 @@ Status MetaFileBuilder::finalize(int64_t txn_id, bool skip_write_tablet_metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     }
 
-    // Update the primary index data version in the update manager
-    _update_mgr->update_primary_index_data_version(_tablet, version);
+    // Update the primary index data version in the primary key manager
+    _primary_key_mgr->update_primary_index_data_version(_tablet, version);
 
     // Fill the delete vector cache with the newly finalized delete vectors
     _fill_delvec_cache();

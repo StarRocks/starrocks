@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/update_compaction_state.h"
+#include "storage/lake/primary_key_compaction_state.h"
 
 #include "base/debug/trace.h"
 #include "column/chunk_factory.h"
@@ -21,23 +21,23 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/update_manager.h"
 #include "storage/tablet_manager.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
-CompactionState::~CompactionState() {
-    if (_update_manager != nullptr) {
-        _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
+PrimaryKeyCompactionState::~PrimaryKeyCompactionState() {
+    if (_primary_key_manager != nullptr) {
+        _primary_key_manager->compaction_state_mem_tracker()->release(_memory_usage);
     }
 }
 
-Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
-                                      const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
-    CHECK_MEM_LIMIT("CompactionState::load_segments");
+Status PrimaryKeyCompactionState::load_segments(Rowset* rowset, PrimaryKeyManager* primary_key_manager,
+                                                const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+    CHECK_MEM_LIMIT("PrimaryKeyCompactionState::load_segments");
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
@@ -45,7 +45,7 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     } else {
         DCHECK(pk_cols.size() == rowset->num_segments());
     }
-    _update_manager = update_manager;
+    _primary_key_manager = primary_key_manager;
     _tablet_id = rowset->tablet_id();
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
         std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
@@ -58,7 +58,8 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     return _load_segments(rowset, tablet_schema, segment_id);
 }
 
-Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema,
+                                                 uint32_t segment_id) {
     vector<uint32_t> pk_columns;
     pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
@@ -110,23 +111,23 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
-    _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
+    _primary_key_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();
 }
 
-void CompactionState::release_segments(uint32_t segment_id) {
+void PrimaryKeyCompactionState::release_segments(uint32_t segment_id) {
     std::lock_guard<std::mutex> lg(_state_lock);
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
     _memory_usage -= pk_cols[segment_id]->memory_usage();
-    _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
+    _primary_key_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
     // reset ptr to release memory immediately
     pk_cols[segment_id].reset();
 }
 
-std::string CompactionState::to_string() const {
-    return strings::Substitute("CompactionState tablet:$0", _tablet_id);
+std::string PrimaryKeyCompactionState::to_string() const {
+    return strings::Substitute("PrimaryKeyCompactionState tablet:$0", _tablet_id);
 }
 
 } // namespace starrocks::lake
