@@ -1824,8 +1824,8 @@ def _check_range_distribution(
     Range distribution has no DISTRIBUTED BY syntax: a table gets it by omitting the clause, so
     a RANGE table whose metadata leaves DISTRIBUTED BY unset (or sets it to 'RANGE') matches.
     Range distribution has no bucket count (StarRocks reports a placeholder 1), so buckets are
-    not compared. Switching between RANGE
-    and HASH/RANDOM cannot be done with ALTER, so it raises instead.
+    not compared. Switching between RANGE and HASH/RANDOM cannot be done with ALTER, so it raises
+    instead.
     """
     conn_is_range = utils.is_range_distribution(conn_distribution)
     meta_is_range = utils.is_range_distribution(meta_distribution)
@@ -1843,10 +1843,23 @@ def _check_range_distribution(
             f"or recreate the {ddl_object.lower()} to change it."
         )
     else:
+        # Metadata says RANGE but the database doesn't: almost always the cluster did not apply
+        # range distribution when the object was created, rather than a deliberate change.
+        if ddl_object.upper() == "MATERIALIZED VIEW":
+            config_hint = (
+                "materialized views also need the FE config 'enable_mv_range_distribution' "
+                "(default false)"
+            )
+        else:
+            config_hint = "shared-nothing clusters do not use it by default"
         reason = (
+            f"This usually means the cluster did not apply range distribution when the "
+            f"{ddl_object.lower()} was created: it is opt-in on StarRocks 4.1 (FE config "
+            f"'enable_range_distribution' defaults to false), and {config_hint}. "
             f"StarRocks has no DISTRIBUTED BY RANGE syntax, so an existing {ddl_object.lower()} "
             f"cannot be altered to RANGE distribution. Set DISTRIBUTED BY to match the database, "
-            f"or recreate the {ddl_object.lower()} to change it."
+            f"or recreate the {ddl_object.lower()} after enabling range distribution. For models "
+            f"shared across clusters, leave DISTRIBUTED BY unset instead of setting 'RANGE'."
         )
     raise NotImplementedError(
         f"{object_label} {table_fqn!r}: Attribute 'DISTRIBUTED BY' differs: "
