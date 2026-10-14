@@ -496,6 +496,11 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Cumulative number of driver scheduling times for pipeline executors in the BE.
 
+## `pipe_drivers`
+
+- Unit: Count
+- Description: Current logical driver capacity reserved by BE admission control. Includes reservations held while a fragment instantiates drivers and operators, as well as reservations retained after instantiation until they are released. The value follows logical DOP accounting, including colocate execution groups, and is not a count of instantiated driver objects or running threads. Releasing a reservation, including on preparation failure or fragment completion, decreases the value.
+
 ## `pipe_poller_block_queue_len`
 
 - Unit: Count
