@@ -85,7 +85,9 @@ public class PartitionContextAnalyzerTest {
             for (KeysType keysType : KeysType.values()) {
                 for (String expression : new String[] {
                         "test.partition_context_stable(k)",
+                        "partition_context_stable(k)",
                         "abs(test.partition_context_stable(k))",
+                        "abs(partition_context_stable(k))",
                         "test.partition_context_random(k)",
                         "abs(test.partition_context_random(k))",
                         "test.partition_context_external(k)",
@@ -100,7 +102,8 @@ public class PartitionContextAnalyzerTest {
 
             // Catalog registration is mocked, but function resolution and all DDL checks are real.
             // Ordinary UDF calls and non-partition generated columns must retain their support.
-            analyzeSuccess("SELECT test.partition_context_stable(v1), test.partition_context_random(v1), "
+            analyzeSuccess("SELECT test.partition_context_stable(v1), partition_context_stable(v1), "
+                    + "test.partition_context_random(v1), "
                     + "test.partition_context_external(v1) FROM t0");
             analyzeSuccess("CREATE TABLE test.partition_context_ordinary (k BIGINT NOT NULL, "
                     + "g BIGINT AS test.partition_context_stable(k)) DUPLICATE KEY(k) "

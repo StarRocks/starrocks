@@ -25,7 +25,6 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -127,8 +126,7 @@ public class CreateTableAnalyzer {
         analyzeEngineName(statement, catalogName);
         analyzeCharsetName(statement);
 
-        com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
-        analyzeMultiExprsPartition(statement, tableNameObj);
+        analyzeMultiExprsPartition(statement, context);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
         analyzePartitionDesc(statement);
@@ -638,7 +636,7 @@ public class CreateTableAnalyzer {
         }
     }
 
-    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, TableName tableName) {
+    public static void analyzeMultiExprsPartition(CreateTableStmt stmt, ConnectContext context) {
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (partitionDesc == null || !(partitionDesc instanceof ListPartitionDesc)) {
             return;
@@ -663,6 +661,13 @@ public class CreateTableAnalyzer {
             }
             if (partitionExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
+                if (stmt.isOlapEngine()) {
+                    try {
+                        PartitionDescAnalyzer.checkPartitionExprDeterminism(expr);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage(), expr.getPos());
+                    }
+                }
                 if (stmt.isIcebergEngine()) {
                     String fnName = ((FunctionCallExpr) expr).getFunctionName();
                     fnName = FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX + fnName;
@@ -671,7 +676,16 @@ public class CreateTableAnalyzer {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                                 new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
                                         col.getType(), null, null)).collect(Collectors.toList()))),
-                        ConnectContext.buildInner());
+                        stmt.isOlapEngine() ? context : ConnectContext.buildInner());
+                if (stmt.isOlapEngine()) {
+                    // Function resolution needs the real user/database even though UDFs are then
+                    // rejected. An empty inner context fails during authorization before the guard.
+                    try {
+                        PartitionDescAnalyzer.checkPartitionExprDeterminism(expr);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage(), expr.getPos());
+                    }
+                }
                 String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
                 partitionColumnList.add(columnName);
                 Type type = expr.getType();

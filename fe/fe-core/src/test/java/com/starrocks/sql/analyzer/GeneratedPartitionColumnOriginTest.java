@@ -107,7 +107,7 @@ public class GeneratedPartitionColumnOriginTest {
             AstToStringBuilder.getDdlStmt("test", table, ddl, null, null, false, false, false);
             String replayDdl = ddl.get(0).replace("`" + tableName + "`", "`origin_like_replay`");
             CreateTableStmt replay = (CreateTableStmt) analyzeSuccess(replayDdl);
-            assertEquals("origin_like_replay", replay.getTableName().getTbl());
+            assertEquals("origin_like_replay", replay.getTableName());
             assertTrue(replay.getColumns().get(2).isInternalGeneratedPartitionColumn());
             assertEquals(AggregateType.REPLACE, replay.getColumns().get(2).getAggregationType());
         } finally {
