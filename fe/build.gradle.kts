@@ -105,7 +105,6 @@ subprojects {
             implementation("com.aliyun:datalake20200710:2.0.12")
             implementation("com.baidu:jprotobuf-precompile-plugin:2.2.12")
             implementation("com.baidu:jprotobuf-rpc-common:1.9")
-            implementation("com.baidu:jprotobuf-rpc-core:4.2.1")
             implementation("com.clickhouse:clickhouse-jdbc:0.4.6")
             implementation("com.esotericsoftware:kryo-shaded:4.0.2")
             implementation("com.fasterxml.jackson.core:jackson-annotations:${project.ext["jackson-annotations.version"]}")
@@ -141,8 +140,14 @@ subprojects {
             // tencentcloud-sdk below 3.1.1471 drags in EOL okhttp 2.7.5 (via hadoop-cos)
             implementation("com.tencentcloudapi:tencentcloud-sdk-java-common:3.1.1471")
             implementation("com.tencentcloudapi:tencentcloud-sdk-java-kms:3.1.1471")
+<<<<<<< HEAD
             implementation("com.starrocks:fe-common:1.0.0")
             implementation("com.starrocks:hive-udf:1.0.0")
+=======
+            implementation("com.starrocks:fe-testing:${project.version}")
+            implementation("com.starrocks:hive-udf:${project.version}")
+            implementation("com.starrocks:jprotobuf-rpc-core:1.0.0")
+>>>>>>> d855a8e ([BugFix] Use com.starrocks:jprotobuf-rpc-core for the FE brpc client (#80684))
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
             implementation("com.starrocks:plugin-common:1.0.0")
             implementation("com.starrocks:spark-dpp:1.0.0")
