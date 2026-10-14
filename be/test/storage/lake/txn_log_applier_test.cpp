@@ -1342,7 +1342,7 @@ void verify_lake_replication_archives_only_unreferenced_files(bool primary_key, 
     const std::string reused_del = "reused.del";
     const std::string garbage_del = "garbage.del";
 
-    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), tablet_id);
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), tablet_id);
     auto meta = primary_key ? build_pk_metadata(tablet_id) : build_non_pk_metadata(tablet_id);
     meta->set_next_rowset_id(10);
     auto* old_rowset = meta->add_rowsets();

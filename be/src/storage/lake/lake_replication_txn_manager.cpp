@@ -882,10 +882,11 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(const TabletM
             const std::optional<int64_t> segment_size =
                     segment_meta.has_size() ? std::make_optional(segment_meta.size()) : std::nullopt;
             existed_filename_uuids.emplace(
-                    uuid, ExistingFileInfo{segment_name,
-                                           is_physical_bundle_segment(segment_meta) ? "" : segment_meta.encryption_meta(),
-                                           segment_meta.shared(),
-                                           is_physical_bundle_segment(segment_meta) ? std::nullopt : segment_size});
+                    uuid,
+                    ExistingFileInfo{segment_name,
+                                     is_physical_bundle_segment(segment_meta) ? "" : segment_meta.encryption_meta(),
+                                     segment_meta.shared(),
+                                     is_physical_bundle_segment(segment_meta) ? std::nullopt : segment_size});
             if (is_physical_bundle_segment(segment_meta)) {
                 auto& slice_infos = bundle_slice_infos[uuid];
                 auto [it, inserted] =
