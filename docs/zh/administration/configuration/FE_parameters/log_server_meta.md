@@ -969,7 +969,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
   - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
 
-  `/dump`、`/dump_starmgr` 不在豁免范围内：无论该参数如何设置，都要求使用拥有 SYSTEM 级 `NODE` 权限或 `root` 角色的用户进行 HTTP Basic 认证。
+  `/dump`、`/dump_starmgr` 不在豁免范围内：无论该参数如何设置，都只允许已认证的管理员访问。认证方式可以是 HTTP Basic 认证，也可以是登录 FE Web 控制台后获得的会话 cookie。满足以下任一条件即视为管理员：拥有 SYSTEM 级 `NODE` 权限；是 `root` 用户或拥有 `root` 角色；同时拥有 `db_admin` 和 `user_admin` 角色。
 
   特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
 

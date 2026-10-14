@@ -961,7 +961,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
   - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
 
-  `/dump`、`/dump_starmgr` は除外されません：この設定にかかわらず、SYSTEM レベルの `NODE` 権限または `root` ロールを持つユーザーによる HTTP Basic 認証が常に必要です。
+  `/dump`、`/dump_starmgr` は除外されません：この設定にかかわらず、認証済みの管理者のみがアクセスできます。認証には HTTP Basic 認証、または FE Web コンソールへのログインで取得したセッション Cookie を使用できます。次のいずれかを満たすユーザーが管理者として扱われます：SYSTEM レベルの `NODE` 権限を持つ；`root` ユーザーである、または `root` ロールを持つ；`db_admin` ロールと `user_admin` ロールの両方を持つ。
 
   特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
