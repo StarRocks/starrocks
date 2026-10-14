@@ -33,6 +33,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
@@ -55,6 +56,7 @@ import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -357,10 +359,18 @@ public class CompactionScheduler extends Daemon {
             table = (OlapTable) stateMgr.getLocalMetastore()
                         .getTable(db.getId(), tableId);
 
-            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
-            // will not be used after the schema change job finished.
-            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
+            // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
+            //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
+            //   - ROLLUP: a lake rollup job (LakeRollupJob, for ADD ROLLUP and sync MVs) publishes the new index by
+            //     replaying the rollup tablets' per-version txn vlogs over [alter_version + 1, commit_version). A
+            //     compaction only writes the visible (base) index tablets, so a compaction version inside that
+            //     range has no rollup vlog and the rollup publish fails on every retry, wedging the job forever
+            //     (RB-320).
+            if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
+                long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
+                compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
+                logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
                 return null;
             }
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
@@ -426,6 +436,22 @@ public class CompactionScheduler extends Daemon {
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
         }
+    }
+
+    // While an alter pauses compaction, the partition's compaction score keeps climbing under ingestion, and
+    // loads get delayed or rejected with a hint to raise compaction concurrency, which cannot help. Log each
+    // skip so an operator can tie the score to the running alter job. The partition id and score match
+    // PARTITION_ID and MAX_CS in information_schema.partitions_meta. A skipped partition is retried at most
+    // once per retryAfterMs, so log at INFO only while its score already delays or rejects commits into it, and
+    // at DEBUG otherwise to keep a wide table from flooding fe.log.
+    private static void logCompactionSkippedByAlter(Database db, OlapTable table, PartitionStatisticsSnapshot snapshot,
+                                                    long retryAfterMs) {
+        double score = snapshot.getCompactionScore().getMax();
+        Level level = CommitRateLimiter.throttlesIngestion(score) ? Level.INFO : Level.DEBUG;
+        LOG.log(level, "Skip compaction of partition {} of table {}.{} while the table is in {} state, compaction "
+                        + "score: {}. Compaction resumes after the alter job finishes; next check in {}ms",
+                snapshot.getPartition().getPartitionId(), db.getFullName(), table.getName(), table.getState(), score,
+                retryAfterMs);
     }
 
     @NotNull
