@@ -1,11 +1,11 @@
 ---
 sidebar_position: 10
-description: "Explains StarRocks feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
+description: "Explains feature maturity levels: Experimental, Beta, Generally Available (GA), Deprecated, and End-of-Life, and what each means for production use."
 ---
 
 # ベータ版および実験的機能
 
-StarRocks の機能には、5 つの成熟度レベルがあります。
+機能には、5 つの成熟度レベルがあります。
 
 - 実験的
 - ベータ版
@@ -13,7 +13,7 @@ StarRocks の機能には、5 つの成熟度レベルがあります。
 - 非推奨
 - 削除済み
 
-ほとんどの StarRocks の機能は GA です。ドキュメントにその機能が実験的、ベータ版、または非推奨であることを示すラベルがない場合、その機能は GA です。
+ほとんどの機能は GA です。ドキュメントにその機能が実験的、ベータ版、または非推奨であることを示すラベルがない場合、その機能は GA です。
 
 ## 実験的機能
 
@@ -22,7 +22,7 @@ StarRocks の機能には、5 つの成熟度レベルがあります。
 - **インターフェース**: インターフェースは将来的に変更される可能性があります。これには、コマンド構文、設定パラメータ、デフォルト、機能の削除などが含まれます。
 - **可用性**: 実験的機能はデフォルトでオフになっており、SQL または設定ファイルでパラメータを設定することで許可する必要があります。
 - **本番環境の準備**: 実験的機能は本番環境で使用すべきではありません。
-- **サポート**: [GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。StarRocks エンジニアリングチームがサポートします。
+- **サポート**: [GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。エンジニアリングチームがサポートします。
 
 ## ベータ版機能
 
@@ -32,7 +32,7 @@ StarRocks の機能には、5 つの成熟度レベルがあります。
 - **インターフェース**: インターフェースは将来的に変更される可能性があります。後方互換性がない可能性があります。
 - **可用性**: ベータ版機能はデフォルトでオフになっており、SQL または設定ファイルでパラメータを設定することで許可する必要があります。
 - **本番環境の準備**: ベータ版機能は本番環境での使用は推奨されません。
-- **サポート**: [GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。StarRocks エンジニアリングチームがサポートします。
+- **サポート**: [GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。エンジニアリングチームがサポートします。
 
 ## GA 機能
 
@@ -41,7 +41,7 @@ StarRocks の機能には、5 つの成熟度レベルがあります。
 - **インターフェース**: 安定した API。
 - **可用性**: GA 機能はデフォルトでオンになっています。
 - **本番環境の準備**: 本番環境での使用が可能です。
-- **サポート**: サポートチームが顧客にサポートを提供します。オープンソースコミュニティのメンバーは、[GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。StarRocks エンジニアリングチームがサポートします。
+- **サポート**: サポートチームが顧客にサポートを提供します。オープンソースコミュニティのメンバーは、[GitHub issue](https://github.com/StarRocks/starrocks/issues) を開くか、[Slack](https://docs.starrocks.io/join/) で質問してください。エンジニアリングチームがサポートします。
 
 ## 非推奨機能
 
