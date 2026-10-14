@@ -245,7 +245,7 @@ create table agg_unixtime (
   city varchar(64) not null,
   pv bigint sum
 ) aggregate key(ts, city)
-partition by from_unixtime(ts)
+partition by from_unixtime(ts, '%Y-%m-%d %H:%i:%s', 'UTC')
 distributed by hash(city) buckets 3
 properties("replication_num" = "1");
 -- result:
