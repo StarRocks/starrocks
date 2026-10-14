@@ -27,6 +27,7 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 public class PartitionContextAnalyzerTest {
     private static final String SESSION_ERROR = "The partition expr should not depend on session context";
     private static final String UDF_ERROR = "The partition expr should only use built-in functions";
+    private static final String RUNTIME_ERROR = "The partition expr should not depend on runtime context";
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -64,6 +65,30 @@ public class PartitionContextAnalyzerTest {
         }
         analyzeSuccess("SELECT session_user(), current_user(), database(), current_role(), connection_id(), "
                 + "@@session.time_zone, @partition_context_tag, concat(v1, session_user()) FROM t0");
+    }
+
+    @Test
+    public void testRuntimeAndMetadataFunctionsRejectedOnlyForPartitioning() {
+        for (String function : new String[] {
+                "host_name()", "current_timezone()", "last_query_id()", "current_version()", "version()",
+                "CAST(is_role_in_session('root') AS VARCHAR)",
+                "get_query_profile('00000000-0000-0000-0000-000000000001')",
+                "inspect_task_runs()", "inspect_memory('Load')"
+        }) {
+            String expression = "concat(k, ':', " + function + ")";
+            for (KeysType keysType : KeysType.values()) {
+                analyzeFail(createTableSql(keysType, expression), RUNTIME_ERROR);
+                analyzeFail(createTableSql(keysType, "substr(" + expression + ", 1, 128)"), RUNTIME_ERROR);
+                if (keysType != KeysType.AGG_KEYS) {
+                    analyzeFail(generatedTableSql(keysType, "VARCHAR(128)", expression), RUNTIME_ERROR);
+                }
+            }
+            analyzeSuccess("SELECT " + expression.replace("concat(k,", "concat(v1,") + " FROM t0");
+            analyzeSuccess("CREATE TABLE test.partition_runtime_ordinary (k BIGINT NOT NULL, "
+                    + "g VARCHAR(128) AS " + expression + ") DUPLICATE KEY(k) "
+                    + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1')");
+        }
+        analyzeSuccess(createTableSql(KeysType.DUP_KEYS, "concat(k, ':stable')"));
     }
 
     @Test
@@ -129,8 +154,12 @@ public class PartitionContextAnalyzerTest {
     }
 
     private String generatedTableSql(String type, String expression) {
+        return generatedTableSql(KeysType.DUP_KEYS, type, expression);
+    }
+
+    private String generatedTableSql(KeysType keysType, String type, String expression) {
         return "CREATE TABLE test.partition_context_generated (k BIGINT NOT NULL, pv BIGINT, g " + type
-                + " AS " + expression + ") DUPLICATE KEY(k) PARTITION BY (g) "
+                + " AS " + expression + ") " + keysType.toSql() + "(k) PARTITION BY (g) "
                 + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num'='1')";
     }
 }

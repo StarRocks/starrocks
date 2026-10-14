@@ -668,6 +668,20 @@ public class PartitionDescAnalyzer {
                         + ExprToSql.toSql(function));
             }
             String name = function.getFunctionName();
+            // A value that is constant within one query need not be stable between loads or workers.
+            // These built-ins read node/query/session/auth state or mutable FE configuration; meta
+            // functions additionally inspect mutable catalog/runtime state. Keep ordinary calls valid.
+            boolean runtimeContextDependent = FunctionSet.HOST_NAME.equalsIgnoreCase(name)
+                    || "current_timezone".equalsIgnoreCase(name)
+                    || FunctionSet.LAST_QUERY_ID.equalsIgnoreCase(name)
+                    || FunctionSet.CURRENT_VERSION.equalsIgnoreCase(name)
+                    || "version".equalsIgnoreCase(name)
+                    || "is_role_in_session".equalsIgnoreCase(name)
+                    || FunctionSet.GET_QUERY_PROFILE.equalsIgnoreCase(name);
+            if (runtimeContextDependent || (function.getFn() != null && function.getFn().isMetaFunction())) {
+                throw new AnalysisException("The partition expr should not depend on runtime context, but got "
+                        + ExprToSql.toSql(function));
+            }
             int argumentCount = function.getChildren().size();
             boolean sessionTimezoneDependent =
                     (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
