@@ -19,6 +19,7 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
@@ -240,6 +241,68 @@ public class MVMirrorBasePartitionTest extends MVTestBase {
                         Assertions.assertEquals(Sets.newHashSet("p202105"), baseMap.get("mirror_b1"));
                         Assertions.assertEquals(Sets.newHashSet("p202106"), baseMap.get("mirror_b2"));
                         Assertions.assertEquals(Sets.newHashSet("p202105"), baseMap.get("mirror_b3"));
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * End-to-end regression for the bounded-refresh data loss: with the flag enabled for an MV that was
+     * built while the flag was off (eager day partitions) and a merged base month, a refresh restricted to
+     * a range outside that month must not drop the month's legacy day partitions.
+     */
+    @Test
+    public void testBoundedRefreshKeepsOutOfRangeMirrorHistory() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            // base table: a merged May month partition plus recent June day partitions
+            starRocksAssert.withTable(createTableSql("mirror_c1", MAY_RANGE,
+                    "PARTITION p20210601 values [('2021-06-01'),('2021-06-02'))",
+                    "PARTITION p20210602 values [('2021-06-02'),('2021-06-03'))"));
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_bounded\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_c1 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+
+                        // initial full refresh with mirror disabled -> eager keeps every day partition
+                        refreshMV(DB_NAME, mv);
+                        Set<String> before = mv.getRangePartitionMap().getPartitionNames();
+                        Assertions.assertTrue(before.contains("p20210501_20210502"), "before: " + before);
+                        Assertions.assertFalse(before.contains("p20210501_20210601"), "before: " + before);
+
+                        // enable mirror and refresh only June: the out-of-range May history must survive
+                        Config.enable_mv_mirror_base_partition = true;
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.getProperties().put(TaskRun.PARTITION_START, "2021-06-01");
+                        taskRun.getProperties().put(TaskRun.PARTITION_END, "2021-06-03");
+                        taskRun.getProperties().put(TaskRun.FORCE, "true");
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "bounded refresh did not succeed");
+
+                        // the refresh must have been scoped to the in-range June partitions only
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Set<String> refreshed = extraMessage.getMvPartitionsToRefresh();
+                        Assertions.assertTrue(refreshed.contains("p20210601_20210602"), "refreshed: " + refreshed);
+                        Assertions.assertTrue(refreshed.contains("p20210602_20210603"), "refreshed: " + refreshed);
+                        Assertions.assertFalse(refreshed.contains("p20210501_20210502"), "refreshed: " + refreshed);
+
+                        Set<String> after = mv.getRangePartitionMap().getPartitionNames();
+                        // May must still be day-partitioned history: not dropped, not coalesced into a month
+                        Assertions.assertTrue(after.contains("p20210501_20210502"), "after: " + after);
+                        Assertions.assertFalse(after.contains("p20210501_20210601"), "after: " + after);
+                        // in-range June partitions are intact
+                        Assertions.assertTrue(after.contains("p20210601_20210602"), "after: " + after);
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
                     });
         } finally {
             Config.enable_mv_mirror_base_partition = original;
