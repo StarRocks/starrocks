@@ -69,7 +69,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. When false, raw task definitions are returned (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
+- Description: When true, StarRocks redacts credentials from task SQL definitions before returning them in `information_schema.tasks` and `information_schema.task_runs` by applying SqlCredentialRedactor.redact to the DEFINITION column. In `information_schema.task_runs` the same redaction is applied whether the definition comes from the task run status or, when empty, from the task definition lookup. The same redaction is applied before finished task runs are archived to `_statistics_.task_run_history`, so the archived definition does not contain credentials in clear text. When false, raw task definitions are returned and archived (may expose credentials). Masking is CPU/string-processing work and can be time-consuming when the number of tasks or `task_runs` is large; disable only if you need unredacted definitions and accept the security risk.
 - Introduced in: v3.5.6
 
 ### `privilege_max_role_depth`
