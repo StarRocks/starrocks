@@ -309,8 +309,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 real_fn_name += "_in";
                 // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
                 // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
-                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
-                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
+                // `first_value`/`last_value` keep the selected value in their aggregate state, so
+                // streaming cumulative frames can evict processed rows and sliding frames only
+                // retain their physical frame. Frame-level materialization requirements still apply.
+                const bool is_streamable_ignore_nulls =
+                        (fname == "lag" || fname == "lead" || fname == "first_value" || fname == "last_value");
                 if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
                     _need_partition_materializing = true;
                 }
