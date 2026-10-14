@@ -49,6 +49,12 @@ description: "Alphabetical t - z"
 - 单位: 计数
 - 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
 
+## `thrift_client_retries_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE 发起的 Thrift RPC 因连接断开而重试的累计次数。每次重试前，FE 会先随机等待一段时间（指数退避：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止），再重新建立连接并重发请求。调用超时不会重试，也不计入该指标。单次调用的重试次数受 `thrift_rpc_retry_times` 限制。该值持续上升说明 FE 与其他节点之间的 Thrift 连接频繁断开，常见原因是对端（例如 Leader FE）的 Thrift 工作线程池已饱和，正在直接关闭新连接，可结合对端的 `thrift_server_rejected_connections_total` 一起判断。
+
 ## `thrift_connections_total`
 
 - 单位: 计数

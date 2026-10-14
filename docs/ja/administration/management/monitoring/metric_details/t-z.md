@@ -49,6 +49,12 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
 
+## `thrift_client_retries_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: FE が発行した Thrift RPC が接続の切断により再試行した累計回数。各再試行の前に、FE はランダムな時間だけ待機（指数バックオフ: 最初の再試行の前は 100～200 ms、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ms に達するまで増加）してから、接続を再開してリクエストを再送します。タイムアウトした呼び出しは再試行されず、カウントもされません。1 回の呼び出しあたりの再試行回数は `thrift_rpc_retry_times` によって制限されます。値が増加し続けている場合、FE と他のノードとの Thrift 接続が頻繁に切断されていることを意味します。よくある原因は、接続先（たとえば Leader FE）の Thrift ワーカー プールが飽和し、新しい接続を即座にクローズしていることです。接続先の `thrift_server_rejected_connections_total` と併せて確認してください。
+
 ## `thrift_connections_total`
 
 - 単位: カウント
