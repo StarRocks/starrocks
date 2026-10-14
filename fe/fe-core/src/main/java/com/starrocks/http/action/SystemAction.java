@@ -34,6 +34,7 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
@@ -130,7 +131,8 @@ public class SystemAction extends WebBaseAction {
                 result = procNode.fetchResult();
             } catch (AnalysisException e) {
                 buffer.append("<p class=\"text-error\"> The result is null, "
-                        + "maybe haven't be implemented completely[" + e.getMessage() + "], please check.</p>");
+                        + "maybe haven't be implemented completely[" + Encode.forHtml(e.getMessage())
+                        + "], please check.</p>");
                 buffer.append("<p class=\"text-info\"> "
                         + "INFO: ProcNode type is [" + procNode.getClass().getName()
                         + "]</p>");
@@ -149,7 +151,10 @@ public class SystemAction extends WebBaseAction {
         appendTableFooter(buffer);
     }
 
-    private void appendSystemTableBody(StringBuilder buffer, List<List<String>> rows, boolean isDir, String path) {
+    // Cells are HTML-encoded because proc results carry user-controlled text, such as table names and SQL statements.
+    // 'path' is already HTML-encoded by the caller.
+    @VisibleForTesting
+    void appendSystemTableBody(StringBuilder buffer, List<List<String>> rows, boolean isDir, String path) {
         UrlValidator validator = new UrlValidator();
         for (List<String> strList : rows) {
             buffer.append("<tr>");
@@ -157,16 +162,15 @@ public class SystemAction extends WebBaseAction {
             for (String str : strList) {
                 buffer.append("<td>");
                 if (isDir && columnIndex == 1) {
-                    String escapeStr = str.replace("%", "%25");
-                    buffer.append("<a href=\"?path=" + path + "/" + escapeStr + "\">");
-                    buffer.append(str);
+                    buffer.append("<a href=\"?path=" + path + "/" + Encode.forUriComponent(str) + "\">");
+                    buffer.append(Encode.forHtml(str));
                     buffer.append("</a>");
                 } else if (validator.isValid(str)) {
-                    buffer.append("<a href=\"" + str + "\">");
+                    buffer.append("<a href=\"" + Encode.forHtmlAttribute(str) + "\">");
                     buffer.append("URL");
                     buffer.append("</a>");
                 } else {
-                    buffer.append(str != null ? str.replaceAll("\\n", "<br/>") : "");
+                    buffer.append(str != null ? Encode.forHtml(str).replace("\n", "<br/>") : "");
                 }
                 buffer.append("</td>");
                 ++columnIndex;
