@@ -1630,6 +1630,79 @@ class TestUnmanagedDefaultProperties:
         assert LOG_NO_ALERT_AUTO_GENERATED in caplog.text
 
 
+class TestPropertiesNotReportedByDatabase:
+    """The metadata sets a property the database does not report (conn side absent)."""
+
+    @staticmethod
+    def _run(conn_props, meta_props):
+        from starrocks.alembic.compare import _compare_table_properties_impl
+
+        to_set, _ = _compare_table_properties_impl(
+            "test_db", "test_table",
+            {TableInfoKey.PROPERTIES: conn_props}, {TableInfoKey.PROPERTIES: meta_props},
+            SystemRunMode.SHARED_NOTHING,
+        )
+        return to_set
+
+    @pytest.mark.parametrize("prop_key, value", [
+        # StarRocks only reports these when they differ from the default
+        ("write_quorum", "MAJORITY"),
+        ("write_quorum", "majority"),
+        ("compaction_strategy", "default"),
+        ("enable_load_profile", "false"),
+        ("mutable_bucket_num", "0"),
+        ("primary_index_cache_expire_sec", "0"),
+        ("storage_type", "COLUMN"),
+        ("enable_statistic_collect_on_first_load", "true"),
+        # Unreported, but set to the default
+        ("storage_format", "DEFAULT"),
+        ("bucket_size", "4294967296"),
+        ("enable_persistent_index", "true"),
+    ])
+    def test_default_value_not_reported_no_op(self, prop_key, value, caplog):
+        caplog.set_level("WARNING")
+        assert self._run({}, {prop_key: value}) == {}
+        assert caplog.records == []
+
+    @pytest.mark.parametrize("prop_key, value", [
+        ("write_quorum", "ONE"),
+        ("compaction_strategy", "REAL_TIME"),
+        ("enable_load_profile", "true"),
+        ("enable_statistic_collect_on_first_load", "false"),
+    ])
+    def test_non_default_value_not_reported_generates_op(self, prop_key, value):
+        """The database does not report it because it holds the default, so this is a real change."""
+        assert self._run({}, {prop_key: value}) == {prop_key: value}
+
+    @pytest.mark.parametrize("prop_key, value", [
+        ("storage_format", "V2"),
+        ("bucket_size", "1073741824"),  # on a HASH-distributed table
+        ("enable_persistent_index", "false"),  # on a non-PRIMARY KEY table
+    ])
+    def test_unreported_property_warns_no_op(self, prop_key, value, caplog):
+        caplog.set_level("WARNING")
+        assert self._run({}, {prop_key: value}) == {}
+        assert "the database does not report it" in caplog.text
+        assert LOG_NO_ALERT_AUTO_GENERATED in caplog.text
+
+    def test_unreported_property_compared_when_reported(self):
+        """bucket_size on a RANDOM-distributed table is reported, so it is compared as usual."""
+        assert self._run({"bucket_size": "4294967296"}, {"bucket_size": "1073741824"}) == {"bucket_size": "1073741824"}
+
+    @pytest.mark.parametrize("prop_key, conn_value, meta_value", [
+        ("write_quorum", "ONE", "one"),
+        ("compression", "LZ4", "lz4"),
+        ("storage_medium", "SSD", "ssd"),
+        ("compaction_strategy", "REAL_TIME", "real_time"),
+        ("replicated_storage", "false", "FALSE"),
+    ])
+    def test_value_case_insensitive(self, prop_key, conn_value, meta_value):
+        assert self._run({prop_key: conn_value}, {prop_key: meta_value}) == {}
+
+    def test_value_case_sensitive_otherwise(self):
+        assert self._run({"colocate_with": "grp"}, {"colocate_with": "GRP"}) == {"colocate_with": "GRP"}
+
+
 class TestORMTableObjects:
     """Tests using real SQLAlchemy ORM Table objects with __table_args__."""
 
