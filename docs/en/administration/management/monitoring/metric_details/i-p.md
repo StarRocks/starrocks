@@ -291,6 +291,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_segment_cache_hit_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookup hits in the last 60 seconds on shared-data clusters. A hit returns a cached candidate, which can subsequently be rejected if its schema is incompatible with the request. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_miss_minute`
+
+- Unit: Count
+- Type: Gauge
+- Description: Number of segment metadata cache lookups that find no cache entry in the last 60 seconds on shared-data clusters. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
+## `lake_segment_cache_schema_reject_total`
+
+- Unit: Count
+- Type: Gauge
+- Description: Cumulative number of cached segment candidates rejected since this BE/CN started because their schema is missing or incompatible with the requested schema. Each rejection opens a private segment without replacing the shared entry. Includes incompatible candidates returned by concurrent cache insertion after a lookup miss, so this value cannot be subtracted directly from lookup hits. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+
 ## `lake_tablet_location_handoff_entries`
 
 - Unit: Count

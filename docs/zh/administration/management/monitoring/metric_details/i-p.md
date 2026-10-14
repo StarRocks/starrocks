@@ -291,6 +291,24 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
+## `lake_segment_cache_hit_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找命中的次数。命中表示找到一个缓存候选对象，该对象仍可能因 schema 与请求不兼容而被拒绝复用。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_miss_minute`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：存算分离集群下，过去 60 秒内 segment 元数据缓存查找未找到缓存条目的次数。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，缓存 segment 候选对象因 schema 缺失或与请求指定的 schema 不兼容而被拒绝复用的累积次数。每次拒绝都会打开私有 segment，保留共享缓存条目。也包括查找未命中后，并发缓存插入返回不兼容候选对象的情况，因此不能直接从查找命中数中扣除此值。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
 ## `lake_tablet_location_handoff_entries`
 
 - 单位：计数

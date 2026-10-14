@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_manager.h"
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -61,6 +62,10 @@
 #include "script/script.h"
 
 namespace starrocks {
+
+static uint64_t segment_cache_schema_reject_count() {
+    return std::stoull(bvar::Variable::describe_exposed("lake_segment_cache_schema_reject_total"));
+}
 
 class LakeTabletManagerTest : public testing::Test {
 public:
@@ -2494,11 +2499,13 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
     for (bool fill_cache : {false, true}) {
         SCOPED_TRACE(fill_cache);
         const auto cache_size = _tablet_manager->metacache()->memory_usage();
+        const auto rejected_before = segment_cache_schema_reject_count();
         auto requested_file = data.file_info;
         if (fill_cache) requested_file.fs.reset(); // Also exercise the cached Segment's shared filesystem.
         ASSIGN_OR_ABORT(auto reopened, _tablet_manager->load_segment(requested_file, 0, &footer_hint, options,
                                                                      fill_cache, data.full_schema));
         EXPECT_NE(cached.get(), reopened.get());
+        EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
         EXPECT_EQ(nullptr, reopened->lake_tablet_manager());
         EXPECT_NE(nullptr, reopened->column_with_uid(1));
         ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
@@ -2508,6 +2515,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
         ASSIGN_OR_ABORT(auto repeated,
                         _tablet_manager->load_segment(data.file_info, 0, options, fill_cache, data.narrow_schema));
         EXPECT_EQ(cached.get(), repeated.get());
+        EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
     }
 }
 
@@ -2518,9 +2526,11 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_keeps_cached_full_sch
                                                                /*fill_meta_cache=*/true, data.full_schema));
     for (bool fill_cache : {false, true}) {
         SCOPED_TRACE(fill_cache);
+        const auto rejected_before = segment_cache_schema_reject_count();
         ASSIGN_OR_ABORT(auto narrowed, _tablet_manager->load_segment(data.file_info, 0, LakeIOOptions{}, fill_cache,
                                                                      data.narrow_schema));
         EXPECT_NE(cached.get(), narrowed.get());
+        EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
         EXPECT_EQ(nullptr, narrowed->lake_tablet_manager());
         EXPECT_EQ(nullptr, narrowed->column_with_uid(1));
         EXPECT_EQ(cached.get(), _tablet_manager->metacache()->lookup_segment(cache_key).get());
@@ -2530,6 +2540,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_keeps_cached_full_sch
         ASSIGN_OR_ABORT(auto unspecified,
                         _tablet_manager->load_segment(data.file_info, 0, LakeIOOptions{}, fill_cache, nullptr));
         EXPECT_EQ(cached.get(), unspecified.get());
+        EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
     }
     ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, cached));
     EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
@@ -2542,9 +2553,11 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_handles_null_cached_s
     _tablet_manager->metacache()->cache_segment(cache_key, marker);
     for (bool fill_cache : {false, true}) {
         SCOPED_TRACE(fill_cache);
+        const auto rejected_before = segment_cache_schema_reject_count();
         ASSIGN_OR_ABORT(auto reopened, _tablet_manager->load_segment(data.file_info, 0, LakeIOOptions{}, fill_cache,
                                                                      data.full_schema));
         EXPECT_NE(marker.get(), reopened.get());
+        EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
         EXPECT_EQ(nullptr, reopened->lake_tablet_manager());
         ASSIGN_OR_ABORT(auto values, read_segment_schema_cache_values(data, reopened));
         EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
@@ -2571,9 +2584,11 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_checks_cache_insert_w
         SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_segment:before_cache_insert");
         SyncPoint::GetInstance()->DisableProcessing();
     });
+    const auto rejected_before = segment_cache_schema_reject_count();
     ASSIGN_OR_ABORT(auto reopened, _tablet_manager->load_segment(data.file_info, 0, &footer_hint, LakeIOOptions{},
                                                                  /*fill_meta_cache=*/true, data.full_schema));
     ASSERT_EQ(1, callback_count);
+    EXPECT_EQ(rejected_before + 1, segment_cache_schema_reject_count());
     EXPECT_NE(winner.get(), reopened.get());
     EXPECT_EQ(nullptr, reopened->lake_tablet_manager());
     EXPECT_NE(nullptr, reopened->column_with_uid(1));
