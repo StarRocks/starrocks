@@ -351,8 +351,11 @@ tasks.register<Task>("generateProtoSources") {
         "encryption.proto"
     )
 
-    // Declare inputs (proto files)
-    inputs.files(protoFiles.map { file("$protoDir/$it") })
+    // Declare inputs (proto files). The generator follows imports (e.g. internal_service.proto ->
+    // status.proto, data.proto), so track every proto in the directory rather than only the root
+    // files above; otherwise editing an imported proto leaves the generated Java stale while
+    // Gradle reports this task up to date.
+    inputs.files(fileTree(protoDir) { include("*.proto") })
 
     // Declare output directory
     outputs.dir(outputDir)
