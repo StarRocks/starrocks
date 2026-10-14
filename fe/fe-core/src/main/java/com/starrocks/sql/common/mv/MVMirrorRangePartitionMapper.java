@@ -112,7 +112,9 @@ public class MVMirrorRangePartitionMapper extends MVRangePartitionMapper {
                     return MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeMap, granularity, partitionType);
                 }
                 if (prev.upperEndpoint().compareTo(range.lowerEndpoint()) > 0) {
-                    // non-aligned / overlapping input: fall back to eager to guarantee non-intersected output
+                    // Only intersecting snapped ranges fall back: a lone unaligned range never overlaps
+                    // any other snapped range, so it is still mirrored as a single snapped partition.
+                    // Fall back to eager to guarantee non-intersecting output.
                     return MVEagerRangePartitionMapper.INSTANCE.toMappingRanges(baseRangeMap, granularity, partitionType);
                 }
             }

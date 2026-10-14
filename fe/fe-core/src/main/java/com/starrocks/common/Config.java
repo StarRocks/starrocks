@@ -4561,8 +4561,9 @@ public class Config extends ConfigBase {
      * For base partitions that are exactly one granularity unit wide (the normal day partitions of
      * a date_trunc('day') table, including discrete/multi-union cases), the mirror mapper is
      * IDENTICAL to the default eager mapper, so this flag is a no-op there. It only diverges for
-     * coarser-than-granularity base partitions (merged months). On any non-aligned / overlapping
-     * input it falls back to the eager mapper, so it is never weaker than the default.
+     * coarser-than-granularity base partitions (merged months). It falls back to the eager mapper only
+     * when two snapped ranges would intersect (possible only for unaligned, cross-granularity base
+     * partitions), so it never produces intersecting partitions.
      * <p>
      * Set to false to restore the original eager (unroll) behavior.
      */
