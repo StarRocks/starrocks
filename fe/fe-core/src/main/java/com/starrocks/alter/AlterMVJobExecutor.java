@@ -1780,6 +1780,42 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
+        }
+    }
+
+    /**
+     * {@link #inactiveMvAndSuspendTaskLocked} for a refresh that broke the incremental chain, except when the MV was
+     * altered to AUTO while that refresh ran: its next refresh falls back to PCT, which, like a FORCE rebuild, does not
+     * read the baseline the refresh broke on. The caller holds the MV's write lock, which the ALTER takes too, so this
+     * sees the mode either way.
+     */
+    public static void inactiveMvAndSuspendTaskUnlessAutoRecoversLocked(MaterializedView mv, String inactiveReason) {
+        if (mv.getCurrentRefreshMode().isAuto() && MaterializedViewExceptions.isRecoveredByForceRefresh(inactiveReason)) {
+            LOG.info("Keep materialized view {} active: it was altered to AUTO while a refresh broke ({}), and its "
+                    + "next refresh falls back to PCT", mv.getName(), inactiveReason);
+            return;
+        }
+        inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
+    }
+
+    /** {@link #inactiveMvAndSuspendTask} for a caller that already holds the MV's write lock. */
+    public static void inactiveMvAndSuspendTaskLocked(MaterializedView mv, String inactiveReason) {
+        inactiveMvAndLog(mv, inactiveReason);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
+    }
+
+>>>>>>> ef227c2e457... [BugFix][RB-390] Handle an MV refresh failure against the status the run saw (#65253)
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
     // or failover instead of reverting to active until the next refresh re-detects the condition.
     public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {

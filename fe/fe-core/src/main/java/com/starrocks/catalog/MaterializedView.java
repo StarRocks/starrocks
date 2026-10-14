@@ -769,6 +769,23 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // entries, and publishes none if that value was odd or has changed, see MVVersionManager#persistRefreshScheme.
     private final AtomicLong versionMapResetEpoch = new AtomicLong();
 
+    /** The status a caller saw, read under this mv's monitor so the two values belong together. */
+    public record StatusSnapshot(long epoch, boolean active) {
+    }
+
+    public synchronized StatusSnapshot getStatusSnapshot() {
+        return new StatusSnapshot(statusEpoch, active);
+    }
+
+    // Only a view that was active changes status here; an inactive one keeps its epoch, so a replayed
+    // activation still being derived for it is not mistaken for stale.
+    private synchronized void markInactiveForReload() {
+        if (active) {
+            this.active = false;
+            this.statusEpoch++;
+        }
+    }
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.state = OlapTableState.NORMAL;
@@ -1696,7 +1713,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         try {
             // set inactive first to avoid inconsistent state during reloading
-            this.active = false;
+            markInactiveForReload();
             // set reload first
             this.changeReloadState(RELOAD_STATE_ING);
             // reload mv required metadata synchronously
