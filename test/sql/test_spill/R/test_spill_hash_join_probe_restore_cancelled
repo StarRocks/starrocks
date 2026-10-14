@@ -41,14 +41,17 @@ shell: sleep 3
 drop task etl_${uuid0};
 -- result:
 -- !result
+admin disable failpoint 'spill_hash_join_probe_load_partition_sleep';
+-- result:
+-- !result
 function: wait_util_no_queries()
 -- result:
 
--- !result
-admin disable failpoint 'spill_hash_join_probe_load_partition_sleep';
--- result:
 -- !result
 select "cluster still alive" as status;
 -- result:
 cluster still alive
 -- !result
+CLEANUP {
+  admin disable failpoint 'spill_hash_join_probe_load_partition_sleep';
+} END CLEANUP

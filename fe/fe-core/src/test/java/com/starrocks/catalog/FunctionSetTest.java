@@ -26,6 +26,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DecimalType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
@@ -396,12 +397,16 @@ public class FunctionSetTest {
                 .sorted(Comparator.comparingLong(Function::getFunctionId))
                 .toList();
 
-        long[] expectedIds = {200100L, 200101L, 200102L, 200103L};
+        long[] expectedIds = {200100L, 200101L, 200102L, 200103L, 200104L, 200105L, 200106L, 200107L};
         Type[][] expectedArgs = {
                 {VarcharType.VARCHAR},
                 {VarcharType.VARCHAR, AnyMapType.ANY_MAP},
                 {VarcharType.VARCHAR, VarcharType.VARCHAR},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP},
+                {VarcharType.VARCHAR, FileType.FILE},
+                {VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP}
         };
 
         Assertions.assertEquals(expectedIds.length, aiCompleteFunctions.size());
@@ -440,9 +445,11 @@ public class FunctionSetTest {
         Type mapType = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
         Type[][] concreteArgs = {
                 {VarcharType.VARCHAR, mapType},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType},
+                {VarcharType.VARCHAR, FileType.FILE, mapType},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, mapType}
         };
-        long[] expectedIds = {200101L, 200103L};
+        long[] expectedIds = {200101L, 200103L, 200105L, 200107L};
 
         for (int i = 0; i < concreteArgs.length; i++) {
             Function resolved = functionSet.getFunction(
