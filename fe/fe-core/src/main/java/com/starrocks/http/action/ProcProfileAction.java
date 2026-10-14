@@ -14,6 +14,7 @@
 
 package com.starrocks.http.action;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -96,7 +97,9 @@ public class ProcProfileAction extends WebBaseAction {
         buffer.append("</li>");
 
         // BE tabs
-        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
+        ImmutableMap<Long, Backend> backendMap =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        for (Backend backend : backendMap.values()) {
             if (!backend.isAlive()) {
                 continue;
             }
