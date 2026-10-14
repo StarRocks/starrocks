@@ -67,6 +67,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/storage_env.h"
+#include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
@@ -2409,6 +2410,65 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
     config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// A publish that finds the tablet's index in the cache counts a hit; one that has to build it counts a load. The
+// memory gauges follow the cache entry: they rise by exactly what the entry is charged, and fall back once the
+// entry leaves the cache.
+TEST_P(LakePrimaryKeyPublishTest, test_index_cache_metrics) {
+    auto* metrics = StorageMetrics::instance();
+    auto charged_gauges = [&]() {
+        return metrics->lake_pk_index_cache_memtable_bytes.value() +
+               metrics->lake_pk_index_cache_index_block_bytes.value() +
+               metrics->lake_pk_index_cache_filter_bytes.value();
+    };
+    const int64_t hits_before = metrics->lake_pk_index_cache_hit_total.value();
+    const int64_t loads_before = metrics->lake_pk_index_load_total.value();
+    const int64_t load_us_before = metrics->lake_pk_index_load_duration_us.value();
+    const int64_t charged_before = charged_gauges();
+
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    auto write_and_publish = [&, &chunk0 = chunk0, &indexes = indexes]() {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    };
+
+    // The first publish builds the index, the second finds it.
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 1, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before, metrics->lake_pk_index_cache_hit_total.value());
+    EXPECT_GT(metrics->lake_pk_index_load_duration_us.value(), load_us_before);
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 1, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before + 1, metrics->lake_pk_index_cache_hit_total.value());
+
+    const int64_t charged = _primary_key_mgr->get_index_memory_size(tablet_id);
+    EXPECT_GT(charged, 0);
+    EXPECT_EQ(charged_before + charged, charged_gauges());
+
+    // Evicting the entry takes its bytes back out, and the next publish has to load the index again.
+    EXPECT_TRUE(_primary_key_mgr->try_remove_primary_index_cache(tablet_id));
+    EXPECT_EQ(0, _primary_key_mgr->get_index_memory_size(tablet_id));
+    EXPECT_EQ(charged_before, charged_gauges());
+    ASSERT_NO_FATAL_FAILURE(write_and_publish());
+    EXPECT_EQ(loads_before + 2, metrics->lake_pk_index_load_total.value());
+    EXPECT_EQ(hits_before + 1, metrics->lake_pk_index_cache_hit_total.value());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {

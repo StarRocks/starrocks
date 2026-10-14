@@ -618,8 +618,7 @@ public:
         // if `_index_entry` is null, do nothing.
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(&_builder));
-            _tablet.primary_key_mgr()->index_cache().update_object_size(_index_entry,
-                                                                        _index_entry->value().memory_usage());
+            _tablet.primary_key_mgr()->update_index_cache_size(_index_entry);
             // Record publish-phase SST flush stats
             if (config::enable_tablet_write_log) {
                 int32_t sst_count = _index_entry->value().publish_sst_flush_count();

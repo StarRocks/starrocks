@@ -200,6 +200,10 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
+    // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
+    // Caller holds the index lock.
+    void update_index_cache_size(IndexEntry* index_entry);
+
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
     // remove index entry if it isn't nullptr

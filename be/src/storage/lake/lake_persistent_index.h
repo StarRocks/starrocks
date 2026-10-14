@@ -53,6 +53,19 @@ class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
 
+// Resident memory of a LakePersistentIndex, by component.
+struct LakePersistentIndexMemoryStats {
+    size_t memtable_bytes = 0;    // active and inactive memtables
+    size_t index_block_bytes = 0; // sstable index blocks
+    size_t filter_bytes = 0;      // sstable bloom filters
+    // Delete vectors held by ingested sstables, compaction output for example. memory_usage() leaves them
+    // out, so the index cache does not charge them either.
+    size_t delvec_bytes = 0;
+
+    // What LakePersistentIndex::memory_usage() reports.
+    size_t charged_bytes() const { return memtable_bytes + index_block_bytes + filter_bytes; }
+};
+
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
 // PrimaryKeyManager's index cache holds one of these per tablet, by value.
@@ -225,6 +238,14 @@ public:
                                  const MetaFileBuilder* builder);
 
     size_t memory_usage() const;
+
+    // memory_usage() split by component, plus the sstable delete vectors it leaves out.
+    LakePersistentIndexMemoryStats memory_stats() const;
+
+    // Publish this index's current memory_stats() to the lake_pk_index_cache_* gauges and return
+    // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
+    // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
+    size_t refresh_cache_memory_metrics();
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -423,6 +444,8 @@ private:
     size_t _key_size{0};
     // The version stamped on memtable entries; see set_publish_version().
     int64_t _publish_version{0};
+    // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
+    LakePersistentIndexMemoryStats _reported_memory_stats;
 
     // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
     mutable std::mutex _load_lock;

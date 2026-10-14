@@ -128,6 +128,14 @@ public:
         return (*v);
     }
 
+    // Size of the object cached under |key|, or 0 if there is none. Unlike get(), it neither pins the
+    // object nor moves it in the LRU list, so monitoring reads do not change what gets evicted next.
+    size_t peek_object_size(const Key& key) const {
+        std::lock_guard<Lock> lg(_lock);
+        auto itr = _map.find(key);
+        return itr == _map.end() ? 0 : (*itr->second)->_size;
+    }
+
     // atomic get_or_create operation, to prevent loading
     // same resource multiple times
     Entry* get_or_create(const Key& key, size_t init_size = 0) {

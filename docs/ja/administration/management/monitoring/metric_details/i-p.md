@@ -291,6 +291,48 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
 
+## `lake_pk_index_cache_delvec_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルに付随する DelVector が使用するメモリ。DelVector を伴って取り込まれた SST ファイル（Compaction の出力など）だけが DelVector を持ちます。このメモリは主キーインデックスキャッシュには計上されないため、`information_schema.be_tablets` の `INDEX_MEM` にも含まれません。
+
+## `lake_pk_index_cache_filter_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのブルームフィルターが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_hit_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスがすでに主キーインデックスキャッシュにロードされていた回数。`lake_pk_index_load_total` と合わせると、キャッシュのヒット率は `hit / (hit + load)` で求められます。
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのインデックスブロックが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE でキャッシュされている主キーインデックスの MemTable（書き込み中のものとフラッシュ中のものの両方）が使用するメモリ。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_load_duration_us`
+
+- 単位: us
+- タイプ: 累積
+- 説明: 共有データモード専用。`lake_pk_index_load_total` で数えられる主キーインデックスのロードに費やされた合計時間。`lake_pk_index_load_total` で割ると、tablet 1 つあたりのインデックスの平均ロード時間が得られます。
+
+## `lake_pk_index_load_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
 ## `lake_tablet_location_handoff_entries`
 
 - 単位: 件数
