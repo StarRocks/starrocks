@@ -250,13 +250,21 @@ LastConsistencyCheckTime: NULL
 
 From v3.4.0 onwards, expression partitioning supports any expressions that return `DATE` or `DATETIME` types to accommodate even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
 
-For example, you can define a Unix timestamp column, and use `from_unixtime()` directly against the column in the partition expression to define the partition key, instead of define a generated `DATE` or `DATETIME` column with the function. For more about the usage, see [Examples](#examples-2).
+For example, you can define a Unix timestamp column, and use `from_unixtime()` with an explicit time zone directly against the column in the partition expression to define the partition key, instead of define a generated `DATE` or `DATETIME` column with the function. For more about the usage, see [Examples](#examples-2).
 
 From v3.4.4 onwards, partition pruning are supported for partitions based on most `DATETIME`-related functions.
 
+:::note
+
+For list partitioning, including automatic list-expression partitioning, partition expressions must be deterministic: the same row must produce the same partition value regardless of the session or load job's time zone. They cannot depend on session information or variables, or use user-defined functions. These restrictions apply to all table types and to generated columns used as list partition columns.
+
+The one- and two-argument forms of `from_unixtime()` depend on the session time zone and are rejected in these partition expressions. Use the three-argument form with a fixed time zone, for example, `from_unixtime(ts, '%Y%m%d', 'UTC')`. Built-in functions and user-defined functions remain available in ordinary SQL queries.
+
+:::
+
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function `from_unixtime()` in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function `from_unixtime()` and a fixed time zone in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. The following example stores data of each UTC day in one partition, and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -264,7 +272,7 @@ CREATE TABLE orders (
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY from_unixtime(ts,'%Y%m%d');
+PARTITION BY from_unixtime(ts, '%Y%m%d', 'UTC');
 ```
 
 Example 2: Suppose you assign an `INT` type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions `cast()` and `str_to_date()` in the expression to transform the timestamp into the `DATE` type, set it as the partition column, and the partition granularity to a month using `date_trunc()` at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
@@ -282,7 +290,7 @@ PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
 
 Partition pruning is applicable to cases of partitioning based on a complex time function expression:
 
-- If the partition clause is `PARTITION BY from_unixtime(ts)`, queries with filters in the format `ts>1727224687` can be pruned to corresponding partitions.
+- If the partition clause is `PARTITION BY from_unixtime(ts, '%Y-%m-%d %H:%i:%s', 'UTC')`, queries with filters in the format `ts>1727224687` can be pruned to corresponding partitions.
 - If the partition clause is `PARTITION BY str2date(CAST(ts AS string),'%Y%m')`, queries with filters in the format `ts = "20240506"` can be pruned.
 - The above cases are also applicable to [Partitioning based on mixed expression](#partitioning-based-on-the-mixed-expression-since-v34).
 
@@ -292,7 +300,7 @@ From v3.4.0 onwards, expression partitioning supports multiple partition columns
 
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the `from_unixtime()` function) and the city column as the partition columns at table creation. Data of each day in each city is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the `from_unixtime()` function and a fixed time zone) and the city column as the partition columns at table creation. The following example stores data of each UTC day in each city in one partition, and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -300,7 +308,7 @@ CREATE TABLE orders (
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
+PARTITION BY from_unixtime(ts, '%Y%m%d', 'UTC'), city;
 ```
 
 ## Manage partitions
@@ -420,8 +428,8 @@ Expression partitioning supports the following functions:
 - `str_to_date(YmdHiSf/YmdHisf)`
 - `to_iso8601`
 - `to_date`
-- `unix_timestamp`
-- `from_unixtime(YmdHiSf/YmdHisf)`
+- `unix_timestamp` (not supported in list partition expressions)
+- `from_unixtime` (with a `YmdHiSf`/`YmdHisf` format and an explicit time zone)
 - `time_slice`
 
 **Other functions**:
@@ -433,11 +441,11 @@ Expression partitioning supports the following functions:
 :::note
 
 - Combined usage of multiple time functions is supported.
-- The system default time zone is used for all the time functions listed above.
+- For list partition expressions, use a fixed time zone explicitly when converting Unix timestamps with `from_unixtime()`.
 - The value format of the time function, `YmdHiSf`, must start with the roughest time granularity, `%Y`. Formats that start with a finer time granularity, for example, `%m-%d`, are not allowed.
 
 **Example**
 
-`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d')`
+`PARTITION BY from_unixtime(cast(str as INT) + 3600, '%Y-%m-%d', 'UTC')`
 
 :::

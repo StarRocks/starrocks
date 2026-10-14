@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -61,11 +62,15 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
@@ -626,7 +631,14 @@ public class PartitionDescAnalyzer {
         }
     }
 
-    private static void checkPartitionExprDeterminism(Expr expr) throws AnalysisException {
+    static void checkPartitionExprDeterminism(Expr expr) throws AnalysisException {
+        // These nodes are rebound in the inserting session, even when they appear below a function
+        // call and the only column reference is a key. Check them before analysis can fold values.
+        if (expr.contains(e -> e instanceof InformationFunction || e instanceof VariableExpr
+                || e instanceof UserVariableExpr)) {
+            throw new AnalysisException("The partition expr should not depend on session context, but got "
+                    + ExprToSql.toSql(expr));
+        }
         // Dictionary lookups bind the current table/cache version again when a load is planned.
         // Even with key-only arguments, the same key can therefore acquire a different partition
         // value after the dictionary changes. Check nested and identifier-based expressions too.
@@ -646,6 +658,15 @@ public class PartitionDescAnalyzer {
         List<FunctionCallExpr> functions = new ArrayList<>();
         expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, functions);
         for (FunctionCallExpr function : functions) {
+            // The outer SQL-UDF call hides its body from this traversal, and even a deterministic
+            // body can change after replacing the function. Inspect resolved functions too; raw
+            // partition expressions may not have function bindings until generated-column analysis.
+            if (function.getFn() instanceof SqlFunction || (function.getFn() != null
+                    && (function.getFn().isUdf() || (function.getFn().getBinaryType() != null
+                    && function.getFn().getBinaryType() != TFunctionBinaryType.BUILTIN)))) {
+                throw new AnalysisException("The partition expr should only use built-in functions, but got "
+                        + ExprToSql.toSql(function));
+            }
             String name = function.getFunctionName();
             int argumentCount = function.getChildren().size();
             boolean sessionTimezoneDependent =

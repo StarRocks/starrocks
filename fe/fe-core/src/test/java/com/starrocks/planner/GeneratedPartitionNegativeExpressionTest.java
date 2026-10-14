@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -120,13 +121,19 @@ public class GeneratedPartitionNegativeExpressionTest {
         TExpr valueExpression = parameters.expr_of_dest_slot.get(destination.getSlots().get(1).getId().asInt());
         TExpr routingExpression = parameters.expr_of_dest_slot.get(destination.getSlots().get(2).getId().asInt());
         Assertions.assertFalse(containsNegativeMultiplier(keyExpression));
-        Assertions.assertTrue(containsNegativeMultiplier(valueExpression));
+        Assertions.assertTrue(containsNegativeMultiplier(valueExpression), valueExpression.toString());
         Assertions.assertFalse(containsNegativeMultiplier(routingExpression));
         Assertions.assertEquals(AggregateType.REPLACE, routing.getAggregationType());
     }
 
     private boolean containsNegativeMultiplier(TExpr expression) {
-        return expression.nodes.stream().anyMatch(node -> node.node_type == TExprNodeType.INT_LITERAL
-                && node.int_literal.value == -1);
+        boolean multiplies = expression.nodes.stream().anyMatch(node -> node.node_type == TExprNodeType.ARITHMETIC_EXPR
+                && node.opcode == TExprOpcode.MULTIPLY);
+        // CSV source slots are VARCHAR. Arithmetic analysis promotes their multiplication to DOUBLE
+        // and folds the cast of -1 into a FLOAT_LITERAL before serializing the actual load expression.
+        boolean negativeOne = expression.nodes.stream().anyMatch(node ->
+                (node.node_type == TExprNodeType.INT_LITERAL && node.int_literal.value == -1)
+                        || (node.node_type == TExprNodeType.FLOAT_LITERAL && node.float_literal.value == -1.0));
+        return multiplies && negativeOne;
     }
 }

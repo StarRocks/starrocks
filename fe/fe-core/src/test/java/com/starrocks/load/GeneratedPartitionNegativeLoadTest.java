@@ -37,6 +37,7 @@ import com.starrocks.planner.StreamLoadScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
@@ -63,6 +64,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +74,8 @@ public class GeneratedPartitionNegativeLoadTest {
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
+    @Injectable
+    private LocalMetastore localMetastore;
     @Injectable
     private Database db;
     @Injectable
@@ -140,11 +144,14 @@ public class GeneratedPartitionNegativeLoadTest {
                 db.getFullName();
                 result = "negative_test";
                 minTimes = 0;
-                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                globalStateMgr.getLocalMetastore();
+                result = localMetastore;
+                minTimes = 0;
+                localMetastore.getTable(anyString, anyString);
                 result = table;
                 minTimes = 0;
                 scanNode.getChildren();
-                result = Collections.emptyList();
+                result = new ArrayList<>();
                 minTimes = 0;
                 scanNode.getId();
                 result = new PlanNodeId(0);

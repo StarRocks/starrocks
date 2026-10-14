@@ -936,6 +936,18 @@ public class CreateTableAnalyzer {
                 AIFunctionUsageAnalyzer.verifyNoAIFunctions(
                         expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
+                // Function bindings, including SQL UDFs, are now resolved. Recheck every generated
+                // list-partition column, including identifier-based user columns, before trusting it.
+                if (stmt.getPartitionDesc() instanceof ListPartitionDesc listPartition
+                        && listPartition.getPartitionColNames().stream()
+                        .anyMatch(name -> name.equalsIgnoreCase(column.getName()))) {
+                    try {
+                        PartitionDescAnalyzer.checkPartitionExprDeterminism(expr);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();
                 expr.collect(FunctionCallExpr.class, funcs);

@@ -429,14 +429,14 @@ public class PartitionPruneTest extends PlanTestBase {
 
     @Test
     public void testGeneratedColumnPruneKeepsNullPartition() throws Exception {
-        // from_unixtime is not defined for every bigint: from_unixtime(-1) is NULL, so a row with c1 = -1
+        // from_unixtime is not defined for every bigint: a negative timestamp is NULL, so a row with c1 = -1
         // lands in the NULL partition while still satisfying a predicate such as c1 < 1700000000. The
         // predicate deduced on the generated column says nothing about that partition, so it must not
         // prune it away.
         starRocksAssert.withTable("CREATE TABLE t_gen_col_null (" +
                 " c1 bigint NOT NULL," +
                 " c2 bigint," +
-                " c3 varchar(64) NULL AS from_unixtime(c1) " +
+                " c3 varchar(64) NULL AS from_unixtime(c1, '%Y-%m-%d %H:%i:%s', 'UTC') " +
                 " ) " +
                 " DUPLICATE KEY(c1) " +
                 " PARTITION BY (c3) " +

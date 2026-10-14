@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -57,8 +58,9 @@ public class PartitionExternalStateAnalyzerTest {
                 AnalysisException error = assertThrows(AnalysisException.class,
                         () -> PartitionDescAnalyzer.analyzeListPartitionDesc(
                                 desc, List.of(keyColumn()), Map.of(), keysType));
-                String function = sql.toLowerCase().contains("dict_mapping") ? "dict_mapping" : "dictionary_get";
-                assertTrue(error.getMessage().contains(function), error.getMessage());
+                String function = sql.toLowerCase(Locale.ROOT).contains("dict_mapping") ? "dict_mapping" : "dictionary_get";
+                assertTrue(error.getMessage().contains("should not depend on mutable dictionary state"), error.getMessage());
+                assertTrue(error.getMessage().toLowerCase(Locale.ROOT).contains(function), error.getMessage());
             }
         }
     }
@@ -80,7 +82,8 @@ public class PartitionExternalStateAnalyzerTest {
                         () -> PartitionDescAnalyzer.analyzeListPartitionDesc(
                                 desc, List.of(keyColumn(), generated), Map.of(), keysType));
                 String function = sql.contains("dict_mapping") ? "dict_mapping" : "dictionary_get";
-                assertTrue(error.getMessage().contains(function), error.getMessage());
+                assertTrue(error.getMessage().contains("should not depend on mutable dictionary state"), error.getMessage());
+                assertTrue(error.getMessage().toLowerCase(Locale.ROOT).contains(function), error.getMessage());
             }
         }
     }

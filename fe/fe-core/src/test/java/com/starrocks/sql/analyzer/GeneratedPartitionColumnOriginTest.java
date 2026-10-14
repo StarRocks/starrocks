@@ -105,7 +105,9 @@ public class GeneratedPartitionColumnOriginTest {
             OlapTable table = (OlapTable) starRocksAssert.getTable("test", tableName);
             List<String> ddl = new ArrayList<>();
             AstToStringBuilder.getDdlStmt("test", table, ddl, null, null, false, false, false);
-            CreateTableStmt replay = (CreateTableStmt) analyzeSuccess(ddl.get(0));
+            String replayDdl = ddl.get(0).replace("`" + tableName + "`", "`origin_like_replay`");
+            CreateTableStmt replay = (CreateTableStmt) analyzeSuccess(replayDdl);
+            assertEquals("origin_like_replay", replay.getTableName().getTbl());
             assertTrue(replay.getColumns().get(2).isInternalGeneratedPartitionColumn());
             assertEquals(AggregateType.REPLACE, replay.getColumns().get(2).getAggregationType());
         } finally {

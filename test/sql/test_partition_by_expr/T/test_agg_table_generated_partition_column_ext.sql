@@ -198,8 +198,8 @@ set enable_query_cache = false;
 select city, sum(pv) from agg_cache group by city order by city;
 
 -- name: test_agg_gpc_stream_load
-create database test_agg_gpc_stream_load_db;
-use test_agg_gpc_stream_load_db;
+create database db_${uuid0};
+use db_${uuid0};
 create table agg_sl (
   event_day datetime not null,
   city varchar(64) not null,
@@ -210,9 +210,9 @@ partition by date_trunc('week', event_day)
 distributed by hash(city) buckets 3
 properties("replication_num" = "1");
 -- the loader must fill the generated column itself, the file only carries the declared columns
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_agg_expr_partition.csv -XPUT -H expect:100-continue -H label:sr_agg_expr_partition_1 -H column_separator:, ${url}/api/test_agg_gpc_stream_load_db/agg_sl/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_agg_expr_partition.csv -XPUT -H expect:100-continue -H label:sr_agg_expr_partition_1 -H column_separator:, ${url}/api/db_${uuid0}/agg_sl/_stream_load
 sync;
 select event_day, city, pv, uv from agg_sl order by event_day, city;
 select partition_name from information_schema.partitions_meta
-where table_name = 'agg_sl' order by partition_name;
-drop database test_agg_gpc_stream_load_db;
+where table_name = 'agg_sl' and db_name = 'db_${uuid0}' order by partition_name;
+drop database db_${uuid0};

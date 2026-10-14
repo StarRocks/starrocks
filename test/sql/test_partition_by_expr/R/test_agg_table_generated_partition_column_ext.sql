@@ -380,10 +380,10 @@ bj	4
 sh	3
 -- !result
 -- name: test_agg_gpc_stream_load
-create database test_agg_gpc_stream_load_db;
+create database db_${uuid0};
 -- result:
 -- !result
-use test_agg_gpc_stream_load_db;
+use db_${uuid0};
 -- result:
 -- !result
 create table agg_sl (
@@ -397,7 +397,7 @@ distributed by hash(city) buckets 3
 properties("replication_num" = "1");
 -- result:
 -- !result
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_agg_expr_partition.csv -XPUT -H expect:100-continue -H label:sr_agg_expr_partition_1 -H column_separator:, ${url}/api/test_agg_gpc_stream_load_db/agg_sl/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_agg_expr_partition.csv -XPUT -H expect:100-continue -H label:sr_agg_expr_partition_1 -H column_separator:, ${url}/api/db_${uuid0}/agg_sl/_stream_load
 -- result:
 0
 {
@@ -415,12 +415,12 @@ select event_day, city, pv, uv from agg_sl order by event_day, city;
 2026-07-20 01:00:00	bj	2	20
 -- !result
 select partition_name from information_schema.partitions_meta
-where table_name = 'agg_sl' order by partition_name;
+where table_name = 'agg_sl' and db_name = 'db_${uuid0}' order by partition_name;
 -- result:
 $shadow_automatic_partition
 p20260713000000
 p20260720000000
 -- !result
-drop database test_agg_gpc_stream_load_db;
+drop database db_${uuid0};
 -- result:
 -- !result
