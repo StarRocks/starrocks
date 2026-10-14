@@ -640,6 +640,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REWRITE_MONOTONIC_MINMAX = "cbo_rewrite_monotonic_minmax_aggregation";
 
     public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
+    public static final String CBO_ENABLE_PARALLEL_ANALYZE_TABLE_METADATA =
+            "enable_parallel_analyze_table_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
     public static final String ENABLE_STATS_TO_OPTIMIZE_SKEW_JOIN = "enable_stats_to_optimize_skew_join";
@@ -3404,6 +3406,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
 
+    @VarAttr(name = CBO_ENABLE_PARALLEL_ANALYZE_TABLE_METADATA)
+    private boolean enableParallelAnalyzeTableMetadata = false;
+
     // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
     // while losing bucket information. Lowering this threshold can lead to worse plans.
     @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
@@ -3449,6 +3454,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
         this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
+
+    public boolean enableParallelAnalyzeTableMetadata() {
+        return enableParallelAnalyzeTableMetadata;
+    }
+
+    public void setEnableParallelAnalyzeTableMetadata(boolean enableParallelAnalyzeTableMetadata) {
+        this.enableParallelAnalyzeTableMetadata = enableParallelAnalyzeTableMetadata;
     }
 
     public void setAnnParams(String annParams) {
