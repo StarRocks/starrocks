@@ -6,7 +6,7 @@ description: "AI プロバイダーをそのタイプのデフォルトとして
 # SET DEFAULT AI PROVIDER
 
 プロバイダーを**そのプロバイダー自身のタイプ**のデフォルトとして設定します。レジストリはタイプごと
-(`embedding` / `rerank` / `text`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
+(`embedding` / `rerank` / `chat`) に 1 つのデフォルトを保持するため、embedding プロバイダーをデフォルトに
 設定しても rerank のデフォルトには影響せず、その逆も同様です。
 
 ## 構文

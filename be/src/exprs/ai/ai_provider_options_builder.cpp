@@ -116,8 +116,7 @@ bool has_binary_storage(const Column& input) {
             column = nullable->data_column_raw_ptr();
         }
     }
-    return dynamic_cast<const BinaryColumn*>(column) != nullptr ||
-           dynamic_cast<const LargeBinaryColumn*>(column) != nullptr;
+    return dynamic_cast<const BinaryColumn*>(column) != nullptr;
 }
 
 bool is_untyped_map(const TypeDescriptor& type) {
@@ -139,13 +138,6 @@ StatusOr<std::string> read_map_key(const Column& input, size_t row) {
         return invalid_options();
     }
     if (const auto* binary = checked_column<BinaryColumn>(*unwrapped); binary != nullptr) {
-        const Slice value = binary->get_slice(unwrapped->row);
-        if (!validate_utf8(value.data, value.size)) {
-            return invalid_options();
-        }
-        return std::string(value.data, value.size);
-    }
-    if (const auto* binary = checked_column<LargeBinaryColumn>(*unwrapped); binary != nullptr) {
         const Slice value = binary->get_slice(unwrapped->row);
         if (!validate_utf8(value.data, value.size)) {
             return invalid_options();
@@ -342,10 +334,6 @@ Status write_value(const Column& input, const TypeDescriptor& type, size_t row, 
             const Slice value = column->get_slice(unwrapped->row);
             return require_json_write(writer->String(value.data, value.size));
         }
-        if (const auto* column = checked_column<LargeBinaryColumn>(*unwrapped); column != nullptr) {
-            const Slice value = column->get_slice(unwrapped->row);
-            return require_json_write(writer->String(value.data, value.size));
-        }
         return invalid_options();
     }
     case TYPE_JSON:
@@ -432,8 +420,9 @@ StatusOr<std::pair<std::string, AIProviderOptionKind>> serialize_value(const Col
 
 } // namespace
 
-StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row) {
-    if (type.type != TYPE_MAP) {
+StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, const TypeDescriptor& type, size_t row,
+                                                      AICapability capability) {
+    if (type.type != TYPE_MAP || (capability != AICapability::CHAT && capability != AICapability::TEXT_EMBEDDING)) {
         return invalid_options();
     }
     auto unwrapped = unwrap_value(column, row);
@@ -468,8 +457,9 @@ StatusOr<AIProviderOptions> build_ai_provider_options(const Column& column, cons
     members.reserve(count);
     for (size_t index = offset; index < offset + count; ++index) {
         auto key = read_map_key(map->keys(), index);
-        if (!key.ok() || key->empty() || !keys.emplace(*key).second || *key == "model" || *key == "messages" ||
-            *key == "stream") {
+        if (!key.ok() || key->empty() || !keys.emplace(*key).second || *key == "model" ||
+            (capability == AICapability::CHAT && (*key == "messages" || *key == "stream")) ||
+            (capability == AICapability::TEXT_EMBEDDING && (*key == "input" || *key == "encoding_format"))) {
             return invalid_options();
         }
         auto value = serialize_value(map->values(), type.children[1], index);

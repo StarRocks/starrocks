@@ -241,6 +241,7 @@ statement
     // Group Provider Statement
     | createGroupProviderStatement
     | dropGroupProviderStatement
+    | alterGroupProviderStatement
     | showGroupProvidersStatement
     | showCreateGroupProviderStatement
 
@@ -2047,6 +2048,13 @@ createGroupProviderStatement
 
 dropGroupProviderStatement
     : DROP GROUP PROVIDER (IF EXISTS)? identifier
+    ;
+
+alterGroupProviderStatement
+    // The property list is spelled out here instead of reusing propertyList, which requires at least one
+    // property: an empty SET () is a mistake worth a clear message ("no property is specified"), and the
+    // shared rule is used by 30+ statements, so it cannot be relaxed just for this one.
+    : ALTER GROUP PROVIDER identifier SET '(' (property (',' property)*)? ')'
     ;
 
 showGroupProvidersStatement

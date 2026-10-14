@@ -234,7 +234,7 @@ SELECT COUNT(*) FROM t5_list_alter;
 -- !result
 SELECT MIN(c1), MAX(c1) FROM t5_list_alter;
 -- result:
-1	4
+1	3
 -- !result
 DROP DATABASE IF EXISTS test_schema_change_empty_partition;
 -- result:

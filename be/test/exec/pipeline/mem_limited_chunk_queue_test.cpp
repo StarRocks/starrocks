@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 
 #include "base/testutil/assert.h"
@@ -99,6 +100,53 @@ void wait_flush_task_done(MemLimitedChunkQueue& queue) {
     while (queue._has_flush_io_task) {
         usleep(1000);
     }
+}
+
+TEST_F(MemLimitedChunkQueueTest, test_pending_flush_task) {
+    MemLimitedChunkQueue::Options options;
+    options.block_size = 1024 * 32;
+    options.memory_limit = 1024 * 32;
+    options.max_unconsumed_bytes = INT64_MAX;
+    options.block_manager = dummy_block_mgr.get();
+    MemLimitedChunkQueue queue(&dummy_runtime_state, 1, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
+    queue.open_consumer(0);
+    queue.open_producer();
+
+    std::atomic<bool> entered = false;
+    std::atomic<bool> release = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_flush_task", [&](void*) {
+        entered.store(true);
+        while (!release.load()) {
+            bthread_usleep(1000);
+        }
+    });
+    DeferOp cleanup([&]() {
+        release.store(true);
+        wait_flush_task_done(queue);
+        while (queue.has_pending_io_tasks()) {
+            bthread_usleep(1000);
+        }
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    AutoIncChunkBuilder builder;
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_FALSE(queue.can_push());
+    for (int i = 0; i < 5000 && !entered.load(); ++i) {
+        bthread_usleep(1000);
+    }
+    ASSERT_TRUE(entered.load());
+    ASSERT_TRUE(queue.has_pending_io_tasks());
+    release.store(true);
+    wait_flush_task_done(queue);
+    while (queue.has_pending_io_tasks()) {
+        bthread_usleep(1000);
+    }
+    ASSERT_FALSE(queue.has_pending_io_tasks());
 }
 
 TEST_F(MemLimitedChunkQueueTest, test_iterator) {
@@ -389,8 +437,10 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         wait_flush_task_done(queue);
         int32_t submitted_load_tasks = 0;
         SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task",
-                                              [&](void* arg) { submitted_load_tasks++; });
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task", [&](void* arg) {
+            ASSERT_TRUE(queue.has_pending_io_tasks());
+            submitted_load_tasks++;
+        });
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearAllCallBacks();
             SyncPoint::GetInstance()->DisableProcessing();

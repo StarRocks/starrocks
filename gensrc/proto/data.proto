@@ -39,6 +39,22 @@ option java_package = "com.starrocks.proto";
 
 import "types.proto";
 
+// Observed statistics of completed AI tasks. Usage counts distinguish unreported tokens from reported zero.
+message AIExecutionStatisticsPB {
+    optional int64 task_count = 1;
+    optional int64 request_count = 2;
+    optional int64 retry_count = 3;
+    optional int64 timeout_count = 4;
+    optional int64 error_count = 5;
+    optional int64 http_time_ns = 6;
+    optional int64 prompt_tokens = 7;
+    optional int64 completion_tokens = 8;
+    optional int64 total_tokens = 9;
+    optional int64 prompt_usage_count = 10;
+    optional int64 completion_usage_count = 11;
+    optional int64 total_usage_count = 12;
+}
+
 message PQueryStatistics {
     optional int64 scan_rows = 1;
     optional int64 scan_bytes = 2;
@@ -51,6 +67,7 @@ message PQueryStatistics {
     repeated NodeExecStatsItemPB node_exec_stats_items = 11;
     optional int64 read_local_cnt = 12;
     optional int64 read_remote_cnt = 13;
+    optional AIExecutionStatisticsPB ai_statistics = 14;
 }
 
 message QueryStatisticsItemPB {

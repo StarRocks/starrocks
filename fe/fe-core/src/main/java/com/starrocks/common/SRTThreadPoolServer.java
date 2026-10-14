@@ -52,7 +52,7 @@ import java.util.function.LongSupplier;
  */
 public class SRTThreadPoolServer extends TServer {
     private static final Logger LOG = LogManager.getLogger(SRTThreadPoolServer.class);
-    private static final long REJECTION_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(10);
+    private static final long WARNING_LOG_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(10);
 
     public static class Args extends AbstractServerArgs<SRTThreadPoolServer.Args> {
         public int minWorkerThreads = 5;
@@ -168,6 +168,27 @@ public class SRTThreadPoolServer extends TServer {
 
     private SocketAddress lastRejectedPeer;
 
+    // The expiry window mirrors the rejection window above, but any worker can expire a connection
+    // rather than just the acceptor, so this one synchronizes. expiryWindowOpen is read once per
+    // dequeued connection to decide whether the lock is worth taking at all, and is volatile for
+    // that read alone. Keeping the two windows separate rate limits the warnings independently, so
+    // neither kind can hide the other.
+    private final Object expiryLock = new Object();
+
+    private volatile boolean expiryWindowOpen;
+
+    private long expiredSinceLastReport;
+
+    private long expiryWindowStartNanos;
+
+    private long lastExpiryNanos;
+
+    private SocketAddress lastExpiredPeer;
+
+    private long lastExpiredWaitMs;
+
+    private long lastExpiredTimeoutMs;
+
     public SRTThreadPoolServer(SRTThreadPoolServer.Args args) {
         this(args, System::nanoTime);
     }
@@ -218,6 +239,16 @@ public class SRTThreadPoolServer extends TServer {
             return;
         }
 
+        // Neither call below returns in the FE, so both force-flushes on this path -- the
+        // rejection flush at the end of execute() and the expiry flush at the end of
+        // waitForShutdown() -- are unreachable outside tests. stopped_ is set only by stop(),
+        // and ThriftServer.stop() has no production caller: StarRocksFEServer starts the thrift
+        // server and never stops it. The counters still record every rejection and expiry; only
+        // the trailing warning line for a window still open at exit is missed.
+        //
+        // Wiring a graceful shutdown must also budget for awaitTermination() in waitForShutdown():
+        // under saturation the workers sit in their socket reads for up to stopTimeoutVal, so a
+        // bounded shutdown hook can expire before the expiry flush runs.
         execute();
         waitForShutdown();
 
@@ -243,10 +274,12 @@ public class SRTThreadPoolServer extends TServer {
             }
         }
         // The acceptor is the only reporter, so flush what the open window still holds.
+        // Unreachable outside tests -- see serve().
         reportRejectedConnections(true);
     }
 
-    private void submitClient(TTransport client) {
+    @VisibleForTesting
+    void submitClient(TTransport client) {
         SRTThreadPoolServer.WorkerProcess worker = new SRTThreadPoolServer.WorkerProcess(client);
         try {
             executorService.execute(worker);
@@ -321,7 +354,7 @@ public class SRTThreadPoolServer extends TServer {
         if (!rejectionWindowOpen) {
             return 0;
         }
-        if (!force && nanoTime.getAsLong() - rejectionWindowStartNanos < REJECTION_LOG_INTERVAL_NANOS) {
+        if (!force && nanoTime.getAsLong() - rejectionWindowStartNanos < WARNING_LOG_INTERVAL_NANOS) {
             return 0;
         }
         long reported = rejectedSinceLastReport;
@@ -339,6 +372,79 @@ public class SRTThreadPoolServer extends TServer {
     @VisibleForTesting
     long getLastReportedSpanMs() {
         return lastReportedSpanMs;
+    }
+
+    /**
+     * Counts one expired connection into the open window, opening it if this is the first. The
+     * synchronized counterpart of {@link #recordRejectedConnection}: expiries arrive from whichever
+     * worker dequeued the connection, so unlike rejections they have no single-threaded owner.
+     * <p>
+     * The peer and the applied timeout are captured here rather than read back at report time, so a
+     * warning emitted later cannot name a limit that was never applied, or a socket already closed.
+     */
+    @VisibleForTesting
+    void recordExpiredConnection(TTransport client, long queueWaitMs, long queueTimeoutMs) {
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS.increase(1L);
+        }
+        long nowNanos = nanoTime.getAsLong();
+        SocketAddress peerAddress = getPeerAddress(client);
+        synchronized (expiryLock) {
+            if (!expiryWindowOpen) {
+                expiryWindowStartNanos = nowNanos;
+                expiryWindowOpen = true;
+            }
+            lastExpiryNanos = nowNanos;
+            expiredSinceLastReport++;
+            lastExpiredPeer = peerAddress;
+            lastExpiredWaitMs = queueWaitMs;
+            lastExpiredTimeoutMs = queueTimeoutMs;
+        }
+    }
+
+    /**
+     * Emits one warning covering every expiry counted in the open window, once that window has
+     * closed. Every dequeued connection drives this, which is the worker-side counterpart of the
+     * accept loop driving the rejection report: a burst that has ended is reported by the next
+     * connection served rather than waiting for another expiry that may never come, and shutdown
+     * flushes whatever is still open once the workers have stopped. The span reported runs from the
+     * first to the last expiry in the window, not to whenever the report fired.
+     *
+     * @param force report a still-open window, for shutdown to flush
+     * @return how many expiries were reported, 0 if none were
+     */
+    @VisibleForTesting
+    long reportExpiredConnections(boolean force) {
+        // One volatile read on the path of every dequeued connection; the lock is only worth taking
+        // once something has actually expired, which with the check disarmed is never.
+        if (!expiryWindowOpen) {
+            return 0;
+        }
+        long reported;
+        long spanMs;
+        SocketAddress peerAddress;
+        long waitMs;
+        long timeoutMs;
+        synchronized (expiryLock) {
+            if (!expiryWindowOpen) {
+                return 0;
+            }
+            if (!force && nanoTime.getAsLong() - expiryWindowStartNanos < WARNING_LOG_INTERVAL_NANOS) {
+                return 0;
+            }
+            reported = expiredSinceLastReport;
+            spanMs = TimeUnit.NANOSECONDS.toMillis(lastExpiryNanos - expiryWindowStartNanos);
+            peerAddress = lastExpiredPeer;
+            waitMs = lastExpiredWaitMs;
+            timeoutMs = lastExpiredTimeoutMs;
+            expiredSinceLastReport = 0;
+            expiryWindowOpen = false;
+            lastExpiredPeer = null;
+        }
+        LOG.warn("Closed {} queued thrift connection(s) within {} ms unserved because they waited "
+                        + "longer than thrift_server_queue_timeout_ms={}, most recent peer {} waited {}ms",
+                reported, spanMs, timeoutMs, peerAddress == null ? "unknown" : peerAddress, waitMs);
+        return reported;
     }
 
     protected void waitForShutdown() {
@@ -360,6 +466,9 @@ public class SRTThreadPoolServer extends TServer {
                 now = newnow;
             }
         }
+        // The workers have stopped, so nothing more can join the window; report what it still holds.
+        // Unreachable outside tests -- see serve().
+        reportExpiredConnections(true);
     }
 
     public void stop() {
@@ -375,18 +484,33 @@ public class SRTThreadPoolServer extends TServer {
         private final TTransport client;
 
         /**
+         * When this connection was handed to the executor. Monotonic, so a wall-clock step cannot
+         * make the whole queue look stale at once.
+         */
+        private final long enqueueNanos;
+
+        /**
          * Default constructor.
          *
          * @param client Transport to process
          */
         private WorkerProcess(TTransport client) {
             this.client = client;
+            this.enqueueNanos = nanoTime.getAsLong();
         }
 
         /**
          * Loops on processing a client forever
          */
         public void run() {
+            long queueWaitMs = recordQueueWait();
+            // Mirrors the accept loop reporting rejections before it submits: whichever connection
+            // gets dequeued next closes out a finished burst, so the last one is never left unsaid.
+            reportExpiredConnections(false);
+            if (closeIfExpired(queueWaitMs)) {
+                return;
+            }
+
             TProcessor processor = null;
             TTransport inputTransport = null;
             TTransport outputTransport = null;
@@ -442,6 +566,44 @@ public class SRTThreadPoolServer extends TServer {
                     client.close();
                 }
             }
+        }
+
+        /**
+         * Samples how long this connection sat between the acceptor and this worker. Expired
+         * connections are sampled too: sampling only the ones that go on to be served would cap the
+         * distribution at the timeout, and so report a calm queue at exactly the moment the queue is
+         * being emptied unserved.
+         *
+         * @return the queue wait in milliseconds
+         */
+        private long recordQueueWait() {
+            long elapsedNanos = nanoTime.getAsLong() - enqueueNanos;
+            long queueWaitMs = elapsedNanos <= 0 ? 0 : TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
+            if (MetricRepo.hasInit) {
+                MetricRepo.HISTO_THRIFT_SERVER_QUEUE_WAIT_MS.update(queueWaitMs);
+            }
+            return queueWaitMs;
+        }
+
+        /**
+         * Closes a connection that waited past the configured timeout, on the grounds that its caller
+         * has almost certainly abandoned it and serving it only holds a worker away from work someone
+         * is still waiting for. Runs before the connection context exists and before the first
+         * protocol read, so an expired connection costs a worker a close rather than a request.
+         *
+         * @return true if the connection was closed unserved
+         */
+        private boolean closeIfExpired(long queueWaitMs) {
+            // One read of the mutable config, so a change between the comparison and the warning
+            // cannot report a limit that was never applied.
+            long queueTimeoutMs = Config.thrift_server_queue_timeout_ms;
+            if (queueTimeoutMs <= 0 || queueWaitMs <= queueTimeoutMs) {
+                return false;
+            }
+
+            recordExpiredConnection(client, queueWaitMs, queueTimeoutMs);
+            client.close();
+            return true;
         }
 
         private boolean isIgnorableException(Exception x) {

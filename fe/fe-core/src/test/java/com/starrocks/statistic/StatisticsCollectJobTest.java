@@ -1285,16 +1285,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap());
         // Columns are split into groups of max(2, parallelism), each group a self-contained single-scan CTE
         // query, per partition. 4 columns / 2-per-scan = 2 groups x 3 partitions = 6 queries.
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         Assertions.assertEquals(6, collectSqlList.size());
         // A large parallelism puts all 4 columns in one scan -> 1 group x 3 partitions = 3 queries.
         Assertions.assertEquals(3, collectJob.buildCollectSQLList(128).size());
         // parallelism 3 -> ceil(4/3)=2 groups x 3 partitions = 6 queries.
         Assertions.assertEquals(6, collectJob.buildCollectSQLList(3).size());
-        for (List<String> group : collectSqlList) {
-            Assertions.assertEquals(1, group.size());
-            assertContains(group.get(0), "WITH base_cte_table AS");
-            assertContains(group.get(0), "FROM base_cte_table");
+        for (ExternalFullStatisticsCollectJob.CollectTask task : collectSqlList) {
+            assertContains(task.getSql(), "WITH base_cte_table AS");
+            assertContains(task.getSql(), "FROM base_cte_table");
         }
         // All columns and all three partition predicates appear across the query list.
         assertContains(collectSqlList.toString(), "c1", "c2", "c3", "par_col");
@@ -1411,7 +1410,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.AnalyzeType.FULL,
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(),
                 "`ts` >= '2019-01-01 00:00:00' and `ts` < '2020-01-01 00:00:00'");
 
@@ -1561,7 +1560,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         // First partition is ts_bucket=0 in mock metadata; spec uses bucket(ts, 10)
         assertContains(collectSqlList.get(0).toString(),
                 "__iceberg_transform_bucket(`ts`, 10) = 0");
@@ -1586,7 +1585,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList = collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(),
                 "__iceberg_transform_truncate(`data`, 5) = 'aaaaa'");
     }
@@ -1608,7 +1607,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleType.ONCE,
                         Maps.newHashMap());
 
-        List<List<String>> collectSqlList =  collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> collectSqlList =  collectJob.buildCollectSQLList(1);
         assertContains(collectSqlList.get(0).toString(), "date` = '2020-01-01'");
     }
 
@@ -1630,7 +1629,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap());
         // Columns split into groups of max(2, parallelism) per partition: 3 cols / 2-per-scan = 2 groups
         // x 10 partitions = 20 queries.
-        List<List<String>> lists = collectJob.buildCollectSQLList(1);
+        List<ExternalFullStatisticsCollectJob.CollectTask> lists = collectJob.buildCollectSQLList(1);
         Assertions.assertEquals(20, lists.size());
 
         //test partition is null

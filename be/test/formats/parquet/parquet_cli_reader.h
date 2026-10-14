@@ -137,6 +137,8 @@ private:
                 ASSIGN_OR_RETURN(auto child_type, _build_type(i));
                 type.children.emplace_back(child_type);
             }
+        } else if (field.type == ColumnType::VARIANT) {
+            type = TypeDescriptor::create_variant_type();
         } else if (field.type == ColumnType::ARRAY) {
             type.type = TYPE_ARRAY;
             ASSIGN_OR_RETURN(auto child_type, _build_type(field.children[0]));

@@ -61,6 +61,11 @@ public:
     METRIC_DEFINE_INT_COUNTER(txn_persist_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_GAUGE(metadata_cache_bytes_total, MetricUnit::BYTES);
+    // Segment metadata currently pinned by running lake compaction tasks
+    // (config::lake_compaction_hold_input_segments). Unlike metadata_cache_bytes_total this memory is
+    // NOT under the cache's LRU: it is released when the holding task ends, so a persistently high
+    // value means long-running compactions, not a cache to resize.
+    METRIC_DEFINE_INT_GAUGE(lake_compaction_held_segment_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_COUNTER(segment_file_not_found_total, MetricUnit::OPERATIONS);
 
     METRIC_DEFINE_UINT_GAUGE(update_primary_index_num, MetricUnit::OPERATIONS);
@@ -119,6 +124,13 @@ public:
     // and reads of either location count. Replication reads of a source
     // cluster and restore reads of a snapshot are not counted.
     METRIC_DEFINE_INT_COUNTER(lake_tablet_metadata_get_not_found_total, MetricUnit::REQUESTS);
+
+    // compression dict column-level compression dictionary (a ZSTD dictionary). Aggregate write-side health signal
+    // exported via /metrics: whether compression dict is working, dictionary scale, and the
+    // rate at which the sampling gate fell back (dict never built).
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_pages_written, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_COUNTER(zstd_compression_dict_build_fallback, MetricUnit::NOUNIT);
 
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(base_compaction_request_failed, MetricUnit::REQUESTS);

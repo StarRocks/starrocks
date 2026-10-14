@@ -18,6 +18,8 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <cmath>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -30,6 +32,21 @@ using RequestWriter = rapidjson::Writer<rapidjson::StringBuffer, rapidjson::UTF8
 
 Status invalid_request() {
     return Status::InvalidArgument("AI provider request is invalid");
+}
+
+AIProviderUsage parse_usage(const rapidjson::Value& document) {
+    const auto usage = document.FindMember("usage");
+    if (usage == document.MemberEnd() || !usage->value.IsObject()) return {};
+    const auto token_count = [&](const char* name) -> std::optional<int64_t> {
+        const auto member = usage->value.FindMember(name);
+        if (member == usage->value.MemberEnd() || !member->value.IsInt64() || member->value.GetInt64() < 0) {
+            return std::nullopt;
+        }
+        return member->value.GetInt64();
+    };
+    return {.prompt_tokens = token_count("prompt_tokens"),
+            .completion_tokens = token_count("completion_tokens"),
+            .total_tokens = token_count("total_tokens")};
 }
 
 rapidjson::Type json_type(AIProviderOptionKind kind) {
@@ -53,9 +70,6 @@ rapidjson::Type json_type(AIProviderOptionKind kind) {
 }
 
 bool has_invalid_api_key_byte(std::string_view api_key) {
-    if (api_key.empty()) {
-        return true;
-    }
     for (unsigned char byte : api_key) {
         if (byte <= 0x1f || byte == 0x7f) {
             return true;
@@ -64,55 +78,13 @@ bool has_invalid_api_key_byte(std::string_view api_key) {
     return false;
 }
 
-bool is_safe_identifier(std::string_view identifier) {
-    if (identifier.empty() || identifier.size() > 128) {
-        return false;
-    }
-    for (unsigned char byte : identifier) {
-        const bool safe = (byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') ||
-                          (byte >= '0' && byte <= '9') || byte == '.' || byte == '_' || byte == '-';
-        if (!safe) {
-            return false;
-        }
-    }
-    return true;
-}
-
-std::string ascii_lower(std::string_view value) {
-    std::string result;
-    result.reserve(value.size());
-    for (unsigned char byte : value) {
-        result.push_back(byte >= 'A' && byte <= 'Z' ? static_cast<char>(byte - 'A' + 'a') : static_cast<char>(byte));
-    }
-    return result;
-}
-
-AIProviderErrorCode classify_identifier(std::string_view identifier) {
-    const std::string value = ascii_lower(identifier);
-    if (value == "rate_limit_exceeded") return AIProviderErrorCode::RATE_LIMIT_EXCEEDED;
-    if (value == "too_many_requests") return AIProviderErrorCode::TOO_MANY_REQUESTS;
-    if (value == "server_error") return AIProviderErrorCode::SERVER_ERROR;
-    if (value == "internal_error") return AIProviderErrorCode::INTERNAL_ERROR;
-    if (value == "service_unavailable") return AIProviderErrorCode::SERVICE_UNAVAILABLE;
-    if (value == "timeout") return AIProviderErrorCode::TIMEOUT;
-    if (value == "api_connection_error") return AIProviderErrorCode::API_CONNECTION_ERROR;
-    if (value.starts_with("throttling.")) return AIProviderErrorCode::THROTTLING;
-    if (value.starts_with("ratelimit.")) return AIProviderErrorCode::RATE_LIMIT;
-    if (value.starts_with("internalerror.")) return AIProviderErrorCode::INTERNAL_ERROR;
-    if (value.starts_with("serviceunavailable.")) return AIProviderErrorCode::SERVICE_UNAVAILABLE;
-    return AIProviderErrorCode::UNKNOWN;
-}
-
 std::optional<AIProviderErrorCode> classify_member(const rapidjson::Value& envelope, const char* name) {
     const auto member = envelope.FindMember(name);
     if (member == envelope.MemberEnd() || !member->value.IsString()) {
         return std::nullopt;
     }
     const std::string_view value(member->value.GetString(), member->value.GetStringLength());
-    if (!is_safe_identifier(value)) {
-        return std::nullopt;
-    }
-    return classify_identifier(value);
+    return parse_ai_provider_error_code(value);
 }
 
 AIProviderErrorCode classify_error(const rapidjson::Value& envelope) {
@@ -135,22 +107,66 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
         return Status::InvalidArgument("AI provider API key is invalid");
     }
 
+    std::string media_uri;
+    const char* media_part_type = "image_url";
+    if (request.media != nullptr) {
+        if (request.capability != AICapability::CHAT) {
+            return Status::NotSupported("OpenAI-compatible embedding does not support FILE input");
+        }
+        if (request.media->mime_type == "video/mp4") {
+            if (!_supports_video) return Status::NotSupported("AI protocol does not support video input");
+            media_part_type = "video_url";
+        }
+        auto encoded = encode_ai_media_data_uri(*request.media);
+        if (!encoded.ok()) return encoded.status();
+        media_uri = std::move(*encoded);
+    }
+
     rapidjson::StringBuffer buffer;
     RequestWriter writer(buffer);
-    if (!writer.StartObject() || !writer.Key("model") || !writer.String(request.model.data(), request.model.size()) ||
-        !writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
-        !writer.String("system") || !writer.Key("content") ||
-        !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() || !writer.StartObject() ||
-        !writer.Key("role") || !writer.String("user") || !writer.Key("content") ||
-        !writer.String(request.prompt.data(), request.prompt.size()) || !writer.EndObject() || !writer.EndArray() ||
-        !writer.Key("stream") || !writer.Bool(false)) {
+    if (!writer.StartObject() || !writer.Key("model") || !writer.String(request.model.data(), request.model.size())) {
+        return invalid_request();
+    }
+    switch (request.capability) {
+    case AICapability::CHAT:
+        if (!writer.Key("messages") || !writer.StartArray() || !writer.StartObject() || !writer.Key("role") ||
+            !writer.String("system") || !writer.Key("content") ||
+            !writer.String(kSystemPrompt.data(), kSystemPrompt.size()) || !writer.EndObject() ||
+            !writer.StartObject() || !writer.Key("role") || !writer.String("user") || !writer.Key("content")) {
+            return invalid_request();
+        }
+        if (request.media == nullptr) {
+            if (!writer.String(request.prompt.data(), request.prompt.size())) return invalid_request();
+        } else if (!writer.StartArray() || !writer.StartObject() || !writer.Key("type") || !writer.String("text") ||
+                   !writer.Key("text") || !writer.String(request.prompt.data(), request.prompt.size()) ||
+                   !writer.EndObject() || !writer.StartObject() || !writer.Key("type") ||
+                   !writer.String(media_part_type) || !writer.Key(media_part_type) || !writer.StartObject() ||
+                   !writer.Key("url") || !writer.String(media_uri.data(), media_uri.size()) || !writer.EndObject() ||
+                   !writer.EndObject() || !writer.EndArray()) {
+            return invalid_request();
+        }
+        if (!writer.EndObject() || !writer.EndArray() || !writer.Key("stream") || !writer.Bool(false)) {
+            return invalid_request();
+        }
+        break;
+    case AICapability::TEXT_EMBEDDING:
+        if (!writer.Key("input") || !writer.String(request.prompt.data(), request.prompt.size()) ||
+            !writer.Key("encoding_format") || !writer.String("float")) {
+            return invalid_request();
+        }
+        break;
+    default:
         return invalid_request();
     }
 
     if (request.options != nullptr) {
         for (const auto& option : request.options->members()) {
-            if (option.key == "model" || option.key == "messages" || option.key == "stream" ||
-                !writer.Key(option.key.data(), option.key.size()) ||
+            const bool reserved = option.key == "model" ||
+                                  (request.capability == AICapability::CHAT &&
+                                   (option.key == "messages" || option.key == "stream")) ||
+                                  (request.capability == AICapability::TEXT_EMBEDDING &&
+                                   (option.key == "input" || option.key == "encoding_format"));
+            if (reserved || !writer.Key(option.key.data(), option.key.size()) ||
                 !writer.RawValue(option.serialized_json.data(), option.serialized_json.size(),
                                  json_type(option.kind))) {
                 return invalid_request();
@@ -166,13 +182,16 @@ StatusOr<AIProviderHttpRequest> OpenAICompatibleProvider::build_request(const AI
     result.headers = {
             AIHttpHeader{.name = "Content-Type", .value = "application/json"},
             AIHttpHeader{.name = "Accept", .value = "application/json"},
-            AIHttpHeader{.name = "Authorization", .value = "Bearer " + std::string(request.api_key)},
     };
+    if (!request.api_key.empty()) {
+        result.headers.emplace_back(
+                AIHttpHeader{.name = "Authorization", .value = "Bearer " + std::string(request.api_key)});
+    }
     result.body.assign(buffer.GetString(), buffer.GetSize());
     return result;
 }
 
-AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body) const {
+AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view body, AICapability capability) const {
     if (body.find('\0') != std::string_view::npos) {
         return AIProviderMalformed{};
     }
@@ -184,28 +203,58 @@ AIProviderParseResult OpenAICompatibleProvider::parse_response(std::string_view 
         return AIProviderMalformed{};
     }
 
+    const AIProviderUsage usage = parse_usage(document);
     const auto nested_error = document.FindMember("error");
     if (nested_error != document.MemberEnd() && nested_error->value.IsObject()) {
-        return AIProviderStructuredError{.code = classify_error(nested_error->value)};
+        return AIProviderStructuredError{.code = classify_error(nested_error->value), .usage = usage};
     }
     if (document.HasMember("code") || document.HasMember("type")) {
-        return AIProviderStructuredError{.code = classify_error(document)};
+        return AIProviderStructuredError{.code = classify_error(document), .usage = usage};
     }
+
+    if (capability == AICapability::TEXT_EMBEDDING) {
+        const auto data = document.FindMember("data");
+        if (data == document.MemberEnd() || !data->value.IsArray() || data->value.Size() != 1 ||
+            !data->value[0].IsObject()) {
+            return AIProviderMalformed{.usage = usage};
+        }
+        const auto& item = data->value[0];
+        const auto index = item.FindMember("index");
+        const auto embedding = item.FindMember("embedding");
+        if (index == item.MemberEnd() || !index->value.IsUint() || index->value.GetUint() != 0 ||
+            embedding == item.MemberEnd() || !embedding->value.IsArray() || embedding->value.Empty()) {
+            return AIProviderMalformed{.usage = usage};
+        }
+        std::vector<float> values;
+        values.reserve(embedding->value.Size());
+        for (const auto& element : embedding->value.GetArray()) {
+            if (!element.IsNumber()) return AIProviderMalformed{.usage = usage};
+            const double value = element.GetDouble();
+            if (!std::isfinite(value) || value < std::numeric_limits<float>::lowest() ||
+                value > std::numeric_limits<float>::max()) {
+                return AIProviderMalformed{.usage = usage};
+            }
+            values.emplace_back(static_cast<float>(value));
+        }
+        return AIProviderSuccess{.value = std::move(values), .usage = usage};
+    }
+    if (capability != AICapability::CHAT) return AIProviderMalformed{.usage = usage};
 
     const auto choices = document.FindMember("choices");
     if (choices == document.MemberEnd() || !choices->value.IsArray() || choices->value.Empty() ||
         !choices->value[0].IsObject()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
     const auto message = choices->value[0].FindMember("message");
     if (message == choices->value[0].MemberEnd() || !message->value.IsObject()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
     const auto content = message->value.FindMember("content");
     if (content == message->value.MemberEnd() || !content->value.IsString()) {
-        return AIProviderMalformed{};
+        return AIProviderMalformed{.usage = usage};
     }
-    return AIProviderSuccess{.content = std::string(content->value.GetString(), content->value.GetStringLength())};
+    return AIProviderSuccess{.value = std::string(content->value.GetString(), content->value.GetStringLength()),
+                             .usage = usage};
 }
 
 } // namespace starrocks

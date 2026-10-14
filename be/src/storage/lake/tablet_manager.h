@@ -39,6 +39,7 @@
 
 namespace starrocks {
 struct FileInfo;
+struct OlapReaderStatistics;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -49,7 +50,7 @@ namespace starrocks::lake {
 
 template <typename T>
 class MetadataIterator;
-class UpdateManager;
+class PrimaryKeyManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
@@ -69,7 +70,7 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
                            int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
 
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
@@ -315,10 +316,20 @@ public:
 
     // Pick a tablet id from `candidates` that is already known to this worker's staros
     // shard cache (so that later location_provider calls can resolve it without issuing
-    // a get-shard-info RPC to StarMgr). Falls back to the first candidate when none is
-    // local or when USE_STAROS is not enabled. Callers must ensure `candidates` is not
-    // empty.
+    // a get-shard-info RPC to StarMgr). When none is local, a candidate whose shard info
+    // the owner handed over (see `borrow_shard_info`) resolves without the RPC too. Falls
+    // back to the first candidate when neither exists or when USE_STAROS is not enabled.
+    // Callers must ensure `candidates` is not empty.
     int64_t pick_local_anchor_tablet_id(const std::vector<int64_t>& candidates);
+
+    // Shared-data only. The serialized shard info of |tablet_id| if this node owns the tablet,
+    // empty otherwise. See StarOSWorker::export_shard_info.
+    std::string export_shard_info(int64_t tablet_id);
+
+    // Shared-data only. Keeps a shard info produced by `export_shard_info` on the tablet's owner,
+    // so this node resolves the tablet's directory without a starmgr RPC although it does not
+    // own the tablet. See StarOSWorker::borrow_shard_info.
+    void borrow_shard_info(const std::string& serialized);
 
     Status drop_local_cache(const std::string& path);
     void prune_metacache();
@@ -378,7 +389,7 @@ public:
 
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
-    UpdateManager* update_mgr();
+    PrimaryKeyManager* primary_key_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
@@ -407,12 +418,14 @@ public:
     // meantime is not charged with this segment's memory cost.
     void update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
 
+    // If |stats| is not null and the segment footer is read, the read is added to it.
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_meta_cache,
-                                      TabletSchemaPtr tablet_schema);
+                                      TabletSchemaPtr tablet_schema, OlapReaderStatistics* stats = nullptr);
     // for load segment parallel
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
-                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema);
+                                      bool fill_meta_cache, TabletSchemaPtr tablet_schema,
+                                      OlapReaderStatistics* stats = nullptr);
 
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
 
@@ -483,7 +496,7 @@ private:
     const StorePathRegistry* _store_path_registry = nullptr;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
-    UpdateManager* _update_mgr = nullptr;
+    PrimaryKeyManager* _primary_key_mgr = nullptr;
     std::unique_ptr<TableSchemaService> _table_schema_service;
 
     std::shared_mutex _meta_lock;

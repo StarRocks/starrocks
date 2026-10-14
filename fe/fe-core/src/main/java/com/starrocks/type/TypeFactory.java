@@ -328,6 +328,7 @@ public class TypeFactory {
                     // Complex types
                     .add(JsonType.JSON)
                     .add(VariantType.VARIANT)
+                    .add(FileType.FILE)
                     // Aggregate types
                     .add(HLLType.HLL)
                     .add(BitmapType.BITMAP)

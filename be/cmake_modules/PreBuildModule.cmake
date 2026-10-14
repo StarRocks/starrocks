@@ -45,6 +45,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
     add_library(Snappy::snappy ALIAS snappy)
+    # starlet >= v4.2-rc5 exports zstd::zstd in its link interface (zstd-compressed
+    # worker heartbeat); reuse the libzstd.a already imported by ThirdParty.cmake
+    add_library(zstd::zstd ALIAS zstd)
     add_library(libxml2::libxml2 ALIAS libxml2)
     add_library(Azure::azure-core ALIAS azure-core)
     add_library(Azure::azure-identity ALIAS azure-identity)

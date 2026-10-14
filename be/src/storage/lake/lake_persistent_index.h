@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <mutex>
 #include <ostream>
@@ -21,7 +22,6 @@
 #include <string>
 
 #include "column/vectorized_fwd.h"
-#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -36,13 +36,10 @@ class ParallelUpsertContext;
 class ThreadPoolToken;
 struct ParallelPublishSlot;
 
-namespace sstable {
-class Iterator;
-} // namespace sstable
-
 namespace lake {
 
 class MetaFileBuilder;
+class ParallelTaskRunner;
 class SegmentPKIterator;
 struct SegmentPKChunkRef;
 
@@ -58,7 +55,7 @@ class PersistentIndexSstableFileset;
 
 // A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
 // filesets on shared storage, plus the load state and the lock the publish path serialises on.
-// UpdateManager's index cache holds one of these per tablet, by value.
+// PrimaryKeyManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
@@ -79,7 +76,7 @@ class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
-    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // PrimaryKeyManager's index cache stores this class by value and creates an entry from a tablet id
     // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
     //
     // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
@@ -217,8 +214,6 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
-    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
-
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -241,9 +236,6 @@ public:
     StatusOr<AsyncCompactCBPtr> early_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                   TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int32_t fileset_start_idx);
-
-    static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
-                                        std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 
     // Assign the generation version (PersistentIndexSstablePB.generation_version) to each
     // sstable in |new_meta|: a sstable that already carries a non-zero value is left
@@ -395,21 +387,20 @@ private:
     Status parallel_reverse_lookup(size_t n, const Slice* keys, IndexValue* old_values, size_t num_tasks,
                                    const std::function<KeyIndexSet(size_t)>& make_subset, bool parallel_worthwhile);
 
+    using DelFilter = std::vector<std::atomic<uint64_t>>;
+    static constexpr size_t kDelFilterBitsPerWord = 64;
+
+    // Submit disjoint filter lookups without waiting. Keep one packed bitmap per file; atomic
+    // words allow batches to share boundary words without allocating a bitmap per tiny batch.
+    // IndexValues are task-local and bounded by the configured batch size. The caller owns keys
+    // and filter_words until runner joins, after all producers sharing its pool have finished.
+    Status parallel_get(ParallelTaskRunner* runner, size_t n, const Slice* keys, uint32_t too_old,
+                        DelFilter* filter_words);
+
     // rebuild delete operation from rowset.
     Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
-
-    // get sstable's iterator that need to compact and modify txn_log
-    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                           TxnLogPB* txn_log,
-                                           std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
-                                           bool* contain_shared_sstables);
-
-    static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
-            std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 

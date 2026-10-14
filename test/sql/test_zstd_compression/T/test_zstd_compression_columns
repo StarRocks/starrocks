@@ -1,0 +1,45 @@
+-- name: test_zstd_compression_columns
+CREATE DATABASE test_zstd_compression_${uuid0};
+USE test_zstd_compression_${uuid0};
+
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
+
+CREATE TABLE t_zstd_col (
+  k BIGINT NOT NULL,
+  v STRING,
+  j JSON
+) ENGINE=OLAP
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1", "zstd_compression_columns" = "v, j");
+
+function: assert_query_contains("show create table t_zstd_col", "zstd_compression_columns")
+
+insert into t_zstd_col values
+  (1, '{"role":"assistant","parts":[{"type":"text","content":"row one"}]}', parse_json('{"a":1}')),
+  (2, '{"role":"assistant","parts":[{"type":"text","content":"row two"}]}', parse_json('{"a":2}')),
+  (3, '{"role":"assistant","parts":[{"type":"text","content":"row three"}]}', parse_json('{"a":3}'));
+
+select count(*) from t_zstd_col;
+select v from t_zstd_col where k = 2;
+select get_json_string(j, 'a') from t_zstd_col where k = 3;
+select sum(length(v)) from t_zstd_col;
+
+ALTER TABLE t_zstd_col SET ("zstd_compression_columns" = "v");
+function: wait_alter_table_finish()
+function: assert_query_contains("show create table t_zstd_col", "\"zstd_compression_columns\" = \"v\"")
+
+select count(*) from t_zstd_col;
+select v from t_zstd_col where k = 2;
+
+ALTER TABLE t_zstd_col DROP COLUMN v;
+function: wait_alter_table_finish()
+function: assert_query_not_contains("show create table t_zstd_col", "zstd_compression_columns")
+
+ALTER TABLE t_zstd_col ADD COLUMN v STRING;
+function: wait_alter_table_finish()
+function: assert_query_not_contains("show create table t_zstd_col", "zstd_compression_columns")
+
+-- restore the default (true): the switch was only exercised above to prove flipping it never affects reads
+update information_schema.be_configs set value = "true" where name = "enable_zstd_compression_dict";
+DROP DATABASE test_zstd_compression_${uuid0};
