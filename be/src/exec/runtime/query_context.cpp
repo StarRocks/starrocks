@@ -335,6 +335,7 @@ std::shared_ptr<QueryStatistics> QueryContext::snapshot_query_statistic() {
     res->add_cpu_costs(_query_runtime_state.cpu_cost());
     if (_mem_tracker != nullptr) {
         res->add_mem_costs(mem_cost_bytes());
+        res->add_mem_usage_gib_hours(_mem_tracker->memory_usage_gib_hours(false));
     }
     res->add_spill_bytes(get_spill_bytes());
     res->add_read_stats(get_read_local_cnt(), get_read_remote_cnt());
