@@ -961,4 +961,59 @@ TEST(QueryContextMemoryUsageTest, FinalSinkCountsUpstreamStatisticsOnce) {
     EXPECT_NEAR(local_total, query_ctx.final_query_statistic()->get_mem_usage_gib_hours(), 1e-12);
 }
 
+TEST(QueryContextMemoryUsageTest, SnapshotReportsCumulativeUsageAfterIntermediateReport) {
+    constexpr int64_t gib = 1LL << 30;
+    MemTracker parent(MemTrackerType::QUERY_POOL, 4 * gib, "parent");
+    QueryContext query_ctx;
+    TUniqueId query_id;
+    query_id.hi = 5;
+    query_id.lo = 6;
+    query_ctx.set_query_id(query_id);
+    query_ctx.init_mem_tracker(2 * gib, &parent, -1, 0.75);
+    auto query = query_ctx.mem_tracker();
+
+    ASSERT_EQ(nullptr, query->try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    query->release(gib);
+
+    PQueryStatistics upstream;
+    upstream.set_mem_usage_gib_hours(0.25);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+
+    auto intermediate = query_ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate);
+    const double first_local = intermediate->get_mem_usage_gib_hours() - 0.25;
+    EXPECT_GT(first_local, 0);
+
+    ASSERT_EQ(nullptr, query->try_consume(gib));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    query->release(gib);
+
+    upstream.set_mem_usage_gib_hours(0.125);
+    query_ctx.maintained_query_recv()->insert(upstream, 1);
+
+    auto snapshot = query_ctx.snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot);
+    const double local_total = query->memory_usage_gib_hours(false);
+    EXPECT_GT(local_total, first_local);
+    EXPECT_NEAR(local_total + 0.125, snapshot->get_mem_usage_gib_hours(), 1e-12);
+
+    TAuditStatistics thrift;
+    snapshot->to_params(&thrift);
+    EXPECT_TRUE(thrift.__isset.mem_usage_gib_hours);
+    EXPECT_NEAR(local_total + 0.125, thrift.mem_usage_gib_hours, 1e-12);
+}
+
+TEST(QueryContextMemoryUsageTest, SnapshotWithoutMemTrackerKeepsUpstreamUsage) {
+    auto query_ctx = QueryContext::create();
+    PQueryStatistics upstream;
+    upstream.set_mem_usage_gib_hours(0.25);
+    query_ctx->maintained_query_recv()->insert(upstream, 1);
+
+    auto snapshot = query_ctx->snapshot_query_statistic();
+    ASSERT_NE(nullptr, snapshot);
+    EXPECT_DOUBLE_EQ(0.25, snapshot->get_mem_usage_gib_hours());
+    EXPECT_EQ(0, snapshot->get_mem_bytes());
+}
+
 } // namespace starrocks::pipeline
