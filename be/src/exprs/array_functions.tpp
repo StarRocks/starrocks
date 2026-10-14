@@ -1632,6 +1632,255 @@ private:
     }
 };
 
+<<<<<<< HEAD
+=======
+// Helper template to map TimeUnit to chrono duration type
+template <TimeUnit UNIT>
+struct TimeUnitToDuration;
+
+template <>
+struct TimeUnitToDuration<TimeUnit::MICROSECOND> {
+    using type = std::chrono::microseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MILLISECOND> {
+    using type = std::chrono::milliseconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::SECOND> {
+    using type = std::chrono::seconds;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::MINUTE> {
+    using type = std::chrono::minutes;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::HOUR> {
+    using type = std::chrono::hours;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::DAY> {
+    using type = std::chrono::days;
+};
+template <>
+struct TimeUnitToDuration<TimeUnit::WEEK> {
+    using type = std::chrono::weeks;
+};
+
+// Helper function to accurately calculate step count for all time units
+// Uses C++20 chrono for precise, standard-compliant time arithmetic
+template <LogicalType LType, TimeUnit TIME_UNIT>
+inline size_t calculate_accurate_step_count(
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& start,
+        const typename std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>& stop, int32_t step) {
+    using namespace std::chrono;
+
+    if (step == 0) return 0;
+
+    // For fixed-length time units, use chrono duration_cast for O(1) calculation
+    if constexpr (TIME_UNIT == TimeUnit::MICROSECOND || TIME_UNIT == TimeUnit::MILLISECOND ||
+                  TIME_UNIT == TimeUnit::SECOND || TIME_UNIT == TimeUnit::MINUTE || TIME_UNIT == TimeUnit::HOUR ||
+                  TIME_UNIT == TimeUnit::DAY || TIME_UNIT == TimeUnit::WEEK) {
+        // Get the time difference
+        auto diff = [&]() {
+            if constexpr (LType == TYPE_DATE) {
+                return stop.to_sys_days() - start.to_sys_days();
+            } else {
+                return stop.to_sys_time() - start.to_sys_time();
+            }
+        }();
+
+        // Convert to target time unit and calculate count
+        using TargetDuration = typename TimeUnitToDuration<TIME_UNIT>::type;
+        int64_t count = std::abs(duration_cast<TargetDuration>(diff).count());
+        return count / step + 1;
+    }
+
+    // For variable-length time units (MONTH, QUARTER, YEAR)
+    // Use C++20 chrono year_month_day for calendar arithmetic
+    if constexpr (TIME_UNIT == TimeUnit::MONTH || TIME_UNIT == TimeUnit::QUARTER || TIME_UNIT == TimeUnit::YEAR) {
+        // Convert to year_month_day using sys_days
+        year_month_day start_ymd, stop_ymd;
+        if constexpr (LType == TYPE_DATE) {
+            start_ymd = year_month_day{start.to_sys_days()};
+            stop_ymd = year_month_day{stop.to_sys_days()};
+        } else {
+            start_ymd = year_month_day{floor<days>(start.to_sys_time())};
+            stop_ymd = year_month_day{floor<days>(stop.to_sys_time())};
+        }
+
+        // Calculate difference based on time unit
+        int64_t diff = 0;
+        if constexpr (TIME_UNIT == TimeUnit::YEAR) {
+            // Year difference
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            diff = std::abs(years_diff);
+        } else if constexpr (TIME_UNIT == TimeUnit::QUARTER) {
+            // Quarter difference: years * 4 + quarter_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int start_quarter = (static_cast<unsigned>(start_ymd.month()) - 1) / 3;
+            int stop_quarter = (static_cast<unsigned>(stop_ymd.month()) - 1) / 3;
+            diff = std::abs(years_diff * 4 + (stop_quarter - start_quarter));
+        } else { // MONTH
+            // Month difference: years * 12 + month_offset
+            int years_diff = static_cast<int>(stop_ymd.year()) - static_cast<int>(start_ymd.year());
+            int months_diff = static_cast<unsigned>(stop_ymd.month()) - static_cast<unsigned>(start_ymd.month());
+            diff = std::abs(years_diff * 12 + months_diff);
+        }
+
+        return diff / step + 1;
+    }
+
+    return 0;
+}
+
+// All rows of an array_generate result share one element column addressed by UInt32 offsets, so a single call can
+// never produce more elements than this. Checking the count up front also keeps reserve() below vector::max_size():
+// past it reserve() throws std::length_error, which TRY_CATCH_BAD_ALLOC does not catch and which aborts the BE.
+static constexpr size_t kArrayGenerateMaxElements = std::numeric_limits<uint32_t>::max();
+
+static inline Status array_generate_too_many_elements() {
+    return Status::InvalidArgument(
+            fmt::format("array_generate would produce more than {} elements", kArrayGenerateMaxElements));
+}
+
+#define DEFINE_ARRAY_GENERATE_FN(NAME, TIME_UNIT)                                                                  \
+    template <LogicalType LType, LogicalType ResultType>                                                           \
+    static StatusOr<ColumnPtr> array_generate_function_##NAME(FunctionContext* ctx, const Columns& columns) {      \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                                      \
+        RETURN_IF(columns.size() != 4, Status::InvalidArgument("expect 4 arguments"));                             \
+                                                                                                                   \
+        auto num_rows = columns[0]->size();                                                                        \
+                                                                                                                   \
+        NullColumn::MutablePtr nulls;                                                                              \
+        for (auto& column : columns) {                                                                             \
+            if (column->has_null()) {                                                                              \
+                const auto* nullable_column = down_cast<const NullableColumn*>(column.get());                      \
+                if (nulls == nullptr) {                                                                            \
+                    nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());              \
+                } else {                                                                                           \
+                    ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),                               \
+                                                 nullable_column->immutable_null_column_data().data());            \
+                }                                                                                                  \
+            }                                                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        auto array_offsets = UInt32Column::create(0);                                                              \
+        auto array_elements = ColumnHelper::create_column(TypeDescriptor(ResultType), true, false, 0);             \
+                                                                                                                   \
+        auto offsets = array_offsets.get();                                                                        \
+        auto elements = down_cast<NullableColumn*>(array_elements.get());                                          \
+                                                                                                                   \
+        offsets->reserve(num_rows + 1);                                                                            \
+        offsets->append(0);                                                                                        \
+                                                                                                                   \
+        auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant(); \
+        auto num_rows_to_process = all_const_cols ? 1 : num_rows;                                                  \
+                                                                                                                   \
+        auto* data_column = elements->data_column_raw_ptr();                                                       \
+        auto* null_column = elements->null_column_raw_ptr();                                                       \
+        ColumnViewer<LType> start_viewer = ColumnViewer<LType>(columns[0]);                                        \
+        ColumnViewer<LType> stop_viewer = ColumnViewer<LType>(columns[1]);                                         \
+        ColumnViewer<TYPE_INT> step_viewer = ColumnViewer<TYPE_INT>(columns[2]);                                   \
+                                                                                                                   \
+        size_t total_elements = 0;                                                                                 \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
+            if (nulls && nulls->get_data()[cur_row]) {                                                             \
+                continue;                                                                                          \
+            }                                                                                                      \
+            auto start = start_viewer.value(cur_row);                                                              \
+            auto stop = stop_viewer.value(cur_row);                                                                \
+            auto step = step_viewer.value(cur_row);                                                                \
+                                                                                                                   \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            size_t accurate_count = calculate_accurate_step_count<LType, TIME_UNIT>(start, stop, step);            \
+            if (accurate_count > kArrayGenerateMaxElements - total_elements) {                                     \
+                return array_generate_too_many_elements();                                                         \
+            }                                                                                                      \
+            total_elements += accurate_count;                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));                                                 \
+                                                                                                                   \
+        size_t total_elements_num = 0;                                                                             \
+        for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {                                       \
+            if (nulls && nulls->get_data()[cur_row]) {                                                             \
+                offsets->append(offsets->get_data().back());                                                       \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            auto start = start_viewer.value(cur_row);                                                              \
+            auto stop = stop_viewer.value(cur_row);                                                                \
+            auto step = step_viewer.value(cur_row);                                                                \
+                                                                                                                   \
+            if (step == 0 || !start.is_valid_non_strict() || !stop.is_valid_non_strict()) {                        \
+                offsets->append(offsets->get_data().back());                                                       \
+                continue;                                                                                          \
+            }                                                                                                      \
+                                                                                                                   \
+            bool is_forward = (start <= stop);                                                                     \
+            int32_t actual_step = is_forward ? step : -step;                                                       \
+                                                                                                                   \
+            using ValueType = std::conditional_t<LType == TYPE_DATE, DateValue, TimestampValue>;                   \
+            ValueType current = start;                                                                             \
+            while (true) {                                                                                         \
+                if (is_forward) {                                                                                  \
+                    if (current > stop) break;                                                                     \
+                } else {                                                                                           \
+                    if (current < stop) break;                                                                     \
+                }                                                                                                  \
+                                                                                                                   \
+                data_column->append_datum(current);                                                                \
+                total_elements_num++;                                                                              \
+                                                                                                                   \
+                ValueType next = current.template add<TIME_UNIT>(actual_step);                                     \
+                                                                                                                   \
+                if (!next.is_valid_non_strict()) break;                                                            \
+                                                                                                                   \
+                if (next == current) break;                                                                        \
+                                                                                                                   \
+                current = next;                                                                                    \
+            }                                                                                                      \
+                                                                                                                   \
+            offsets->append(total_elements_num);                                                                   \
+        }                                                                                                          \
+                                                                                                                   \
+        null_column->get_data().resize(total_elements_num, 0);                                                     \
+        CHECK_EQ(offsets->get_data().back(), elements->size());                                                    \
+                                                                                                                   \
+        auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));                       \
+                                                                                                                   \
+        if (all_const_cols) {                                                                                      \
+            if (nulls && nulls->is_null(0)) {                                                                      \
+                return ColumnHelper::create_const_null_column(num_rows);                                           \
+            } else {                                                                                               \
+                return ConstColumn::create(std::move(dst), num_rows);                                              \
+            }                                                                                                      \
+        }                                                                                                          \
+                                                                                                                   \
+        if (nulls == nullptr) {                                                                                    \
+            return std::move(dst);                                                                                 \
+        } else {                                                                                                   \
+            return NullableColumn::create(std::move(dst), std::move(nulls));                                       \
+        }                                                                                                          \
+    }
+
+// Generate functions for all supported time units (lowercase names)
+DEFINE_ARRAY_GENERATE_FN(year, TimeUnit::YEAR);
+DEFINE_ARRAY_GENERATE_FN(quarter, TimeUnit::QUARTER);
+DEFINE_ARRAY_GENERATE_FN(month, TimeUnit::MONTH);
+DEFINE_ARRAY_GENERATE_FN(week, TimeUnit::WEEK);
+DEFINE_ARRAY_GENERATE_FN(day, TimeUnit::DAY);
+DEFINE_ARRAY_GENERATE_FN(hour, TimeUnit::HOUR);
+DEFINE_ARRAY_GENERATE_FN(minute, TimeUnit::MINUTE);
+DEFINE_ARRAY_GENERATE_FN(second, TimeUnit::SECOND);
+DEFINE_ARRAY_GENERATE_FN(millisecond, TimeUnit::MILLISECOND);
+DEFINE_ARRAY_GENERATE_FN(microsecond, TimeUnit::MICROSECOND);
+
+>>>>>>> a691e5d ([BugFix] Reject an array_generate range too large to hold instead of aborting the BE (#80205))
 // Todo:support datetime/date
 template <LogicalType Type>
 class ArrayGenerate {
@@ -1644,6 +1893,7 @@ public:
 
         auto num_rows = columns[0]->size();
 
+<<<<<<< HEAD
         // compute nulls first. if any input is null, then output is null
         NullColumnPtr nulls;
         for (auto& column : columns) {
@@ -1651,6 +1901,105 @@ public:
                 const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
                 if (nulls == nullptr) {
                     nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
+=======
+            // compute nulls first. if any input is null, then output is null
+            NullColumn::MutablePtr nulls;
+            for (auto& column : columns) {
+                if (column->has_null()) {
+                    const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+                    if (nulls == nullptr) {
+                        nulls = NullColumn::static_pointer_cast(nullable_column->null_column()->clone());
+                    } else {
+                        ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
+                                                     nullable_column->immutable_null_column_data().data());
+                    }
+                }
+            }
+
+            auto array_offsets = UInt32Column::create(0);
+            auto array_elements = ColumnHelper::create_column(TypeDescriptor(Type), true, false, 0);
+
+            auto offsets = array_offsets.get();
+            auto elements = down_cast<NullableColumn*>(array_elements.get());
+
+            offsets->reserve(num_rows + 1);
+            offsets->append(0);
+
+            auto all_const_cols = columns[0]->is_constant() && columns[1]->is_constant() && columns[2]->is_constant();
+
+            auto num_rows_to_process = all_const_cols ? 1 : num_rows;
+
+            size_t total_elements = 0;
+            auto* data_column = elements->data_column_raw_ptr();
+            auto* null_column = elements->null_column_raw_ptr();
+            ColumnViewer start_viewer = ColumnViewer<Type>(columns[0]);
+            ColumnViewer stop_viewer = ColumnViewer<Type>(columns[1]);
+            ColumnViewer step_viewer = ColumnViewer<Type>(columns[2]);
+            for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+                if (nulls && nulls->get_data()[cur_row]) {
+                    continue;
+                }
+                auto step = step_viewer.value(cur_row);
+                if (step == 0) {
+                    continue;
+                }
+                auto start = start_viewer.value(cur_row);
+                auto stop = stop_viewer.value(cur_row);
+                // Count in unsigned 128-bit: stop - start and -step overflow the input type at its extremes
+                // (LARGEINT included), while the unsigned difference of two sign-extended values is exact.
+                using U128 = unsigned __int128;
+                U128 steps;
+                if (step > 0 && start <= stop) {
+                    steps = (static_cast<U128>(stop) - static_cast<U128>(start)) / static_cast<U128>(step);
+                } else if (step < 0 && start >= stop) {
+                    steps = (static_cast<U128>(start) - static_cast<U128>(stop)) / (U128(0) - static_cast<U128>(step));
+                } else {
+                    continue;
+                }
+                // The row yields steps + 1 elements.
+                if (steps >= kArrayGenerateMaxElements - total_elements) {
+                    return array_generate_too_many_elements();
+                }
+                total_elements += static_cast<size_t>(steps) + 1;
+            }
+            TRY_CATCH_BAD_ALLOC(data_column->reserve(total_elements));
+
+            size_t total_elements_num = 0;
+            for (size_t cur_row = 0; cur_row < num_rows_to_process; cur_row++) {
+                if (nulls && nulls->get_data()[cur_row]) {
+                    offsets->append(offsets->get_data().back());
+                    continue;
+                }
+
+                auto step = step_viewer.value(cur_row);
+
+                // just return empty array
+                if (step == 0) {
+                    offsets->append(offsets->get_data().back());
+                    continue;
+                }
+                auto start = start_viewer.value(cur_row);
+                auto stop = stop_viewer.value(cur_row);
+
+                InputCppType temp;
+                for (InputCppType cur_element = start; step > 0 ? cur_element <= stop : cur_element >= stop;
+                     cur_element += step) {
+                    data_column->append_datum(cur_element);
+                    total_elements_num++;
+                    if (__builtin_add_overflow(cur_element, step, &temp)) break;
+                }
+                offsets->append(total_elements_num);
+            }
+
+            null_column->get_data().resize(total_elements_num, 0);
+            CHECK_EQ(offsets->get_data().back(), elements->size());
+
+            auto dst = ArrayColumn::create(std::move(array_elements), std::move(array_offsets));
+
+            if (all_const_cols) {
+                if (nulls && nulls->is_null(0)) {
+                    return ColumnHelper::create_const_null_column(num_rows);
+>>>>>>> a691e5d ([BugFix] Reject an array_generate range too large to hold instead of aborting the BE (#80205))
                 } else {
                     ColumnHelper::or_two_filters(num_rows, nulls->get_data().data(),
                                                  nullable_column->null_column()->get_data().data());
