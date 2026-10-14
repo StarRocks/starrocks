@@ -118,7 +118,7 @@ public class QueryAction extends WebBaseAction {
         buffer.append("</tr>");
     }
 
-    // Cells are HTML-encoded because they carry user-controlled text, such as SQL statements and custom query ids.
+    // Cells are HTML-encoded because they carry user-controlled text, such as SQL statements.
     private void appendFinishedQueryTableBody(
             StringBuilder buffer,
             List<List<String>> bodies,
@@ -133,28 +133,7 @@ public class QueryAction extends WebBaseAction {
                     continue;
                 }
                 buffer.append("<td>");
-<<<<<<< HEAD
-                buffer.append(row.get(i));
-=======
-                if (columnHeaders.get(i).equals(ProfileManager.SQL_STATEMENT)) {
-                    String statement = row.get(i);
-                    if (statement != null && statement.length() > Config.ui_queries_sql_statement_max_length) {
-                        String truncatedStatement =
-                                statement.substring(0, Math.max(Config.ui_queries_sql_statement_max_length, 0))
-                                + " ...";
-                        // Add title attribute for hover tooltip to show full statement
-                        buffer.append("<span title=\"")
-                                .append(Encode.forHtmlAttribute(statement))
-                                .append("\">")
-                                .append(Encode.forHtml(truncatedStatement))
-                                .append("</span>");
-                    } else {
-                        buffer.append(Encode.forHtml(statement));
-                    }
-                } else {
-                    buffer.append(Encode.forHtml(row.get(i)));
-                }
->>>>>>> 5e4b7df ([BugFix] HTML-encode cells in the FE web console /query page (#80582))
+                buffer.append(Encode.forHtml(row.get(i)));
                 buffer.append("</td>");
             }
 
