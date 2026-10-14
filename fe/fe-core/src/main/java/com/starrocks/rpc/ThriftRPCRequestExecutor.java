@@ -16,11 +16,7 @@ package com.starrocks.rpc;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.metric.MetricRepo;
->>>>>>> 2bca3a86dbe... [BugFix][RB-258] FailFast: back off with jitter between FE thrift RPC retries (#65032)
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
