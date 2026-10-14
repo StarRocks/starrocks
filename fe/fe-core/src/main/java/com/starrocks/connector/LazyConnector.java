@@ -21,10 +21,12 @@ import com.starrocks.authorization.ranger.hive.RangerHiveCatalogProperties;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class LazyConnector implements Connector {
@@ -33,7 +35,8 @@ public class LazyConnector implements Connector {
     private final ConnectorContext context;
 
     public LazyConnector(ConnectorContext context) {
-        this.context = context;
+        this.context = new ConnectorContext(context.getCatalogName(), context.getType(),
+                new HashMap<>(context.getProperties()));
     }
 
     @Override
@@ -95,6 +98,29 @@ public class LazyConnector implements Connector {
         if (Authorizer.getInstance().catalogToAccessControl.containsKey(context.getCatalogName())) {
             installAccessControl();
         }
+    }
+
+    @Override
+    public synchronized Runnable preparePropertyUpdate(Map<String, String> properties) {
+        if (delegate != null) {
+            return delegate.preparePropertyUpdate(properties);
+        }
+        // Replay must not initialize a remote catalog just to resize its still-empty caches.
+        if (!"iceberg".equalsIgnoreCase(context.getType()) ||
+                !IcebergCatalogProperties.isCacheMemoryPropertyUpdate(properties)) {
+            return null;
+        }
+        IcebergCatalogProperties.validateCacheMemoryProperties(properties);
+        Map<String, String> updates = Map.copyOf(properties);
+        return () -> {
+            synchronized (this) {
+                // A query may have initialized the delegate while the edit log was being written.
+                if (delegate != null) {
+                    delegate.preparePropertyUpdate(updates).run();
+                }
+                context.getProperties().putAll(updates);
+            }
+        };
     }
 
     @Override

@@ -831,6 +831,10 @@ From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy]
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | The maximum memory usage ratio for the data file Manifest cache. Supported from v3.5.6 onwards. |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | The maximum memory usage ratio for the delete file Manifest cache. Supported from v3.5.6 onwards. |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | The interval (in seconds) at which the asynchronous refresh of the Iceberg table cache is triggered. Supported from v3.5.7 onwards. |
+| iceberg_table_cache_memory_usage_ratio | 0.1 | Maximum fraction of the FE JVM heap for cached Iceberg table objects. |
+| iceberg_partition_cache_memory_usage_ratio | 0.1 | Maximum fraction of the FE JVM heap for cached partition metadata. |
+
+When `ALTER CATALOG` changes only the four `iceberg_*_cache_memory_usage_ratio` properties above, StarRocks updates the existing cache limits without recreating the connector. Increasing a limit preserves cached entries; decreasing it may evict entries to meet the new limit. Each ratio must be a finite number between 0 and 1. If the same statement also changes another property, StarRocks recreates the connector as before.
 
 Starting from v3.4, StarRocks can obtain statistics of Iceberg tables by reading Iceberg metadata through setting the following parameters, without actively triggering the collection of Iceberg table statistics.
 

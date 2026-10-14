@@ -874,6 +874,10 @@ Google GCS 的 `StorageCredentialParams`：
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_table_cache_refresh_interval_sec      | 60                    | 触发 Iceberg 表缓存异步刷新操作的时间间隔（单位：秒）。从 v3.5.7 版本开始支持。 |
+| iceberg_table_cache_memory_usage_ratio | 0.1 | Iceberg 表对象缓存占 FE JVM 堆内存的最大比例。 |
+| iceberg_partition_cache_memory_usage_ratio | 0.1 | 分区元数据缓存占 FE JVM 堆内存的最大比例。 |
+
+当 `ALTER CATALOG` 仅修改上述四个 `iceberg_*_cache_memory_usage_ratio` 属性时，StarRocks 会直接更新现有缓存的容量上限，而不重建连接器。提高上限会保留缓存条目；降低上限可能淘汰部分条目，以满足新的限制。每个比例必须是 0 到 1 之间的有限数值。如果同一语句还修改其他属性，StarRocks 仍会重建连接器。
 
 从 v3.4 起，StarRocks 在没有主动触发收集 Iceberg 表统计信息的情况下，可以通过设置以下参数读取 Iceberg 的元数据来获取 Iceberg 表的统计信息。
 

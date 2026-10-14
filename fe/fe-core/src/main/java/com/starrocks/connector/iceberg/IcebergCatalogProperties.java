@@ -20,6 +20,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.util.PropertyUtil;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
 
@@ -46,6 +47,27 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
     public static final String ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO = "iceberg_table_cache_memory_usage_ratio";
     public static final String ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO = "iceberg_partition_cache_memory_usage_ratio";
+
+    private static final Set<String> CACHE_MEMORY_PROPERTIES = Set.of(
+            ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO, ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO,
+            ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO);
+
+    public static boolean isCacheMemoryPropertyUpdate(Map<String, String> updates) {
+        return !updates.isEmpty() && CACHE_MEMORY_PROPERTIES.containsAll(updates.keySet());
+    }
+
+    public static void validateCacheMemoryProperties(Map<String, String> updates) {
+        updates.forEach((key, value) -> {
+            try {
+                double ratio = Double.parseDouble(value);
+                if (!Double.isFinite(ratio) || ratio < 0 || ratio > 1) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException | NullPointerException e) {
+                throw new StarRocksConnectorException("%s must be a finite number between 0 and 1", key);
+            }
+        });
+    }
 
     // internal config
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
