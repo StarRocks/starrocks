@@ -78,16 +78,16 @@ Lance uses Rust SDK 12.0.0 and is **disabled by default**. Default StarRocks pac
 
 ```bash
 ./thirdparty/build-thirdparty.sh -j2 lance
-WITH_CONNECTOR_LANCE=ON ./build.sh --fe --be
+./build.sh --fe --be --with-connector-lance
 ```
 
 For focused connector tests:
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --with-connector-lance --build-target connector_lance_test --module connector_lance_test --without-java-ext
 ```
 
-Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Set `WITH_CONNECTOR_LANCE=OFF` to explicitly disable it. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. The enabled FE package includes `fe/lib/lance-metadata-lib`. Default FE packages omit these SDK libraries; directory listing and schema discovery require an enabled FE package. Query execution also requires an enabled BE package.
+Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Use `--without-connector-lance` or set `WITH_CONNECTOR_LANCE=OFF` to explicitly disable it. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. The enabled FE package includes `fe/lib/lance-metadata-lib`. Default FE packages omit these SDK libraries; directory listing and schema discovery require an enabled FE package. Query execution also requires an enabled BE package.
 
 The FE captures each dataset version together with its schema and reuses that snapshot across all references to the dataset in a query, including self-joins. BE readers open the pinned version; a missing version fails the query instead of silently switching to latest. A subsequent query discovers a fresh version.
 

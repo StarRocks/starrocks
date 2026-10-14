@@ -78,16 +78,16 @@ Lance 使用 Rust SDK 12.0.0，构建时**默认关闭**。默认的 StarRocks �
 
 ```bash
 ./thirdparty/build-thirdparty.sh -j2 lance
-WITH_CONNECTOR_LANCE=ON ./build.sh --fe --be
+./build.sh --fe --be --with-connector-lance
 ```
 
 运行 Connector 的定向测试：
 
 ```bash
-WITH_CONNECTOR_LANCE=ON ./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --with-connector-lance --build-target connector_lance_test --module connector_lance_test --without-java-ext
 ```
 
-直接使用 CMake 构建时，设置 `-DWITH_CONNECTOR_LANCE=ON`。设置 `WITH_CONNECTOR_LANCE=OFF` 可显式关闭。默认构建或显式关闭的构建会从 BE 安装包中排除之前构建的 Lance 动态库。启用后的 FE 安装包包含 `fe/lib/lance-metadata-lib`。默认 FE 安装包不包含这些 SDK 库，因此目录列举和 Schema 发现需要启用了 Lance 的 FE 安装包，查询执行还需要启用了 Lance 的 BE 安装包。
+直接使用 CMake 构建时，设置 `-DWITH_CONNECTOR_LANCE=ON`。使用 `--without-connector-lance` 或设置 `WITH_CONNECTOR_LANCE=OFF` 可显式关闭。默认构建或显式关闭的构建会从 BE 安装包中排除之前构建的 Lance 动态库。启用后的 FE 安装包包含 `fe/lib/lance-metadata-lib`。默认 FE 安装包不包含这些 SDK 库，因此目录列举和 Schema 发现需要启用了 Lance 的 FE 安装包，查询执行还需要启用了 Lance 的 BE 安装包。
 
 FE 在读取 Schema 时同时取得数据集版本，并在同一查询中对该数据集的所有引用（包括自连接）复用这个快照。BE 读取指定版本；版本不存在时查询失败，不会静默切换为最新版本。后续查询会重新发现版本。
 
