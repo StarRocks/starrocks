@@ -86,6 +86,10 @@ private:
     static size_t _count_nodes(const JsonFlatPath* node);
     // A key left out of the trie ends up in the remain column, so the remain filter must report it.
     void _add_remain_key(const std::string_view& key);
+    // Readers test only the last component of a path against the remain filter, so a subtree that goes
+    // to the remain column must report every key in it, not just its root.
+    void _add_remain_keys_in(const vpack::Slice& value);
+    void _add_remain_subtree(const JsonFlatPath* node);
 
 private:
     bool _has_remain = false;

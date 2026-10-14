@@ -75,10 +75,13 @@ private:
     // equals or merge, dst-src: 1-N/1-1
     struct MergeTask {
         // to avoid create column with find type
-        Expr* cast_expr;
+        Expr* cast_expr = nullptr;
 
         bool is_merge = false;
         bool need_cast = false;
+        // Compaction only: convert a scalar sub-column of src_type to JSON value by value (see _to_json).
+        bool to_json = false;
+        LogicalType src_type = TYPE_UNKNOWN;
 
         int dst_index = -1;
         std::vector<int> src_index;
@@ -96,6 +99,7 @@ private:
 
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
+    Status _to_json(const MergeTask& task, const ColumnPtr& col);
     Status _merge(const MergeTask& task, const Columns& columns);
     void _flat(const FlatTask& task, const Columns& columns);
 
