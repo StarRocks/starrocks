@@ -46,6 +46,8 @@ TWorkGroupOp make_twg_op(const TWorkGroup& twg, const TWorkGroupOpType::type op_
     return op;
 }
 
+// In an anonymous namespace, since other test files linked into the same binary define their own FakeDriverQueue.
+namespace {
 class FakeDriverQueue final : public pipeline::DriverQueue {
 public:
     FakeDriverQueue() : DriverQueue(nullptr) {}
@@ -65,6 +67,7 @@ public:
 
     std::vector<pipeline::DriverQueueLevelStats> stats;
 };
+} // namespace
 
 WorkGroupManager::DriverQueueFactory make_fake_driver_queue_factory(int* create_count = nullptr) {
     return [create_count](pipeline::DriverQueueMetrics*) {
