@@ -59,6 +59,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 `sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, 以及 `pindex_optional_block_cache_reclaim_bytes` 在publish trace中标识该路径。 `sst_probe_io_*` and `sst_open_io_*` 分别记录探测和打开阶段的本地/远端字节与请求数，与lookup IO分开。大小计数仍是累计值；单个文件需用单次probe的trace或单独元数据核对。
 
+prepare 阶段的 MemTable 交接同样共享有界的 inactive flush 等待并检查退出，在 SST 重开前退还已释放的 cache 记账，并把新刷出的 SST 纳入读状态选择。`pindex_prepare_memtable_flush_us`、`pindex_prepare_memtable_flush_timeout` 和 `pindex_prepare_memtable_flush_cancelled` 标识该阶段；active flush IO 保留原始错误原因和独立 IO 计时。
+
 - 引入版本：-
 
 ### cloud_native_pk_index_rebuild_files_threshold

@@ -62,6 +62,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 `sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, and `pindex_optional_block_cache_reclaim_bytes` はpublish traceでこの経路を識別します。 `sst_probe_io_*` and `sst_open_io_*` はサイズ調査とオープン時のローカル・リモートのバイト数と要求数をlookup IOと分けて記録します。サイズ値は累計であり、ファイル単位の検証には単一probeのtraceまたは別のメタデータが必要です。
 
+prepare 時の MemTable 引き渡しも inactive flush の有限な待機期限と終了確認を共有し、SST を再オープンする前に解放済みキャッシュの計上を戻し、新たに flush された SST を読み取り状態の選択に含めます。`pindex_prepare_memtable_flush_us`、`pindex_prepare_memtable_flush_timeout`、`pindex_prepare_memtable_flush_cancelled` がこの段階を示します。active flush IO は元のエラー原因と独立した IO 計時を保持します。
+
 - 導入バージョン: -
 
 ### cloud_native_pk_index_rebuild_files_threshold

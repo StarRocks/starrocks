@@ -271,7 +271,8 @@ public:
     size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
-    Status prepare_sstable_read_state(size_t budget, bool partial);
+    Status prepare_sstable_read_state(size_t budget, bool partial, const std::function<void()>& refresh_memory = {},
+                                      const std::function<bool()>& cancelled = {});
     // Zero preserves the ordinary chunking path. Only a mandatory old-file index close to the
     // whole update budget requires a smaller live input/mutation working set.
     size_t publish_input_chunk_rows(const TabletSchema& schema) const;

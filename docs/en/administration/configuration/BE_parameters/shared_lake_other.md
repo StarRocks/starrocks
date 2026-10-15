@@ -62,6 +62,8 @@ When the full compressed-input plus decoded-output reservation fits immediately,
 
 `sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, and `pindex_optional_block_cache_reclaim_bytes` identify this path in publish traces. `sst_probe_io_*` and `sst_open_io_*` record local/remote bytes and requests for sizing and open IO separately from lookup IO. The sizing counters remain cumulative; an individual file needs a single-probe trace or separate metadata.
 
+Prepare-time MemTable handoffs use the same bounded inactive-flush wait and shutdown checks, refund released cache memory before SST reopen, and include newly flushed SSTs in read-state selection. `pindex_prepare_memtable_flush_us`, `pindex_prepare_memtable_flush_timeout`, and `pindex_prepare_memtable_flush_cancelled` identify this phase; active flush IO retains its original error cause and separate IO timer.
+
 - Introduced in: -
 
 ### cloud_native_pk_index_rebuild_files_threshold

@@ -2002,18 +2002,24 @@ size_t LakePersistentIndex::sst_read_state_reservation_demand() const {
     return demand;
 }
 
-Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial) {
+Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial,
+                                                       const std::function<void()>& refresh_memory,
+                                                       const std::function<bool()>& cancelled) {
     if (!partial && !_partial_read_state) {
         return Status::OK();
     }
     _partial_read_state = partial;
     const auto context = partial ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context() : nullptr;
     std::vector<const PersistentIndexSstable*> ssts;
-    for (const auto& fileset : _sstable_filesets) {
-        if (fileset) {
-            fileset->for_each_sstable([&](const PersistentIndexSstable& sst) { ssts.push_back(&sst); });
+    auto collect_ssts = [&] {
+        ssts.clear();
+        for (const auto& fileset : _sstable_filesets) {
+            if (fileset) {
+                fileset->for_each_sstable([&](const PersistentIndexSstable& sst) { ssts.push_back(&sst); });
+            }
         }
-    }
+    };
+    collect_ssts();
     _publish_workspace_budget = 0;
     if (partial) {
         size_t minimum_read = 0;
@@ -2035,7 +2041,20 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
             // Flush only at this joined owner boundary, before the next mutations/old-rowid
             // lookups start. A reservation inside an upsert must never flush its new values.
             if (!_inactive_memtables.empty() || (_memtable && _memtable->memory_usage() > _publish_workspace_budget)) {
-                RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+                TRACE_COUNTER_SCOPE_LATENCY_US("pindex_prepare_memtable_flush_us");
+                const auto status = sync_flush_all_memtables(
+                        std::max<int64_t>(0, std::min<int64_t>(config::lake_pk_index_publish_wait_timeout_ms,
+                                                               config::pk_index_memtable_max_wait_flush_timeout_ms)) *
+                                1000,
+                        cancelled ? cancelled : std::function<bool()>([] { return false; }));
+                // Successful handoffs retire memory even when a later wait fails. Refresh before
+                // opening any SST, so a reservation cannot wait for this owner's stale charge.
+                if (refresh_memory) refresh_memory();
+                if (status.is_time_out()) TRACE_COUNTER_INCREMENT("pindex_prepare_memtable_flush_timeout", 1);
+                if (status.is_cancelled()) TRACE_COUNTER_INCREMENT("pindex_prepare_memtable_flush_cancelled", 1);
+                RETURN_IF_ERROR(status);
+                // Flush may append another SST/fileset. Include it in context and cache selection.
+                collect_ssts();
             }
         }
     }
@@ -2054,6 +2073,10 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
             }
         }
     }
+    // Non-cacheable transitions above can release legacy resident state. Refund that charge
+    // before parallel opens as well; no cache/accounting lock is held during SST IO.
+    if (refresh_memory) refresh_memory();
+    TEST_SYNC_POINT("LakePersistentIndex::prepare_sstable_read_state:before_reopen");
     auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
             ThreadPool::ExecutionMode::CONCURRENT);
     ParallelTaskRunner runner(token.get());

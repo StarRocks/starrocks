@@ -60,6 +60,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -1910,6 +1911,60 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_pressure_prepare_discards_preloaded_wide_pk_chunks) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    constexpr size_t rows = 8192;
+    auto metadata = new_cloud_native_pk_tablet();
+    auto [chunk, indexes] = gen_data_and_index(rows, 0, false, true);
+    const auto txn = next_id();
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(metadata->id(), txn));
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    RssidFileInfoContainer container;
+    auto schema = TabletSchema::create(metadata->schema());
+    RowsetUpdateStateParams params{.op_write = log->op_write(),
+                                   .tablet_schema = schema,
+                                   .metadata = metadata,
+                                   .tablet = &tablet,
+                                   .container = container};
+    RowsetUpdateState state;
+    state.init(params);
+    ASSERT_OK(state.prepare(params));
+    ASSERT_OK(state.load_segment(0, params, 1, false, false));
+    ASSERT_NE(nullptr, state.upserts(0));
+    const auto preloaded_bytes = state.memory_usage();
+    ASSERT_GT(preloaded_bytes, 0);
+    params.pk_input_chunk_rows = 7;
+    ASSERT_OK(state.prepare(params));
+    EXPECT_EQ(nullptr, state.upserts(0));
+    EXPECT_LT(state.memory_usage(), preloaded_bytes);
+    ASSERT_OK(state.load_segment(0, params, 1, false, false));
+    const auto& iterator = state.upserts(0);
+    size_t seen = 0;
+    for (; !iterator->done(); iterator->next()) {
+        const auto ref = iterator->current();
+        ASSERT_LE(ref.chunk->num_rows(), 7);
+        EXPECT_EQ(seen, ref.physical_rowid_offset);
+        seen += ref.chunk->num_rows();
+    }
+    ASSERT_OK(iterator->status());
+    EXPECT_EQ(rows, seen);
+    state.release_segment(0);
+    EXPECT_EQ(0, state.memory_usage());
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growth_before_tablet_locks) {

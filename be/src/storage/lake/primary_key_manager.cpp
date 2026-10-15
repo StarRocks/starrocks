@@ -258,7 +258,13 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
                 const size_t size = _index_cache.size();
                 budget = std::min(desired, target - std::min(target, size) + index.cached_sst_bytes());
             }
-            st = index.prepare_sstable_read_state(budget, partial);
+            st = index.prepare_sstable_read_state(
+                    budget, partial, [this, index_entry] { update_index_cache_size(index_entry); },
+                    [] {
+                        bool cancelled = process_exit_in_progress();
+                        TEST_SYNC_POINT_CALLBACK("PrimaryKeyManager::prepare_primary_index:cancelled", &cancelled);
+                        return cancelled;
+                    });
             update_index_cache_size(index_entry);
         }
     }
