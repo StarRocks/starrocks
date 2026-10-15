@@ -299,7 +299,7 @@ REST catalog 的 `MetastoreParams`：
 
 必需：否
 
-描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2` 和 `JWT`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略  `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。
+描述：要使用的授权协议类型。默认值：`NONE`。有效值：`OAUTH2`、`JWT` 和 `GOOGLE`。当设置为 `OAUTH2` 时，需要指定 `iceberg.catalog.oauth2.token` 或 `iceberg.catalog.oauth2.credential`。当设置为 `JWT` 时，可省略  `token` 或 `credential`，需要使用 `JWT` 方式登录 StarRocks 集群。StarRocks 会使用登陆用户的 JWT 令牌访问 Catalog。当设置为 `GOOGLE` 时，StarRocks 使用 Google Cloud 认证（例如 Lakehouse for Apache Iceberg REST catalog，原 BigLake），默认使用 Application Default Credentials；如果指定了 `gcp.auth.credentials-path`，则使用服务账号密钥文件。
 
 ###### iceberg.catalog.oauth2.token
 
@@ -324,6 +324,18 @@ REST catalog 的 `MetastoreParams`：
 必需：否
 
 描述：从 OAuth2 服务器检索访问令牌的端点。
+
+###### iceberg.catalog.gcp.auth.credentials-path
+
+必需：否
+
+描述：FE 节点上 Google Cloud 服务账号密钥文件（JSON）的路径。仅在 `security` 设置为 `GOOGLE` 时适用。如果省略，则使用 Application Default Credentials。
+
+###### iceberg.catalog.gcp.auth.scopes
+
+必需：否
+
+描述：Google Cloud 认证所请求的 OAuth2 范围，多个范围以逗号分隔。仅在 `security` 设置为 `GOOGLE` 时适用。默认值：`https://www.googleapis.com/auth/cloud-platform`。
 
 ###### iceberg.catalog.vended-credentials-enabled
 
@@ -419,6 +431,23 @@ SHOW DATABASES FROM r2;
 ```
 
 `<r2_warehouse_name>`、`<r2_api_token>` 和 `<r2_catalog_uri>` 的值可以从 [Cloudflare Dashboard 中获取，详细信息请参见此处](https://developers.cloudflare.com/r2/data-catalog/get-started/#prerequisites)。
+
+以下示例创建了一个名为 `lakehouse` 的 Iceberg catalog，使用 Google Cloud Lakehouse for Apache Iceberg REST catalog（原 BigLake，API 端点仍沿用 `biglake` 名称）作为元存储：
+
+```SQL
+CREATE EXTERNAL CATALOG lakehouse
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "rest",
+    "iceberg.catalog.uri" = "https://biglake.googleapis.com/iceberg/v1/restcatalog",
+    "iceberg.catalog.warehouse" = "bl://projects/<project_id>/catalogs/<catalog_id>",
+    "iceberg.catalog.security" = "google",
+    "iceberg.catalog.header.x-goog-user-project" = "<project_id>"
+);
+```
+
+StarRocks 默认使用 Application Default Credentials 进行 Google Cloud 认证。如需使用服务账号密钥文件，请设置 `"iceberg.catalog.gcp.auth.credentials-path" = "/path/to/service_account.json"`。由于默认启用了凭证下发（`iceberg.catalog.vended-credentials-enabled`），StarRocks 会使用 Catalog 下发的凭证访问底层 Cloud Storage 数据。Lakehouse catalog 自身也必须启用凭证下发（创建时指定 `--credential-mode=vended-credentials`），并且 Catalog 自动创建的服务账号需要在相关 Cloud Storage 存储桶上具有 Storage Object User 角色（`roles/storage.objectUser`）。如果禁用凭证下发，请通过 `StorageCredentialParams` 单独配置存储访问（例如 `"gcp.gcs.use_compute_engine_service_account" = "true"`）。
 
 </TabItem>
 

@@ -49,7 +49,9 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.RESTException;
+import org.apache.iceberg.gcp.auth.GoogleAuthManager;
 import org.apache.iceberg.rest.RESTSessionCatalog;
+import org.apache.iceberg.rest.auth.AuthProperties;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
 import org.apache.iceberg.view.ImmutableSQLViewRepresentation;
@@ -421,6 +423,52 @@ public class IcebergRESTCatalogTest {
         assertNotNull(sessionContext);
         assertTrue(sessionContext.credentials().containsKey("token"));
         assertEquals("test_token", sessionContext.credentials().get("token"));
+    }
+
+    @Test
+    public void testGoogleSecurity(@Mocked RESTSessionCatalog restCatalog) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(ICEBERG_CATALOG_SECURITY, "google");
+        properties.put("iceberg.catalog.uri", "https://biglake.googleapis.com/iceberg/v1/restcatalog");
+        properties.put("iceberg.catalog." + GoogleAuthManager.GCP_CREDENTIALS_PATH_PROPERTY, "/path/to/sa.json");
+        // a stray raw credential must not re-enable auth-session recovery under google security
+        properties.put("iceberg.catalog.credential", "stray_client:stray_secret");
+
+        IcebergRESTCatalog catalog = new IcebergRESTCatalog(
+                "test_catalog", new Configuration(), properties);
+
+        Map<String, String> restCatalogProperties = Deencapsulation.getField(catalog, "restCatalogProperties");
+        assertEquals(AuthProperties.AUTH_TYPE_GOOGLE, restCatalogProperties.get(AuthProperties.AUTH_TYPE));
+        assertEquals("/path/to/sa.json", restCatalogProperties.get(GoogleAuthManager.GCP_CREDENTIALS_PATH_PROPERTY));
+        assertEquals("vended-credentials", restCatalogProperties.get("header.X-Iceberg-Access-Delegation"));
+        boolean authRecoveryEnabled = Deencapsulation.getField(catalog, "authRecoveryEnabled");
+        Assertions.assertFalse(authRecoveryEnabled);
+
+        // the per-user auth token must not be passed to the REST catalog for google security
+        new MockUp<ConnectContext>() {
+            @Mock
+            public String getQualifiedUser() {
+                return "test_user";
+            }
+
+            @Mock
+            public String getSessionId() {
+                return "test_session";
+            }
+
+            @Mock
+            public String getAuthToken() {
+                return "test_token";
+            }
+
+            @Mock
+            public UserIdentity getCurrentUserIdentity() {
+                return new UserIdentity("test_user", "%");
+            }
+        };
+        SessionCatalog.SessionContext sessionContext = Deencapsulation.invoke(catalog, "buildContext", connectContext);
+        assertTrue(sessionContext.credentials() == null || sessionContext.credentials().isEmpty(),
+                "When security=GOOGLE, user's auth token should NOT be passed to REST Catalog");
     }
 
     @Test
