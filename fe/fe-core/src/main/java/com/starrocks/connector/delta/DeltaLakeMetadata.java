@@ -294,6 +294,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             }
             newFuture.complete(null);
         } catch (RuntimeException | Error e) {
+            statisticProvider.discardFileStats(key);
             newFuture.completeExceptionally(e);
             throw e;
         } finally {

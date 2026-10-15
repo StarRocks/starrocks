@@ -71,6 +71,10 @@ public class DeltaStatisticProvider {
         });
     }
 
+    public void discardFileStats(PredicateSearchKey key) {
+        deltaLakeFileStatsMap.remove(key);
+    }
+
     public Statistics getTableStatistics(StructType schema,
                                          PredicateSearchKey key,
                                          Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
