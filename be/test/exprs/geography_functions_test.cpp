@@ -14,9 +14,7 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#ifdef WITH_H3
 #include <h3/h3api.h>
-#endif
 
 #include <algorithm>
 #include <array>
@@ -2332,7 +2330,6 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     }
 }
 
-#ifdef WITH_H3
 TEST_F(geographyFunctionsTest, h3CellAndArrayContract) {
     constexpr int64_t expected = 0x83754efffffffffLL; // H3 4.5.0: POINT (0 0), resolution 3
     auto point = geography({"POINT (0 0)"});
@@ -2796,5 +2793,4 @@ TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
 
-#endif // WITH_H3
 } // namespace starrocks
