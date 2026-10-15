@@ -382,10 +382,16 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     return s;
 }
 
+size_t Table::index_block_memory_usage() const {
+    return (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+}
+
+size_t Table::filter_memory_usage() const {
+    return rep_->filter_data_size;
+}
+
 size_t Table::memory_usage() const {
-    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
-    const size_t filter_data_sz = rep_->filter_data_size;
-    return index_block_sz + filter_data_sz;
+    return index_block_memory_usage() + filter_memory_usage();
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.

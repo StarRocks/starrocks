@@ -196,7 +196,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
         guard = index.fetch_guard();
     }
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
-    _index_cache.update_object_size(index_entry, index.memory_usage());
+    update_index_cache_size(index_entry);
     if (!st.ok()) {
         if (st.is_already_exist()) {
             StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
@@ -215,6 +215,10 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     // only way the old prepare() could was an unloaded index, and the load above succeeded.
     index.set_publish_version(new_version);
     return index_entry;
+}
+
+void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
+    _index_cache.update_object_size(index_entry, index_entry->value().refresh_cache_memory_metrics());
 }
 
 void PrimaryKeyManager::release_primary_index_cache(IndexEntry* index_entry) {
@@ -301,6 +305,9 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
     // inherited sstables (already present in the pre-commit sstable_meta) keep their
     // recorded versions. The metadata version is left untouched.
     RETURN_IF_ERROR(index_entry->value().commit(&builder, generation_version));
+    // The flush turned memtable bytes into sstable index and filter bytes. Recharge the entry, as the publish path
+    // does after its commit.
+    update_index_cache_size(index_entry);
 
     // Success: dismiss the failure cleanup and release the cache entry.
     // write_guard is released when it goes out of scope at function return.
@@ -569,7 +576,7 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             if (state.auto_increment_deletes(local_id) != nullptr) {
                 RETURN_IF_ERROR(index.erase(*state.auto_increment_deletes(local_id), &new_deletes, del_rebuild_rssid));
             }
-            _index_cache.update_object_size(index_entry, index.memory_usage());
+            update_index_cache_size(index_entry);
             state.release_segment(local_id);
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
             if (has_prebuilt_sst(op_write, local_id) && use_cloud_native_pk_index(*metadata)) {
@@ -586,7 +593,7 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
                 for (uint32_t del_id : it->second) {
                     RETURN_IF_ERROR(
                             _do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
-                    _index_cache.update_object_size(index_entry, index.memory_usage());
+                    update_index_cache_size(index_entry);
                     del_plan.del_applied[del_id] = true;
                 }
             }
@@ -628,7 +635,7 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             continue;
         }
         RETURN_IF_ERROR(_do_delete(del_id, del_plan.del_rssids[del_id], params, state, index, &new_deletes));
-        _index_cache.update_object_size(index_entry, index.memory_usage());
+        update_index_cache_size(index_entry);
         del_plan.del_applied[del_id] = true;
     }
 
@@ -1063,7 +1070,7 @@ Status PrimaryKeyManager::_handle_delete_files(const TxnLogPB_OpWrite& op_write,
         RETURN_IF_ERROR(state.load_delete(del_id, params));
         DCHECK(state.deletes(del_id) != nullptr);
         RETURN_IF_ERROR(index.erase(*state.deletes(del_id), &new_deletes, del_rebuild_rssid));
-        _index_cache.update_object_size(index_entry, index.memory_usage());
+        update_index_cache_size(index_entry);
         state.release_delete(del_id);
     }
 
@@ -2129,7 +2136,7 @@ Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpComp
         RETURN_IF_ERROR(index.ingest_sst(op_compaction.ssts(i), op_compaction.sst_ranges(i), rssid, metadata->version(),
                                          delvec_page_pb, delvecs[i].second));
     }
-    _index_cache.update_object_size(index_entry, index.memory_usage());
+    update_index_cache_size(index_entry);
     // 5. update TabletMeta (in-memory metadata edit; not traced -- covered by the per-tablet total)
     RETURN_IF_ERROR(builder->apply_opcompaction(op_compaction, max_rowset_id, tablet_schema->id()));
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
@@ -2216,7 +2223,7 @@ Status PrimaryKeyManager::publish_primary_compaction(const TxnLogPB_OpCompaction
         {
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             RETURN_IF_ERROR(index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes));
-            _index_cache.update_object_size(index_entry, index.memory_usage());
+            update_index_cache_size(index_entry);
         }
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
@@ -2258,6 +2265,8 @@ bool PrimaryKeyManager::try_remove_primary_index_cache(uint32_t tablet_id) {
 void PrimaryKeyManager::unload_primary_index(int64_t tablet_id) {
     auto index_entry = _index_cache.get_or_create(tablet_id);
     index_entry->value().unload();
+    // The entry stays in the cache, so stop charging it for the memory unload() just freed.
+    update_index_cache_size(index_entry);
     _index_cache.release(index_entry);
 }
 
@@ -2458,14 +2467,9 @@ bool PrimaryKeyManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t ex
 }
 
 int64_t PrimaryKeyManager::get_index_memory_size(int64_t tablet_id) const {
-    int64_t index_memory_size = 0;
-    auto& index_cache = _tablet_mgr->primary_key_mgr()->index_cache();
-    auto index_entry = index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        index_memory_size = index_entry->size();
-        index_cache.release(index_entry);
-    }
-    return index_memory_size;
+    // A monitoring read: get() + release() would move the tablet to the MRU end of the index cache, so every
+    // be_tablets scan would reorder eviction.
+    return _index_cache.peek_object_size(tablet_id);
 }
 
 } // namespace starrocks::lake
