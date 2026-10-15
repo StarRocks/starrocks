@@ -449,7 +449,7 @@ public class ExternalResourceCleanupTest {
             PredicateSearchKey key = PredicateSearchKey.of("db", "tbl", params);
 
             Method collectMethod = DeltaLakeMetadata.class.getDeclaredMethod(
-                    "collectDeltaLakePlanFiles", PredicateSearchKey.class, Table.class,
+                    "collectDeltaLakePlanFiles", PredicateSearchKey.class, com.starrocks.catalog.Table.class,
                     com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.class,
                     com.starrocks.qe.ConnectContext.class, List.class, Tracers.class);
             collectMethod.setAccessible(true);
