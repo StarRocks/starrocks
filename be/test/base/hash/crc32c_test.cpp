@@ -307,6 +307,65 @@ TEST(Crc32cTest, ActiveImplementationReported) {
 #endif
 }
 
+TEST(Crc32cTest, StandardReferenceVectors) {
+    // Standard CRC-32C reference vector: "123456789" -> 0xe3069283
+    const char* digits = "123456789";
+    EXPECT_EQ(0xe3069283, starrocks::crc32c::Value(digits, 9));
+    EXPECT_EQ(0xe3069283, starrocks::crc32c::ValueFallback(digits, 9));
+
+    // Multi-chunk stream extension equivalence
+    uint32_t streamed = starrocks::crc32c::Extend(0, digits, 4);
+    streamed = starrocks::crc32c::Extend(streamed, digits + 4, 5);
+    EXPECT_EQ(0xe3069283, streamed);
+}
+
+TEST(Crc32cTest, BitForBitParityAcrossChunkBoundariesAndAlignments) {
+    const size_t max_len = 65536 + 64;
+    std::vector<char> buffer(max_len);
+    for (size_t i = 0; i < max_len; ++i) {
+        buffer[i] = static_cast<char>((i * 137 + 13) & 0xFF);
+    }
+
+    std::vector<size_t> test_lengths;
+    for (size_t len = 0; len <= 1024; ++len) {
+        test_lengths.push_back(len);
+    }
+    for (size_t len = 2048; len <= max_len; len *= 2) {
+        test_lengths.push_back(len);
+        test_lengths.push_back(len - 1);
+        test_lengths.push_back(len + 1);
+    }
+
+    const size_t alignment_offsets[] = {0, 1, 2, 3, 4, 7, 8, 15, 16};
+
+    for (size_t offset : alignment_offsets) {
+        for (size_t len : test_lengths) {
+            if (offset + len > max_len) continue;
+            const char* ptr = buffer.data() + offset;
+
+            uint32_t standard_crc = starrocks::crc32c::Value(ptr, len);
+            uint32_t fallback_crc = starrocks::crc32c::ValueFallback(ptr, len);
+
+            ASSERT_EQ(standard_crc, fallback_crc) << "CRC mismatch at length=" << len << ", offset=" << offset;
+        }
+    }
+}
+
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+TEST(Crc32cTest, DirectPmullContractEnforcement) {
+    if (!starrocks::crc32c::HasArmPmull()) return;
+
+    std::vector<char> buf(1024, 'x');
+    // Precondition: len >= 64 && (len % 16 == 0)
+    // Inverted CRC contract: crc32c_pmull_simd works with bitwise NOT of CRC (~crc).
+    for (size_t len = 64; len <= 1024; len += 16) {
+        uint32_t crc_simd = ~starrocks::crc32c::crc32c_pmull_simd(~0u, buf.data(), len);
+        uint32_t crc_ref = starrocks::crc32c::Value(buf.data(), len);
+        EXPECT_EQ(crc_simd, crc_ref) << "Direct PMULL fold mismatch at len=" << len;
+    }
+}
+#endif
+
 #endif // BE_TEST
 
 } // namespace starrocks::crc32c
