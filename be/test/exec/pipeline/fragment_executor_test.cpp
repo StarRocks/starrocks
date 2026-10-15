@@ -178,7 +178,8 @@ TEST_F(FragmentExecutorPartitionTest, DriverAdmissionPrecedesInstantiation) {
         workgroup::PipelineExecutorSetConfig executor_config{1, 1, 1, 1, {}, false, false, nullptr};
         workgroup::PipelineExecutorSet executors(executor_config, "driver_limit_test", {}, {});
         auto wg = std::make_shared<workgroup::WorkGroup>("driver_limit_test", 1, 0, 1, 1.0, 0, 1.0,
-                                                         TWorkGroupType::WG_NORMAL);
+                                                         TWorkGroupType::WG_NORMAL,
+                                                         workgroup::WorkGroup::DEFAULT_MEM_POOL);
         wg->set_shared_executors(&executors);
         std::vector<std::shared_ptr<DriverLimitSourceFactory>> sources;
         for (int i = 0; i < scenario.num_pipelines; ++i) {
