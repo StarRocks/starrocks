@@ -2433,6 +2433,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     // Phase 1: create an SST on disk by writing and flushing on a temporary index.
     std::string sst_filename;
     int64_t sst_filesize = 0;
+    PersistentIndexSstableRangePB sst_range;
     {
         auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
         ASSERT_OK(index->init(_tablet_metadata));
@@ -2462,6 +2463,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
         ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
         sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
         sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+        sst_range.CopyFrom(tablet_metadata_ptr->sstable_meta().sstables(0).range());
     }
 
     config::lake_pk_index_partial_eviction = true;
@@ -2477,7 +2479,6 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     sst_meta.set_size(sst_filesize);
     sst_meta.set_shared(true); // cross-publish marks this true
 
-    PersistentIndexSstableRangePB sst_range;
     DelvecPagePB delvec_page;
     ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
     ASSERT_OK(index2->prepare_sstable_read_state(0, true));

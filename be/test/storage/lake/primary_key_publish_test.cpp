@@ -1926,6 +1926,16 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growt
     });
     constexpr int kPublishers = 4;
     constexpr int kRows = 40000;
+    auto log_memory = [&](const char* phase, int publisher) {
+        LOG(INFO) << "partial eviction growth phase=" << phase << " publisher=" << publisher
+                  << " consumption=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption()
+                  << " limit=" << _mem_tracker->limit()
+                  << " index=" << _primary_key_mgr->index_mem_tracker()->consumption()
+                  << " update_state=" << _primary_key_mgr->update_state_mem_tracker()->consumption()
+                  << " compaction=" << _primary_key_mgr->compaction_state_mem_tracker()->consumption()
+                  << " sst=" << _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption();
+    };
+    log_memory("before_setup", -1);
     std::vector<TabletMetadataPtr> metadata;
     std::vector<int64_t> txns;
     auto [chunk, indexes] = gen_data_and_index(kRows, 0, true, true);
@@ -1943,9 +1953,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growt
                                              .build());
         ASSERT_OK(writer->open());
         ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        log_memory("writer_write", i);
         ASSERT_OK(writer->finish_with_txnlog());
+        log_memory("writer_finish", i);
         writer->close();
+        log_memory("writer_close", i);
     }
+    log_memory("before_publish", -1);
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
     std::promise<void> first_prepared;
     std::promise<void> all_queued;
     std::promise<void> grow;
@@ -1957,7 +1972,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growt
         if (++queued == kPublishers) all_queued.set_value();
     });
     sync->SetCallBack("PrimaryKeyManager::prepare_primary_index:before_load", [&](void*) {
-        if (++entered == 1) {
+        const int current = ++entered;
+        log_memory("before_load", current);
+        if (current == 1) {
             first_prepared.set_value();
             growth.wait();
         }
@@ -1971,8 +1988,11 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growt
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
     std::vector<std::future<Status>> publishes;
     for (int i = 0; i < kPublishers; ++i) {
-        publishes.push_back(std::async(
-                std::launch::async, [&, i] { return publish_single_version(metadata[i]->id(), 2, txns[i]).status(); }));
+        publishes.push_back(std::async(std::launch::async, [&, i] {
+            auto status = publish_single_version(metadata[i]->id(), 2, txns[i]).status();
+            log_memory("publish_finished", i);
+            return status;
+        }));
     }
     EXPECT_EQ(std::future_status::ready, first_prepared.get_future().wait_for(std::chrono::seconds(5)));
     EXPECT_EQ(std::future_status::ready, all_queued.get_future().wait_for(std::chrono::seconds(5)));
