@@ -51,6 +51,7 @@ public class IcebergConnector implements Connector {
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
+    private ExecutorService backgroundJobPlanningExecutor;
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
 
@@ -132,8 +133,9 @@ public class IcebergConnector implements Connector {
     }
 
     private ExecutorService buildBackgroundJobPlanningExecutor() {
-        return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+        backgroundJobPlanningExecutor = newWorkerPool(catalogName + "-background-iceberg-worker-pool",
                 icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+        return backgroundJobPlanningExecutor;
     }
 
     @Override
@@ -145,6 +147,9 @@ public class IcebergConnector implements Connector {
         }
         if (refreshOtherFeExecutor != null) {
             refreshOtherFeExecutor.shutdown();
+        }
+        if (backgroundJobPlanningExecutor != null) {
+            backgroundJobPlanningExecutor.shutdown();
         }
     }
 
