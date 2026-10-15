@@ -1,0 +1,84 @@
+-- name: test_decimal_sum_overflow
+
+DROP DATABASE IF EXISTS test_decimal_sum_overflow;
+CREATE DATABASE test_decimal_sum_overflow;
+USE test_decimal_sum_overflow;
+
+-- Two rows of 10^38-1. The true sum is 199999999999999999999999999999999999998,
+-- which does not fit the int128 accumulator SUM(DECIMAL) uses.
+CREATE TABLE d38 (k int, a decimal(38,0)) PROPERTIES("replication_num"="1");
+INSERT INTO d38 VALUES (1, 99999999999999999999999999999999999999), (1, 99999999999999999999999999999999999999);
+
+CREATE TABLE d38s (k int, a decimal(38,2)) PROPERTIES("replication_num"="1");
+INSERT INTO d38s VALUES (1, 1.25), (1, 2.50), (2, -3.75);
+
+-- D3 sliding-window table. A = 9 * 10^37; the rows are A, -A, -A, A.
+CREATE TABLE win (k int, a decimal(38,0)) PROPERTIES("replication_num"="1");
+INSERT INTO win VALUES (1, 90000000000000000000000000000000000000), (2, -90000000000000000000000000000000000000), (3, -90000000000000000000000000000000000000), (4, 90000000000000000000000000000000000000);
+
+CREATE TABLE bigint_t (k int, b bigint) PROPERTIES("replication_num"="1");
+INSERT INTO bigint_t VALUES (1, 9223372036854775807), (1, 9223372036854775807);
+
+-- Default sql_mode. This documents today's behaviour, which this change does NOT fix:
+-- the accumulator wraps and the answer is the true sum minus 2^128.
+-- Returning NULL here needs an "overflowed" flag in the aggregate state that survives
+-- serialization/merge, which changes the intermediate on-wire format; that is a separate change.
+SELECT SUM(a) FROM d38;
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+SELECT SUM(a) OVER () FROM d38;
+SELECT SUM(a) + 0 FROM d38;
+
+SET sql_mode = 'ERROR_IF_OVERFLOW';
+
+-- With ERROR_IF_OVERFLOW the wrap must be reported, exactly like the decimal binary operators do.
+-- The report goes through FunctionContext::set_error(), not an exception: Aggregator::
+-- check_has_error() and Analytor::_check_has_error() turn it into a query error. The OVER () shape
+-- exercises Analytor::finish_process(), which does all the work for an empty OVER () and is not
+-- inside any catch handler - which is exactly why this must not throw.
+SELECT SUM(a) FROM d38;
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+SELECT SUM(a) OVER () FROM d38;
+SELECT SUM(a) + 0 FROM d38;
+
+-- D3: no false positive from the incremental sliding window. update_state_removable_cumulatively()
+-- subtracts the row leaving the frame BEFORE adding the row entering it, so the accumulator
+-- transits previous_frame_sum - leaving_row, a value belonging to no frame. Here the four frame
+-- sums are A, 0, -A, -A, all inside int128, but the transit at row 4 is -1.8 * 10^38, outside it.
+-- All four rows must come back, with no error.
+SELECT k, SUM(a) OVER (ORDER BY k ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) FROM win ORDER BY k;
+
+-- The sorted-streaming aggregation path is covered too. SortedStreamingAggregator is
+-- `final : public Aggregator`, and SortedAggregateStreamingSinkOperator::push_chunk() polls the
+-- inherited Aggregator::check_has_error() right after streaming_compute_agg_state()
+-- (exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp:95). All accumulation
+-- happens in push_chunk; set_finishing() only flushes. EXPLAIN shows "sorted streaming: true".
+SET enable_sort_aggregate = true;
+SELECT k, SUM(a) FROM d38 GROUP BY k ORDER BY k;
+SET enable_sort_aggregate = false;
+
+-- The partition-topn pre-aggregation path. PushDownPredicateRankingWindowRule /
+-- PushDownLimitRankingWindowRule fold a non-ranking window function that shares the ranking
+-- window's PARTITION BY into the PARTITION-TOP-N node as a "pre agg function"
+-- (RankingWindowUtils::satisfyRankingPreAggOptimization accepts any real aggregate function of at
+-- most one argument, so SUM qualifies). That pre-agg runs in
+-- LocalPartitionTopnContext::compute_agg_state(), whose PreAggState is a plain struct with its own
+-- FunctionContexts and therefore does not inherit Aggregator::check_has_error(); this change polls
+-- the contexts at the end of compute_agg_state() instead. Verified on
+-- starrocks/allin1-ubuntu:latest (4.1.4) that EXPLAIN for this statement really does contain
+-- "1:PARTITION-TOP-N ... pre agg functions: [, sum(2: a), ]" and that the unpatched server returns
+-- 1 | 1 | -140282366920938463463374607431768211458.
+-- Note that the trailing ANALYTIC node over the same SUM is polled by Analytor as well, so this
+-- row alone does not prove WHICH of the two poll sites fired; it pins the end-to-end behaviour.
+SELECT * FROM (SELECT k, row_number() OVER (PARTITION BY k ORDER BY k) AS rn, SUM(a) OVER (PARTITION BY k) AS s FROM d38) t WHERE rn <= 1;
+
+-- No false positives: sums that fit are unchanged under ERROR_IF_OVERFLOW.
+SELECT SUM(a) FROM d38s;
+SELECT k, SUM(a) FROM d38s GROUP BY k ORDER BY k;
+SELECT SUM(a) OVER (ORDER BY k) FROM d38s ORDER BY 1;
+
+-- Integer SUM keeps MySQL's silent wraparound semantics even under ERROR_IF_OVERFLOW,
+-- which is only documented for DECIMAL.
+SELECT SUM(b) FROM bigint_t;
+
+SET sql_mode = 'ONLY_FULL_GROUP_BY';
+DROP DATABASE test_decimal_sum_overflow;
