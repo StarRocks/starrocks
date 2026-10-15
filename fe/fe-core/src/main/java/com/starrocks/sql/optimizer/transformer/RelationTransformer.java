@@ -682,6 +682,22 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
             } else {
+<<<<<<< HEAD
+=======
+                OlapTable scanTable = (OlapTable) node.getTable();
+                OlapTable unscopedTable = scanTable;
+                if (node.getBookmarkId().isPresent()) {
+                    scanTable = BookmarkScopedTableResolver.resolveById(
+                            scanTable, node.getBookmarkId().getAsLong());
+                } else if (session.getMvPinnedBookmarkIds() != null) {
+                    // Pinned MV refresh: read the base table AS-OF the frozen snapshot the refresh
+                    // planner staged on the context (no [_BOOKMARK_] hint on the relation).
+                    Long pinned = session.getMvPinnedBookmarkIds().get(scanTable.getUUID());
+                    if (pinned != null) {
+                        scanTable = BookmarkScopedTableResolver.resolveById(scanTable, pinned);
+                    }
+                }
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -689,6 +705,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setDistributionSpec(distributionSpec)
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexMetaId())
                         .setGtid(node.getGtid())
+                        .setBookmarkScoped(scanTable != unscopedTable)
                         .setPartitionNames(node.getPartitionNames() == null ? null
                                 : new PartitionNames(node.getPartitionNames().isTemp(),
                                 node.getPartitionNames().getPartitionNames(), node.getPartitionNames().getPos()))

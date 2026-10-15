@@ -23,6 +23,10 @@ import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -304,21 +308,29 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRepairSkippedWhenMvWatermarkIsBehindVersionTime() {
+=======
+    public void testRepairDoesNotRestoreAVersionMapResetMidRepair() {
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
         starRocksAssert.withTable(m1, () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
+<<<<<<< HEAD
                             " PROPERTIES (\n" +
                             " 'transparent_mv_rewrite_mode' = 'true'" +
                             " ) " +
+=======
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
                         String mvName = (String) obj;
                         starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
                                 "PARTITION START ('%s') END ('%s')", "1", "3"));
+<<<<<<< HEAD
                         Table baseTable = getTable("test", "m1");
                         Partition curPartition = baseTable.getPartition("p1");
 
@@ -348,6 +360,65 @@ public class MVMetaVersionRepairerTest extends MVTestBase {
                                 .values().iterator().next().get(baseTablePartitionName);
                         Assertions.assertEquals(before.getVersion(), after.getVersion());
                         Assertions.assertEquals(before.getLastRefreshTime(), after.getLastRefreshTime());
+=======
+                        MaterializedView mv1 = getMv("test", mvName);
+                        Assertions.assertEquals(1,
+                                mv1.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().size());
+
+                        // An inactivation clears the version map without the MV lock the repair holds: let it land
+                        // after the repair copied the scheme and before it publishes the copy.
+                        new MockUp<MvUtils>() {
+                            @Mock
+                            public long getMaxTablePartitionInfoRefreshTime(
+                                    Invocation invocation, Map<String, MaterializedView.BasePartitionInfo> infos) {
+                                mv1.resetVisibleVersionMap();
+                                return invocation.proceed(infos);
+                            }
+                        };
+                        Table baseTable = getTable("test", "m1");
+                        MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
+                                toPartitionInfo(baseTable.getPartition("p1"), 100L, System.currentTimeMillis());
+                        MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable, ImmutableList.of(partitionRepairInfo));
+
+                        MaterializedView.MvRefreshScheme scheme = mv1.getRefreshScheme();
+                        Assertions.assertTrue(scheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty(),
+                                "the repair brought back the entries the reset cleared: "
+                                        + scheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap());
+                        Assertions.assertEquals(0L, scheme.getLastFreshnessConfirmedAt());
+                    });
+        });
+    }
+
+    @Test
+    public void testRepairStartedDuringAResetPublishesNoVersionEntries() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS SELECT k1, k2, v1, v2 from m1;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", mvName);
+                        // An inactivation has bumped the epoch and is journaling; its applier has not cleared the
+                        // maps yet. The repair copies them in this window.
+                        mv1.markVersionMapReset();
+                        try {
+                            Table baseTable = getTable("test", "m1");
+                            MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
+                                    toPartitionInfo(baseTable.getPartition("p1"), 100L, System.currentTimeMillis());
+                            MVMetaVersionRepairer.repairBaseTableVersionChanges(baseTable,
+                                    ImmutableList.of(partitionRepairInfo));
+                        } finally {
+                            mv1.markVersionMapReset();
+                        }
+                        Assertions.assertTrue(mv1.getRefreshScheme().getAsyncRefreshContext()
+                                        .getBaseTableVisibleVersionMap().isEmpty(),
+                                "a repair that copied the maps before the clear published them");
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
                     });
         });
     }

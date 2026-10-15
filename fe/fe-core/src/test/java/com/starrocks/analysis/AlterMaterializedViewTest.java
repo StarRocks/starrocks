@@ -43,6 +43,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddMVColumnClause;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.ColumnDef;
@@ -398,6 +399,70 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) parTbl1, Set.of("item_id"));
         baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(baseTableVisibleVersionMap.isEmpty());
+    }
+
+    @Test
+    public void testActivationClearsVersionMapAnInactivationCleared() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE act_clear_base (k1 int, v1 int)\n" +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "PROPERTIES ('replication_num' = '1');");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW act_clear_mv\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES ('replication_num' = '1')\n" +
+                "AS SELECT k1, v1 FROM act_clear_base;");
+        try {
+            MaterializedView mv = starRocksAssert.getMv("test", "act_clear_mv");
+            Table base = starRocksAssert.getTable("test", "act_clear_base");
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) base, Set.of("v1"));
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.isVersionMapResetPending());
+
+            // A writer racing the inactivation journaled its copy of the scheme after the clear, and the clear it
+            // owed then never reached the journal (a leader demoted between the two writes): replay brings the
+            // entries computed from the old definition back.
+            Map<String, MaterializedView.BasePartitionInfo> stale = Maps.newHashMap();
+            stale.put("act_clear_base", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+            mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(base.getId(), stale);
+
+            List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
+            new MockUp<EditLog>() {
+                @Mock
+                public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
+                                             WALApplier walApplier) {
+                    journaled.add(log);
+                    invocation.proceed();
+                }
+            };
+            AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "ALTER MATERIALIZED VIEW act_clear_mv ACTIVE", connectContext);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
+
+            Assertions.assertTrue(mv.isActive());
+            Assertions.assertTrue(
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty(),
+                    "the activation kept the entries an inactivation cleared");
+            Assertions.assertFalse(mv.isVersionMapResetPending());
+
+            // The clear travels with the ACTIVE entry, so a follower that replayed the resurrected entries clears
+            // them when it replays the activation.
+            AlterMaterializedViewStatusLog activeLog = journaled.stream()
+                    .filter(log -> log.getTableId() == mv.getId()
+                            && AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("the activation was not journaled"));
+            Assertions.assertTrue(activeLog.isClearVersionMap());
+            mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(base.getId(), stale);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewStatus(activeLog);
+            Assertions.assertTrue(
+                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
+
+            // Once cleared, a later activation does not clear what refreshes record after it.
+            Assertions.assertFalse(mv.isVersionMapResetPending());
+        } finally {
+            starRocksAssert.dropMaterializedView("act_clear_mv");
+            starRocksAssert.dropTable("act_clear_base");
+        }
     }
 
     @Test

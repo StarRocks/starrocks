@@ -49,7 +49,6 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
-import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.qe.ConnectContext;
@@ -58,6 +57,7 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -1288,6 +1288,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     throw new DmlException(
                             "update meta failed. materialized view:" + materializedView.getName() + " not exist");
                 }
+                // Read before the copy: an inactivation can clear the version map without the MV lock (see
+                // MVVersionManager#publishRefreshScheme).
+                long versionMapResetEpoch = materializedView.getVersionMapResetEpoch();
                 MaterializedView.MvRefreshScheme copiedScheme = materializedView.getRefreshScheme().copy(); // copy on write
                 copiedScheme.setType(newRefreshType);
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
@@ -1313,10 +1316,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     }
                 }
 
-                final ChangeMaterializedViewRefreshSchemeLog log =
-                        new ChangeMaterializedViewRefreshSchemeLog(materializedView, copiedScheme);
-                GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log,
-                        wal -> materializedView.setRefreshScheme(copiedScheme));
+                MVVersionManager.publishRefreshScheme(materializedView, copiedScheme, versionMapResetEpoch, LOG);
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
             }
@@ -1343,11 +1343,40 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
                 AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
                 // Analyzed in resolveBeforeLock.
+<<<<<<< HEAD
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext = takePreResolvedActivate(materializedView);
+=======
+                PreResolvedActivate activate = takePreResolvedActivate(materializedView);
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext = activate.statusContext();
+                // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
+                // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
+                // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
+                // so isActive() is the only criterion covering both. Journaling first would record an
+                // activation that never happened -- the entry is durable and nothing revokes it, so a
+                // permanently broken MV grew one bogus entry per MVActiveChecker round, without bound.
+                // Captured before the rebuild so a failed journal write can restore exactly the state the
+                // statement started from.
+                String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
+                // Cleared here too, so that the MV never turns active with entries an inactivation cleared, not even
+                // until the ACTIVE entry below is journaled; that entry clears it on every FE.
+                if (materializedView.isVersionMapResetPending()) {
+                    materializedView.resetVisibleVersionMap();
+                }
+                // The rebuild resolves every base table again, several times each; the external ones are
+                // answered from what resolveBeforeLock resolved.
+                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
+                    alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                }
+                if (!materializedView.isActive()) {
+                    throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
+                            materializedView.getName(), materializedView.getInactiveReason()));
+                }
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
                 // Journal the base tables the activation settled on, so replay can adopt them instead of
                 // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
+<<<<<<< HEAD
                 log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
                 // The applier rebuilds the relationship, which resolves every base table again, several times
                 // each; the external ones are answered from what resolveBeforeLock resolved. The applier runs
@@ -1355,6 +1384,29 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 try (PreResolvedBaseTables.Scope ignored = preResolvedBaseTables.enter()) {
                     GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
                             alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
+=======
+                log.setBaseTableInfos(Lists.newArrayList(materializedView.getBaseTableInfos()));
+                // Clear the version map once more if an inactivation cleared it: see
+                // MaterializedView#versionMapResetPending. The writers that could have published entries back hold
+                // this MV's lock, which this statement holds too.
+                boolean clearVersionMap = materializedView.isVersionMapResetPending();
+                log.setClearVersionMap(clearVersionMap);
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
+                        if (clearVersionMap) {
+                            materializedView.clearVersionStateForActivation();
+                        }
+                        alterJobMgr.resumeTaskForActivate(statusContext, false);
+                    });
+                } catch (Throwable t) {
+                    // The rebuild already ran setActive(), which republishes the MV to the query-rewrite
+                    // cache. A journal write that never commits means the activation did not happen, so
+                    // undo it: otherwise this leader would keep rewriting queries with an MV that is
+                    // active in memory only, and whose refresh task was never resumed either -- so it
+                    // would never be refreshed again. setInactiveAndReason evicts the rewrite cache.
+                    materializedView.setInactiveAndReason(inactiveReasonBeforeActivate);
+                    throw t;
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
                 }
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
@@ -1453,8 +1505,31 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     alterJobMgr.prepareAlterMaterializedViewStatus(mv, status, reason, false);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                     mv.getId(), status, reason);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
                     alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false));
+=======
+            // The clear of the version map, which makes the next refresh recompute everything, travels with the
+            // status so that a replay clears it too. The reset epoch is bumped before the journal write and again
+            // once the clear is done, so that it is odd while the reset is in flight: see
+            // MaterializedView#resetVisibleVersionMap.
+            log.setClearVersionMap(isClearVersionMap);
+            if (isClearVersionMap) {
+                mv.markVersionMapReset();
+            }
+            try {
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
+                    alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false);
+                    if (isClearVersionMap) {
+                        mv.clearVersionStateForInactivation();
+                    }
+                });
+            } finally {
+                if (isClearVersionMap) {
+                    mv.markVersionMapReset();
+                }
+            }
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
         } else {
             mv.setInactiveAndReason(reason);
         }
@@ -1643,6 +1718,64 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Inactivates an MV from inside the refresh that found it can no longer be refreshed, and stops scheduling it as
+     * every other inactivation does. Both happen under the MV's write lock, which ALTER ... ACTIVE takes too: an
+     * activation in between would be paused by the suspension, and leave an active MV that is never refreshed.
+     */
+    public static void inactiveMvAndSuspendTask(MaterializedView mv, String inactiveReason) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
+        }
+    }
+
+    /**
+     * {@link #inactiveMvAndSuspendTaskLocked} for a refresh that broke the incremental chain, except when the MV was
+     * altered to AUTO while that refresh ran: its next refresh falls back to PCT, which, like a FORCE rebuild, does not
+     * read the baseline the refresh broke on. The caller holds the MV's write lock, which the ALTER takes too, so this
+     * sees the mode either way.
+     */
+    public static void inactiveMvAndSuspendTaskUnlessAutoRecoversLocked(MaterializedView mv, RefreshFailureKind kind) {
+        String inactiveReason = kind.inactiveReason(mv.getName());
+        if (mv.getCurrentRefreshMode().isAuto() && kind.invalidatesBaseline()) {
+            LOG.info("Keep materialized view {} active: it was altered to AUTO while a refresh broke ({}), and its "
+                    + "next refresh falls back to PCT", mv.getName(), inactiveReason);
+            return;
+        }
+        inactiveMvAndSuspendTaskLocked(mv, inactiveReason);
+    }
+
+    // Without a baseline the next refresh goes through the hybrid processor, whose PCT fallback rebuilds it from the
+    // partitions that changed since the last successful refresh.
+    private static void clearTvrBaselineIfUnusable(MaterializedView mv, String inactiveReason) {
+        if (!MaterializedViewExceptions.invalidatesBaseline(inactiveReason)
+                || !mv.getCurrentRefreshMode().isIncrementalOrAuto() || mv.getRowIdStrategy() == null) {
+            return;
+        }
+        long versionMapResetEpoch = mv.getVersionMapResetEpoch();
+        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
+        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
+        if (refreshContext.getBaseTableInfoTvrVersionRangeMap().isEmpty()
+                && refreshContext.getTempBaseTableInfoTvrDeltaMap().isEmpty()) {
+            return;
+        }
+        refreshContext.getBaseTableInfoTvrVersionRangeMap().clear();
+        refreshContext.clearTempBaseTableInfoTvrDeltaState();
+        MVVersionManager.publishRefreshScheme(mv, copiedScheme, versionMapResetEpoch, LOG);
+        LOG.info("Cleared the incremental baseline of materialized view {} on activation, it was inactive because: {}",
+                mv.getName(), inactiveReason);
+    }
+
+    /** {@link #inactiveMvAndSuspendTask} for a caller that already holds the MV's write lock. */
+    public static void inactiveMvAndSuspendTaskLocked(MaterializedView mv, String inactiveReason) {
+        inactiveMvAndLog(mv, inactiveReason);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.suspendTaskWithoutKilling(taskManager.getTask(TaskBuilder.getMvTaskName(mv.getId())));
+    }
+
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
     // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
     // or failover instead of reverting to active until the next refresh re-detects the condition.
     public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {

@@ -646,6 +646,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;
 
+    // Set while the MV is inactive after an inactivation that cleared its version map, until the next activation
+    // clears it once more. A writer racing that inactivation can still have journaled entries back after it (see
+    // MVVersionManager#publishRefreshScheme); the activation is ordered after every such write, so its clear, which
+    // travels with the ACTIVE entry, leaves no entry computed from the old definition on any FE.
+    @SerializedName(value = "versionMapResetPending")
+    private boolean versionMapResetPending;
+
     // This is a normalized view define SQL by AstToSQLBuilder#toSQL, which is used for show create mv, constructing a refresh job
     // (insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -806,6 +813,54 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return active;
     }
 
+<<<<<<< HEAD
+=======
+    public long getVersionMapResetEpoch() {
+        return versionMapResetEpoch.get();
+    }
+
+    /**
+     * Clears the visible version maps so that the next refresh recomputes everything, because the data the MV
+     * holds no longer matches what its definition reads (a base table or view it depends on changed). Callers do
+     * not hold the MV lock, so a refresh run may be about to publish a copy of the scheme it took before the
+     * clear; the epoch, bumped on both sides of the clear, lets that run notice and drop its version entries.
+     */
+    public void resetVisibleVersionMap() {
+        markVersionMapReset();
+        refreshScheme.clearVersionState();
+        versionMapResetPending = true;
+        markVersionMapReset();
+    }
+
+    /**
+     * The clear of an inactivation, in its journal entry's applier and in its replay: the caller bumps the reset epoch
+     * around it on the leader, see {@link #markVersionMapReset}.
+     */
+    public void clearVersionStateForInactivation() {
+        refreshScheme.clearVersionState();
+        versionMapResetPending = true;
+    }
+
+    public boolean isVersionMapResetPending() {
+        return versionMapResetPending;
+    }
+
+    /** The clear an activation journals with its ACTIVE entry when {@link #isVersionMapResetPending}. */
+    public void clearVersionStateForActivation() {
+        refreshScheme.clearVersionState();
+        versionMapResetPending = false;
+    }
+
+    /**
+     * Bumps the reset epoch. {@link #resetVisibleVersionMap} does it on both sides of the clear; a caller that
+     * clears the scheme in a journal write's applier must do the same, the second bump in a finally block so that the
+     * epoch never stays odd.
+     */
+    public void markVersionMapReset() {
+        versionMapResetEpoch.incrementAndGet();
+    }
+
+>>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
     /**
      * active the materialized again & reload the state.
      */
