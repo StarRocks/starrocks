@@ -58,7 +58,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
  * QueryLocker is used to obtain the lock corresponding to the metadata used in Query
@@ -111,8 +110,11 @@ public class PlannerMetaLocker implements AutoCloseable {
     private final Deque<List<Map.Entry<Long, Set<Long>>>> heldStack = new ArrayDeque<>();
 
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
-        new TableCollector(session, dbs, tables).visit(statementBase);
-        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+        TableCollector collector = new TableCollector(session, dbs, tables);
+        collector.visit(statementBase);
+        // The databases the statement names, not those of the tables behind a view: they classify the query
+        // (resource groups and the like) and stay what the user wrote.
+        session.setCurrentSqlDbIds(new HashSet<>(collector.statementDbIds));
         this.queryId = session.getQueryId();
     }
 
@@ -379,17 +381,14 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         private final Map<Long, Database> dbs;
         private final Map<Long, Set<Long>> tables;
-<<<<<<< HEAD
-=======
         private final Set<Long> statementDbIds = new HashSet<>();
-        // > 0 while inside what an AgentBase relation resolved to, or the body of a view
+        // > 0 while inside the body of a view
         private int resolvedDepth = 0;
         // The views whose bodies are being walked, so that a definition rewritten into a cycle cannot recurse forever
         private final Set<Long> expandingViews = new HashSet<>();
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
->>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
             this.session = session;
@@ -549,12 +548,9 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-<<<<<<< HEAD
-=======
-            if (isCteReference(node.getName()) || visitResolved(node)) {
+            if (isCteReference(node.getName())) {
                 return null;
             }
->>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
             if (dbAndTable != null && dbAndTable.second instanceof View view) {
@@ -588,67 +584,6 @@ public class PlannerMetaLocker implements AutoCloseable {
         }
 
         @Override
-<<<<<<< HEAD
-=======
-        public Void visitTableFunction(TableFunctionRelation node, Void context) {
-            visitResolved(node);
-            return null;
-        }
-
-        @Override
-        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
-            // The call on the right, or once analyzed the relation it became; the left side is the dual row.
-            return visit(node.getRight(), context);
-        }
-
-        /**
-         * An analyzed statement (SPM analyzes before planning does; re-planning analyzes again) carries what an
-         * AgentBase relation resolved to in place of the call. It is still not something the statement named.
-         */
-        @Override
-        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
-            PreResolvedState state = PreResolvedState.of(session);
-            if (state == null || !state.isAgentBaseResolution(node)) {
-                return super.visitSubqueryRelation(node, context);
-            }
-            resolvedDepth++;
-            try {
-                return super.visitSubqueryRelation(node, context);
-            } finally {
-                resolvedDepth--;
-            }
-        }
-
-        /**
-         * Resolve an AgentBase relation here, before the lock is taken (see {@link AgentBaseRelations}), and
-         * collect the tables it reads.
-         *
-         * <p>Not inside a view body, which this walks on a parse of its own: the analyzer expands the view from another
-         * parse and so resolves the call again, under the lock. Resolving it here too would run its search twice, the
-         * second time with the tables it reads locked by this statement -- the deadlock resolving early avoids. Such a
-         * call is left to the analyzer, as it was before view bodies were walked.
-         *
-         * @return whether {@code node} was one
-         */
-        private boolean visitResolved(Relation node) {
-            if (!expandingViews.isEmpty()) {
-                return AgentBaseRelations.isAgentBaseRelation(node);
-            }
-            Relation resolved = AgentBaseRelations.resolve(session, node);
-            if (resolved == null) {
-                return false;
-            }
-            resolvedDepth++;
-            try {
-                visit(resolved);
-            } finally {
-                resolvedDepth--;
-            }
-            return true;
-        }
-
-        @Override
->>>>>>> 6b7f7239f88... [BugFix][POST-1966] Lock a view's base tables before planning reads them (#65293)
         public Void visitView(ViewRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
@@ -662,6 +597,9 @@ public class PlannerMetaLocker implements AutoCloseable {
 
                 dbs.putIfAbsent(database.getId(), database);
                 tables.computeIfAbsent(database.getId(), k -> new HashSet<>()).add(table.getId());
+                if (resolvedDepth == 0) {
+                    statementDbIds.add(database.getId());
+                }
             }
         }
     }
