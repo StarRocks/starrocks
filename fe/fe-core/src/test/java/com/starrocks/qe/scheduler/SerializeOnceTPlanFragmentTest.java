@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
@@ -25,7 +26,6 @@ import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TBucketProperty;
