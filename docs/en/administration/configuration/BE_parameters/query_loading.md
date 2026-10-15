@@ -1109,8 +1109,8 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Default: 64
 - Type: Int
 - Unit: -
-- Is mutable: No
-- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped.
+- Is mutable: Yes
+- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running.
 - Introduced in: -
 
 ### enable_rejected_record_sync
