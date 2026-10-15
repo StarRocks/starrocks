@@ -340,6 +340,30 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
 
+## `load_sink_close_active_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中正在执行的关闭操作数。存算分离集群下，每个关闭操作会向对象存储写入一次导入的合并事务日志。
+
+## `load_sink_close_queue_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：在导入 Sink 关闭线程池队列中等待的关闭操作数。该值持续增长，说明对象存储写入跟不上导入结束的速度。
+
+## `load_sink_close_running_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中的线程数。
+
+## `load_sink_close_threadpool_size`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池的最大线程数，由 `load_sink_close_thread_pool_num_max` 设置。
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`

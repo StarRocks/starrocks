@@ -15,7 +15,7 @@
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
 #include "base/time/time.h"
-#include "common/thread/priority_thread_pool.hpp"
+#include "common/thread/threadpool.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -101,8 +101,8 @@ bool OlapTableSinkOperator::pending_finish() const {
 
     // Every channel has processed its last response, so close() no longer waits on RPCs, but it still writes the
     // combined txn log to object storage, which can take seconds. pending_finish() runs on the pipeline poller, a
-    // single thread that checks every blocked driver of the executor set, so run the close on the sink IO pool and
-    // only check its result here.
+    // single thread that checks every blocked driver of the executor set, or on a pipeline executor thread, so run
+    // the close on the load sink close pool and only check its result here.
     _submit_close();
     return _pending_close();
 }
@@ -124,17 +124,27 @@ void OlapTableSinkOperator::_submit_close() const {
     };
 
     auto* pool = state->query_execution_services() != nullptr
-                         ? state->query_execution_services()->execution->pipeline_sink_io_pool
+                         ? state->query_execution_services()->execution->load_sink_close_thread_pool
                          : nullptr;
-    if (pool != nullptr && pool->try_offer([close_task, query_id = state->query_id(),
-                                            fragment_instance_id = state->fragment_instance_id()]() {
-            SCOPED_SET_TRACE_INFO(0, query_id, fragment_instance_id);
-            close_task();
-        })) {
-        return;
+    if (pool != nullptr) {
+        auto task = std::make_shared<CancellableRunnable>(
+                [close_task, query_id = state->query_id(), fragment_instance_id = state->fragment_instance_id()]() {
+                    SCOPED_SET_TRACE_INFO(0, query_id, fragment_instance_id);
+                    close_task();
+                },
+                [this]() {
+                    // Dropped by the pool while it shuts down: fail the load and let the driver finish.
+                    _close_status = Status::Cancelled("olap table sink close dropped by a stopping thread pool");
+                    _close_done.store(true, std::memory_order_release);
+                });
+        // The queue is unbounded, so this only fails when the pool is shutting down.
+        auto st = pool->submit(std::move(task));
+        if (st.ok()) {
+            return;
+        }
+        LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
+                     << print_id(state->fragment_instance_id()) << ", error=" << st;
     }
-    LOG_IF(WARNING, pool != nullptr) << "Sink IO pool is full, close the olap table sink inline, fragment_instance_id="
-                                     << print_id(state->fragment_instance_id());
     close_task();
 }
 

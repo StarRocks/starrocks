@@ -73,13 +73,13 @@ private:
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;
 
-    // Set once the final close of _sink has been handed to the pipeline sink IO pool. From then on the sink
-    // belongs to that task, and this operator does not touch it again until _close_done is set.
+    // Set once the final close of _sink has been handed to the load sink close pool. From then on the sink belongs
+    // to that task, and this operator does not touch it again until _close_done is set.
     mutable bool _close_submitted = false;
     mutable std::atomic<bool> _close_done = false;
     // Written by the close task before it sets _close_done.
     mutable Status _close_status;
-    // Time the close waited in the sink IO pool queue before a thread picked it up.
+    // Time the close waited in the load sink close pool queue before a thread picked it up.
     RuntimeProfile::Counter* _close_queue_timer = nullptr;
 };
 

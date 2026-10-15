@@ -340,6 +340,30 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: The current size of the RPC thread pool, which is used for handling Routine Load and loading via table functions. The default value is 10, with a maximum value of 1000. This value is dynamically adjusted based on the usage of the thread pool.
 
+## `load_sink_close_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes that are running in the load sink close thread pool. In a shared-data cluster, each close writes the combined transaction log of a load to object storage.
+
+## `load_sink_close_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes waiting in the queue of the load sink close thread pool. A value that keeps growing means object-storage writes are slower than loads finish.
+
+## `load_sink_close_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the load sink close thread pool.
+
+## `load_sink_close_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`

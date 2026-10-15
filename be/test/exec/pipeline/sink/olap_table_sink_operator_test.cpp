@@ -185,7 +185,7 @@ TEST_F(OlapTableSinkOperatorTest, cancel_while_closing_waits_for_the_close) {
     EXPECT_FALSE(_sink.concurrent_close);
 }
 
-TEST_F(OlapTableSinkOperatorTest, closes_inline_without_sink_io_pool) {
+TEST_F(OlapTableSinkOperatorTest, closes_inline_without_a_close_pool) {
     _runtime_state->set_query_execution_services(nullptr);
 
     EXPECT_FALSE(_op->pending_finish());

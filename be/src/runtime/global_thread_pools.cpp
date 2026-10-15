@@ -147,6 +147,14 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(500))
                             .build(&_put_combined_txn_log_thread_pool));
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_sink_close")
+                            .set_min_threads(0)
+                            .set_max_threads(config::load_sink_close_thread_pool_num_max)
+                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+                            .build(&_load_sink_close_thread_pool));
+    REGISTER_THREAD_POOL_RUNTIME_METRICS(metrics, load_sink_close, _load_sink_close_thread_pool.get());
+
     return Status::OK();
 }
 
@@ -252,6 +260,7 @@ Status GlobalThreadPools::init_lake_thread_pools(MetricRegistry* metrics) {
 }
 
 void GlobalThreadPools::shutdown() {
+    if (_load_sink_close_thread_pool) _load_sink_close_thread_pool->shutdown();
     if (_pipeline_sink_io_pool) _pipeline_sink_io_pool->shutdown();
     if (_put_aggregate_metadata_thread_pool) _put_aggregate_metadata_thread_pool->shutdown();
     if (_lake_metadata_fetch_thread_pool) _lake_metadata_fetch_thread_pool->shutdown();
@@ -283,6 +292,7 @@ void GlobalThreadPools::destroy() {
     _load_segment_thread_pool.reset();
     _load_rowset_thread_pool.reset();
     _put_combined_txn_log_thread_pool.reset();
+    _load_sink_close_thread_pool.reset();
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
