@@ -447,9 +447,10 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
         List<Boolean> lockedAtRefresh = new CopyOnWriteArrayList<>();
         ReloadingHiveMetadata metadata = new ReloadingHiveMetadata(false) {
             @Override
-            public synchronized void invalidateTableForRead(String srDbName, Table table) {
+            public synchronized void refreshTable(String srDbName, Table table, List<String> partitionNames,
+                                                  boolean onlyCachedPartitions) {
                 lockedAtRefresh.add(locked.get());
-                super.invalidateTableForRead(srDbName, table);
+                super.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
             }
         };
         register(metadata);

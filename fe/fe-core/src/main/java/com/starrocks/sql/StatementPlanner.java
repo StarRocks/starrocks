@@ -311,20 +311,10 @@ public class StatementPlanner {
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
-<<<<<<< HEAD
-=======
-                // Only pre-resolve external tables when there are internal tables to lock.
-                // This avoids holding meta lock while fetching external metadata.
-                // Check config first (cheapest), then locker state.
-                if (insertStmt == null && Config.enable_experimental_external_table_preparse
-                        && locker != null && !locker.isEmpty()) {
-                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
-                }
                 // An INSERT analyzed before planning (the one a CTAS carries, a replanned statement) has every
                 // relation bound already, so the pre-pass skipped its sources: refresh and reload them here, not
                 // under the lock. The refresh after analysis below then only rebinds them.
                 refreshRemainingInsertSources(statement, session);
->>>>>>> c491422 ([BugFix][POST-1966] Refresh an analyzed INSERT's sources before taking the planner lock (#80786))
                 takeLock.run();
                 Analyzer.analyze(statement, session);
                 refreshRemainingInsertSources(statement, session);
