@@ -665,9 +665,9 @@ TEST_F(PersistentIndexSstableTest, test_table_builder_out_of_order_keys) {
 }
 
 // Helper: build a small valid SST file and return its filesize
-static void build_test_sst(const std::string& path, uint64_t* filesize) {
+static void build_test_sst(const std::string& path, uint64_t* filesize, int num_keys = 10) {
     phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_keys; i++) {
         map.emplace(fmt::format("key_{:04d}", i), std::make_pair(int64_t(1), IndexValue(i)));
     }
     ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(path));
@@ -679,7 +679,9 @@ static void build_test_sst(const std::string& path, uint64_t* filesize) {
 TEST_F(PersistentIndexSstableTest, test_evict_read_state_reopens_all_read_paths) {
     const std::string path = lake::join_path(kTestDir, "read_state.sst");
     uint64_t filesize = 0;
-    build_test_sst(path, &filesize);
+    // Multiple data blocks are required: a one-block SST has only a trailing short-successor
+    // index key, which legitimately produces no data-key samples.
+    build_test_sst(path, &filesize, 1000);
     PersistentIndexSstablePB pb;
     pb.set_filename("read_state.sst");
     pb.set_filesize(filesize);
