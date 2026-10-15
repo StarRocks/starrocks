@@ -18,10 +18,12 @@
 
 #include <algorithm>
 
+#include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
+#include "common/process_exit.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/types.pb.h"
@@ -71,6 +73,16 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
 }
 
 struct PersistentIndexSstable::ReadState {
+    ~ReadState() {
+        table.reset();
+        if (memory_context) {
+            memory_context->tracker.release(transient_bytes);
+        }
+        permit.reset();
+    }
+    std::shared_ptr<SstReadStateMemoryContext> memory_context;
+    std::unique_ptr<PkIndexPublishLimiter::Permit> permit;
+    size_t transient_bytes = 0;
     // Destroy the table before the file and filter policy its iterators/options refer to.
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     std::unique_ptr<RandomAccessFile> rf;
@@ -124,6 +136,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << _sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
+    _read_state_memory_demand.store(state->table->memory_usage());
     return state;
 }
 
@@ -135,13 +148,48 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     if (_filename.empty()) {
         return Status::InvalidArgument("SSTable is not initialized");
     }
+    if (auto state = _transient_read_state.lock()) {
+        return state;
+    }
+    const bool cacheable = _read_state_cacheable || !config::lake_pk_index_partial_eviction;
+    std::unique_ptr<PkIndexPublishLimiter::Permit> permit;
+    if (!cacheable && _memory_context) {
+        ASSIGN_OR_RETURN(permit, _memory_context->limiter.acquire(
+                                         std::max(0, config::lake_pk_index_publish_wait_timeout_ms), [] { return 1; },
+                                         [] { return process_exit_in_progress(); }, true));
+    }
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_reopen_us");
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_count", 1);
     ASSIGN_OR_RETURN(auto rf, _open_file());
     ASSIGN_OR_RETURN(auto state, _open_read_state(std::move(rf)));
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_bytes", state->table->memory_usage());
-    _read_state = std::move(state);
-    return _read_state;
+    if (cacheable || !_memory_context) {
+        _read_state = state;
+    } else {
+        state->memory_context = _memory_context;
+        state->permit = std::move(permit);
+        state->transient_bytes = state->table->memory_usage();
+        _memory_context->tracker.consume(state->transient_bytes);
+        _transient_read_state = state;
+        TRACE_COUNTER_INCREMENT("pindex_sst_transient_bytes", state->transient_bytes);
+    }
+    return state;
+}
+
+void PersistentIndexSstable::set_read_state_cacheable(bool cacheable,
+                                                      const std::shared_ptr<SstReadStateMemoryContext>& context) const {
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    _memory_context = context;
+    _read_state_cacheable = cacheable;
+    if (!cacheable && _read_state && _read_state.use_count() == 1) {
+        TRACE_COUNTER_INCREMENT("pindex_sst_read_state_evict_bytes", _read_state->table->memory_usage());
+        _read_state.reset();
+    }
+}
+
+Status PersistentIndexSstable::reopen_read_state() const {
+    ASSIGN_OR_RETURN(auto state, _get_read_state());
+    return Status::OK();
 }
 
 size_t PersistentIndexSstable::evict_read_state() const {
@@ -151,6 +199,11 @@ size_t PersistentIndexSstable::evict_read_state() const {
     }
     const size_t bytes = _read_state->table->memory_usage();
     _read_state.reset();
+    // A lazy fallback after eviction uses a single transient SST at a time. prepare_primary_index
+    // can explicitly reserve a resident batch and turn caching back on before its parallel reopen.
+    if (_memory_context) {
+        _read_state_cacheable = false;
+    }
     TRACE_COUNTER_INCREMENT("pindex_sst_read_state_evict_bytes", bytes);
     return bytes;
 }
@@ -169,14 +222,22 @@ sstable::Iterator* PersistentIndexSstable::new_iterator(const sstable::ReadOptio
 
 Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
                                     Cache* cache, bool need_filter, DelVectorPtr delvec,
-                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr,
+                                    const std::shared_ptr<SstReadStateMemoryContext>& memory_context,
+                                    bool defer_read_state) {
     _filename = rf->filename();
     _sstable_pb.CopyFrom(sstable_pb);
     _cache = cache;
     _need_filter = need_filter;
     _block_cache_id = 0;
-    ASSIGN_OR_RETURN(_read_state, _open_read_state(std::move(rf)));
-    _block_cache_id = _read_state->table->cache_id();
+    _memory_context = memory_context;
+    _read_state_cacheable = !defer_read_state;
+    if (defer_read_state) {
+        _block_cache_id = cache ? cache->new_id() : 0;
+    } else {
+        ASSIGN_OR_RETURN(_read_state, _open_read_state(std::move(rf)));
+        _block_cache_id = _read_state->table->cache_id();
+    }
     // load delvec
     if (_sstable_pb.has_delvec() && _sstable_pb.delvec().size() > 0) {
         if (delvec) {
@@ -448,7 +509,8 @@ Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, 
 
 StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache, bool need_filter,
-        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+        const DelVectorPtr& delvec, const TabletMetadataPtr& metadata, TabletManager* tablet_mgr,
+        const std::shared_ptr<SstReadStateMemoryContext>& memory_context, bool defer_read_state) {
     auto sstable = std::make_unique<PersistentIndexSstable>();
     RandomAccessFileOptions opts;
     if (!sstable_pb.encryption_meta().empty()) {
@@ -456,7 +518,8 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         opts.encryption_info = std::move(info);
     }
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr,
+                                  memory_context, defer_read_state));
     return std::move(sstable);
 }
 

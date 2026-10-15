@@ -59,8 +59,9 @@ struct LakePersistentIndexMemoryStats {
     size_t index_block_bytes = 0; // sstable index blocks
     size_t filter_bytes = 0;      // sstable bloom filters
     // Delete vectors held by ingested sstables, compaction output for example. memory_usage() leaves them
-    // out, so the index cache does not charge them either.
+    // out; partial eviction includes them in the cache charge.
     size_t delvec_bytes = 0;
+    size_t overhead_bytes = 0; // estimated object, protobuf, path and fileset overhead
 
     // What LakePersistentIndex::memory_usage() reports.
     size_t charged_bytes() const { return memtable_bytes + index_block_bytes + filter_bytes; }
@@ -252,6 +253,15 @@ public:
     // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
     // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
     size_t refresh_cache_memory_metrics();
+
+    // Lock-free snapshots for eviction: no index lock is acquired while inspecting active tablets.
+    size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
+    size_t sst_memory_demand() const { return _sst_memory_demand.load(); }
+    size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
+    // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
+    Status prepare_sstable_read_state(size_t budget, bool partial);
+    void record_cache_access();
+    double cache_access_frequency(int64_t now_ms) const;
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
@@ -452,6 +462,13 @@ private:
     int64_t _publish_version{0};
     // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
     LakePersistentIndexMemoryStats _reported_memory_stats;
+    bool _partial_read_state = false;
+    std::atomic<size_t> _cached_metadata_bytes{0};
+    std::atomic<size_t> _cached_sst_bytes{0};
+    std::atomic<size_t> _sst_memory_demand{0};
+    mutable std::mutex _frequency_mutex;
+    double _access_frequency = 0;
+    int64_t _frequency_time_ms = 0;
 
     // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
     mutable std::mutex _load_lock;

@@ -268,7 +268,9 @@ public:
     // Defers `delete entry` to AFTER releasing _lock so a cached value whose
     // destructor re-enters the cache (e.g. VectorIndexCache entries holding
     // tenann handles back into the same cache) cannot self-deadlock on _lock.
-    bool update_object_size(Entry* entry, size_t new_size) {
+    // Set evict=false when the owner performs partial eviction after this accounting update.
+    // The owner must restore its budget outside _lock. Existing users retain automatic LRU.
+    bool update_object_size(Entry* entry, size_t new_size, bool evict = true) {
         std::vector<Entry*> entry_list;
         bool ret;
         {
@@ -276,7 +278,7 @@ public:
             _size += new_size - entry->_size;
             _tracker_consume(new_size - entry->_size);
             entry->_size = new_size;
-            ret = _evict(_capacity, &entry_list);
+            ret = evict ? _evict(_capacity, &entry_list) : _size <= _capacity;
         }
         for (Entry* e : entry_list) {
             delete e;
@@ -347,13 +349,13 @@ public:
     // Same deferred-delete rationale as update_object_size: keep entry
     // destructors out from under _lock to avoid self-deadlock when an
     // entry's value chain re-enters the cache on release.
-    bool set_capacity(size_t capacity) {
+    bool set_capacity(size_t capacity, bool evict = true) {
         std::vector<Entry*> entry_list;
         bool ret;
         {
             std::lock_guard<Lock> lg(_lock);
             _capacity = capacity;
-            ret = _evict(_capacity, &entry_list);
+            ret = evict ? _evict(_capacity, &entry_list) : _size <= _capacity;
         }
         for (Entry* e : entry_list) {
             delete e;

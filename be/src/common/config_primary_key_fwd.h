@@ -119,6 +119,13 @@ CONF_mBool(ignore_merge_condition_inside_same_transaction, "false");
 
 CONF_Int32(update_memory_limit_percent, "60");
 
+// Preserve hot shared-data PK index memtables and evict SST read state by decayed frequency.
+// Experimental; keep disabled until pressure and publish-latency validation is complete.
+CONF_mBool(lake_pk_index_partial_eviction, "false");
+
+// Maximum admission wait before taking tablet or shard locks; a timeout is reported separately.
+CONF_mInt32(lake_pk_index_publish_wait_timeout_ms, "30000");
+
 // If enable_retry_apply is set to true, the system will attempt retries when apply fails.
 // Retry scenarios for apply operations include the following cases:
 //   1. ​Retry indefinitely for explicitly retryable errors (e.g., memory limits)

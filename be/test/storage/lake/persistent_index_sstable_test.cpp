@@ -676,6 +676,67 @@ static void build_test_sst(const std::string& path, uint64_t* filesize, int num_
     CHECK_OK(wf->close());
 }
 
+TEST_F(PersistentIndexSstableTest, test_transient_read_state_bounds_memory_and_shares_concurrent_reads) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    const std::string path = lake::join_path(kTestDir, "transient.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 1000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("transient.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                  context, true));
+    ASSIGN_OR_ABORT(auto other, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                    context, true));
+    EXPECT_EQ(0, sst->memory_usage());
+    EXPECT_EQ(0, tracker.consumption());
+    auto iterator = std::unique_ptr<sstable::Iterator>(sst->new_iterator({}));
+    iterator->SeekToFirst();
+    ASSERT_TRUE(iterator->Valid());
+    const size_t demand = sst->read_state_memory_demand();
+    EXPECT_GT(demand, 0);
+    EXPECT_EQ(demand, tracker.consumption());
+    EXPECT_EQ(0, sst->memory_usage()); // transient memory belongs to the active reader, not the cache
+
+    std::vector<std::future<Status>> readers;
+    for (int i = 0; i < 8; ++i) {
+        readers.push_back(std::async(std::launch::async, [&] {
+            Slice key("key_0003");
+            IndexValue value(NullIndexValue);
+            KeyIndexSet found;
+            RETURN_IF_ERROR(sst->multi_get(&key, {0}, 1, &value, &found));
+            EXPECT_EQ(IndexValue(3), value);
+            EXPECT_EQ(KeyIndexSet{0}, found);
+            return Status::OK();
+        }));
+    }
+    for (auto& reader : readers) {
+        ASSERT_OK(reader.get());
+    }
+    EXPECT_EQ(demand, tracker.consumption());
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    DeferOp restore([&] { config::lake_pk_index_publish_wait_timeout_ms = old_timeout; });
+    config::lake_pk_index_publish_wait_timeout_ms = 0;
+    // Another SST cannot accumulate a second transient read state while the first is pinned.
+    EXPECT_TRUE(other->reopen_read_state().is_time_out());
+    EXPECT_EQ(demand, tracker.consumption());
+    iterator.reset();
+    EXPECT_EQ(0, tracker.consumption());
+    ASSERT_OK(other->reopen_read_state());
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(0, other->memory_usage());
+    sst->set_read_state_cacheable(true, context);
+    ASSERT_OK(sst->reopen_read_state());
+    EXPECT_EQ(demand, sst->memory_usage());
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(demand, sst->evict_read_state());
+    EXPECT_EQ(demand, sst->read_state_memory_demand());
+}
+
 TEST_F(PersistentIndexSstableTest, test_evict_read_state_reopens_all_read_paths) {
     const std::string path = lake::join_path(kTestDir, "read_state.sst");
     uint64_t filesize = 0;

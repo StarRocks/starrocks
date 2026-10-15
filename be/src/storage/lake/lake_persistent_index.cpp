@@ -15,6 +15,7 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 #include <unordered_map>
 
@@ -76,6 +77,7 @@ static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from
     metrics->lake_pk_index_cache_index_block_bytes.increment(delta(from.index_block_bytes, to.index_block_bytes));
     metrics->lake_pk_index_cache_filter_bytes.increment(delta(from.filter_bytes, to.filter_bytes));
     metrics->lake_pk_index_cache_delvec_bytes.increment(delta(from.delvec_bytes, to.delvec_bytes));
+    metrics->lake_pk_index_cache_overhead_bytes.increment(delta(from.overhead_bytes, to.overhead_bytes));
 }
 
 // unload() used to be free: LakePrimaryIndex held this class behind a shared_ptr and reset it, so the
@@ -85,6 +87,10 @@ static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from
 void LakePersistentIndex::_reset_index_state() {
     move_cache_memory_metrics(_reported_memory_stats, {});
     _reported_memory_stats = {};
+    _cached_sst_bytes.store(0);
+    _sst_memory_demand.store(0);
+    _cached_metadata_bytes.store(0);
+    _partial_read_state = false;
     if (_memtable) {
         _memtable->clear();
     }
@@ -119,7 +125,11 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         auto& pb = sstable_meta.sstables(idx);
         ASSIGN_OR_RETURN(sstables[idx], PersistentIndexSstable::new_sstable(
                                                 pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
-                                                true /* need filter */, nullptr, metadata, tablet_mgr));
+                                                true /* need filter */, nullptr, metadata, tablet_mgr,
+                                                config::lake_pk_index_partial_eviction
+                                                        ? tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                                        : nullptr,
+                                                config::lake_pk_index_partial_eviction));
         return Status::OK();
     };
 
@@ -139,6 +149,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     if (block_cache == nullptr) {
         return Status::InternalError("Block cache is null.");
     }
+    _partial_read_state = config::lake_pk_index_partial_eviction;
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
     const int num_sstables = sstable_meta.sstables_size();
     TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
@@ -291,8 +302,12 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     // We don't use UINT32_MAX as max rowid because it is reserved for delete rows.
     sstable_pb.set_max_rss_rowid((static_cast<uint64_t>(rssid) << 32) | (UINT32_MAX - 1));
     sstable_pb.mutable_range()->CopyFrom(sst_range);
-    RETURN_IF_ERROR(
-            sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */, std::move(delvec)));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true /* need filter */,
+                                  std::move(delvec), nullptr, _tablet_mgr,
+                                  config::lake_pk_index_partial_eviction
+                                          ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                          : nullptr,
+                                  config::lake_pk_index_partial_eviction));
     const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     // try to merge to a existing fileset
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
@@ -689,7 +704,11 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     sstable_pb.set_shared(del_sst_meta.shared());
     sstable_pb.mutable_range()->CopyFrom(del_sst_range);
     auto sstable = std::make_unique<PersistentIndexSstable>();
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true, nullptr, nullptr, _tablet_mgr,
+                                  config::lake_pk_index_partial_eviction
+                                          ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                          : nullptr,
+                                  config::lake_pk_index_partial_eviction));
     const uint64_t direct_max_rss_rowid = sstable_pb.max_rss_rowid();
     RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
     _memtable->advance_max_rss_rowid(direct_max_rss_rowid);
@@ -830,7 +849,10 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
     auto open_output_sstable = [&](const PersistentIndexSstablePB& sstable_pb) {
         return PersistentIndexSstable::new_sstable(
                 sstable_pb, _tablet_mgr->sst_location(_tablet_id, sstable_pb.filename()), block_cache->cache(),
-                /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr);
+                /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr,
+                config::lake_pk_index_partial_eviction ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                                       : nullptr,
+                config::lake_pk_index_partial_eviction);
     };
 
     // Handle multiple output sstables (from parallel compaction).
@@ -1747,6 +1769,10 @@ size_t LakePersistentIndex::memory_usage() const {
 
 LakePersistentIndexMemoryStats LakePersistentIndex::memory_stats() const {
     LakePersistentIndexMemoryStats stats;
+    stats.overhead_bytes = sizeof(*this);
+    stats.overhead_bytes += _sstable_filesets.capacity() * sizeof(std::unique_ptr<PersistentIndexSstableFileset>);
+    stats.overhead_bytes += _inactive_memtables.capacity() * sizeof(std::shared_ptr<PersistentIndexMemtable>);
+    stats.overhead_bytes += (_inactive_memtables.size() + (_memtable ? 1 : 0)) * sizeof(PersistentIndexMemtable);
     if (_memtable != nullptr) {
         stats.memtable_bytes += _memtable->memory_usage();
     }
@@ -1757,10 +1783,12 @@ LakePersistentIndexMemoryStats LakePersistentIndex::memory_stats() const {
         if (fileset_ptr == nullptr) {
             continue;
         }
+        stats.overhead_bytes += fileset_ptr->metadata_memory_usage();
         fileset_ptr->for_each_sstable([&](const PersistentIndexSstable& sstable) {
             stats.index_block_bytes += sstable.index_block_memory_usage();
             stats.filter_bytes += sstable.filter_memory_usage();
             stats.delvec_bytes += sstable.delvec_memory_usage();
+            stats.overhead_bytes += sstable.metadata_memory_usage() - sstable.delvec_memory_usage();
         });
     }
     return stats;
@@ -1770,7 +1798,66 @@ size_t LakePersistentIndex::refresh_cache_memory_metrics() {
     const auto stats = memory_stats();
     move_cache_memory_metrics(_reported_memory_stats, stats);
     _reported_memory_stats = stats;
+    _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
+    size_t demand = 0;
+
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable(
+                    [&](const PersistentIndexSstable& sst) { demand += sst.read_state_memory_demand(); });
+        }
+    }
+    _sst_memory_demand.store(demand);
+    _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
     return stats.charged_bytes();
+}
+
+Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial) {
+    if (!partial && !_partial_read_state) {
+        return Status::OK();
+    }
+    _partial_read_state = partial;
+    const auto context = partial ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context() : nullptr;
+    std::vector<const PersistentIndexSstable*> ssts;
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable([&](const PersistentIndexSstable& sst) { ssts.push_back(&sst); });
+        }
+    }
+    // Keep already resident SSTs first, then use the remaining reservation to reopen missing SSTs.
+    std::stable_partition(ssts.begin(), ssts.end(), [](const auto* sst) { return sst->memory_usage() != 0; });
+    std::vector<const PersistentIndexSstable*> reopen;
+    for (const auto* sst : ssts) {
+        const size_t demand = sst->read_state_memory_demand();
+        const bool cacheable = !partial || (demand > 0 && demand <= budget);
+        sst->set_read_state_cacheable(cacheable, context);
+        if (cacheable) {
+            budget -= std::min(budget, demand);
+            if (sst->memory_usage() == 0) {
+                reopen.push_back(sst);
+            }
+        }
+    }
+    auto token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+            ThreadPool::ExecutionMode::CONCURRENT);
+    ParallelTaskRunner runner(token.get());
+    for (auto* sst : reopen) {
+        runner.run([sst] { return sst->reopen_read_state(); });
+    }
+    return runner.join();
+}
+
+void LakePersistentIndex::record_cache_access() {
+    const int64_t now = MonotonicMillis();
+    std::lock_guard<std::mutex> lock(_frequency_mutex);
+    // One-minute half-life, measured in elapsed time rather than eviction rounds.
+    _access_frequency = _access_frequency * std::exp2(-(now - _frequency_time_ms) / 60000.0) + 1;
+    _frequency_time_ms = now;
+}
+
+double LakePersistentIndex::cache_access_frequency(int64_t now_ms) const {
+    std::lock_guard<std::mutex> lock(_frequency_mutex);
+    return std::max(0.001, _access_frequency * std::exp2(-(now_ms - _frequency_time_ms) / 60000.0));
 }
 
 size_t LakePersistentIndex::evict_sstable_read_state(size_t bytes_to_free) {
@@ -1784,6 +1871,11 @@ size_t LakePersistentIndex::evict_sstable_read_state(size_t bytes_to_free) {
         }
         fileset->for_each_sstable([&](const PersistentIndexSstable& sstable) {
             if (freed_bytes < bytes_to_free) {
+                if (config::lake_pk_index_partial_eviction && _tablet_mgr) {
+                    sstable.set_read_state_memory_context(
+                            _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context());
+                    _partial_read_state = true;
+                }
                 freed_bytes += sstable.evict_read_state();
             }
         });

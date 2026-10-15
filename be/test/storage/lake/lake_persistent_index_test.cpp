@@ -989,6 +989,102 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_lower_tail_watermark) 
     EXPECT_EQ(IndexValue(kTailValue), values[1]);
 }
 
+TEST_F(LakePersistentIndexTest, test_partial_eviction_sync_resize_pressure_and_rollback) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
+    std::vector<PersistentIndexSstablePB> ssts;
+    for (int file = 0; file < 4; ++file) {
+        const std::string filename = fmt::format("fair-share-{}.sst", file);
+        phmap::btree_map<std::string, IndexValueWithVer, std::less<>> data;
+        for (int i = 0; i < 10000; ++i) {
+            data.emplace(fmt::format("sst-key-{:05d}", i), std::make_pair(int64_t{1}, IndexValue(i)));
+        }
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_metadata->id(), filename)));
+        uint64_t filesize = 0;
+        PersistentIndexSstableRangePB range;
+        ASSERT_OK(PersistentIndexSstable::build_sstable(data, wf.get(), &filesize, &range));
+        ASSERT_OK(wf->close());
+        PersistentIndexSstablePB pb;
+        pb.set_filename(filename);
+        pb.set_filesize(filesize);
+        pb.set_max_rss_rowid((uint64_t{100} + file) << 32);
+        ssts.push_back(pb);
+    }
+    std::vector<TabletMetadataPtr> metadata;
+    std::vector<size_t> memtable_bytes;
+    for (int i = 0; i < 6; ++i) {
+        auto meta = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        meta->set_id(next_id());
+        for (const auto& pb : ssts) meta->mutable_sstable_meta()->add_sstables()->CopyFrom(pb);
+        metadata.push_back(meta);
+        auto* entry = _primary_key_mgr->index_cache().get_or_create(meta->id());
+        auto guard = entry->value().fetch_guard();
+        ASSERT_OK(entry->value().lake_load(_tablet_mgr.get(), meta, 1, nullptr));
+        Slice key("memtable-tail");
+        IndexValue value(12345);
+        ASSERT_OK(entry->value().insert(1, &key, &value, 2));
+        _primary_key_mgr->update_index_cache_size(entry);
+        memtable_bytes.push_back(entry->value().memory_stats().memtable_bytes);
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    config::lake_pk_index_partial_eviction = true;
+    size_t resident = 0;
+    size_t fixed = 0;
+    for (const auto& meta : metadata) {
+        auto* entry = _primary_key_mgr->index_cache().get(meta->id());
+        auto guard = entry->value().fetch_guard();
+        entry->value().record_cache_access();
+        _primary_key_mgr->update_index_cache_size(entry);
+        resident += entry->value().cached_sst_bytes();
+        fixed += entry->size() - entry->value().cached_sst_bytes();
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    auto& cache = _primary_key_mgr->index_cache();
+    const size_t target = fixed + resident * 3 / 4;
+    // Set the soft capacity without automatic LRU, then exercise the owner's synchronous resize.
+    cache.set_capacity(target * 4 / 3, false);
+    auto* pinned = cache.get(metadata[0]->id());
+    auto held_guard = pinned->value().fetch_guard();
+    _primary_key_mgr->update_index_cache_size(pinned);
+    EXPECT_EQ(6, cache.object_size());
+    EXPECT_LT(cache.size(), fixed + resident);
+    EXPECT_EQ(resident / 6, pinned->value().cached_sst_bytes());
+    held_guard.reset();
+    _primary_key_mgr->release_primary_index_cache(pinned);
+    _primary_key_mgr->evict_cache(85, 75);
+    EXPECT_EQ(6, cache.object_size());
+    EXPECT_LE(cache.size(), target);
+    for (size_t i = 0; i < metadata.size(); ++i) {
+        Tablet tablet(_tablet_mgr.get(), metadata[i]->id());
+        auto mutable_meta = std::make_shared<TabletMetadata>(*metadata[i]);
+        MetaFileBuilder builder(tablet, mutable_meta);
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+        ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata[i], &builder, 1, 2, guard));
+        EXPECT_EQ(memtable_bytes[i], entry->value().memory_stats().memtable_bytes);
+        std::array<Slice, 2> keys{Slice("memtable-tail"), Slice("sst-key-00003")};
+        std::array<IndexValue, 2> values;
+        ASSERT_OK(entry->value().get(2, keys.data(), values.data()));
+        EXPECT_EQ(IndexValue(12345), values[0]);
+        EXPECT_EQ(IndexValue(3), values[1]);
+        _primary_key_mgr->update_index_cache_size(entry);
+        EXPECT_EQ(entry->value().memory_usage() + entry->value().cached_metadata_bytes(), entry->size());
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    config::lake_pk_index_partial_eviction = false;
+    auto* entry = cache.get(metadata[0]->id());
+    auto guard = entry->value().fetch_guard();
+    ASSERT_OK(entry->value().prepare_sstable_read_state(std::numeric_limits<size_t>::max(), false));
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(entry->value().memory_usage(), entry->size());
+    EXPECT_EQ(resident / 6, entry->value().cached_sst_bytes());
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+}
+
 // memory_stats() splits memory_usage() into memtables, sstable index blocks and bloom filters, and also reports
 // the sstable delete vectors that memory_usage() leaves out. refresh_cache_memory_metrics() adds that split to the
 // lake_pk_index_cache_* gauges, and destroying the index takes it back out.
@@ -1453,6 +1549,9 @@ TEST_F(LakePersistentIndexTest, test_replace) {
 }
 
 TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delvec) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10; // force a flush so the upsert produces an on-disk sstable
     DeferOp restore_config([&]() { config::l0_max_mem_usage = saved_l0_max_mem_usage; });
@@ -1490,7 +1589,7 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
     DelVector delete_vector;
     delete_vector.set_empty();
     std::shared_ptr<DelVector> new_delete_vector;
-    std::vector<uint32_t> deleted_row_ids = {1, 3, 5};
+    std::vector<uint32_t> deleted_row_ids = {2, 6, 10};
     delete_vector.add_dels_as_new_version(deleted_row_ids, kVersion, &new_delete_vector);
     builder.append_delvec(new_delete_vector, kSegmentId);
     ASSERT_OK(builder.finalize(next_id()));
@@ -1517,7 +1616,18 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
 
     // Before the fix this returned InvalidArgument:
     //   "metadata is null when loading delvec from file".
+    config::lake_pk_index_partial_eviction = true;
+    EXPECT_GT(reloaded_index->evict_sstable_read_state(std::numeric_limits<size_t>::max()), 0);
     ASSERT_OK(reloaded_index->apply_opcompaction(committed_metadata, txn_log.op_compaction()));
+    ASSERT_OK(reloaded_index->prepare_sstable_read_state(0, true));
+    std::vector<IndexValue> after(kNumKeys, IndexValue(NullIndexValue));
+    ASSERT_OK(reloaded_index->get(kNumKeys, key_slices.data(), after.data()));
+    for (int i = 0; i < kNumKeys; ++i) {
+        EXPECT_EQ(i == 1 || i == 3 || i == 5 ? IndexValue(NullIndexValue) : values[i], after[i]);
+    }
+    EXPECT_GT(reloaded_index->memory_stats().delvec_bytes, 0);
+    EXPECT_EQ(0, reloaded_index->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 }
 
 TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
@@ -1977,6 +2087,9 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
 // (loaded by init from metadata). This prevents duplicate ingest during tablet split
 // where the SST was already loaded from shared metadata with correct shared/fileset_id.
 TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
     using Key = uint64_t;
@@ -2031,6 +2144,9 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
     auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index2->init(tablet_metadata_ptr));
 
+    config::lake_pk_index_partial_eviction = true;
+    EXPECT_GT(index2->evict_sstable_read_state(std::numeric_limits<size_t>::max()), 0);
+
     // Now try to ingest the same SST again
     FileMetaPB sst_meta;
     sst_meta.set_name(sst_filename);
@@ -2041,6 +2157,14 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
     DelvecPagePB delvec_page;
     // ingest_sst should skip because the SST already exists in _sstable_filesets
     ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+    ASSERT_OK(index2->prepare_sstable_read_state(0, true));
+    Key lookup_key = 3;
+    Slice lookup_slice(reinterpret_cast<const uint8_t*>(&lookup_key), sizeof(Key));
+    IndexValue lookup_value(NullIndexValue);
+    ASSERT_OK(index2->get(1, &lookup_slice, &lookup_value));
+    EXPECT_EQ(IndexValue(6), lookup_value);
+    EXPECT_EQ(0, index2->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 
     // Commit and verify: the sstable_meta should have exactly the same SSTs as before,
     // with shared=true preserved (not overwritten by the duplicate ingest)
@@ -2068,6 +2192,9 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
 // the downstream tablet must persist it into sstable_meta so that remove_compacted_sst
 // and vacuum continue to see the file as shared.
 TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_sst) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    DeferOp restore_partial([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    config::lake_pk_index_partial_eviction = false;
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
     using Key = uint64_t;
@@ -2110,6 +2237,8 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
         sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
     }
 
+    config::lake_pk_index_partial_eviction = true;
+
     // Phase 2: build a fresh index backed by the empty _tablet_metadata (no SSTs loaded).
     // Now ingest the SST from phase 1 with shared=true (as cross-publish would do after
     // set_all_data_files_shared has marked op_write.ssts shared).
@@ -2124,6 +2253,14 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
     PersistentIndexSstableRangePB sst_range;
     DelvecPagePB delvec_page;
     ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+    ASSERT_OK(index2->prepare_sstable_read_state(0, true));
+    Key lookup_key = 3;
+    Slice lookup_slice(reinterpret_cast<const uint8_t*>(&lookup_key), sizeof(Key));
+    IndexValue lookup_value(NullIndexValue);
+    ASSERT_OK(index2->get(1, &lookup_slice, &lookup_value));
+    EXPECT_EQ(IndexValue(6), lookup_value);
+    EXPECT_EQ(0, index2->memory_stats().index_block_bytes);
+    EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->tracker.consumption());
 
     // Commit and verify the shared flag made it into sstable_meta.
     Tablet tablet(_tablet_mgr.get(), tablet_id);

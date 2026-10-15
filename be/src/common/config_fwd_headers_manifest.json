@@ -815,6 +815,8 @@
         "lake_pk_index_sst_max_compaction_versions",
         "lake_pk_index_sst_verify_checksum",
         "lake_pk_index_block_cache_limit_percent",
+        "lake_pk_index_partial_eviction",
+        "lake_pk_index_publish_wait_timeout_ms",
         "cloud_native_pk_index_rebuild_files_threshold",
         "primary_key_compaction_replace_batch_rows",
         "cloud_native_pk_index_rebuild_rows_threshold",

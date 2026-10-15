@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -21,6 +22,8 @@
 
 #include "base/phmap/btree.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/mem_tracker.h"
+#include "storage/lake/pk_index_publish_limiter.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -44,6 +47,12 @@ namespace lake {
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
+struct SstReadStateMemoryContext {
+    explicit SstReadStateMemoryContext(MemTracker* parent) : tracker(-1, "lake_pk_index_transient_sst", parent) {}
+    MemTracker tracker;
+    PkIndexPublishLimiter limiter;
+};
+
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
 // Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
 Status drop_corrupted_sstable_cache(const std::string& path);
@@ -55,7 +64,9 @@ public:
 
     Status init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb, Cache* cache,
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
-                TabletManager* tablet_mgr = nullptr);
+                TabletManager* tablet_mgr = nullptr,
+                const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr,
+                bool defer_read_state = false);
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
@@ -89,6 +100,21 @@ public:
     // progress. Subsequent reads reopen the file on demand; concurrent opens share one read state.
     size_t evict_read_state() const;
 
+    size_t metadata_memory_usage() const {
+        return sizeof(*this) + _sstable_pb.SpaceUsedLong() + _filename.capacity() + delvec_memory_usage();
+    }
+
+    // Caller holds the tablet index lock; used only between joined index operations.
+    void set_read_state_cacheable(bool cacheable, const std::shared_ptr<SstReadStateMemoryContext>& context) const;
+    void set_read_state_memory_context(const std::shared_ptr<SstReadStateMemoryContext>& context) const {
+        std::lock_guard<std::mutex> lock(_read_state_mutex);
+        _memory_context = context;
+    }
+    Status reopen_read_state() const;
+
+    // Last known full read-state size, retained after eviction for cache share calculation.
+    size_t read_state_memory_demand() const { return _read_state_memory_demand.load(); }
+
     // Resident bytes of the index block and bloom filter; memory_usage() is their sum.
     size_t index_block_memory_usage() const;
     size_t filter_memory_usage() const;
@@ -116,12 +142,11 @@ public:
         _sstable_pb.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
     }
 
-    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(const PersistentIndexSstablePB& sstable_pb,
-                                                                 const std::string& location, Cache* cache,
-                                                                 bool need_filter = true,
-                                                                 const DelVectorPtr& delvec = nullptr,
-                                                                 const TabletMetadataPtr& metadata = nullptr,
-                                                                 TabletManager* tablet_mgr = nullptr);
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable(
+            const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache,
+            bool need_filter = true, const DelVectorPtr& delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
+            TabletManager* tablet_mgr = nullptr,
+            const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr, bool defer_read_state = false);
 
 private:
     struct ReadState;
@@ -131,8 +156,12 @@ private:
 
     // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
     // state, so its return value never counts memory that a reader still owns.
+    mutable std::atomic<size_t> _read_state_memory_demand{0};
     mutable std::mutex _read_state_mutex;
     mutable std::shared_ptr<ReadState> _read_state;
+    mutable std::weak_ptr<ReadState> _transient_read_state;
+    mutable std::shared_ptr<SstReadStateMemoryContext> _memory_context;
+    mutable bool _read_state_cacheable = true;
     std::string _filename;
     Cache* _cache = nullptr;
     bool _need_filter = true;

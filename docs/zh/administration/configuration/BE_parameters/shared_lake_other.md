@@ -38,6 +38,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 存算分离
 
+### lake_pk_index_partial_eviction
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，最多同时执行四个，update 内存紧张时降为一个。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。
+- 引入版本：-
+
+### lake_pk_index_publish_wait_timeout_ms
+
+- 默认值：30000
+- 类型：Int
+- 单位：毫秒
+- 是否动态：是
+- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。
+- 引入版本：-
+
 ### cloud_native_pk_index_rebuild_files_threshold
 
 - 默认值：50

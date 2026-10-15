@@ -63,6 +63,14 @@ public:
     bool contains_sst(const std::string& filename) const;
 
     size_t memory_usage() const;
+    size_t metadata_memory_usage() const {
+        size_t bytes = sizeof(*this);
+        for (const auto& entry : _sstable_map) {
+            // Account for the map payload, links and copied range keys separately from SST metadata.
+            bytes += sizeof(entry) + 4 * sizeof(void*) + entry.first.first.capacity() + entry.first.second.capacity();
+        }
+        return bytes;
+    }
 
     void for_each_sstable(const std::function<void(const PersistentIndexSstable&)>& fn) const;
 

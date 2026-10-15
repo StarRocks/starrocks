@@ -459,9 +459,18 @@ public:
             // 3. remove index from cache to save resource
             _tablet.primary_key_mgr()->remove_primary_index_cache(_index_entry);
         } else {
+            _guard.reset();
             _tablet.primary_key_mgr()->release_primary_index_cache(_index_entry);
         }
         _index_entry = nullptr;
+    }
+
+    Status ensure_publish_admission() {
+        if (!_admission_checked) {
+            ASSIGN_OR_RETURN(_publish_permit, _tablet.primary_key_mgr()->acquire_publish_slot());
+            _admission_checked = true;
+        }
+        return Status::OK();
     }
 
     Status check_rebuild_index() {
@@ -485,6 +494,7 @@ public:
     }
 
     Status apply(const TxnLogPB& log) override {
+        RETURN_IF_ERROR(ensure_publish_admission());
         // Tablet id check for cross publish
         if (log.tablet_id() != _metadata->id()) {
             return Status::InternalError("Tablet id in txn log and metadata are not the same");
@@ -536,6 +546,7 @@ public:
     }
 
     Status apply(const TxnLogVector& txn_logs) override {
+        RETURN_IF_ERROR(ensure_publish_admission());
         if (txn_logs.empty()) {
             return Status::OK();
         }
@@ -595,6 +606,7 @@ public:
     }
 
     Status finish() override {
+        RETURN_IF_ERROR(ensure_publish_admission());
         if (_is_lake_replication) {
             return finalize_lake_replication();
         }
@@ -1031,7 +1043,7 @@ private:
             collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
             collect_idg_orphan_files(old_idg_meta, new_referenced_files, _metadata.get());
 
-            _tablet.primary_key_mgr()->unload_primary_index(_tablet.id());
+            _tablet.primary_key_mgr()->unload_primary_index(_tablet.id(), _guard == nullptr);
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
@@ -1044,6 +1056,8 @@ private:
         return Status::OK();
     }
 
+    std::unique_ptr<PkIndexPublishLimiter::Permit> _publish_permit;
+    bool _admission_checked = false;
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};

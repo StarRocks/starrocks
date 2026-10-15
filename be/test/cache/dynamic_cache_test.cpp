@@ -23,6 +23,31 @@
 
 namespace starrocks {
 
+TEST(DynamicCacheTest, owner_can_account_and_resize_before_partial_eviction) {
+    MemTracker tracker(100);
+    DynamicCache<int, int> cache(10);
+    cache.set_mem_tracker(&tracker);
+    auto* first = cache.get_or_create(1);
+    EXPECT_TRUE(cache.update_object_size(first, 8));
+    cache.release(first);
+    auto* second = cache.get_or_create(2);
+    EXPECT_FALSE(cache.update_object_size(second, 8, false));
+    EXPECT_EQ(16, tracker.consumption());
+    EXPECT_EQ(2, cache.object_size());
+    EXPECT_FALSE(cache.set_capacity(12, false));
+    first = cache.get(1);
+    ASSERT_NE(nullptr, first);
+    EXPECT_TRUE(cache.update_object_size(first, 4, false));
+    EXPECT_EQ(12, cache.size());
+    EXPECT_EQ(12, tracker.consumption());
+    cache.release(first);
+    cache.release(second);
+    // Existing automatic eviction remains the default when the owner rolls its policy back.
+    EXPECT_TRUE(cache.set_capacity(4));
+    EXPECT_LE(cache.size(), 4);
+    EXPECT_EQ(cache.size(), tracker.consumption());
+}
+
 TEST(DynamicCacheTest, cache) {
     DynamicCache<int32_t, int64_t> cache(10);
     for (int i = 0; i < 20; i++) {

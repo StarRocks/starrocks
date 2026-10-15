@@ -41,6 +41,24 @@ This topic introduces the following types of BE configurations:
 
 ## Shared-data
 
+### lake_pk_index_partial_eviction
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enables experimental partial eviction of shared-data Primary Key indexes. Under memory pressure, releases SST index/filter read state according to a decaying access-frequency share while preferentially retaining MemTables and metadata. Expired entries and skeletons that exceed the budget can still be evicted entirely. Reserves one quarter of the update budget for execution workspace and subtracts other update memory usage from the cache budget. Oversized SST working sets use bounded transient reads. Publish admission is FIFO, with at most four active publishes and one under update memory pressure. Existing memory checks remain enabled. Set to `false` to restore whole-entry LRU eviction.
+- Introduced in: -
+
+### lake_pk_index_publish_wait_timeout_ms
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Maximum wait for publish admission or an SST read-state memory permit when `lake_pk_index_partial_eviction` is enabled. Waiting occurs before tablet and shard locks for publish admission. Permit release wakes waiting work; shutdown cancels it. A timeout returns an error and is distinct from an update memory-limit error. Internal publish trace counters report admission time, waits, timeouts, cancellations, SST transient bytes, partial eviction and skeleton fallback.
+- Introduced in: -
+
 ### cloud_native_pk_index_rebuild_files_threshold
 
 - Default: 50

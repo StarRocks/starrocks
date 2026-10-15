@@ -297,11 +297,15 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the delete vectors attached to the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. Only SST files ingested together with a delete vector, such as compaction output, carry one. This memory is not charged to the Primary Key index cache, so `INDEX_MEM` in `information_schema.be_tablets` does not include it.
 
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. Transient SST state is charged to the active update memory tracker and is not resident cache memory.
+
 ## `lake_pk_index_cache_filter_bytes`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the Bloom filters of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_index_block_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. Transient SST state is charged to the active update memory tracker and is not resident cache memory.
 
 ## `lake_pk_index_cache_hit_total`
 
@@ -315,11 +319,21 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the index blocks of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
 
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. Transient SST state is charged to the active update memory tracker and is not resident cache memory.
+
 ## `lake_pk_index_cache_memtable_bytes`
 
 - Unit: Bytes
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. Transient SST state is charged to the active update memory tracker and is not resident cache memory.
+
+## `lake_pk_index_cache_overhead_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Estimated object, protobuf, path and fileset overhead of cached shared-data Primary Key indexes. Included in the cache charge when `lake_pk_index_partial_eviction` is enabled. Delete vectors have their own metric.
 
 ## `lake_pk_index_load_duration_us`
 

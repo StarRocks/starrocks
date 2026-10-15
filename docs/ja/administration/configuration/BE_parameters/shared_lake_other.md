@@ -41,6 +41,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## 共有データ
 
+### lake_pk_index_partial_eviction
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: Yes
+- 説明: 共有データ主キーインデックスの実験的な部分退避を有効にします。メモリ逼迫時は減衰するアクセス頻度に応じて SST のインデックスブロックとフィルターの読み取り状態を解放し、MemTable とメタデータを優先して保持します。期限切れのエントリや予算を超える骨格は全体を退避できます。update 予算の 4 分の 1 を実行用に確保し、他の update メモリ使用量をキャッシュ予算から差し引きます。大きな SST ワーキングセットは一時読み取りを使用します。Publish は FIFO で受け付け、同時実行数は最大 4、メモリ逼迫時は 1 です。既存のメモリ検査は維持されます。`false` にするとエントリ全体の LRU 退避に戻ります。
+- 導入バージョン: -
+
+### lake_pk_index_publish_wait_timeout_ms
+
+- デフォルト: 30000
+- タイプ: Int
+- 単位: ミリ秒
+- 変更可能: Yes
+- 説明: `lake_pk_index_partial_eviction` が有効な場合の Publish 受付または SST 読み取り状態のメモリ許可の最大待機時間。Publish の受付は tablet と shard のロック取得前に待機します。許可の解放で待機処理を起こし、プロセス終了時にはキャンセルします。タイムアウトはエラーを返し、update メモリ上限エラーとは区別されます。内部 Publish trace は受付時間、待機、タイムアウト、キャンセル、SST 一時読み取りバイト数、部分退避と骨格退避のフォールバックを記録します。
+- 導入バージョン: -
+
 ### cloud_native_pk_index_rebuild_files_threshold
 
 - デフォルト: 50

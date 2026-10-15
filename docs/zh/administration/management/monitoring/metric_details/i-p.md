@@ -297,11 +297,15 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件所附带的 Delete Vector 占用的内存。只有随 Delete Vector 一起导入的 SST 文件（例如 Compaction 的产出）才带有 Delete Vector。这部分内存不计入主键索引缓存，因此也不包含在 `information_schema.be_tablets` 的 `INDEX_MEM` 中。
 
+启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。临时 SST 读状态计入活跃 update 内存，不属于常驻缓存。
+
 ## `lake_pk_index_cache_filter_bytes`
 
 - 单位：字节
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件的 Bloom Filter 占用的内存。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
+
+启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。临时 SST 读状态计入活跃 update 内存，不属于常驻缓存。
 
 ## `lake_pk_index_cache_hit_total`
 
@@ -315,11 +319,21 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件的索引块（index block）占用的内存。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
 
+启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。临时 SST 读状态计入活跃 update 内存，不属于常驻缓存。
+
 ## `lake_pk_index_cache_memtable_bytes`
 
 - 单位：字节
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE 上已缓存的主键索引中，MemTable（包括正在写入的和正在 Flush 的）占用的内存。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
+
+启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。临时 SST 读状态计入活跃 update 内存，不属于常驻缓存。
+
+## `lake_pk_index_cache_overhead_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：存算分离已缓存主键索引的对象、Protobuf、路径及 fileset 开销估算。启用 `lake_pk_index_partial_eviction` 时计入缓存记账。Delete Vector 由独立指标统计。
 
 ## `lake_pk_index_load_duration_us`
 

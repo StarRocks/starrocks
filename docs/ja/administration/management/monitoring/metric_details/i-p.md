@@ -297,11 +297,15 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルに付随する DelVector が使用するメモリ。DelVector を伴って取り込まれた SST ファイル（Compaction の出力など）だけが DelVector を持ちます。このメモリは主キーインデックスキャッシュには計上されないため、`information_schema.be_tablets` の `INDEX_MEM` にも含まれません。
 
+`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。一時 SST 読み取り状態はアクティブな update メモリに計上され、常駐キャッシュには含まれません。
+
 ## `lake_pk_index_cache_filter_bytes`
 
 - 単位: バイト
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのブルームフィルターが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。一時 SST 読み取り状態はアクティブな update メモリに計上され、常駐キャッシュには含まれません。
 
 ## `lake_pk_index_cache_hit_total`
 
@@ -315,11 +319,21 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのインデックスブロックが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
 
+`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。一時 SST 読み取り状態はアクティブな update メモリに計上され、常駐キャッシュには含まれません。
+
 ## `lake_pk_index_cache_memtable_bytes`
 
 - 単位: バイト
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。この BE でキャッシュされている主キーインデックスの MemTable（書き込み中のものとフラッシュ中のものの両方）が使用するメモリ。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。一時 SST 読み取り状態はアクティブな update メモリに計上され、常駐キャッシュには含まれません。
+
+## `lake_pk_index_cache_overhead_bytes`
+
+- 単位: バイト
+- タイプ: 瞬間値
+- 説明: 共有データ主キーインデックスのオブジェクト、Protobuf、パス、fileset の推定オーバーヘッド。`lake_pk_index_partial_eviction` 有効時にキャッシュへ計上します。削除ベクトルは別の指標で集計します。
 
 ## `lake_pk_index_load_duration_us`
 

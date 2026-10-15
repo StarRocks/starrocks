@@ -252,7 +252,11 @@ Status PersistentIndexMemtable::flush() {
     sstable_pb.set_max_rss_rowid(max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     sstable_pb.mutable_range()->CopyFrom(range_pb);
-    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
+    RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache(), true, nullptr, nullptr, _tablet_mgr,
+                                  config::lake_pk_index_partial_eviction
+                                          ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
+                                          : nullptr,
+                                  config::lake_pk_index_partial_eviction));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);
     cleanup_output.cancel();
