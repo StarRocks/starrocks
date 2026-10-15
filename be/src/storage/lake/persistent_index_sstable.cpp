@@ -87,6 +87,12 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
 #endif
 }
 
+Status SstReadStateMemoryContext::check_cancelled() const {
+    return process_exit_in_progress() || (wait_scope && wait_scope->cancelled && wait_scope->cancelled())
+                   ? Status::Cancelled("SST byte reservation cancelled")
+                   : Status::OK();
+}
+
 SstReadStateMemoryContext::Reservation::~Reservation() {
     shrink_to(0);
 }
@@ -100,8 +106,8 @@ void SstReadStateMemoryContext::Reservation::shrink_to(size_t bytes) {
 
 bool SstReadStateMemoryContext::Reservation::try_add(size_t bytes) {
     if (_context->refresh_usage) _context->refresh_usage();
-    if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes || process_exit_in_progress() ||
-        _context->tracker.try_consume(bytes)) {
+    if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes ||
+        !_context->check_cancelled().ok() || _context->tracker.try_consume(bytes)) {
         return false;
     }
     _bytes += bytes;
@@ -112,10 +118,15 @@ bool SstReadStateMemoryContext::Reservation::try_add(size_t bytes) {
 Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, const std::function<bool()>& cancelled,
                                                    int64_t wait_timeout_ms) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_byte_reservation_us");
-    const auto deadline =
+    auto deadline =
             std::chrono::steady_clock::now() +
             std::chrono::milliseconds(wait_timeout_ms < 0 ? std::max(0, config::lake_pk_index_publish_wait_timeout_ms)
                                                           : wait_timeout_ms);
+    if (_context->wait_scope && _context->wait_scope->deadline_ms >= 0) {
+        deadline = std::min(deadline, std::chrono::steady_clock::now() +
+                                              std::chrono::milliseconds(std::max<int64_t>(
+                                                      0, _context->wait_scope->deadline_ms - MonotonicMillis())));
+    }
     bool waited = false;
     if (_context->refresh_usage) _context->refresh_usage();
     auto trace_rejection = [&](MemTracker* exceeded) {
@@ -139,8 +150,8 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, cons
                                 metrics->lake_pk_index_cache_overhead_bytes.value());
     };
     for (;;) {
-        if (process_exit_in_progress() || (cancelled && cancelled()))
-            return Status::Cancelled("SST byte reservation cancelled");
+        RETURN_IF_ERROR(_context->check_cancelled());
+        if (cancelled && cancelled()) return Status::Cancelled("SST byte reservation cancelled");
         if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes) {
             return Status::MemoryLimitExceeded("SST read-state reservation overflows");
         }
@@ -187,8 +198,16 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, cons
             TEST_SYNC_POINT_CALLBACK("SstReadStateMemoryContext::Reservation::waiting", nullptr);
         }
         std::unique_lock<std::mutex> lock(_context->memory_mutex);
+        const auto wait_begin =
+                _context->wait_scope ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
         _context->memory_cv.wait_until(
                 lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)));
+        if (_context->wait_scope) {
+            _context->wait_scope->memory_wait_us.fetch_add(
+                    std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - wait_begin)
+                            .count(),
+                    std::memory_order_relaxed);
+        }
     }
 }
 
@@ -241,8 +260,8 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         options.try_reserve_read_state_memory = [reservation = state->reservation](size_t bytes) {
             return reservation->try_add(bytes);
         };
-        options.check_read_state_cancelled = [] {
-            return process_exit_in_progress() ? Status::Cancelled("SST windowed read cancelled") : Status::OK();
+        options.check_read_state_cancelled = [context] {
+            return context->check_cancelled().ok() ? Status::OK() : Status::Cancelled("SST windowed read cancelled");
         };
     }
     if (_need_filter) {

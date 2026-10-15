@@ -823,6 +823,112 @@ TEST_F(PersistentIndexSstableTest, test_unknown_sst_demand_reserves_before_alloc
     EXPECT_EQ(0, tracker.consumption());
 }
 
+TEST_F(PersistentIndexSstableTest, test_scoped_input_open_uses_remaining_memory_deadline) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    config::lake_pk_index_partial_eviction = true;
+    config::lake_pk_index_publish_wait_timeout_ms = 5000;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::lake_pk_index_publish_wait_timeout_ms = old_timeout;
+    });
+    const std::string path = lake::join_path(kTestDir, "scoped-open-deadline.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 10000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("scoped-open-deadline.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    MemTracker inflight(-1, "inflight", &tracker);
+    auto scope = std::make_shared<SstReadStateMemoryContext::WaitScope>();
+    scope->deadline_ms = MonotonicMillis() + 1000;
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker, scope);
+    inflight.consume(tracker.limit() - 4096);
+    DeferOp release([&] { inflight.release(inflight.consumption()); });
+    // Work before this input has already consumed most of the shared deadline.
+    std::this_thread::sleep_for(std::chrono::milliseconds(600));
+    const auto begin = std::chrono::steady_clock::now();
+    auto open = std::async(std::launch::async, [&] {
+        auto result = PersistentIndexSstable::new_sstable(pb, path, nullptr, false, nullptr, nullptr, nullptr, context);
+        return result.status();
+    });
+    const auto ready = open.wait_for(std::chrono::milliseconds(1500));
+    EXPECT_EQ(std::future_status::ready, ready);
+    if (ready != std::future_status::ready) { // release a buggy/default-timeout opener before joining it
+        inflight.release(inflight.consumption());
+        context->memory_cv.notify_all();
+    }
+    const auto status = open.get();
+    EXPECT_TRUE(status.is_time_out()) << status;
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(2));
+    if (ready == std::future_status::ready && status.is_time_out()) {
+        const auto second_begin = std::chrono::steady_clock::now();
+        auto second = PersistentIndexSstable::new_sstable(pb, path, nullptr, false, nullptr, nullptr, nullptr, context);
+        EXPECT_TRUE(second.status().is_time_out()) << second.status();
+        EXPECT_LT(std::chrono::steady_clock::now() - second_begin, std::chrono::milliseconds(500));
+    }
+    EXPECT_EQ(4096, context->tracker.peak_consumption()); // input objects fit; its index waited
+    EXPECT_EQ(0, context->tracker.consumption());
+    EXPECT_EQ(inflight.consumption(), tracker.consumption());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+}
+
+TEST_F(PersistentIndexSstableTest, test_scoped_input_open_cancels_during_index_memory_wait) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    config::lake_pk_index_partial_eviction = true;
+    config::lake_pk_index_publish_wait_timeout_ms = 5000;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::lake_pk_index_publish_wait_timeout_ms = old_timeout;
+    });
+    const std::string path = lake::join_path(kTestDir, "scoped-open-cancel.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 10000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("scoped-open-cancel.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    MemTracker inflight(-1, "inflight", &tracker);
+    std::atomic<bool> cancelled{false}, signalled{false};
+    auto scope = std::make_shared<SstReadStateMemoryContext::WaitScope>();
+    scope->deadline_ms = MonotonicMillis() + 5000;
+    scope->cancelled = [&] { return cancelled.load(); };
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker, scope);
+    inflight.consume(tracker.limit() - 4096);
+    DeferOp release([&] { inflight.release(inflight.consumption()); });
+    std::promise<void> waiting;
+    auto observed = waiting.get_future();
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("SstReadStateMemoryContext::Reservation::waiting", [&](void*) {
+        if (!signalled.exchange(true)) waiting.set_value();
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    auto open = std::async(std::launch::async, [&] {
+        auto result = PersistentIndexSstable::new_sstable(pb, path, nullptr, false, nullptr, nullptr, nullptr, context);
+        return result.status();
+    });
+    EXPECT_EQ(std::future_status::ready, observed.wait_for(std::chrono::seconds(2)));
+    cancelled.store(true);
+    context->memory_cv.notify_all();
+    const auto ready = open.wait_for(std::chrono::seconds(1));
+    EXPECT_EQ(std::future_status::ready, ready);
+    if (ready != std::future_status::ready) {
+        inflight.release(inflight.consumption());
+        context->memory_cv.notify_all();
+    }
+    const auto status = open.get();
+    EXPECT_TRUE(status.is_cancelled()) << status;
+    EXPECT_EQ(4096, context->tracker.peak_consumption());
+    EXPECT_EQ(0, context->tracker.consumption());
+    EXPECT_EQ(inflight.consumption(), tracker.consumption());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+}
+
 TEST_F(PersistentIndexSstableTest, test_unknown_sst_waits_for_inflight_work_to_release_bytes) {
     const bool old_partial = config::lake_pk_index_partial_eviction;
     const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;

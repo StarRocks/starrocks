@@ -23,12 +23,14 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <fstream>
 #include <future>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <random>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -1477,7 +1479,7 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_is_bounded_cancel_safe_and_pre
     std::vector<std::string> keys;
     std::vector<IndexValue> expected;
     for (int i = 0; i < 32; ++i) {
-        auto key = fmt::format("tail_{:04d}_{}", i, std::string(180, 'x'));
+        auto key = i == 0 ? std::string("base") : fmt::format("tail_{:04d}_{}", i, std::string(180, 'x'));
         auto value = i % 3 == 0 ? IndexValue(NullIndexValue) : IndexValue((uint64_t{2} << 32) | i);
         auto* pb = append_all_key_sstable(metadata.get(), {{key, 2, value}}, (uint64_t{2} << 32) | 31);
         ASSERT_NE(nullptr, pb);
@@ -1505,7 +1507,10 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_is_bounded_cancel_safe_and_pre
     ASSERT_TRUE(cancelled.is_cancelled()) << cancelled;
     EXPECT_EQ(2, index._sstable_filesets.size());
     EXPECT_EQ(before, tracker->consumption());
-    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    std::atomic<bool> scope_cancelled{false};
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [&] { return scope_cancelled.load(); }));
+    scope_cancelled.store(true); // installed outputs must use the ordinary, unscoped context
+
     EXPECT_LT(tracker->consumption(), before);
     std::vector<Slice> slices;
     for (const auto& key : keys) slices.emplace_back(key);
@@ -1515,12 +1520,195 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_is_bounded_cancel_safe_and_pre
     Slice base_key("base");
     IndexValue base_value;
     ASSERT_OK(index.get(1, &base_key, &base_value));
-    EXPECT_EQ(IndexValue(7), base_value);
+    EXPECT_EQ(IndexValue(NullIndexValue), base_value);
     PersistentIndexSstableMetaPB committed;
     for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&committed);
     ASSERT_EQ(2, committed.sstables_size());
     EXPECT_EQ(base_filename, committed.sstables(0).filename());
     EXPECT_EQ((uint64_t{2} << 32) | 31, committed.sstables(1).max_rss_rowid());
+    auto reload_metadata = std::make_shared<TabletMetadata>(*metadata);
+    reload_metadata->mutable_sstable_meta()->CopyFrom(committed);
+    reload_metadata->set_version(2);
+    {
+        LakePersistentIndex reloaded(_tablet_mgr.get(), metadata->id());
+        ASSERT_OK(reloaded.init(reload_metadata));
+        ASSERT_OK(reloaded.get(1, &base_key, &base_value));
+        EXPECT_EQ(IndexValue(NullIndexValue), base_value); // base live value must not resurrect
+    }
+    const IndexValue replacement((uint64_t{3} << 32) | 7);
+    IndexValue old;
+    index.set_publish_version(3);
+    ASSERT_OK(index.upsert(1, &base_key, &replacement, &old));
+    EXPECT_EQ(IndexValue(NullIndexValue), old);
+    ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+    reload_metadata->clear_sstable_meta();
+    for (const auto& fileset : index._sstable_filesets)
+        fileset->get_all_sstable_pbs(reload_metadata->mutable_sstable_meta());
+    reload_metadata->set_version(3);
+    LakePersistentIndex reinserted(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(reinserted.init(reload_metadata));
+    ASSERT_OK(reinserted.get(1, &base_key, &base_value));
+    EXPECT_EQ(replacement, base_value);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_no_gain_group_refunds_before_next_group) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    const auto first_id = UniqueId::gen_uid().to_proto();
+    std::vector<std::string> unchanged;
+    for (int file = 0; file < 8; ++file) {
+        std::vector<std::tuple<std::string, int64_t, IndexValue>> entries;
+        for (int i = 0; i < 1500; ++i) {
+            const int row = file * 1500 + i;
+            entries.emplace_back(fmt::format("a_{:06d}", row), 1, IndexValue((uint64_t{1} << 32) | row));
+        }
+        auto* pb = append_all_key_sstable(metadata.get(), entries, (uint64_t{1} << 32) | 11999);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(first_id);
+        unchanged.push_back(pb->filename());
+    }
+    const auto second_id = UniqueId::gen_uid().to_proto();
+    for (int i = 0; i < 32; ++i) {
+        auto* pb = append_all_key_sstable(metadata.get(), {{fmt::format("b_{:04d}", i), 2, IndexValue(i)}},
+                                          (uint64_t{2} << 32) | 31);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(second_id);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = tracker->consumption();
+    auto refresh = [&] { _primary_key_mgr->update_index_cache_size(entry); };
+    const auto begin = std::chrono::steady_clock::now();
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(5));
+    ASSERT_EQ(2, index._sstable_filesets.size());
+    EXPECT_TRUE(
+            index._sstable_filesets[0]->pressure_coalesce_unproductive(256 * 1024, config::pk_index_target_file_size));
+    PersistentIndexSstableMetaPB after;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&after);
+    ASSERT_EQ(9, after.sstables_size());
+    for (size_t i = 0; i < unchanged.size(); ++i) EXPECT_EQ(unchanged[i], after.sstables(i).filename());
+    EXPECT_LT(tracker->consumption(), before);
+    const auto charge = tracker->consumption();
+    const auto inventory = sst_inventory(metadata->id());
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    EXPECT_EQ(inventory, sst_inventory(metadata->id())); // no repeat rewrite of the unchanged group
+    EXPECT_EQ(charge, tracker->consumption());
+    std::array<Slice, 2> keys{Slice("a_011999"), Slice("b_0031")};
+    std::array<IndexValue, 2> values;
+    ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+    EXPECT_EQ(IndexValue((uint64_t{1} << 32) | 11999), values[0]);
+    EXPECT_EQ(IndexValue(31), values[1]);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_preserves_crc_cause_on_compressed_data_budget_decline) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, false);
+    ConfigResetGuard<bool> checksum(&config::lake_pk_index_sst_verify_checksum, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    const auto fileset_id = UniqueId::gen_uid().to_proto();
+    IndexValuesWithVerPB versions;
+    std::mt19937 rng(290448);
+    for (int i = 60000; i > 0; --i) {
+        auto* value = versions.add_values();
+        value->set_version(i);
+        value->set_rssid(7);
+        value->set_rowid((rng() & 0xffff) << 8);
+    }
+    const auto encoded = versions.SerializeAsString();
+    ASSERT_GT(encoded.size(), 256 * 1024);
+    std::string first_file;
+    for (int i = 0; i < 8; ++i) {
+        KeyValueMerger writer("", 0, false, _tablet_mgr.get(), metadata->id(), false);
+        const auto key = fmt::format("crc_{:04d}", i);
+        ASSERT_OK(writer.append_encoded(key, encoded));
+        ASSIGN_OR_ABORT(auto outputs, writer.finish());
+        ASSERT_EQ(1, outputs.size());
+        auto* pb = metadata->mutable_sstable_meta()->add_sstables();
+        pb->set_filename(outputs[0].filename);
+        pb->set_filesize(outputs[0].filesize);
+        pb->set_max_rss_rowid((uint64_t{7} << 32) | UINT32_MAX);
+        pb->mutable_fileset_id()->CopyFrom(fileset_id);
+        pb->mutable_range()->set_start_key(key);
+        pb->mutable_range()->set_end_key(key);
+        if (i == 0) first_file = _tablet_mgr->sst_location(metadata->id(), pb->filename());
+    }
+    // Corrupt only the CRC trailer of the large, otherwise legal Snappy data block.
+    // Its valid index remains readable, and budget decline must still drain/check the CRC.
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(first_file));
+    char footer_bytes[sstable::Footer::kEncodedLength];
+    const auto filesize = metadata->sstable_meta().sstables(0).filesize();
+    ASSERT_OK(rf->read_at_fully(filesize - sizeof(footer_bytes), footer_bytes, sizeof(footer_bytes)));
+    Slice footer_input(footer_bytes, sizeof(footer_bytes));
+    sstable::Footer footer;
+    ASSERT_OK(footer.DecodeFrom(&footer_input));
+    sstable::BlockContents contents;
+    ASSERT_OK(sstable::ReadBlock(rf.get(), {}, footer.index_handle(), &contents));
+    sstable::Block index_block(contents);
+    std::unique_ptr<sstable::Iterator> index_iter(index_block.NewIterator(sstable::BytewiseComparator()));
+    index_iter->SeekToFirst();
+    ASSERT_TRUE(index_iter->Valid());
+    sstable::BlockHandle data_handle;
+    auto handle_input = index_iter->value();
+    ASSERT_OK(data_handle.DecodeFrom(&handle_input));
+    sstable::BlockReadMemory memory;
+    ASSERT_OK(sstable::ProbeBlockMemory(rf.get(), data_handle, &memory));
+    ASSERT_EQ(sstable::kSnappyCompression, memory.compression);
+    ASSERT_GT(memory.encoded, 65536);
+    ASSERT_GT(memory.decoded, 256 * 1024);
+    rf.reset();
+    std::fstream corrupt(first_file, std::ios::in | std::ios::out | std::ios::binary);
+    ASSERT_TRUE(corrupt.good());
+    const auto crc_offset = static_cast<std::streamoff>(data_handle.offset() + data_handle.size() + 1);
+    corrupt.seekg(crc_offset);
+    char byte;
+    corrupt.read(&byte, 1);
+    ASSERT_TRUE(corrupt.good());
+    byte ^= 1;
+    corrupt.seekp(crc_offset);
+    corrupt.write(&byte, 1);
+    corrupt.close();
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(32 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto cached = tracker->consumption();
+    MemTracker inflight(-1, "retained-inflight-work", tracker);
+    inflight.consume(tracker->limit() - cached - 8 * 1024 * 1024 - 128 * 1024);
+    DeferOp release_inflight([&] { inflight.release(inflight.consumption()); });
+    const auto before = tracker->consumption();
+    EXPECT_LT(tracker->limit() - before - 8 * 1024 * 1024, memory.decoded);
+    const auto errors = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const auto status = index._coalesce_pressure_filesets(
+            8 * 1024 * 1024, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; });
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_EQ(errors + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_EQ(before, tracker->consumption());
+    PersistentIndexSstableMetaPB unchanged;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
+    EXPECT_EQ(metadata->sstable_meta().SerializeAsString(), unchanged.SerializeAsString());
     EXPECT_LE(tracker->peak_consumption(), tracker->limit());
 }
 
@@ -1558,9 +1746,21 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_scratch_decline_keeps_the_orig
     const auto old_limit = tracker->limit();
     tracker->set_limit(8 * 1024 * 1024);
     DeferOp restore([&] { tracker->set_limit(old_limit); });
-    LakePersistentIndex index(_tablet_mgr.get(), metadata->id());
-    ASSERT_OK(index.init(metadata));
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    MemTracker inflight(-1, "retained-inflight-work", tracker);
+    inflight.consume(tracker->limit() - tracker->consumption() - 1024 * 1024 - 128 * 1024);
+    DeferOp release_inflight([&] { inflight.release(inflight.consumption()); });
+    const auto before = tracker->consumption();
     ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, {}, [] { return false; }));
+    EXPECT_EQ(before, tracker->consumption());
     PersistentIndexSstableMetaPB unchanged;
     for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
     ASSERT_EQ(names.size(), unchanged.sstables_size());
@@ -1569,6 +1769,7 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_scratch_decline_keeps_the_orig
     IndexValue found;
     ASSERT_OK(index.get(1, &key, &found));
     EXPECT_EQ(IndexValue((uint64_t{2} << 32) | 6000), found);
+    _primary_key_mgr->block_cache()->update_memory_usage();
     EXPECT_LE(tracker->peak_consumption(), tracker->limit());
 }
 

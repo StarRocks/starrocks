@@ -2010,16 +2010,31 @@ size_t LakePersistentIndex::sst_read_state_reservation_demand() const {
 // rewrite the large mandatory SST to consolidate newly flushed tail fragments.
 Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const std::function<void()>& refresh_memory,
                                                         const std::function<bool()>& cancelled) {
-    auto context = _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context();
+    auto global_context = _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context();
+    auto wait_scope = std::make_shared<SstReadStateMemoryContext::WaitScope>();
+    wait_scope->deadline_ms = MonotonicMillis() + std::max(0, config::lake_pk_index_publish_wait_timeout_ms);
+    wait_scope->cancelled = cancelled;
+    // This local context also carries the same deadline/cancellation through native input
+    // objects, Table::Open, window decode and corruption retries. It never escapes to outputs.
+    auto context = std::make_shared<SstReadStateMemoryContext>(global_context->tracker.parent(), wait_scope);
+    context->reclaim = global_context->reclaim;
+    context->refresh_usage = global_context->refresh_usage;
+    TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_count", 1);
+    DeferOp report_peak([&] {
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_peak_bytes_sum", context->tracker.peak_consumption());
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_memory_wait_us", wait_scope->memory_wait_us.load());
+    });
     SstReadStateMemoryContext::Reservation reservation(context, _reclaim_read_state);
-    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_pressure_coalesce_io_us");
-    const int64_t deadline_ms = MonotonicMillis() + std::max(0, config::lake_pk_index_publish_wait_timeout_ms);
-    auto reserve = [&](SstReadStateMemoryContext::Reservation& memory, size_t bytes) {
-        return memory.add(bytes, true, cancelled, std::max<int64_t>(0, deadline_ms - MonotonicMillis()));
-    };
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_pressure_coalesce_total_us");
+    auto reserve = [](SstReadStateMemoryContext::Reservation& memory, size_t bytes) { return memory.add(bytes, true); };
     const size_t output_bytes = std::max<size_t>(4096, workspace / 4);
+    const int64_t target_file_size = config::pk_index_target_file_size;
     for (auto& fileset : _sstable_filesets) {
         if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+        if (fileset->pressure_coalesce_unproductive(output_bytes, target_file_size)) {
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_unproductive_skip_count", 1);
+            continue;
+        }
         size_t count = 0;
         bool eligible = !fileset->is_standalone_sstable();
         Status probe_status;
@@ -2038,7 +2053,10 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
         });
         RETURN_IF_ERROR(probe_status);
         if (!eligible || count < 8) continue;
-        if (reservation.bytes() == 0) RETURN_IF_ERROR(reserve(reservation, workspace));
+        if (reservation.bytes() == 0) {
+            RETURN_IF_ERROR(reserve(reservation, workspace));
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_workspace_bytes", workspace);
+        }
         // Input PBs remain owned by the unchanged fileset until the replacement is complete.
         // Reserve pointer storage before collecting them, rather than copying every hierarchy.
         SstReadStateMemoryContext::Reservation metadata_reservation(context, _reclaim_read_state);
@@ -2114,7 +2132,10 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
         }
         RETURN_IF_ERROR(copy_status);
         ASSIGN_OR_RETURN(auto outputs, merger->finish());
-        if (outputs.size() >= count) continue;
+        if (outputs.size() >= count) {
+            fileset->mark_pressure_coalesce_unproductive(output_bytes, target_file_size);
+            continue;
+        }
         std::vector<std::unique_ptr<PersistentIndexSstable>> new_ssts;
         for (const auto& output : outputs) {
             PersistentIndexSstablePB pb;
@@ -2128,7 +2149,7 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
             ASSIGN_OR_RETURN(auto sst, PersistentIndexSstable::new_sstable(
                                                pb, _tablet_mgr->sst_location(_tablet_id, pb.filename()),
                                                _tablet_mgr->primary_key_mgr()->block_cache()->cache(), true, nullptr,
-                                               nullptr, _tablet_mgr, context, true, _reclaim_read_state));
+                                               nullptr, _tablet_mgr, global_context, true, _reclaim_read_state));
             sst->set_skip_data_block_cache(true);
             new_ssts.push_back(std::move(sst));
         }
@@ -2137,7 +2158,10 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
         size_t old_bytes = fileset->metadata_memory_usage(), new_bytes = replacement->metadata_memory_usage();
         fileset->for_each_sstable([&](const auto& sst) { old_bytes += sst.metadata_memory_usage(); });
         replacement->for_each_sstable([&](const auto& sst) { new_bytes += sst.metadata_memory_usage(); });
-        if (new_bytes >= old_bytes) continue;
+        if (new_bytes >= old_bytes) {
+            fileset->mark_pressure_coalesce_unproductive(output_bytes, target_file_size);
+            continue;
+        }
         if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
         fileset = std::move(replacement);
         TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_metadata_freed_bytes", old_bytes - new_bytes);

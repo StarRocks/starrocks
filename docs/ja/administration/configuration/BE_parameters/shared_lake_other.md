@@ -52,9 +52,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 - 導入バージョン: -
 
-上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_io_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
+上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
 
 このマージ用作業領域を予約する前に、保留中の MemTable を引き渡して再計上します。データブロックの読み取りも事前予約した作業領域内に収めます。大きすぎるデータブロックでは、この任意の連結をスキップして元の fileset を保持します。`pindex_pressure_coalesce_memory_fallback_count` がその判断を、`pindex_pressure_coalesce_data_block_read_bytes` がデータブロック IO を記録します。
+
+圧力下の連結には、同じ update tracker の子 `lake_pk_index_pressure_merge` を使用します。作業領域、一時入力読み取り状態、出力メタデータは、入力 `Table::Open` と解凍の予約も含め、単一の絶対メモリ待機期限とキャンセルを共有します。インストール済み出力は通常の読み取り状態コンテキストを使用します。現在の出力上限でファイル数やメタデータが減らない fileset は、入力または上限が変わるまで再連結しません。 マージ trace は `pindex_pressure_coalesce_workspace_bytes`、呼び出し回数、`pindex_pressure_coalesce_peak_bytes_sum` を記録します。最後の値は各呼び出しの子 tracker 計上ピークの合計で、グローバルな同時ピークやプロセスピークではありません。 `pindex_pressure_coalesce_unproductive_skip_count` は、その再書き込みのスキップを記録します。 `pindex_pressure_coalesce_total_us` は作業と待機の合計で、`pindex_pressure_coalesce_memory_wait_us` は条件変数でのメモリ待機を別に測定します。ここでは同期ファイルシステム IO は引き続き中断できません。
 
 ### lake_pk_index_publish_wait_timeout_ms
 

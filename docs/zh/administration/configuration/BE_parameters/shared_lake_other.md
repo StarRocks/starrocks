@@ -49,9 +49,11 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 - 引入版本：-
 
-计算接近内存上限的工作配额前，tablet 持锁方会先归还可回收读状态对象的记账。它可以按顺序合并键范围不重叠的尾部 SST 碎片，预留合并内存，并在输出文件轮换时销毁已完成的 builder；保留原大 SST。此路径的尾部查找不填充可选的数据块缓存。Trace 计数器 `pindex_pressure_coalesce_io_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files` 和 `pindex_pressure_coalesce_metadata_freed_bytes` 记录该回收工作。在文件和 key 之间检查取消；同步 IO 仍遵循文件系统超时。
+计算接近内存上限的工作配额前，tablet 持锁方会先归还可回收读状态对象的记账。它可以按顺序合并键范围不重叠的尾部 SST 碎片，预留合并内存，并在输出文件轮换时销毁已完成的 builder；保留原大 SST。此路径的尾部查找不填充可选的数据块缓存。Trace 计数器 `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files` 和 `pindex_pressure_coalesce_metadata_freed_bytes` 记录该回收工作。在文件和 key 之间检查取消；同步 IO 仍遵循文件系统超时。
 
 先完成 pending MemTable 的交接和重新记账，再预留该合并工作区。数据块读取必须符合已预付的工作内存额度；数据块过大时跳过这次可选连接并保留原 fileset。`pindex_pressure_coalesce_memory_fallback_count` 记录该回退，`pindex_pressure_coalesce_data_block_read_bytes` 记录数据块 IO。
+
+压力连接使用同一 update tracker 下的 `lake_pk_index_pressure_merge` 子 tracker。工作区、临时输入读状态和输出元数据共用一个绝对内存等待截止时间及取消信号，包括输入 `Table::Open` 和解压预留；安装后的输出使用普通读状态上下文。在当前输出额度下无文件数或元数据收益的 fileset，会跳过后续重复连接，直到输入或额度改变。 合并 trace 记录 `pindex_pressure_coalesce_workspace_bytes`、调用次数和 `pindex_pressure_coalesce_peak_bytes_sum`；后者累加每次调用的子 tracker 记账峰值，不代表全局并发峰值或进程峰值。 `pindex_pressure_coalesce_unproductive_skip_count` 记录这些已跳过的重复写入。 `pindex_pressure_coalesce_total_us` 包含实际工作和等待；`pindex_pressure_coalesce_memory_wait_us` 单独记录条件变量上的内存等待。同步文件系统 IO 在此仍不可抢占。
 
 ### lake_pk_index_publish_wait_timeout_ms
 

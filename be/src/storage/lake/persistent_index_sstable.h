@@ -50,7 +50,15 @@ using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
 struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadStateMemoryContext> {
-    explicit SstReadStateMemoryContext(MemTracker* parent) : tracker(-1, "lake_pk_index_sst_read_state", parent) {}
+    struct WaitScope {
+        int64_t deadline_ms = -1;
+        std::function<bool()> cancelled;
+        mutable std::atomic<int64_t> memory_wait_us{0};
+    };
+    explicit SstReadStateMemoryContext(MemTracker* parent, std::shared_ptr<const WaitScope> scope = nullptr)
+            : tracker(-1, scope ? "lake_pk_index_pressure_merge" : "lake_pk_index_sst_read_state", parent),
+              wait_scope(std::move(scope)) {}
+    Status check_cancelled() const;
     class Reservation {
     public:
         explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context,
@@ -69,6 +77,7 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
         size_t _bytes = 0;
     };
     MemTracker tracker;
+    const std::shared_ptr<const WaitScope> wait_scope;
     PkIndexPublishLimiter limiter;
     // Try-lock eviction only; called without any cache lock before retrying a byte reservation.
     std::function<void(size_t)> reclaim;

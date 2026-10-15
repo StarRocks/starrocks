@@ -111,6 +111,8 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
+    _pressure_unproductive_output_bytes = 0;
+    _pressure_unproductive_target_file_size = 0;
     return true;
 }
 
