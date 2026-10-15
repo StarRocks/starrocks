@@ -1773,7 +1773,9 @@ TEST_F(LakePersistentIndexTest, test_pressure_flush_preserves_async_io_timeout_c
     });
     ASSERT_OK(index->flush_memtable(true));
     const auto result = index->sync_flush_all_memtables(1'000'000, [] { return false; });
-    EXPECT_EQ(original.to_string(), result.to_string());
+    // RETURN_IF_ERROR adds propagation context; the IO code and cause must stay unchanged.
+    EXPECT_EQ(original.code(), result.code());
+    EXPECT_EQ(original.message(), result.message());
 }
 
 TEST_F(LakePersistentIndexTest, test_pressure_flush_shares_deadline_and_retires_successful_handoffs) {
