@@ -64,6 +64,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.metric.MetricRepo;
@@ -393,9 +394,12 @@ public class DatabaseTransactionMgr {
             // too: an empty-partition range rewrite produces zero rows but must still commit so the flip
             // can anchor an empty op_schema_change@W on that partition (the BE converter tolerates an empty
             // source). Without this it would abort with ERR_NO_ROWS_IMPORTED and cancel the schema change.
+            // Kafka routine load must also commit successful empty batches carrying consumption progress:
+            // aborting them prevents the BE from committing the corresponding Kafka consumer-group offsets.
             if (Config.empty_load_as_error && tabletCommitInfos.isEmpty()
                     && transactionState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING
-                    && !transactionState.isShadowRewrite()) {
+                    && !transactionState.isShadowRewrite()
+                    && !canCommitEmptyKafkaRoutineLoad(transactionState, txnCommitAttachment)) {
                 throw new TransactionCommitFailedException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
             }
 
@@ -1109,6 +1113,18 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return result;
+    }
+
+    private static boolean canCommitEmptyKafkaRoutineLoad(TransactionState transactionState,
+                                                          TxnCommitAttachment attachment) {
+        if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK
+                || !(attachment instanceof RLTaskTxnCommitAttachment)) {
+            return false;
+        }
+        RLTaskTxnCommitAttachment routineLoadAttachment = (RLTaskTxnCommitAttachment) attachment;
+        return routineLoadAttachment.getLoadedRows() == 0
+                && !routineLoadAttachment.isNonRetryable()
+                && routineLoadAttachment.getProgress() instanceof KafkaProgress;
     }
 
     // check whether transaction can be finished or not

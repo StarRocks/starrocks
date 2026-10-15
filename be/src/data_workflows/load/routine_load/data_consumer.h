@@ -37,6 +37,7 @@
 #include <ctime>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "base/uid_util.h"
@@ -187,7 +188,9 @@ private:
     std::string _group_id;
     std::unordered_map<std::string, std::string> _custom_properties;
 
-    size_t _non_eof_partition_count = 0;
+    size_t _assigned_partition_count = 0;
+    // Partitions whose latest delivered event is EOF; new data clears the state.
+    std::unordered_set<int32_t> _eof_partitions;
     KafkaEventCb _k_event_cb;
     RdKafka::KafkaConsumer* _k_consumer = nullptr;
 };
