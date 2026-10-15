@@ -346,6 +346,24 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：瞬时值
 - 描述：导入 Sink 关闭线程池中正在执行的关闭操作数。存算分离集群下，每个关闭操作会向对象存储写入一次导入的合并事务日志。
 
+## `load_sink_close_execute_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务的累计执行时间，包含关闭过程中的等待和对象存储写入耗时。在每个任务结束时更新。
+
+## `load_sink_close_executed_tasks_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：线程池已完成的导入 Sink 关闭任务数，包含返回错误的关闭任务。
+
+## `load_sink_close_pending_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务在线程池队列中等待的累计时间。在每个任务结束时更新，尚未包含当前仍在排队的任务。
+
 ## `load_sink_close_queue_count`
 
 - 单位：计数

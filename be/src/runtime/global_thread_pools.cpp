@@ -148,7 +148,8 @@ Status GlobalThreadPools::init_execution_thread_pools(MetricRegistry* metrics) {
                             .build(&_put_combined_txn_log_thread_pool));
 
     RETURN_IF_ERROR(ThreadPoolBuilder("load_sink_close")
-                            .set_min_threads(0)
+                            // Creating the first worker in submit() can stall the poller after an idle period.
+                            .set_min_threads(1)
                             .set_max_threads(config::load_sink_close_thread_pool_num_max)
                             .set_max_queue_size(std::numeric_limits<int>::max())
                             .set_idle_timeout(MonoDelta::FromMilliseconds(500))

@@ -346,6 +346,24 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: The number of load sink closes that are running in the load sink close thread pool. In a shared-data cluster, each close writes the combined transaction log of a load to object storage.
 
+## `load_sink_close_execute_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total execution time of completed load sink close tasks, including waits and object-storage writes performed during close. Updated when each task finishes.
+
+## `load_sink_close_executed_tasks_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of load sink close tasks completed by the thread pool, including closes that return an error.
+
+## `load_sink_close_pending_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total time completed load sink close tasks spent waiting in the thread pool queue. Updated when each task finishes; currently queued tasks are not yet included.
+
 ## `load_sink_close_queue_count`
 
 - Unit: Count
