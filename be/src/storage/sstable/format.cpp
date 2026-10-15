@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <memory>
 #include <string>
 
 #include "base/compression/compression_headers.h"
@@ -65,6 +66,162 @@ Status Footer::DecodeFrom(Slice* input) {
     return result;
 }
 
+Status ProbeBlockMemory(RandomAccessFile* file, const BlockHandle& handle, BlockReadMemory* result) {
+    if (handle.size() > std::numeric_limits<size_t>::max() - kBlockTrailerSize ||
+        handle.offset() > std::numeric_limits<uint64_t>::max() - handle.size() - kBlockTrailerSize) {
+        return Status::Corruption("SST block extent overflows");
+    }
+    result->encoded = handle.size();
+    RETURN_IF_ERROR(file->read_at_fully(handle.offset() + handle.size(), &result->compression, 1));
+    result->decoded = result->encoded;
+    if (result->compression == kSnappyCompression) {
+        char prefix[5];
+        const size_t size = std::min(result->encoded, sizeof(prefix));
+        RETURN_IF_ERROR(file->read_at_fully(handle.offset(), prefix, size));
+        if (!snappy::GetUncompressedLength(prefix, size, &result->decoded) ||
+            result->decoded > std::numeric_limits<size_t>::max() - result->encoded - kBlockTrailerSize) {
+            return Status::Corruption("invalid SST block uncompressed length");
+        }
+    } else if (result->compression != kNoCompression) {
+        return Status::Corruption("bad block type");
+    }
+    return Status::OK();
+}
+
+namespace {
+constexpr size_t kEncodedWindow = kBlockEncodedReadWindow;
+
+// Bound encoded input through the same (possibly decrypting) RandomAccessFile.
+class BlockSource final : public snappy::Source {
+public:
+    BlockSource(RandomAccessFile* file, uint64_t offset, size_t size, const ReadOptions& options)
+            : _file(file),
+              _offset(offset),
+              _remaining(size),
+              _capacity(std::min(size, kEncodedWindow)),
+              _buffer(new char[_capacity]),
+              _options(options) {}
+    size_t Available() const override { return _status.ok() ? _remaining : 0; }
+    const char* Peek(size_t* size) override {
+        if (_begin == _end && Available()) {
+            const size_t n = std::min(_remaining, _capacity);
+            if (_options.check_read_cancelled) _status = _options.check_read_cancelled();
+            if (_status.ok()) {
+                _status = _file->read_at_fully(_offset, _buffer.get(), n);
+                if (_options.stat) _options.stat->bytes_from_file += n;
+            }
+            if (_status.ok()) {
+                _offset += n;
+                _begin = 0;
+                _end = n;
+                if (_options.verify_checksums) _crc = crc32c::Extend(_crc, _buffer.get(), n);
+            }
+        }
+        *size = _status.ok() ? _end - _begin : 0;
+        return _buffer.get() + _begin;
+    }
+    void Skip(size_t n) override {
+        DCHECK_LE(n, Available());
+        while (n && _status.ok()) {
+            size_t ready;
+            Peek(&ready);
+            if (!ready) break;
+            const size_t step = std::min(n, ready);
+            _begin += step;
+            _remaining -= step;
+            n -= step;
+        }
+    }
+    Status drain() {
+        while (Available()) {
+            size_t n;
+            Peek(&n);
+            if (!n) break;
+            Skip(n);
+        }
+        return _status;
+    }
+    void rewind(uint64_t offset, size_t size) {
+        _offset = offset;
+        _remaining = size;
+        _begin = _end = 0;
+        _crc = 0;
+        _status = Status::OK();
+    }
+    const Status& status() const { return _status; }
+    uint32_t crc() const { return _crc; }
+
+private:
+    RandomAccessFile* _file;
+    uint64_t _offset;
+    size_t _remaining;
+    size_t _capacity;
+    std::unique_ptr<char[]> _buffer;
+    const ReadOptions& _options;
+    size_t _begin = 0;
+    size_t _end = 0;
+    uint32_t _crc = 0;
+    Status _status;
+};
+
+Status read_snappy_bounded(RandomAccessFile* file, const ReadOptions& options, const BlockHandle& handle,
+                           BlockContents* result) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("sst_encoded_input_window_read_us");
+    const size_t n = handle.size();
+    BlockSource source(file, handle.offset(), n, options);
+    size_t first_size;
+    const char* first = source.Peek(&first_size);
+    RETURN_IF_ERROR(source.status());
+    size_t actual_decoded = 0;
+    const bool prefix_valid = snappy::GetUncompressedLength(first, first_size, &actual_decoded);
+    auto drain_and_verify = [&]() -> Status {
+        RETURN_IF_ERROR(source.drain());
+        char trailer[kBlockTrailerSize];
+        if (options.check_read_cancelled) RETURN_IF_ERROR(options.check_read_cancelled());
+        const auto st = file->read_at_fully(handle.offset() + n, trailer, sizeof(trailer));
+        if (options.stat) options.stat->bytes_from_file += sizeof(trailer);
+        RETURN_IF_ERROR(st);
+        if (options.verify_checksums &&
+            crc32c::Extend(source.crc(), trailer, 1) != crc32c::Unmask(DecodeFixed32(trailer + 1))) {
+            return Status::Corruption("block checksum mismatch");
+        }
+        if (trailer[0] != kSnappyCompression) return Status::Corruption("bad block type");
+        return Status::OK();
+    };
+    if (!prefix_valid) {
+        RETURN_IF_ERROR(drain_and_verify());
+        return Status::Corruption("corrupted compressed block contents");
+    }
+    // Reserve only the fixed input window before reading the actual prefix. A corrupt tiny
+    // probe must never force an oversized output allocation or hide an IO/checksum error as
+    // memory pressure. If output does not fit immediately, validate the encoded stream before
+    // waiting/rejecting, then rewind the same input buffer and confirm its stable prefix.
+    if (!options.try_reserve_memory(actual_decoded)) {
+        RETURN_IF_ERROR(drain_and_verify());
+        RETURN_IF_ERROR(options.reserve_memory(actual_decoded));
+        source.rewind(handle.offset(), n);
+        first = source.Peek(&first_size);
+        RETURN_IF_ERROR(source.status());
+        size_t confirmed = 0;
+        if (!snappy::GetUncompressedLength(first, first_size, &confirmed) || confirmed != actual_decoded) {
+            RETURN_IF_ERROR(drain_and_verify());
+            return Status::Corruption("SST block changed during read");
+        }
+    }
+    TRACE_COUNTER_INCREMENT("sst_encoded_input_window_reservation_bytes", actual_decoded);
+    // RawUncompress sees this very same cached first chunk; its output limit was validated.
+    std::unique_ptr<char[]> output(new char[actual_decoded]);
+    const bool decoded = snappy::RawUncompress(&source, output.get());
+    // IO/checksum errors retain precedence even if decoding stops early on malformed data.
+    RETURN_IF_ERROR(drain_and_verify());
+    if (!decoded) return Status::Corruption("corrupted compressed block contents");
+    result->data = Slice(output.release(), actual_decoded);
+    result->heap_allocated = true;
+    result->cachable = true;
+    return Status::OK();
+}
+} // namespace
+
 Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const BlockHandle& handle,
                  BlockContents* result) {
     RandomAccessFile* file = nullptr;
@@ -82,43 +239,43 @@ Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const
     // See table_builder.cc for the code that built this structure.
     size_t n = static_cast<size_t>(handle.size());
     size_t reserved = 0;
+    bool bounded_snappy = false;
     if (options.reserve_memory) {
-        // Read only the compression tag and Snappy length prefix before reserving. In particular,
-        // never allocate a large, previously unseen index/filter block just to discover its size.
-        if (handle.size() > std::numeric_limits<size_t>::max() - kBlockTrailerSize ||
-            handle.offset() > std::numeric_limits<uint64_t>::max() - handle.size() - kBlockTrailerSize) {
-            return Status::Corruption("SST block extent overflows");
-        }
-        char compression = 0;
-        RETURN_IF_ERROR(file->read_at_fully(handle.offset() + n, &compression, 1));
-        size_t bytes = n + kBlockTrailerSize;
-        size_t decoded = n;
+        BlockReadMemory memory;
+        RETURN_IF_ERROR(ProbeBlockMemory(file, handle, &memory));
+        const auto compression = memory.compression;
+        const size_t decoded = memory.decoded;
+        size_t bytes = memory.bulk_bytes();
         if (compression == kSnappyCompression) {
-            char prefix[5];
-            const size_t prefix_size = std::min(n, sizeof(prefix));
-            RETURN_IF_ERROR(file->read_at_fully(handle.offset(), prefix, prefix_size));
-            size_t uncompressed = 0;
-            if (!snappy::GetUncompressedLength(prefix, prefix_size, &uncompressed) ||
-                uncompressed > std::numeric_limits<size_t>::max() - bytes) {
-                return Status::Corruption("invalid SST block uncompressed length");
+            if (n > kEncodedWindow && options.try_reserve_memory) {
+                if (options.try_reserve_memory(bytes)) {
+                    reserved = bytes;
+                } else {
+                    bounded_snappy = true;
+                    bytes = std::min(n, kEncodedWindow) + kBlockTrailerSize;
+                    TRACE_COUNTER_INCREMENT("sst_encoded_input_window_count", 1);
+                    TRACE_COUNTER_INCREMENT("sst_encoded_input_window_reservation_bytes", bytes);
+                }
             }
-            bytes += uncompressed;
-            decoded = uncompressed;
-        } else if (compression != kNoCompression) {
-            return Status::Corruption("bad block type");
         }
         if (options.is_index_block) {
             // These probes use the normal (possibly decrypting) RandomAccessFile, before bulk
             // allocation. Encoded+decoded overlap is an open peak, not the decoded index size.
-            // Counters are sums across opens; divide by probe_count only for like-sized files.
+            // Counters are sums across opens. A per-file size needs one probe or separate file metadata.
             TRACE_COUNTER_INCREMENT("sst_index_probe_count", 1);
             TRACE_COUNTER_INCREMENT("sst_index_probe_snappy_count", compression == kSnappyCompression);
             TRACE_COUNTER_INCREMENT("sst_index_probe_encoded_bytes", n);
             TRACE_COUNTER_INCREMENT("sst_index_probe_decoded_bytes", decoded);
-            TRACE_COUNTER_INCREMENT("sst_index_probe_open_peak_bytes", bytes);
+            TRACE_COUNTER_INCREMENT("sst_index_probe_open_peak_bytes",
+                                    n + kBlockTrailerSize + (compression == kSnappyCompression ? decoded : 0));
         }
-        RETURN_IF_ERROR(options.reserve_memory(bytes));
-        reserved = bytes;
+        if (reserved == 0) {
+            RETURN_IF_ERROR(options.reserve_memory(bytes));
+            reserved = bytes;
+        }
+    }
+    if (bounded_snappy) {
+        return read_snappy_bounded(file, options, handle, result);
     }
     char* buf = new char[n + kBlockTrailerSize];
     //Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);

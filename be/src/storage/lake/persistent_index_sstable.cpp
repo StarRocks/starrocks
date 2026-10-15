@@ -35,6 +35,7 @@
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
 #include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/table_builder.h"
 #include "storage/storage_metrics.h"
@@ -52,6 +53,17 @@ namespace {
 io::IoStatsSnapshot take_sstable_io_snapshot(RandomAccessFile* rf) {
     auto stream = rf->stream();
     return stream ? stream->get_io_stats_snapshot() : io::IoStatsSnapshot{};
+}
+
+void trace_open_io(const io::IoStatsSnapshot& before, const io::IoStatsSnapshot& after, bool probe) {
+    TRACE_COUNTER_INCREMENT(probe ? "sst_probe_io_local_disk_bytes" : "sst_open_io_local_disk_bytes",
+                            std::max<int64_t>(0, after.bytes_read_local_disk - before.bytes_read_local_disk));
+    TRACE_COUNTER_INCREMENT(probe ? "sst_probe_io_remote_bytes" : "sst_open_io_remote_bytes",
+                            std::max<int64_t>(0, after.bytes_read_remote - before.bytes_read_remote));
+    TRACE_COUNTER_INCREMENT(probe ? "sst_probe_io_count_local_disk" : "sst_open_io_count_local_disk",
+                            std::max<int64_t>(0, after.io_count_local_disk - before.io_count_local_disk));
+    TRACE_COUNTER_INCREMENT(probe ? "sst_probe_io_count_remote" : "sst_open_io_count_remote",
+                            std::max<int64_t>(0, after.io_count_remote - before.io_count_remote));
 }
 
 } // namespace
@@ -86,11 +98,23 @@ void SstReadStateMemoryContext::Reservation::shrink_to(size_t bytes) {
     _context->memory_cv.notify_all();
 }
 
+bool SstReadStateMemoryContext::Reservation::try_add(size_t bytes) {
+    if (_context->refresh_usage) _context->refresh_usage();
+    if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes || process_exit_in_progress() ||
+        _context->tracker.try_consume(bytes)) {
+        return false;
+    }
+    _bytes += bytes;
+    TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
+    return true;
+}
+
 Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_byte_reservation_us");
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(std::max(0, config::lake_pk_index_publish_wait_timeout_ms));
     bool waited = false;
+    if (_context->refresh_usage) _context->refresh_usage();
     auto trace_rejection = [&](MemTracker* exceeded) {
         TRACE_COUNTER_INCREMENT("pindex_sst_rejected_request_bytes", bytes);
         TRACE_COUNTER_INCREMENT("pindex_sst_rejected_reserved_bytes", _bytes);
@@ -210,6 +234,12 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         options.reserve_read_state_memory = [reservation = state->reservation](size_t bytes, bool wait) {
             return reservation->add(bytes, wait);
         };
+        options.try_reserve_read_state_memory = [reservation = state->reservation](size_t bytes) {
+            return reservation->try_add(bytes);
+        };
+        options.check_read_state_cancelled = [] {
+            return process_exit_in_progress() ? Status::Cancelled("SST windowed read cancelled") : Status::OK();
+        };
     }
     if (_need_filter) {
         state->filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
@@ -218,8 +248,12 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     options.block_cache = _cache;
     // Preserve checksum verification and the local-cache corruption retry on both initial open and reopen.
     options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
-    auto open_st =
-            sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table, _block_cache_id);
+    auto open_table = [&] {
+        const auto before = take_sstable_io_snapshot(state->rf.get());
+        DeferOp report_io([&] { trace_open_io(before, take_sstable_io_snapshot(state->rf.get()), false); });
+        return sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table, _block_cache_id);
+    };
+    auto open_st = open_table();
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
     if (open_st.is_corruption()) {
         auto drop_status = drop_corrupted_sstable_cache(_filename);
@@ -227,8 +261,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
             state->table.reset();
             if (state->reservation) state->reservation->shrink_to(kReadStateObjectMemoryReserve);
             ASSIGN_OR_RETURN(state->rf, _open_file());
-            open_st = sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table,
-                                           _block_cache_id);
+            open_st = open_table();
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
     }
@@ -245,6 +278,45 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         state->reservation->shrink_to(state->table->memory_usage() + kReadStateObjectMemoryReserve);
     }
     return state;
+}
+
+StatusOr<size_t> PersistentIndexSstable::probe_minimum_read_memory() const {
+    if (const auto known = _minimum_read_memory.load(); known != 0) return known;
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_working_set_probe_us");
+    auto probe = [&](RandomAccessFile* file) -> StatusOr<size_t> {
+        const auto before = take_sstable_io_snapshot(file);
+        DeferOp report_io([&] { trace_open_io(before, take_sstable_io_snapshot(file), true); });
+        if (_sstable_pb.filesize() < sstable::Footer::kEncodedLength) {
+            return Status::Corruption("file is too short to be an sstable");
+        }
+        char footer_bytes[sstable::Footer::kEncodedLength];
+        RETURN_IF_ERROR(
+                file->read_at_fully(_sstable_pb.filesize() - sizeof(footer_bytes), footer_bytes, sizeof(footer_bytes)));
+        Slice footer_input(footer_bytes, sizeof(footer_bytes));
+        sstable::Footer footer;
+        RETURN_IF_ERROR(footer.DecodeFrom(&footer_input));
+        sstable::BlockReadMemory memory;
+        RETURN_IF_ERROR(sstable::ProbeBlockMemory(file, footer.index_handle(), &memory));
+        if (memory.minimum_open_bytes() > std::numeric_limits<size_t>::max() - kReadStateObjectMemoryReserve) {
+            return Status::Corruption("SST minimum read-state size overflows");
+        }
+        return memory.minimum_open_bytes() + kReadStateObjectMemoryReserve;
+    };
+    ASSIGN_OR_RETURN(auto file, _open_file());
+    auto result = probe(file.get());
+    if (!result.ok() && result.status().is_corruption() && drop_corrupted_sstable_cache(_filename).ok()) {
+        ASSIGN_OR_RETURN(file, _open_file());
+        result = probe(file.get());
+    }
+    if (!result.ok()) {
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        return result.status();
+    }
+    // This is an immutable-file sizing hint. Actual input/checksum and byte reservations are
+    // still validated by ReadBlock; it never authorizes an allocation from this hint alone.
+    _minimum_read_memory.store(*result);
+    TRACE_COUNTER_INCREMENT("pindex_sst_working_set_probe_count", 1);
+    return *result;
 }
 
 StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_get_read_state() const {
@@ -473,6 +545,13 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
     options.stat = &stat;
+    if (state->reservation && config::lake_pk_index_partial_eviction) {
+        const auto limit = state->reservation->parent_limit();
+        if (limit > 0 && state->table->memory_usage() > static_cast<size_t>(limit / 2)) {
+            options.fill_cache = false;
+            TRACE_COUNTER_INCREMENT("pindex_large_sst_data_cache_bypass_count", 1);
+        }
+    }
     // Catch corrupted data blocks as Corruption (instead of silently returning wrong
     // index values) so the drop-cache-and-retry below can heal a bad local cache.
     options.verify_checksums = config::lake_pk_index_sst_verify_checksum;

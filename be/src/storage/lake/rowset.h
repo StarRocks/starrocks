@@ -199,7 +199,8 @@ public:
     // this function does not expect segment schema will be changed, so return error if record predicate exists
     // but does not match its chunk schema
     StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
-                                                                      OlapReaderStatistics* stats);
+                                                                      OlapReaderStatistics* stats,
+                                                                      size_t chunk_rows = 0);
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates

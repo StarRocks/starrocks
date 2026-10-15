@@ -103,6 +103,9 @@ struct Options {
     // Optional open-time budget. Called before allocating an index/meta/filter block, including
     // compressed input and decompression output. Filters are optional; index blocks are mandatory.
     std::function<Status(size_t, bool)> reserve_read_state_memory;
+    // A declined bulk attempt consumes nothing and does not wait/reclaim.
+    std::function<bool(size_t)> try_reserve_read_state_memory;
+    std::function<Status()> check_read_state_cancelled;
 };
 
 struct ReadIOStat {
@@ -155,6 +158,8 @@ struct ReadOptions {
     // Identify the mandatory Table::Open index probe in the publish trace. Metadata/filter probes
     // are optional and must not be mistaken for the index working set when diagnosing pressure.
     bool is_index_block = false;
+    std::function<bool(size_t)> try_reserve_memory;
+    std::function<Status()> check_read_cancelled;
 };
 
 // Options that control write operations

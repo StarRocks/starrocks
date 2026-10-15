@@ -272,6 +272,10 @@ public:
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
     Status prepare_sstable_read_state(size_t budget, bool partial);
+    // Zero preserves the ordinary chunking path. Only a mandatory old-file index close to the
+    // whole update budget requires a smaller live input/mutation working set.
+    size_t publish_input_chunk_rows(const TabletSchema& schema) const;
+    size_t publish_workspace_budget() const { return _publish_workspace_budget; }
     void record_cache_access();
     double cache_access_frequency(int64_t now_ms) const;
 
@@ -486,6 +490,7 @@ private:
     std::function<void(size_t)> _finish_growth;
     bool _growth_mutation_active = false;
     bool _partial_read_state = false;
+    size_t _publish_workspace_budget = 0;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};
     std::atomic<size_t> _cached_legacy_charge{0};

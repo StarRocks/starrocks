@@ -58,8 +58,10 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
                 : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)) {}
         ~Reservation();
         Status add(size_t bytes, bool wait);
+        bool try_add(size_t bytes);
         void shrink_to(size_t bytes);
         size_t bytes() const { return _bytes; }
+        int64_t parent_limit() const { return _context->tracker.parent()->limit(); }
 
     private:
         std::shared_ptr<SstReadStateMemoryContext> _context;
@@ -70,6 +72,8 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
     PkIndexPublishLimiter limiter;
     // Try-lock eviction only; called without any cache lock before retrying a byte reservation.
     std::function<void(size_t)> reclaim;
+    // Refresh optional-cache charges before assessing headroom; no IO or index-cache lock.
+    std::function<void()> refresh_usage;
     std::mutex memory_mutex;
     std::condition_variable memory_cv;
 };
@@ -135,6 +139,7 @@ public:
         _reclaim_self = reclaimer;
     }
     Status reopen_read_state() const;
+    StatusOr<size_t> probe_minimum_read_memory() const;
 
     // Last known full read-state size, retained after eviction for cache share calculation.
     size_t read_state_memory_demand() const { return _read_state_memory_demand.load(); }
@@ -199,6 +204,7 @@ private:
 
     // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
     // state, so its return value never counts memory that a reader still owns.
+    mutable std::atomic<size_t> _minimum_read_memory{0};
     mutable std::atomic<size_t> _read_state_memory_demand{0};
     mutable std::mutex _read_state_mutex;
     mutable std::condition_variable _read_state_cv;

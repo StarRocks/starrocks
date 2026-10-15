@@ -63,6 +63,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     ReadOptions opt;
     if (options.reserve_read_state_memory) {
         opt.reserve_memory = [&](size_t bytes) { return options.reserve_read_state_memory(bytes, true); };
+        opt.try_reserve_memory = options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = options.check_read_state_cancelled;
         opt.is_index_block = true;
     }
     ReadIOStat iostat;
@@ -183,6 +185,8 @@ void Table::ReadMeta(const Footer& footer) {
     ReadOptions opt;
     if (rep_->options.reserve_read_state_memory) {
         opt.reserve_memory = [&](size_t bytes) { return rep_->options.reserve_read_state_memory(bytes, false); };
+        opt.try_reserve_memory = rep_->options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = rep_->options.check_read_state_cancelled;
     }
     ReadIOStat iostat;
     opt.stat = &iostat;
@@ -221,6 +225,8 @@ void Table::ReadFilter(const Slice& filter_handle_value) {
     ReadOptions opt;
     if (rep_->options.reserve_read_state_memory) {
         opt.reserve_memory = [&](size_t bytes) { return rep_->options.reserve_read_state_memory(bytes, false); };
+        opt.try_reserve_memory = rep_->options.try_reserve_read_state_memory;
+        opt.check_read_cancelled = rep_->options.check_read_state_cancelled;
     }
     if (rep_->options.paranoid_checks) {
         opt.verify_checksums = true;

@@ -44,7 +44,9 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；必需索引打开时的输入/输出预留超过整个 update 预算仍是明确的错误边界。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。 必需的 SST 打开内存不足时，tablet 锁持有者也可在等待前释放自身没有 reader pin 的 SST 读状态；正在读取的状态继续保留。 MemTable 修改在分配前预留有字节上限的批次，记账时接管实际增长，在 SST IO 前归还多余预留，仅保留反查工作区。延迟查找完成后才释放槽位或刷新 MemTable。压力下可分批刷新待处理的 MemTable（包括活跃 tablet 自身的 MemTable），避免等待本次 publish 持有且能够释放的内存。
+- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。 必需的 SST 打开内存不足时，tablet 锁持有者也可在等待前释放自身没有 reader pin 的 SST 读状态；正在读取的状态继续保留。 MemTable 修改在分配前预留有字节上限的批次，记账时接管实际增长，在 SST IO 前归还多余预留，仅保留反查工作区。延迟查找完成后才释放槽位或刷新 MemTable。压力下可分批刷新待处理的 MemTable（包括活跃 tablet 自身的 MemTable），避免等待本次 publish 持有且能够释放的内存。
+完整压缩输入与解码输出的预留能够立即满足时，SST 打开继续整块读取。内存紧张时，大 Snappy 块使用64KiB压缩输入窗口，并继续为完整解码输出预留内存。每个窗口之间检查进程退出；单次IO仍遵循原有文件系统超时，内存等待超时不能中断已执行的IO。在加载PK输入前，通过正常解密读文件路径探测必需索引的大小。当索引接近整个update预算时，根据剩余工作区收紧惰性segment输出、PK编码/lookup批次和活跃MemTable；只有reader已join后才刷新。可选数据block可回收，大索引查找避免重新填充其缓存。实际SST和树分配仍需字节预留；若解码索引加最小活跃工作区仍放不下，仍是明确边界。大小探测不绕过CRC校验，也不授权分配。
+
 - 引入版本：-
 
 ### lake_pk_index_publish_wait_timeout_ms
@@ -54,6 +56,9 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：毫秒
 - 是否动态：是
 - 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。 同时限制 MemTable 增长预留的等待，多个 inactive MemTable 刷新共用剩余等待预算，进程退出会取消等待。主动刷新 IO 属于实际工作，使用自身的 IO 超时；该参数不保证整个预留调用的墙钟上限。trace 分别记录预留、批次、刷新等待、主动刷新 IO 和超时。两种模式都记录实际 process/update 上限及 index/block cache 容量，并提供预算采样次数。 索引块探测通过正常的解密文件读取路径，在块分配前分别记录编码字节数、解码字节数和打开时的重叠峰值。`sst_index_probe_*` 是包含探测次数的累计值，不能据此认定每个解码块本身都超过预算。预留被拒绝时还记录请求/已预留字节数、触发限制的 tracker 上限及占用，以及现有缓存分项快照；这些快照不是 tracker 的原子分项统计。
+
+`sst_encoded_input_window_count`, `sst_encoded_input_window_reservation_bytes`, `sst_encoded_input_window_read_us`, `pindex_sst_working_set_probe_*`, `pindex_minimum_sst_open_bytes`, `pindex_publish_workspace_budget_bytes`, `pindex_bounded_pk_input_rows`, `pindex_large_sst_data_cache_bypass_count`, 以及 `pindex_optional_block_cache_reclaim_bytes` 在publish trace中标识该路径。 `sst_probe_io_*` and `sst_open_io_*` 分别记录探测和打开阶段的本地/远端字节与请求数，与lookup IO分开。大小计数仍是累计值；单个文件需用单次probe的trace或单独元数据核对。
+
 - 引入版本：-
 
 ### cloud_native_pk_index_rebuild_files_threshold

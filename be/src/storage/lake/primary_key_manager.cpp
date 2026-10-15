@@ -93,12 +93,22 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
     _sst_memory_context = std::make_shared<SstReadStateMemoryContext>(mem_tracker);
+    _sst_memory_context->refresh_usage = [this] { _block_cache->update_memory_usage(); };
     _sst_memory_context->reclaim = [this](size_t bytes) {
         const auto limit = _primary_key_mem_tracker->limit();
         if (limit < 0) return;
         const int64_t available = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
         if (bytes <= available) return;
-        const size_t shortage = bytes - available;
+        // Optional data blocks must not prevent a mandatory old-file index from opening.
+        const auto block_bytes_before = _block_cache->cache()->get_memory_usage();
+        _block_cache->cache()->prune();
+        _block_cache->update_memory_usage();
+        TRACE_COUNTER_INCREMENT(
+                "pindex_optional_block_cache_reclaim_bytes",
+                block_bytes_before - std::min(block_bytes_before, _block_cache->cache()->get_memory_usage()));
+        const int64_t after_prune = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
+        if (bytes <= after_prune) return;
+        const size_t shortage = bytes - after_prune;
         const size_t size = _index_cache.size();
         _evict_index_cache(size - std::min(size, shortage));
     };
@@ -596,9 +606,13 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
             .metadata = metadata,
             .tablet = tablet,
             .container = rssid_fileinfo_container,
+            .pk_input_chunk_rows = index_entry->value().publish_input_chunk_rows(*tablet_schema),
     };
     state.init(params);
     RETURN_IF_ERROR(state.prepare(params));
+    if (config::lake_pk_index_partial_eviction) {
+        _update_state_cache.update_object_size(state_entry, state.memory_usage());
+    }
     // Init delvec state.
     // Map from rssid (rowset id + segment offset) to the list of deleted rowids collected during this publish.
     PrimaryIndex::DeletesMap new_deletes;

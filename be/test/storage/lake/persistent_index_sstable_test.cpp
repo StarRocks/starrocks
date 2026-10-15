@@ -44,6 +44,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
+#include "storage/lake/pk_index_pressure_test_util.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/utils.h"
 #include "storage/persistent_index.h"
@@ -871,6 +872,71 @@ TEST_F(PersistentIndexSstableTest, test_unknown_sst_waits_for_inflight_work_to_r
     ASSERT_OK(reader.get());
     EXPECT_LE(tracker.peak_consumption(), tracker.limit());
     EXPECT_EQ(0, tracker.consumption());
+}
+
+TEST_F(PersistentIndexSstableTest, test_existing_compressed_index_fits_with_bounded_input_and_inflight_workspace) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    const auto path = lake::join_path(kTestDir, "bounded-old-index.sst");
+    auto fixture = make_large_index_fixture(path, "bounded-old-index.sst");
+    MemTracker tracker(fixture.minimum_bytes + 128 * 1024);
+    ASSERT_GT(fixture.bulk_bytes, tracker.limit());
+    MemTracker inflight(-1, "inflight-pk-input", &tracker);
+    inflight.consume(64 * 1024);
+    DeferOp release([&] { inflight.release(inflight.consumption()); });
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(fixture.pb, path, nullptr, false, nullptr, nullptr,
+                                                                  nullptr, context, true));
+    ASSIGN_OR_ABORT(auto minimum, sst->probe_minimum_read_memory());
+    EXPECT_EQ(fixture.minimum_bytes, minimum);
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        Slice key(fixture.keys[17]);
+        IndexValue value(NullIndexValue);
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(&key, {0}, -1, &value, &found));
+        EXPECT_EQ(IndexValue(17), value);
+        EXPECT_EQ(KeyIndexSet{0}, found);
+    }
+    EXPECT_EQ(64 * 1024, tracker.consumption());
+    EXPECT_EQ(0, context->tracker.consumption());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+    std::map<std::string, int64_t> counters;
+    for (const auto& [name, value] : trace->metrics()->Get()) counters[name] = value;
+    EXPECT_EQ(1, counters["sst_encoded_input_window_count"]);
+    EXPECT_EQ(1, counters["pindex_large_sst_data_cache_bypass_count"]);
+    EXPECT_EQ(0, counters["pindex_sst_byte_reservation_rejected"]);
+}
+
+TEST_F(PersistentIndexSstableTest, test_nonblocking_bulk_reservation_declines_without_reclaim_or_charge) {
+    MemTracker tracker(1024);
+    MemTracker inflight(-1, "inflight", &tracker);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    int reclaimed = 0;
+    context->reclaim = [&](size_t bytes) {
+        ++reclaimed;
+        inflight.release(bytes);
+    };
+    {
+        SstReadStateMemoryContext::Reservation reservation(context);
+        ASSERT_TRUE(reservation.try_add(100));
+        inflight.consume(900);
+        EXPECT_FALSE(reservation.try_add(100));
+        EXPECT_EQ(100, reservation.bytes());
+        EXPECT_EQ(1000, tracker.consumption());
+        EXPECT_EQ(0, reclaimed);
+        EXPECT_FALSE(reservation.try_add(std::numeric_limits<size_t>::max()));
+        ASSERT_OK(reservation.add(100, false));
+        EXPECT_EQ(1, reclaimed);
+        EXPECT_EQ(200, reservation.bytes());
+        EXPECT_EQ(1000, tracker.consumption());
+    }
+    EXPECT_EQ(800, tracker.consumption());
+    inflight.release(800);
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
 }
 
 TEST_F(PersistentIndexSstableTest, test_single_mandatory_index_block_over_budget_is_rejected_before_allocation) {

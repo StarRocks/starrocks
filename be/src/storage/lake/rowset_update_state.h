@@ -87,6 +87,7 @@ struct RowsetUpdateStateParams {
     const TabletMetadataPtr& metadata;
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
+    size_t pk_input_chunk_rows = 0;
 };
 
 class RowsetUpdateState {
@@ -222,6 +223,7 @@ private:
     // one for each delete file
     MutableColumns _deletes;
     std::atomic<size_t> _memory_usage{0};
+    size_t _pk_input_chunk_rows = 0;
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;

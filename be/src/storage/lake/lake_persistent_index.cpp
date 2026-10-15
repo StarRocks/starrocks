@@ -221,8 +221,10 @@ bool LakePersistentIndex::is_memtable_full() const {
             _tablet_mgr->primary_key_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
     const auto limit = _tablet_mgr ? _tablet_mgr->primary_key_mgr()->mem_tracker()->limit() : -1;
+    const size_t bounded_limit =
+            _publish_workspace_budget > 0 ? _publish_workspace_budget : std::max<int64_t>(1, limit / 4);
     const bool bounded_full = _reserve_growth && config::lake_pk_index_partial_eviction && limit > 0 &&
-                              memtable_mem_size >= std::max<int64_t>(1, limit / 4);
+                              memtable_mem_size >= bounded_limit;
     return mem_size_exceed || mem_tracker_exceed || bounded_full;
 }
 
@@ -420,7 +422,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         // 3. flush current memtable
         bool flush_async = false;
-        if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+        if (_publish_workspace_budget == 0 && _inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -551,7 +553,9 @@ Status LakePersistentIndex::_mutate_in_reserved_batches(size_t n, const Slice* k
     // key for sparsely occupied nodes and lookup sets, twice its key bytes, and 64KiB for
     // splits along the tree height. Keep both row count and bytes bounded; long keys must
     // not turn a small row batch into an unbounded reservation.
-    const size_t batch_budget = limit > 0 ? std::max<int64_t>(65536, limit / 8) : 1024 * 1024;
+    const size_t batch_budget = _publish_workspace_budget > 0
+                                        ? std::max<size_t>(65536, _publish_workspace_budget)
+                                        : (limit > 0 ? std::max<int64_t>(65536, limit / 8) : 1024 * 1024);
     for (size_t offset = 0; offset < n;) {
         size_t count = 0;
         size_t bytes = 65536;
@@ -2010,6 +2014,31 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
             fileset->for_each_sstable([&](const PersistentIndexSstable& sst) { ssts.push_back(&sst); });
         }
     }
+    _publish_workspace_budget = 0;
+    if (partial) {
+        size_t minimum_read = 0;
+        for (const auto* sst : ssts) {
+            ASSIGN_OR_RETURN(auto minimum, sst->probe_minimum_read_memory());
+            minimum_read = std::max(minimum_read, minimum);
+        }
+        const auto limit = _tablet_mgr->primary_key_mgr()->mem_tracker()->limit();
+        if (limit > 0 && minimum_read > static_cast<size_t>(limit / 2)) {
+            // Keep the immutable decoded index plus encoded window, metadata and 64KiB of
+            // block/iterator scratch out of the input, mutation and live MemTable allowances.
+            const auto stats = memory_stats();
+            const size_t fixed = stats.overhead_bytes + stats.delvec_bytes + 65536;
+            const size_t room = static_cast<size_t>(limit) - std::min(static_cast<size_t>(limit), minimum_read);
+            const size_t available = room - std::min(room, fixed);
+            _publish_workspace_budget = std::max<size_t>(1, available / 4);
+            TRACE_COUNTER_INCREMENT("pindex_minimum_sst_open_bytes", minimum_read);
+            TRACE_COUNTER_INCREMENT("pindex_publish_workspace_budget_bytes", _publish_workspace_budget);
+            // Flush only at this joined owner boundary, before the next mutations/old-rowid
+            // lookups start. A reservation inside an upsert must never flush its new values.
+            if (!_inactive_memtables.empty() || (_memtable && _memtable->memory_usage() > _publish_workspace_budget)) {
+                RETURN_IF_ERROR(sync_flush_all_memtables(config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+            }
+        }
+    }
     // Keep already resident SSTs first, then use the remaining reservation to reopen missing SSTs.
     std::stable_partition(ssts.begin(), ssts.end(), [](const auto* sst) { return sst->memory_usage() != 0; });
     std::vector<const PersistentIndexSstable*> reopen;
@@ -2032,6 +2061,20 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
         runner.run([sst] { return sst->reopen_read_state(); });
     }
     return runner.join();
+}
+
+size_t LakePersistentIndex::publish_input_chunk_rows(const TabletSchema& schema) const {
+    if (!config::lake_pk_index_partial_eviction || _publish_workspace_budget == 0) return 0;
+    // Declared key widths bound original columns, their read buffer and encoded copies; reserve
+    // per-row room for offsets, value arrays and lookup-set nodes as well. Actual SST and tree
+    // allocations still require their own hard byte reservations.
+    size_t per_row = 512;
+    for (size_t i = 0; i < schema.num_key_columns(); ++i) {
+        const size_t width = schema.column(i).length();
+        if (width > (std::numeric_limits<size_t>::max() - per_row) / 4) return 1;
+        per_row += width * 4;
+    }
+    return std::clamp<size_t>(_publish_workspace_budget / per_row, 1, std::max(1, config::vector_chunk_size));
 }
 
 void LakePersistentIndex::record_cache_access() {

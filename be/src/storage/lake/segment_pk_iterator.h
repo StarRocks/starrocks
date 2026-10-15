@@ -62,7 +62,7 @@ public:
     // The first chunk will be loaded lazily on the first done()/next() call.
     // This avoids memory spikes when many iterators are created upfront.
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                PrimaryKeyEncodingType encoding_type, bool defer_data_load = false);
+                PrimaryKeyEncodingType encoding_type, bool defer_data_load = false, size_t max_chunk_rows = 0);
 
     // Marks every emitted chunk with the rows this tablet owns (SegmentPKChunkRef::owned). Only a
     // SPLIT child's cross publish passes one; without it every row is owned and nothing is paid.
@@ -147,6 +147,7 @@ private:
     // Current loaded row count of the segment.
     size_t _current_rows = 0;
     // If true, we will load segment peice by piece when needed.
+    size_t _max_chunk_rows = 0;
     bool _lazy_load = false;
     // If true, first _load() is deferred until done() is first called.
     bool _defer_data_load = false;
