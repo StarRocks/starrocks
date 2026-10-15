@@ -64,6 +64,10 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     }
 
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
+        // Also runs on replay and batch publish, when the original DeleteJob callback may be absent.
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.DELETE) {
+            table.setHasDelete();
+        }
         List<ColumnId> validDictCacheColumns = Lists.newArrayList();
         List<Long> dictCollectedVersions = Lists.newArrayList();
 
