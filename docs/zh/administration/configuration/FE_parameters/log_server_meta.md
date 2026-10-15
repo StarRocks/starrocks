@@ -1648,7 +1648,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
+- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次重试前，执行器会先随机等待一段时间再重新打开连接：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止。这样，同时断开连接的多个调用方不会在同一时刻集中重连。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
 - 引入版本: v3.2.0
 
 ### `thrift_rpc_strict_mode`
