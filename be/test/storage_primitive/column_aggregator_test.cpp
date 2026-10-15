@@ -57,9 +57,8 @@ TEST(ColumnAggregator, testLegacyDecimalAggregation) {
 
                 ASSERT_EQ(1, dst->size());
                 ASSERT_FALSE(dst->is_null(0));
-                const char* expected = method == STORAGE_AGGREGATE_MIN   ? "1.25"
-                                       : method == STORAGE_AGGREGATE_MAX ? "2.5"
-                                                                         : "3.75";
+                const char* expected =
+                        method == STORAGE_AGGREGATE_MIN ? "1.25" : method == STORAGE_AGGREGATE_MAX ? "2.5" : "3.75";
                 ASSERT_EQ(DecimalV2Value(expected), dst->get(0).get_decimal());
             }
         }
