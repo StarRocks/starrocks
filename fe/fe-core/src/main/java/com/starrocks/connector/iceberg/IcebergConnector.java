@@ -151,6 +151,9 @@ public class IcebergConnector implements Connector {
         if (backgroundJobPlanningExecutor != null) {
             backgroundJobPlanningExecutor.shutdown();
         }
+        if (icebergNativeCatalog != null) {
+            icebergNativeCatalog.shutdown();
+        }
     }
 
     @Override
