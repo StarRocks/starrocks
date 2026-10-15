@@ -833,13 +833,6 @@ This topic introduces the following types of FE configurations:
 - Introduced in: v4.2.0
 - Description: When true, most external FE HTTP endpoints require HTTP Basic Auth. Credentials are validated against the user store via `AuthenticationHandler.authenticate()`, so LDAP / security-integration login works on the HTTP path the same way it does for the MySQL protocol. The following are exempt:
   - Public probes / observability: `/api/bootstrap`, `/api/oauth2`.
-<<<<<<< HEAD
-  - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/service_id`, `/static`, `/api/_meta_replay_state`, `/api/get_small_file`.
-
-  `/dump` and `/dump_starmgr` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege, granted directly or through a role that is active at login (a default role of the user, or any granted role when `activate_all_roles_on_login` is `true`); the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
-
-  Other privileged endpoints that this setting governs (this does not apply to `/dump` and `/dump_starmgr`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
-=======
   - Peer-FE / control-plane paths that are IP-whitelisted or token-gated inside the handler: `/image`, `/check`, `/journal_id`, `/info`, `/role`, `/static`, `/api/get_small_file`.
 
   `/dump`, `/dump_starmgr`, and `/service_id` are not exempt: regardless of this setting, they accept only an authenticated admin. The caller can authenticate with HTTP Basic Auth or with the session cookie obtained by logging in to the FE web console. A user is treated as an admin if any of the following holds: the user has the SYSTEM-level `NODE` privilege through a role that is active at login, for example the built-in `cluster_admin` role set as a default role of the user (when `activate_all_roles_on_login` is `true`, any granted role counts); the user is `root` or has the `root` role; the user has both the `db_admin` and `user_admin` roles.
@@ -847,7 +840,6 @@ This topic introduces the following types of FE configurations:
   `/api/_meta_replay_state` is not exempt either: regardless of this setting, it requires HTTP Basic Auth of a user who is `root`, has the `root` role, or has both the `db_admin` and `user_admin` roles. The `NODE` privilege alone is not enough.
 
   Other privileged endpoints that this setting governs (this does not apply to `/dump`, `/dump_starmgr`, `/service_id`, and `/api/_meta_replay_state`) additionally require a SYSTEM-level RBAC privilege (`OPERATE` or `NODE`) that is **active** in the caller's session. If the granting role is not the user's default, run `SET DEFAULT ROLE <roles> TO <user>;` or set the global variable `activate_all_roles_on_login=true` so the roles activate at login. LDAP / security-integration group → role mappings activate automatically.
->>>>>>> 64980d4 ([Doc] Correct enable_http_auth notes for /api/_meta_replay_state and NODE (#80769))
 
 ### `http_web_page_display_hardware`
 
