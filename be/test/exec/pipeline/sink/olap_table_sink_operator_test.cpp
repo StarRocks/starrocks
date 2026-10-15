@@ -20,12 +20,18 @@
 #include <chrono>
 #include <future>
 #include <memory>
+#include <new>
 #include <thread>
 
+#include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/thread/threadpool.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 namespace {
@@ -203,6 +209,99 @@ TEST_F(OlapTableSinkOperatorTest, closes_inline_without_a_close_pool) {
     EXPECT_FALSE(_op->pending_finish());
     EXPECT_EQ(1, _sink.close_calls);
     EXPECT_EQ(std::this_thread::get_id(), _sink.close_thread);
+}
+
+TEST_F(OlapTableSinkOperatorTest, enqueue_exception_returns_close_ownership_to_cancellation) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry",
+                                          [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
+    });
+
+    EXPECT_THROW((void)_op->pending_finish(), std::bad_alloc);
+    SyncPoint::GetInstance()->DisableProcessing();
+    EXPECT_EQ(0, _sink.close_calls);
+    _fragment_ctx->cancel(Status::Cancelled("close submission allocation failed"));
+    EXPECT_OK(_op->set_cancelled(_runtime_state));
+    EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_TRUE(_sink.last_exec_status.is_cancelled()) << _sink.last_exec_status;
+}
+
+TEST_F(OlapTableSinkOperatorTest, enqueue_exception_allows_a_later_close_to_finish) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry",
+                                          [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
+    });
+
+    EXPECT_THROW((void)_op->pending_finish(), std::bad_alloc);
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_TRUE(wait_until_close_finished());
+    EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_FALSE(_runtime_state->is_cancelled());
+}
+
+TEST_F(OlapTableSinkOperatorTest, shutdown_joins_running_close_and_cancels_queued_close_before_context_destruction) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("load_sink_close_shutdown_ut").set_min_threads(1).set_max_threads(1).build(&pool));
+    auto* original_services = _runtime_state->query_execution_services();
+    auto execution = *original_services->execution;
+    execution.load_sink_close_thread_pool = pool.get();
+    auto services = *original_services;
+    services.execution = &execution;
+    _runtime_state->set_query_execution_services(&services);
+
+    SlowCloseSink queued_sink;
+    auto queued_op =
+            std::make_shared<OlapTableSinkOperator>(&_factory, 0, Operator::s_pseudo_plan_node_id_for_final_sink, 0, 0,
+                                                    &queued_sink, _fragment_ctx, _num_sinkers);
+    std::future<void> shutdown;
+    bool released = false;
+    auto release_running_close = [&]() {
+        if (!released) {
+            released = true;
+            _sink.release_close.set_value();
+        }
+    };
+    DeferOp cleanup([&]() {
+        release_running_close();
+        if (shutdown.valid()) shutdown.wait();
+        pool->shutdown();
+        if (_runtime_state != nullptr) _runtime_state->set_query_execution_services(original_services);
+    });
+    ASSERT_OK(queued_op->prepare(_runtime_state));
+    _sink.hold_close = true;
+
+    EXPECT_TRUE(_op->pending_finish());
+    ASSERT_EQ(std::future_status::ready, _sink.close_started.get_future().wait_for(10s));
+    EXPECT_TRUE(queued_op->pending_finish());
+    EXPECT_EQ(0, queued_sink.close_calls);
+
+    // As at process shutdown, submissions have stopped but the query's objects are still alive.
+    shutdown = std::async(std::launch::async, [&]() { pool->shutdown(); });
+    ASSERT_TRUE(Awaitility().timeout(5000000).until([&]() { return !pool->is_pool_status_ok(); }));
+    EXPECT_EQ(std::future_status::timeout, shutdown.wait_for(20ms));
+    EXPECT_TRUE(_op->pending_finish());
+    release_running_close();
+    ASSERT_EQ(std::future_status::ready, shutdown.wait_for(10s));
+    shutdown.get();
+
+    EXPECT_FALSE(_op->pending_finish());
+    EXPECT_FALSE(queued_op->pending_finish());
+    EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_EQ(0, queued_sink.close_calls);
+    EXPECT_TRUE(_fragment_ctx->final_status().is_cancelled()) << _fragment_ctx->final_status();
+    // Only after shutdown has joined the task and run its queued cancellation callback may contexts be freed.
+    _runtime_state->set_query_execution_services(original_services);
+    queued_op.reset();
+    _op.reset();
+    _pool.clear();
+    _runtime_state = nullptr;
+    _fragment_ctx = nullptr;
 }
 
 } // namespace

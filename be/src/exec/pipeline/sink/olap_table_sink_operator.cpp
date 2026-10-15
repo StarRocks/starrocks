@@ -15,6 +15,7 @@
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
 #include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/thread/threadpool.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
@@ -109,6 +110,9 @@ bool OlapTableSinkOperator::pending_finish() const {
 
 void OlapTableSinkOperator::_submit_close() const {
     _close_submitted = true;
+    // Constructing or enqueueing the runnable can throw before the pool accepts it. In that case cancellation
+    // must still own the sink; otherwise no task can ever publish _close_done and the driver stays pending.
+    CancelableDefer restore_close_ownership([this]() { _close_submitted = false; });
     auto* state = _fragment_ctx->runtime_state();
     const int64_t submit_time_ns = MonotonicNanos();
     auto close_task = [this, state, submit_time_ns]() {
@@ -147,12 +151,14 @@ void OlapTableSinkOperator::_submit_close() const {
         // The queue is unbounded, so this only fails when the pool is shutting down.
         auto st = pool->submit(std::move(task));
         if (st.ok()) {
+            restore_close_ownership.cancel();
             return;
         }
         LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
                      << print_id(state->fragment_instance_id()) << ", error=" << st;
     }
     close_task();
+    restore_close_ownership.cancel();
 }
 
 bool OlapTableSinkOperator::_pending_close() const {
