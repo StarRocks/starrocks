@@ -155,6 +155,27 @@ public class AlterMaterializedViewTest extends MVTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testIncrementalToAutoKeepsInactiveView() throws Exception {
+        String query = "SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        String reason = MaterializedViewExceptions.inactiveReasonForIncrementalBreaking(mv.getName());
+        mv.setInactiveAndReason(reason);
+
+        alterMaterializedView("alter materialized view test_mv1 set (\"refresh_mode\" = \"auto\")", false);
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertEquals(reason, mv.getInactiveReason());
+        Assertions.assertTrue(MaterializedViewExceptions.invalidatesBaseline(mv.getInactiveReason()));
+
+        alterMaterializedView("alter materialized view test_mv1 active", false);
+        Assertions.assertTrue(mv.isActive());
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+    }
+
+    @Test
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     public void testAutoRefreshInactiveActive1() throws Exception {
         String query = "SELECT date, sum(id), approx_count_distinct(data) " +
                 "FROM `iceberg0`.`unpartitioned_db`.`t0` group by date;";

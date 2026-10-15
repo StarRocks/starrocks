@@ -161,9 +161,26 @@ public class MVActiveChecker extends LeaderDaemon {
             return;
         }
 
+<<<<<<< HEAD
         boolean activeOk = false;
         String mvFullName =
                 new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
+=======
+        boolean activeOk = executeActivate(mv, dbName.get());
+        if (activeOk) {
+            MV_ACTIVE_INFO.remove(mv.getMvId());
+        } else {
+            if (activeInfo != null) {
+                activeInfo.next();
+            } else {
+                MV_ACTIVE_INFO.put(mv.getMvId(), MvActiveInfo.firstFailure());
+            }
+        }
+    }
+
+    private static boolean executeActivate(MaterializedView mv, String dbName) {
+        String mvFullName = ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(mv.getName());
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
                 mvFullName, mv.getInactiveReason());

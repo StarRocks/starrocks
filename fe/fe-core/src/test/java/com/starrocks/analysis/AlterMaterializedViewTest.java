@@ -731,6 +731,29 @@ public class AlterMaterializedViewTest extends MVTestBase  {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testActivateAViewWhoseNamesNeedQuoting() throws Exception {
+        String dbName = "db-active-quoted";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
+        try {
+            starRocksAssert.withTable("create table base_tbl_quoted (k1 int, k2 int) properties('replication_num'='1')");
+            starRocksAssert.withMaterializedView("create materialized view `mv-active-quoted` " +
+                    "refresh manual as select * from base_tbl_quoted");
+            MaterializedView mv = starRocksAssert.getMv(dbName, "mv-active-quoted");
+            AlterMVJobExecutor.inactiveMvAndLog(mv,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns("base_tbl_quoted"));
+
+            MVActiveChecker.tryToActivate(mv);
+            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        } finally {
+            starRocksAssert.useDatabase("test");
+            starRocksAssert.dropDatabase("`" + dbName + "`");
+        }
+    }
+
+    @Test
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
     public void testActiveCheckerBackoff() {
         MVActiveChecker.MvActiveInfo activeInfo = MVActiveChecker.MvActiveInfo.firstFailure();
         Assertions.assertTrue(activeInfo.isInGracePeriod());

@@ -31,7 +31,11 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 | PARTITION START () END () | 否           | 手动刷新该时间区间内的分区。      |
 | partition_start_date      | 否           | 待手动刷新的分区开始时间。       |
 | partition_end_date        | 否           | 待手动刷新的分区结束时间。       |
+<<<<<<< HEAD
 | FORCE                     | 否           | 如果指定该参数，StarRocks 将强制刷新相应的物化视图或分区。如果不指定该参数，StarRocks 会自动判断数据是否被更新过，只在需要时刷新分区。|
+=======
+| FORCE                     | 否           | 如果指定该参数，StarRocks 将强制刷新相应的物化视图或分区。如果不指定该参数，StarRocks 会自动判断数据是否被更新过，只在需要时刷新分区。对于增量物化视图，`FORCE` 会重建整个物化视图。`FORCE` 本身不负责激活：普通刷新无法重新激活的物化视图（例如因增量链中断而被置为未激活的物化视图）仍保持未激活，需执行 `ALTER MATERIALIZED VIEW ... ACTIVE`。参见[增量物化视图](../../../using_starrocks/async_mv/incremental_materialized_view.md#恢复)。|
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 | WITH ... MODE             | 否           | 同步或异步调用刷新任务。`SYNC` 指同步调用刷新任务，执行 SQL 语句后，StarRocks 将在刷新任务成功或失败后返回结果。`ASYNC` 指异步调用刷新任务，执行 SQL 语句后，StarRocks 将在刷新任务提交后立即返回成功，实际刷新任务会异步在后台运行。您可以通过查询 StarRocks 的 Information Schema 中的 `tasks` 和 `task_runs` 元数据视图来查看异步物化视图的刷新状态。详细信息，请参考[查看异步物化视图的执行状态](../../../using_starrocks/async_mv/Materialized_view.md#查看异步物化视图的执行状态)。默认值：`ASYNC`。自 v2.5.8 和 v3.1.0 起支持。 |
 
 > **注意**

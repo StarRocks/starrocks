@@ -388,7 +388,11 @@ SELECT ERROR_MESSAGE LIKE '%non-append-only%' FROM information_schema.task_runs 
 -- result:
 1
 -- !result
+<<<<<<< HEAD
 SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+=======
+SELECT ERROR_MESSAGE LIKE '%ACTIVE to recover%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 -- result:
 1
 -- !result

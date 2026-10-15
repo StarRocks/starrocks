@@ -66,7 +66,7 @@ SELECT ERROR_MESSAGE LIKE '%non-append-only%' FROM information_schema.task_runs 
 -- result:
 1
 -- !result
-SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%ACTIVE to recover%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
 -- result:
 1
 -- !result
@@ -107,7 +107,7 @@ SELECT ERROR_MESSAGE LIKE '%snapshot ancestry broken%' FROM information_schema.t
 -- result:
 1
 -- !result
-SELECT ERROR_MESSAGE LIKE '%Drop and recreate%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE LIKE '%ACTIVE to recover%' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
 -- result:
 1
 -- !result

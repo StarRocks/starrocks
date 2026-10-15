@@ -541,6 +541,25 @@ While operators listed above generally support incremental refresh, certain oper
 - However, incremental computation is **not** supported when performing Join after aggregation or UNION ALL after aggregation.
 :::
 
+<<<<<<< HEAD
+=======
+#### Base Table Version Retention
+
+Incremental refresh reads the changes each load produced, so every version a base table has produced since the last successful refresh stays on that table until a refresh consumes it. Versions a refresh has consumed are released.
+
+Retained versions cost storage, so versions held this way on a StarRocks base table in a shared-data cluster have a retention limit: [`bookmark_reference_max_ttl_ms`](../../../administration/configuration/FE_parameters/shared_lake_other.md#bookmark_reference_max_ttl_ms), 3 days by default. A materialized view that does not refresh successfully within that limit loses the versions its next refresh was going to read, and can no longer refresh incrementally:
+
+- Under `INCREMENTAL`, the refresh fails and the materialized view is deactivated. To recover, run `ALTER MATERIALIZED VIEW <mv> ACTIVE`: the next refresh establishes a new baseline with a PCT refresh of the partitions that changed.
+- Under `AUTO`, the refresh falls back to a full `PCT` refresh, and later refreshes attempt to run incrementally again.
+
+Keep every window in which a materialized view cannot refresh successfully shorter than the retention limit:
+
+- Set the scheduled refresh interval below the limit.
+- Keep the interval between manual refreshes below the limit.
+- Keep a materialized view you set inactive by hand inactive for less than the limit.
+- Resolve a failing refresh within the limit.
+
+>>>>>>> 06b694cc699... [Enhancement][RB-454] Recover an incremental MV with ALTER ACTIVE, and let REFRESH ... FORCE only refresh (#65472)
 ## Usage notes
 
 - The current version of StarRocks does not support creating multiple materialized views at the same time. A new materialized view can only be created when the one before is completed.
