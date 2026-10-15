@@ -58,6 +58,29 @@ public class SessionVariableTest {
     }
 
     @Test
+    public void testBroadcastMemExceedThresholdState() throws Exception {
+        SessionVariable variables = new SessionVariable();
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemExceedThreshold());
+        variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
+        Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
+        Assertions.assertEquals(2147483648L, variables.getBroadcastMemExceedThreshold());
+
+        variables.setBroadcastMemExceedThreshold(1024);
+        Assertions.assertEquals(1024L,
+                variables.getNonDefaultVariables().get(SessionVariable.BROADCAST_MEM_EXCEED_THRESHOLD).actualValue);
+        SessionVariable clone = variables.clone();
+        SessionVariable restored = new SessionVariable();
+        restored.replayFromJson(variables.getJsonString());
+        Assertions.assertEquals(1024L, clone.getBroadcastMemExceedThreshold());
+        Assertions.assertEquals(1024L, restored.getBroadcastMemExceedThreshold());
+        clone.setBroadcastMemExceedThreshold(Long.MAX_VALUE);
+        Assertions.assertEquals(1024L, variables.getBroadcastMemExceedThreshold());
+        Assertions.assertEquals(Long.MAX_VALUE, clone.getBroadcastMemExceedThreshold());
+        Assertions.assertThrows(SemanticException.class, () -> variables.setBroadcastMemExceedThreshold(-1));
+        Assertions.assertEquals(1024L, variables.getBroadcastMemExceedThreshold());
+    }
+
+    @Test
     public void testAITopNThresholdValidationAndState() throws Exception {
         SessionVariable variables = new SessionVariable();
         Assertions.assertTrue(variables.isEnableAiTopnPushdown());
