@@ -14,6 +14,7 @@
 package com.starrocks.authorization.ranger;
 
 import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 import org.apache.ranger.plugin.policyengine.RangerRequestScriptEvaluator;
 import org.apache.ranger.plugin.util.RangerRequestExprResolver;
 import org.apache.ranger.plugin.util.ScriptEngineUtil;
@@ -28,6 +29,7 @@ public class RangerScriptEngineTest {
         RangerRequestExprResolver resolver =
                 new RangerRequestExprResolver("owner = '${{ctx.getUser()}}'", "starrocks");
         RangerAccessRequestImpl request = new RangerAccessRequestImpl();
+        request.setResource(new RangerAccessResourceImpl());
         request.setUser("alice");
 
         // Exercise Ranger's real engine discovery and bindings instead of mocking a policy result.
@@ -39,6 +41,7 @@ public class RangerScriptEngineTest {
         ScriptEngine engine = ScriptEngineUtil.createScriptEngine("starrocks");
         Assertions.assertNotNull(engine, "Ranger requires a JavaScript engine on the FE runtime classpath");
         RangerAccessRequestImpl request = new RangerAccessRequestImpl();
+        request.setResource(new RangerAccessResourceImpl());
         request.setUser("alice");
         RangerRequestScriptEvaluator evaluator = new RangerRequestScriptEvaluator(request, engine, false);
 
