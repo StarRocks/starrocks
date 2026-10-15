@@ -339,6 +339,17 @@ public class LockManager {
         }
     }
 
+    /** Whether any locker of the current thread holds {@code rid} with {@code lockType}. */
+    public boolean isOwnedByCurrentThread(long rid, LockType lockType) {
+        Thread current = Thread.currentThread();
+        int lockTableIndex = getLockTableIndex(rid);
+        synchronized (lockTableMutexes[lockTableIndex]) {
+            Set<LockHolder> owners = cloneOwnersInternal(rid, lockTableIndex);
+            return owners != null && owners.stream().anyMatch(holder -> holder.getLockType() == lockType
+                    && holder.getLocker().getLockerThread() == current);
+        }
+    }
+
     private boolean isOwnerInternal(long rid, Locker locker, LockType lockType, int lockTableIndex) {
         final Map<Long, Lock> lockTable = lockTables[lockTableIndex];
         final Lock lock = lockTable.get(rid);
