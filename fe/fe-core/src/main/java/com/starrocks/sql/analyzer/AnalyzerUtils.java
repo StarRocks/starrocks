@@ -998,7 +998,14 @@ public class AnalyzerUtils {
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
-        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+        new AnalyzerUtils.OlapTableCollector(olapTables, true).visit(statementBase);
+    }
+
+    /** The olap tables {@link #copyOlapTable} would copy, left in place. */
+    public static Set<OlapTable> collectOlapTablesToCopy(StatementBase statementBase) {
+        Set<OlapTable> olapTables = new HashSet<>();
+        new AnalyzerUtils.OlapTableCollector(olapTables, false).visit(statementBase);
+        return olapTables;
     }
 
     public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
@@ -1272,10 +1279,13 @@ public class AnalyzerUtils {
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
         private Map<TableIndexId, OlapTable> idMap;
+        // false to only collect the originals, leaving the statement on them
+        private final boolean copy;
 
-        public OlapTableCollector(Set<OlapTable> tables) {
+        public OlapTableCollector(Set<OlapTable> tables, boolean copy) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
+            this.copy = copy;
         }
 
         /**
@@ -1367,6 +1377,10 @@ public class AnalyzerUtils {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
+            if (!copy) {
+                olapTables.add(table);
+                return null;
+            }
             TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
