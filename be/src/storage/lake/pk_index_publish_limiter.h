@@ -28,8 +28,9 @@
 
 namespace starrocks::lake {
 
-// FIFO admission before acquiring any tablet/shard lock. Pressure reduces concurrency to one;
-// an admitted publish always runs to completion, so it can release memory for the oldest waiter.
+// FIFO permits for publish admission and transient SST reads. Publish callers acquire before
+// tablet/shard locks; pressure reduces their concurrency to one. Admitted work can finish and
+// release memory for the oldest waiter.
 class PkIndexPublishLimiter {
 public:
     class Permit {

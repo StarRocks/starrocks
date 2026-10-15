@@ -358,9 +358,10 @@ StatusOr<TabletMetadataPtr> PrimaryKeyManager::flush_pk_memtable(const TabletMet
     // does after its commit.
     update_index_cache_size(index_entry);
 
-    // Success: dismiss the failure cleanup and release the cache entry.
-    // write_guard is released when it goes out of scope at function return.
+    // Drop the tablet lock before releasing the last external cache pin. A pressure sweep can
+    // retire this entry immediately afterwards, including its mutex.
     failure_cleanup.cancel();
+    write_guard.reset();
     release_primary_index_cache(index_entry);
     return mutable_metadata;
 }
