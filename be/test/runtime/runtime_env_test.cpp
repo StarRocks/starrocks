@@ -107,6 +107,7 @@ TEST(RuntimeEnvTest, OwnsExecutionThreadPools) {
     ASSERT_NE(env->load_rowset_thread_pool(), nullptr);
     ASSERT_NE(env->load_segment_thread_pool(), nullptr);
     ASSERT_NE(env->put_combined_txn_log_thread_pool(), nullptr);
+    ASSERT_NE(env->load_sink_close_thread_pool(), nullptr);
     ASSERT_NE(env->java_env(), nullptr);
     ASSERT_NE(env->java_env()->jvm_call_pool(), nullptr);
     ASSERT_NE(env->java_env()->udf_call_pool(), nullptr);
