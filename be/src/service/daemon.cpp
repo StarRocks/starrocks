@@ -57,6 +57,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "base/hash/crc32c.h"
 #include "base/time/monotime.h"
 #include "base/time/time.h"
 #include "base/time/timezone_utils.h"
@@ -377,6 +378,7 @@ void Daemon::init(bool as_cn, const std::vector<StorePath>& paths, ProcessMetric
     LOG(INFO) << MemInfo::debug_string();
     LOG(INFO) << base::CPU::instance()->debug_string();
     LOG(INFO) << "openssl aesni support: " << openssl_supports_aesni();
+    LOG(INFO) << "crc32c acceleration: " << crc32c::ActiveImplementationName();
     auto unsupported_flags = CpuInfo::unsupported_cpu_flags_from_current_env();
     if (!unsupported_flags.empty()) {
         LOG(FATAL) << fmt::format(
