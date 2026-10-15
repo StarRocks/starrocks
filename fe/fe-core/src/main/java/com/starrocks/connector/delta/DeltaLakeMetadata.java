@@ -320,8 +320,16 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, partitionColumns);
         Predicate deltaLakePredicate = new ScalarOperationToDeltaLakeExpr().convert(residual.pushable, deltaLakeContext);
 
-        ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
-        ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
+        // Delta kernel's SnapshotImpl/LogReplay lazily initialize internal state (e.g. the log segment) via
+        // unsynchronized check-then-act Lazy fields. Pre-collection can run two scans that reference the same
+        // underlying table (and therefore the same cached SnapshotImpl, e.g. a self-join) on different threads;
+        // synchronize all kernel access on the shared snapshot so first-access initialization isn't racy.
+        ScanBuilderImpl scanBuilder;
+        ScanImpl scan;
+        synchronized (snapshot) {
+            scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
+            scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
+        }
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> baseIterator = new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
@@ -347,25 +355,27 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             }
 
             private void ensureOpen() {
-                try {
-                    if (scanFilesAsBatches == null) {
-                        scanFilesAsBatches = scan.getScanFiles(engine, true);
-                    }
-                    while (scanFileRows == null || !scanFileRows.hasNext()) {
-                        if (!scanFilesAsBatches.hasNext()) {
-                            scanFilesAsBatches.close();
-                            hasMore = false;
-                            break;
+                synchronized (snapshot) {
+                    try {
+                        if (scanFilesAsBatches == null) {
+                            scanFilesAsBatches = scan.getScanFiles(engine, true);
                         }
-                        if (scanFileRows != null) {
-                            scanFileRows.close();
+                        while (scanFileRows == null || !scanFileRows.hasNext()) {
+                            if (!scanFilesAsBatches.hasNext()) {
+                                scanFilesAsBatches.close();
+                                hasMore = false;
+                                break;
+                            }
+                            if (scanFileRows != null) {
+                                scanFileRows.close();
+                            }
+                            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+                            scanFileRows = scanFileBatch.getRows();
                         }
-                        FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-                        scanFileRows = scanFileBatch.getRows();
+                    } catch (IOException e) {
+                        LOG.error("Failed to get delta lake scan files", e);
+                        throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
                     }
-                } catch (IOException e) {
-                    LOG.error("Failed to get delta lake scan files", e);
-                    throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
                 }
             }
 
