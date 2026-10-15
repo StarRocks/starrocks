@@ -16,14 +16,25 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.Utils;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -38,13 +49,21 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PublishVersionDaemon;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -53,6 +72,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -828,6 +848,115 @@ public class LakeTableIndexFastPathJobTest {
         restored.getInfo(restoredRows);
         assertFalse(expectedRows.isEmpty());
         assertEquals(expectedRows, restoredRows);
+    }
+
+    /**
+     * A load that begins after the job's watershed can commit while the tablets are being altered. It then holds
+     * the version just below the commit version the job reserves at FINISHED_REWRITING, and it can only finish
+     * while that version is the partition's next one. So the job must not publish on top of the load's version,
+     * nor make its own commit version visible, before the load is visible; otherwise the load and every later one
+     * on the table stay COMMITTED forever. A new leader resumes the job from its journal entry and must wait too.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testFinishWaitsForLoadCommittedDuringAlter(boolean resumeOnNewLeader) throws Exception {
+        OlapTable table = createTable("t_drop_index_concurrent_load_" + resumeOnNewLeader,
+                "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        PhysicalPartition partition = table.getAllPhysicalPartitions().iterator().next();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        // The test finishes the load itself, at the point its publish would.
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public void runAfterLeaseValid() {
+            }
+        };
+        // The alter tasks are sent, and finish only once the load has committed.
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+            }
+        };
+        List<long[]> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedVersions.add(new long[] {baseVersion, newVersion});
+            }
+        };
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        job.run();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        long loadTxnId = txnMgr.beginTransaction(db.getId(), List.of(table.getId()), "load_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        assertTrue(loadTxnId > job.getTransactionId().orElseThrow());
+        long loadVersion = partition.getNextVersion();
+        commitLoad(db, table, loadTxnId);
+        assertEquals(loadVersion - 1, partition.getVisibleVersion());
+        assertEquals(loadVersion + 1, partition.getNextVersion());
+
+        job.batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+        job.run();
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = job.commitVersionMap.get(partition.getId());
+        assertEquals(loadVersion + 1, commitVersion);
+        if (resumeOnNewLeader) {
+            job = (LakeTableIndexFastPathJobBase) gsonCopy(job);
+        }
+        // Before the load is visible, give the job the rounds it would need to publish and finish.
+        for (int i = 0; i < 20 && !job.isDone(); i++) {
+            job.run();
+            Thread.sleep(10);
+        }
+        int publishesBeforeLoadVisible = publishedVersions.size();
+        long visibleVersionBeforeLoadVisible = partition.getVisibleVersion();
+
+        // The load's publish succeeds, so it finishes at its own version.
+        txnMgr.finishTransaction(db.getId(), loadTxnId, null);
+        TransactionState loadState = txnMgr.getTransactionState(db.getId(), loadTxnId);
+        assertEquals(TransactionStatus.VISIBLE, loadState.getTransactionStatus(),
+                () -> "the load committed below the job's commit version is stranded: " + loadState.getErrMsg());
+        assertEquals(0, publishesBeforeLoadVisible);
+        assertEquals(loadVersion - 1, visibleVersionBeforeLoadVisible);
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertEquals(loadVersion, partition.getVisibleVersion());
+
+        runToFinished(job);
+        assertFalse(publishedVersions.isEmpty());
+        for (long[] versions : publishedVersions) {
+            assertEquals(loadVersion, versions[0]);
+            assertEquals(commitVersion, versions[1]);
+        }
+        assertEquals(commitVersion, partition.getVisibleVersion());
+        assertTrue(indexNames(table).isEmpty());
+    }
+
+    /**
+     * Commits the load on every tablet of the table, holding the table WRITE lock as a load does.
+     */
+    private static void commitLoad(Database db, OlapTable table, long txnId) throws Exception {
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().get(0);
+        List<TabletCommitInfo> commitInfos = new ArrayList<>();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    commitInfos.add(new TabletCommitInfo(tablet.getId(), backendId));
+                }
+            }
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(db.getId(), txnId,
+                    commitInfos, new ArrayList<>(), null);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.WRITE);
+        }
     }
 
     private static OlapTable createTable(String tableName, String columns) throws Exception {
