@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetaPreparationItem;
@@ -66,6 +67,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -157,6 +159,22 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     .map(DeltaRemoteFileInfo::new).collect(Collectors.toList()));
         }
         return buildRemoteInfoSource(table, params);
+    }
+
+    @Override
+    public TvrVersionRange getTableVersionRange(String dbName, Table table,
+                                                Optional<ConnectorTableVersion> startVersion,
+                                                Optional<ConnectorTableVersion> endVersion) {
+        // Delta has no time-travel resolution yet (unlike Iceberg), so an ordinary scan always arrives here
+        // with both versions empty. Resolve to the table's pinned snapshot, matching the version key that
+        // getTableStatistics()/DeltaLakeScanNode build from deltaSnapshot.getVersion() - otherwise the scan
+        // operator keeps the TvrVersionRange.empty() default, prepareMetadata() treats that as "nothing to
+        // do" (item.getVersion().end().isEmpty()), and pre-collection becomes a no-op for ordinary scans.
+        if (startVersion.isPresent() || endVersion.isPresent()) {
+            return TvrTableSnapshot.empty();
+        }
+        SnapshotImpl snapshot = (SnapshotImpl) ((DeltaLakeTable) table).getDeltaSnapshot();
+        return TvrTableSnapshot.of(snapshot.getVersion());
     }
 
     @Override

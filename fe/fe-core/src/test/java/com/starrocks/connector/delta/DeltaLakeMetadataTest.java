@@ -22,6 +22,7 @@ import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
@@ -29,6 +30,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileInfo;
@@ -51,6 +53,9 @@ import io.delta.kernel.defaults.internal.data.vector.DefaultBinaryVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultMapVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultStructVector;
 import io.delta.kernel.engine.Engine;
+import io.delta.kernel.expressions.Predicate;
+import io.delta.kernel.internal.ScanBuilderImpl;
+import io.delta.kernel.internal.ScanImpl;
 import io.delta.kernel.internal.SnapshotImpl;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.DataType;
@@ -236,6 +241,89 @@ public class DeltaLakeMetadataTest {
     @Test
     public void testDeltaTableSupportsParallelMetadataPreparation() {
         Assertions.assertTrue(newTable().supportPreCollectMetadata());
+    }
+
+    @Test
+    public void testGetTableVersionRangeResolvesOrdinaryScanToPinnedSnapshot(@Mocked SnapshotImpl snapshot) {
+        new Expectations() {
+            {
+                snapshot.getVersion();
+                result = 42L;
+                minTimes = 0;
+            }
+        };
+        DeltaLakeTable table = new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
+                Lists.newArrayList(), snapshot, null, new MetastoreTable("db1", "table1", "path/to/table", 123));
+
+        TvrVersionRange versionRange = deltaLakeMetadata.getTableVersionRange("db1", table, Optional.empty(),
+                Optional.empty());
+
+        Assertions.assertFalse(versionRange.end().isEmpty());
+        Assertions.assertEquals(42L, versionRange.end().get());
+    }
+
+    @Test
+    public void testPrepareMetadataCollectsFilesForOrdinaryScanWithResolvedVersion(@Mocked SnapshotImpl snapshot,
+                                                                                   @Mocked ScanBuilderImpl scanBuilder,
+                                                                                   @Mocked ScanImpl scan) {
+        new Expectations() {
+            {
+                snapshot.getVersion();
+                result = 42L;
+                minTimes = 0;
+
+                snapshot.getScanBuilder();
+                result = scanBuilder;
+                minTimes = 0;
+
+                scanBuilder.withFilter((Predicate) any);
+                result = scanBuilder;
+                minTimes = 0;
+
+                scanBuilder.build();
+                result = scan;
+                minTimes = 0;
+
+                scan.getScanFiles((Engine) any, true);
+                result = emptyScanFilesIterator();
+                minTimes = 0;
+            }
+        };
+        DeltaLakeTable table = new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
+                Lists.newArrayList(), snapshot, null, new MetastoreTable("db1", "table1", "path/to/table", 123));
+
+        TvrVersionRange versionRange = deltaLakeMetadata.getTableVersionRange("db1", table, Optional.empty(),
+                Optional.empty());
+        Assertions.assertFalse(versionRange.end().isEmpty(), "ordinary scan must resolve to a real version");
+
+        MetaPreparationItem item = new MetaPreparationItem(table, null, -1, versionRange);
+        boolean result = deltaLakeMetadata.prepareMetadata(item, null, null);
+        Assertions.assertTrue(result);
+
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setTableVersionRange(versionRange).build();
+        PredicateSearchKey key = PredicateSearchKey.of("db1", "table1", params);
+        List<FileScanTask> prepared =
+                Deencapsulation.<Map<PredicateSearchKey, List<FileScanTask>>>getField(deltaLakeMetadata, "splitTasks")
+                        .get(key);
+        Assertions.assertNotNull(prepared, "prepareMetadata must not no-op once the version range is resolved");
+    }
+
+    private static CloseableIterator<FilteredColumnarBatch> emptyScanFilesIterator() {
+        return new CloseableIterator<FilteredColumnarBatch>() {
+            @Override
+            public boolean hasNext() {
+                return false;
+            }
+
+            @Override
+            public FilteredColumnarBatch next() {
+                throw new java.util.NoSuchElementException();
+            }
+
+            @Override
+            public void close() {
+            }
+        };
     }
 
     @Test
