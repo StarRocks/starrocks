@@ -65,11 +65,11 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/options.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
@@ -95,8 +95,8 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_tablet_metadata(GetParam());
@@ -257,7 +257,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 
     int64_t _src_tablet_id = 10000;
@@ -755,8 +755,8 @@ protected:
         CHECK_OK(fs::create_directories(_test_dir));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         // Create a simple tablet metadata for testing
@@ -827,7 +827,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<FileSystem> _shared_fs;
@@ -1109,7 +1109,7 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, does_not_hide_corrupt_source_me
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
     _replication_txn_manager.reset();
-    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
     _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
     const std::string meta_dir = "/remote/source/meta";
@@ -1154,8 +1154,8 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
     }
 
@@ -1308,7 +1308,7 @@ protected:
     std::string _test_dir = kTestDirectory;
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::TabletManager> _tablet_mgr;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 };
@@ -2134,8 +2134,9 @@ protected:
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_simple_tablet_metadata(_src_tablet_id);
@@ -2253,7 +2254,7 @@ protected:
     std::unique_ptr<TabletManager> _tablet_mgr;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 
     std::shared_ptr<TabletMetadata> _src_tablet_metadata;

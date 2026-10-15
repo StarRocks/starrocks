@@ -262,7 +262,7 @@ public:
     void force_set_build_vector_index_inline() { _force_build_vector_index_inline = true; }
 
     // Set by DeltaWriter for the column partial-update modes, whose publish path
-    // (UpdateManager::_handle_delete_files) applies every del file with index.erase and never consults
+    // (PrimaryKeyManager::_handle_delete_files) applies every del file with index.erase and never consults
     // op_write.del_ssts(). A tombstone sstable built for such a load is therefore never ingested, so it
     // never enters sstable_meta() and only a full vacuum's orphan scan reclaims it -- pure waste on both
     // the write and the storage side. Skip the build instead of emitting a file nobody consumes.

@@ -61,7 +61,7 @@
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/non_closing_chunk_iterator.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"

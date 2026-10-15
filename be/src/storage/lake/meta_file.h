@@ -34,7 +34,7 @@ class DelVector;
 
 namespace lake {
 
-class UpdateManager;
+class PrimaryKeyManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
@@ -198,7 +198,7 @@ private:
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
-    UpdateManager* _update_mgr;
+    PrimaryKeyManager* _primary_key_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     // from segment id to delvec, used for fill cache in finalize stage.

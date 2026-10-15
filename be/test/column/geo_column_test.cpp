@@ -306,18 +306,13 @@ TEST(GeoColumnTest, MaterializationBindsOnlyStorageOfTypedPlaceholders) {
     EXPECT_EQ(explicit_desc, explicit_column->descriptor());
 }
 
-TEST(GeoColumnTest, BoundedInspectionDoesNotTrustProducerFlag) {
+TEST(GeoColumnTest, InspectionDoesNotTrustProducerFlag) {
     auto desc = descriptor();
     desc.storage.validation_state = GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED;
-    GeoWkbLimits limits;
-    limits.max_bytes = 20;
-    auto column = GeoColumn::create(desc, limits);
-    column->append_wkb(Slice(point()));
-    EXPECT_FALSE(column->inspect_wkb(0).ok());
-    EXPECT_FALSE(column->has_wkb_cache());
-    column->reset_column();
+    auto column = GeoColumn::create(desc);
     column->append_wkb(Slice("invalid"));
     EXPECT_FALSE(column->inspect_wkb(0).ok());
+    EXPECT_FALSE(column->has_wkb_cache());
     EXPECT_FALSE(column->inspect_wkb(1).ok());
     EXPECT_EQ("invalid", column->get_wkb(0).to_string());
 }

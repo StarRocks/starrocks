@@ -50,7 +50,7 @@ namespace starrocks::lake {
 
 template <typename T>
 class MetadataIterator;
-class UpdateManager;
+class PrimaryKeyManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
@@ -70,7 +70,7 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
                            int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
 
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
@@ -389,7 +389,7 @@ public:
 
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
-    UpdateManager* update_mgr();
+    PrimaryKeyManager* primary_key_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
 
@@ -496,7 +496,7 @@ private:
     const StorePathRegistry* _store_path_registry = nullptr;
     std::unique_ptr<Metacache> _metacache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
-    UpdateManager* _update_mgr = nullptr;
+    PrimaryKeyManager* _primary_key_mgr = nullptr;
     std::unique_ptr<TableSchemaService> _table_schema_service;
 
     std::shared_mutex _meta_lock;

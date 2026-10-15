@@ -103,4 +103,33 @@ public class ScoreSelectorTest {
             Config.lake_compaction_score_selector_min_score = originalThreshold;
         }
     }
+
+    @Test
+    public void testPriorityHonorsRetryDeadline() {
+        long future = System.currentTimeMillis() + 60_000;
+        List<PartitionStatistics> statisticsList = new ArrayList<>();
+        // A deferred priority request waits out its retry deadline, whatever its priority or score.
+        PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(5.0)));
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        statistics.setNextCompactionTime(future);
+        statisticsList.add(statistics);
+
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(5.0)));
+        statistics.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+        statistics.setNextCompactionTime(future);
+        statisticsList.add(statistics);
+
+        // Once the deadline has passed, a priority request still skips the min score check.
+        statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 5));
+        statistics.setCompactionScore(Quantiles.compute(Collections.singleton(0.0)));
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+        statistics.setNextCompactionTime(System.currentTimeMillis() - 1);
+        statisticsList.add(statistics);
+
+        List<PartitionStatisticsSnapshot> targetList = selector.select(statisticsList, new HashSet<Long>());
+        Assertions.assertEquals(1, targetList.size());
+        Assertions.assertEquals(5, targetList.get(0).getPartition().getPartitionId());
+    }
 }

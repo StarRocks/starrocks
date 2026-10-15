@@ -36,6 +36,7 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -69,6 +70,13 @@ public class PolymorphicFunctionAnalyzer {
         for (int i = 0; i < size; ++i) {
             Type declType = i >= argsTypes.length ? argsTypes[argsTypes.length - 1] : argsTypes[i];
             Type inputType = inputArgTypes[i];
+
+            // A wildcard decimal declaration (map_agg's key) has no precision or scale; take them from the input,
+            // or the deduced return type hands the BE a decimal of precision -1.
+            if (declType.isDecimalV3() && ((ScalarType) declType).isWildcardDecimal() && inputType.isDecimalV3()) {
+                resolvedTypes[i] = inputType;
+                continue;
+            }
 
             // If declaration type is not a pseudo type, use it.
             if (!declType.isPseudoType()) {

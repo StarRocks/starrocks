@@ -19,7 +19,7 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -231,7 +231,7 @@ struct TabletDeleteStats {
 };
 
 TabletDeleteStats tablet_delete_stats(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                      UpdateManager* mgr) {
+                                      PrimaryKeyManager* mgr) {
     TabletDeleteStats stats;
     for (const auto& rowset_pb : tablet_metadata->rowsets()) {
         stats.total_rows += rowset_pb.num_rows();
@@ -379,7 +379,7 @@ static bool skip_sparse_low_score_level(const PKSizeTieredLevel& pick_level,
 StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
     bool is_real_time = is_real_time_compaction_strategy(tablet_metadata);
-    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    PrimaryKeyManager* mgr = _tablet_mgr->primary_key_mgr();
     std::vector<int64_t> rowset_indexes;
     if (!min_input_segment_check(tablet_metadata)) {
         // When the number of segments cannot meet the requirement
@@ -461,7 +461,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
-    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    PrimaryKeyManager* mgr = _tablet_mgr->primary_key_mgr();
     // Base compaction is a full merge: collect ALL rowsets (like non-primary-key base compaction),
     // then order them by absolute delete-row count (num_dels) descending. Both the delete-vector
     // size and the reclaimable space scale with the absolute delete count -- not the ratio -- so
@@ -544,7 +544,7 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // still merges small files. Skip collecting delete stats when automatic base compaction is
     // forbidden: for rowsets without num_dels, this reads the delete vector of every segment.
     if (base_compaction_allowed()) {
-        const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
+        const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->primary_key_mgr());
         // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
         // under a forced base compaction: there is nothing for base compaction to reclaim, so skip
         // the second rowset walk in pick_base_rowsets and go straight to cumulative selection.

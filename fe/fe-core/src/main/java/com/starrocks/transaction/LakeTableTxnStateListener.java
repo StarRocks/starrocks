@@ -196,9 +196,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
      * unfinished-tablet check above.
      *
      * <p>The compaction exemption is safe only while CompactionScheduler keeps compaction off the table for
-     * the whole alter. Its table-state gate covers SCHEMA_CHANGE and ROLLUP on range-distribution tables, but
-     * not ROLLUP on hash-distributed tables (LakeRollupJob). A compaction committed there after W carries no
-     * rollup vlog and wedges the rollup's final publish just like a writer this method rejects.
+     * the whole alter. Its table-state gate skips every table in SCHEMA_CHANGE or ROLLUP state, which covers
+     * schema changes and both rollup paths (LakeRollupJob for hash-distributed tables and sync MVs,
+     * LakeRangeRollupJob for range-distribution tables). A compaction committed after W would carry no shadow
+     * vlog and wedge the job's final publish just like a writer this method rejects.
      *
      * <p>The check runs only while the index is still SHADOW. The alter jobs wait only for transactions below W,
      * so a writer that resolved its tablets early and is still open when the alter makes the index NORMAL is not

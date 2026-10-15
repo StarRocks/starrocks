@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
@@ -490,6 +491,50 @@ public class InsertSourceRefreshTest extends ConnectorPlanTestBase {
         StatementPlanner.analyzeStatement(stmt, connectContext, locker);
         Assertions.assertEquals(List.of(false), lockedAtRefresh);
         Assertions.assertTrue(locked.get());
+    }
+
+    @Test
+    public void testCtasRefreshRunsBeforeLockWhenSelectReadsInternalTable() throws Exception {
+        // The SELECT reads an internal table, so the lock is taken before analysis; the INSERT a CTAS carries is
+        // analyzed already, so the pre-pass skips its sources. Their refresh and reload still belong before the lock.
+        AtomicBoolean locked = new AtomicBoolean(false);
+        List<Boolean> lockedAtRefresh = new CopyOnWriteArrayList<>();
+        ReloadingHiveMetadata metadata = new ReloadingHiveMetadata(false) {
+            @Override
+            public synchronized void invalidateTableForRead(String srDbName, Table table) {
+                lockedAtRefresh.add(locked.get());
+                super.invalidateTableForRead(srDbName, table);
+            }
+        };
+        register(metadata);
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create table test.ctas_locked distributed by hash(l_orderkey) buckets 1 " +
+                        "properties('replication_num'='1') " +
+                        "as select l_orderkey, l_partkey from hive0.tpch.lineitem join test.t0 on l_orderkey = v1",
+                connectContext);
+        boolean runningUnitTest = FeConstants.runningUnitTest;
+        try {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().createTable(connectContext, ctas.getCreateTableStmt());
+            PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, ctas.getInsertStmt()) {
+                @Override
+                public void lock() {
+                    locked.set(true);
+                }
+
+                @Override
+                public void unlock() {
+                }
+            };
+            // Off, or every INSERT in a UT takes the deferred-lock path.
+            FeConstants.runningUnitTest = false;
+            Assertions.assertFalse(StatementPlanner.analyzeStatement(ctas.getInsertStmt(), connectContext, locker));
+            Assertions.assertTrue(locked.get());
+            Assertions.assertEquals(List.of(false), lockedAtRefresh);
+            Assertions.assertSame(metadata.latest("lineitem"), boundSources(ctas.getInsertStmt()).get(0));
+        } finally {
+            FeConstants.runningUnitTest = runningUnitTest;
+            starRocksAssert.dropTable("ctas_locked");
+        }
     }
 
     @Test

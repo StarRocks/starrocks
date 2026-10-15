@@ -49,7 +49,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
                     # comment
 
                     src/exec/exec_env.cpp
-                    src/storage/lake/update_manager.cpp
+                    src/storage/lake/primary_key_manager.cpp
                     """
                 )
             )
@@ -57,7 +57,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
             self.assertEqual(
                 {
                     "src/exec/exec_env.cpp",
-                    "src/storage/lake/update_manager.cpp",
+                    "src/storage/lake/primary_key_manager.cpp",
                 },
                 MODULE.load_path_allowlist(allowlist_path),
             )
