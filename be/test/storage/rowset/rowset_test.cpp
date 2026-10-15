@@ -36,6 +36,7 @@
 
 #include <butil/iobuf.h>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -50,15 +51,19 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/empty_iterator.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_rewriter.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/rowset_update_state.h"
+#include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_meta.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
@@ -66,6 +71,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 using std::string;
 
@@ -1217,4 +1223,334 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     LOG(INFO) << st;
     ASSERT_TRUE(st.ok());
 }
+
+namespace {
+
+constexpr int64_t kVectorIndexId = 100;
+
+// id(BIGINT key) + v(ARRAY<FLOAT>) with an HNSW vector index on v. The index is a standalone
+// .vi file next to the segment, not part of the segment file.
+std::shared_ptr<TabletSchema> create_vector_index_tablet_schema() {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(1024);
+    schema_pb.set_next_column_unique_id(3);
+
+    auto* col0 = schema_pb.add_column();
+    col0->set_unique_id(0);
+    col0->set_name("id");
+    col0->set_type("BIGINT");
+    col0->set_is_key(true);
+    col0->set_is_nullable(false);
+    col0->set_length(8);
+    col0->set_index_length(8);
+    col0->set_aggregation("NONE");
+
+    auto* col1 = schema_pb.add_column();
+    col1->set_unique_id(1);
+    col1->set_name("v");
+    col1->set_type("ARRAY");
+    col1->set_is_key(false);
+    col1->set_is_nullable(false);
+    col1->set_length(24);
+    col1->set_aggregation("NONE");
+    auto* child = col1->add_children_columns();
+    child->set_unique_id(2);
+    child->set_name("element");
+    child->set_type("FLOAT");
+    child->set_is_key(false);
+    child->set_is_nullable(true);
+    child->set_length(4);
+    child->set_aggregation("NONE");
+
+    auto* idx = schema_pb.add_table_indices();
+    idx->set_index_id(kVectorIndexId);
+    idx->set_index_name("idx_v");
+    idx->set_index_type(IndexType::VECTOR);
+    idx->add_col_unique_id(1);
+    idx->set_index_properties(
+            R"({"common_properties":{"index_type":"hnsw","dim":"3","metric_type":"l2_distance","is_vector_normed":"false"},"index_properties":{"efconstruction":"40","m":"16"},"search_properties":{"efsearch":"40"}})");
+
+    return TabletSchema::create(schema_pb);
+}
+
+static RowsetSharedPtr create_indexed_rowset(const TabletSchemaCSPtr& schema, const std::string& dir,
+                                             const RowsetId& rowset_id, int num_segments = 1) {
+    RowsetMetaPB rowset_meta_pb;
+    rowset_meta_pb.set_deprecated_rowset_id(0);
+    rowset_meta_pb.set_rowset_id(rowset_id.to_string());
+    rowset_meta_pb.set_tablet_id(12345);
+    rowset_meta_pb.set_tablet_schema_hash(1111);
+    rowset_meta_pb.set_partition_id(1);
+    rowset_meta_pb.set_rowset_type(BETA_ROWSET);
+    rowset_meta_pb.set_rowset_state(VISIBLE);
+    rowset_meta_pb.set_start_version(2);
+    rowset_meta_pb.set_end_version(2);
+    rowset_meta_pb.set_num_rows(1);
+    rowset_meta_pb.set_num_segments(num_segments);
+    rowset_meta_pb.set_total_disk_size(1);
+    rowset_meta_pb.set_data_disk_size(1);
+    rowset_meta_pb.set_index_disk_size(0);
+    rowset_meta_pb.set_empty(false);
+    rowset_meta_pb.set_creation_time(time(nullptr));
+
+    auto rowset_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
+    return Rowset::create(schema, dir, rowset_meta);
+}
+
+static void create_dummy_segment_file(const std::string& dir, const RowsetId& rowset_id, int segment_id = 0) {
+    ASSIGN_OR_ABORT(auto wfile,
+                    FileSystem::Default()->new_writable_file(Rowset::segment_file_path(dir, rowset_id, segment_id)));
+    ASSERT_OK(wfile->append("dummy segment"));
+    ASSERT_OK(wfile->close());
+}
+
+} // namespace
+
+TEST_F(RowsetTest, copy_files_to_copies_vector_indexes) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_vector_indexes";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id, 3);
+    const std::string index_data("vector\0index", 12);
+    for (int i = 0; i < 3; ++i) {
+        create_dummy_segment_file(src_dir, rowset_id, i);
+        // The middle segment has no .vi file because its index build was skipped.
+        if (i == 1) continue;
+        auto src_index_path =
+                IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), i, kVectorIndexId);
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(src_index_path));
+        ASSERT_OK(file->append(index_data));
+        ASSERT_OK(file->close());
+    }
+
+    auto res = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_TRUE(res.ok()) << res.status();
+    // Three 13-byte segments and two 12-byte vector index files.
+    ASSERT_EQ(63, res.value());
+    for (int i = 0; i < 3; ++i) {
+        ASSERT_TRUE(fs::path_exist(Rowset::segment_file_path(dst_dir, rowset_id, i)));
+        auto dst_index_path =
+                IndexDescriptor::vector_index_file_path(dst_dir, rowset_id.to_string(), i, kVectorIndexId);
+        if (i == 1) {
+            ASSERT_FALSE(fs::path_exist(dst_index_path));
+            continue;
+        }
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(dst_index_path));
+        ASSIGN_OR_ABORT(auto contents, file->read_all());
+        ASSERT_EQ(index_data, contents);
+    }
+}
+
+TEST_F(RowsetTest, copy_files_to_skips_missing_vector_index) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_missing_vector_index";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+
+    auto res = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_TRUE(res.ok()) << res.status();
+    ASSERT_EQ(13, res.value());
+    ASSERT_TRUE(fs::path_exist(Rowset::segment_file_path(dst_dir, rowset_id, 0)));
+    ASSERT_FALSE(
+            fs::path_exist(IndexDescriptor::vector_index_file_path(dst_dir, rowset_id.to_string(), 0, kVectorIndexId)));
+}
+
+TEST_F(RowsetTest, copy_files_to_reports_existing_vector_index) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_existing_vector_index";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    for (const auto& dir : {src_dir, dst_dir}) {
+        auto index_path = IndexDescriptor::vector_index_file_path(dir, rowset_id.to_string(), 0, kVectorIndexId);
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(index_path));
+        ASSERT_OK(file->append(dir == src_dir ? "source" : "existing"));
+        ASSERT_OK(file->close());
+    }
+
+    auto res = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_already_exist()) << res.status();
+    auto dst_index_path = IndexDescriptor::vector_index_file_path(dst_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    ASSERT_NE(std::string::npos, res.status().to_string().find(dst_index_path));
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(dst_index_path));
+    ASSIGN_OR_ABORT(auto contents, file->read_all());
+    ASSERT_EQ("existing", contents);
+}
+
+TEST_F(RowsetTest, copy_files_to_reports_vector_index_path_error) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_vector_index_path_error";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    auto src_index_path = IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    // A symlink loop produces a real I/O error rather than a missing optional index.
+    std::filesystem::create_symlink(src_index_path, src_index_path);
+    // Recursive fixture cleanup follows symlinks, so unlink this one before TearDown.
+    DeferOp cleanup_link([&] { (void)FileSystem::Default()->delete_file(src_index_path); });
+
+    auto res = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_FALSE(res.ok());
+    // The POSIX filesystem reports ELOOP as InternalError; preserve that status.
+    ASSERT_TRUE(res.status().is_internal_error()) << res.status();
+    ASSERT_NE(std::string::npos, res.status().to_string().find(src_index_path));
+}
+
+TEST_F(RowsetTest, copy_files_to_reports_vector_index_copy_error) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/copy_vector_index_copy_error";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    auto src_index_path = IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    // The path exists, but reading a directory as an index file must fail.
+    ASSERT_OK(fs::create_directories(src_index_path));
+
+    auto res = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_FALSE(res.ok());
+    ASSERT_FALSE(res.status().is_not_found()) << res.status();
+    ASSERT_NE(std::string::npos, res.status().to_string().find(src_index_path));
+    auto dst_index_path = IndexDescriptor::vector_index_file_path(dst_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    ASSERT_NE(std::string::npos, res.status().to_string().find(dst_index_path));
+}
+
+TEST_F(RowsetTest, copy_files_to_converts_rowset_id_without_vector_index) {
+    auto schema = create_vector_index_tablet_schema();
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/convert_missing_vector_index";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    auto rowset = create_indexed_rowset(schema, src_dir, rowset_id);
+
+    // Write a valid empty segment: its vector index writer leaves no .vi file.
+    SegmentWriterOptions options;
+    options.segment_file_mark.rowset_path_prefix = src_dir;
+    options.segment_file_mark.rowset_id = rowset_id.to_string();
+    uint64_t segment_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    {
+        ASSIGN_OR_ABORT(auto file,
+                        FileSystem::Default()->new_writable_file(Rowset::segment_file_path(src_dir, rowset_id, 0)));
+        SegmentWriter writer(std::move(file), 0, schema, options);
+        ASSERT_OK(writer.init());
+        ASSERT_OK(writer.finalize(&segment_size, &index_size, &footer_position));
+    }
+    rowset->rowset_meta()->set_num_rows(0);
+    rowset->rowset_meta()->set_empty(true);
+    rowset->rowset_meta()->set_total_disk_size(segment_size);
+    rowset->rowset_meta()->set_data_disk_size(segment_size - index_size);
+    rowset->rowset_meta()->set_index_disk_size(index_size);
+    ASSERT_OK(rowset->load());
+    ASSERT_FALSE(
+            fs::path_exist(IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId)));
+
+    auto copied = rowset->copy_files_to(nullptr, dst_dir);
+    ASSERT_TRUE(copied.ok()) << copied.status();
+    ASSERT_EQ(segment_size, copied.value());
+
+    TabletMetaPB tablet_meta_pb;
+    tablet_meta_pb.set_tablet_id(12345);
+    tablet_meta_pb.set_schema_hash(1111);
+    tablet_meta_pb.set_partition_id(1);
+    tablet_meta_pb.set_tablet_state(PB_RUNNING);
+    schema->to_schema_pb(tablet_meta_pb.mutable_schema());
+    rowset->rowset_meta()->get_full_meta_pb(tablet_meta_pb.add_rs_metas());
+    const std::string header_path = dst_dir + "/12345.hdr";
+    ASSERT_OK(TabletMeta::save(header_path, tablet_meta_pb));
+
+    // Exercise the same rowset-ID conversion that follows copying in storage migration.
+    ASSERT_OK(SnapshotManager::instance()->convert_rowset_ids(dst_dir, 12345, 1111));
+    TabletMeta converted_meta;
+    ASSERT_OK(converted_meta.create_from_file(header_path));
+    TabletMetaPB converted_pb;
+    converted_meta.to_meta_pb(&converted_pb);
+    ASSERT_EQ(1, converted_pb.rs_metas_size());
+    const auto& converted_rowset_pb = converted_pb.rs_metas(0);
+    ASSERT_NE(rowset_id.to_string(), converted_rowset_pb.rowset_id());
+    auto converted = Rowset::create(schema, dst_dir, std::make_shared<RowsetMeta>(converted_rowset_pb));
+    ASSERT_EQ(0, converted->num_rows());
+    ASSERT_EQ(1, converted->num_segments());
+    ASSERT_OK(converted->load());
+    ASSERT_TRUE(fs::path_exist(Rowset::segment_file_path(dst_dir, converted->rowset_id(), 0)));
+    ASSERT_FALSE(fs::path_exist(
+            IndexDescriptor::vector_index_file_path(dst_dir, converted_rowset_pb.rowset_id(), 0, kVectorIndexId)));
+    ASSERT_FALSE(fs::path_exist(Rowset::segment_file_path(dst_dir, rowset_id, 0)));
+    ASSERT_TRUE(fs::path_exist(Rowset::segment_file_path(src_dir, rowset_id, 0)));
+}
+
+TEST_F(RowsetTest, link_files_to_links_vector_index) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/link_vector_index";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    auto src_index_path = IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    {
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(src_index_path));
+        ASSERT_OK(file->append("vector index"));
+        ASSERT_OK(file->close());
+    }
+
+    RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
+    ASSERT_OK(rowset->link_files_to(nullptr, dst_dir, new_rowset_id));
+    ASSERT_TRUE(fs::path_exist(Rowset::segment_file_path(dst_dir, new_rowset_id, 0)));
+    auto dst_index_path =
+            IndexDescriptor::vector_index_file_path(dst_dir, new_rowset_id.to_string(), 0, kVectorIndexId);
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(dst_index_path));
+    ASSIGN_OR_ABORT(auto contents, file->read_all());
+    ASSERT_EQ("vector index", contents);
+}
+
+TEST_F(RowsetTest, link_files_to_reports_vector_index_path_error) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/link_vector_index_path_error";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    auto src_index_path = IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    std::filesystem::create_symlink(src_index_path, src_index_path);
+    DeferOp cleanup_link([&] { (void)FileSystem::Default()->delete_file(src_index_path); });
+
+    RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
+    auto st = rowset->link_files_to(nullptr, dst_dir, new_rowset_id);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_NE(std::string::npos, st.to_string().find(src_index_path));
+}
+
+TEST_F(RowsetTest, link_files_to_reports_existing_vector_index) {
+    const std::string src_dir = config::storage_root_path + "/data/rowset_test";
+    const std::string dst_dir = config::storage_root_path + "/data/link_existing_vector_index";
+    ASSERT_OK(fs::create_directories(dst_dir));
+    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
+    RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
+    create_dummy_segment_file(src_dir, rowset_id);
+    auto rowset = create_indexed_rowset(create_vector_index_tablet_schema(), src_dir, rowset_id);
+    auto src_index_path = IndexDescriptor::vector_index_file_path(src_dir, rowset_id.to_string(), 0, kVectorIndexId);
+    auto dst_index_path =
+            IndexDescriptor::vector_index_file_path(dst_dir, new_rowset_id.to_string(), 0, kVectorIndexId);
+    for (const auto& path : {src_index_path, dst_index_path}) {
+        ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_writable_file(path));
+        ASSERT_OK(file->append(path == src_index_path ? "source" : "existing"));
+        ASSERT_OK(file->close());
+    }
+
+    auto st = rowset->link_files_to(nullptr, dst_dir, new_rowset_id);
+    ASSERT_FALSE(st.ok());
+    ASSIGN_OR_ABORT(auto file, FileSystem::Default()->new_random_access_file(dst_index_path));
+    ASSIGN_OR_ABORT(auto contents, file->read_all());
+    ASSERT_EQ("existing", contents);
+}
+
 } // namespace starrocks
