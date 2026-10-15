@@ -15,7 +15,11 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterHandler;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import mockit.Mock;
@@ -28,6 +32,7 @@ import java.util.List;
 
 public class SchemaChangeProcDirTest {
     private Database db;
+    private SchemaChangeHandler handler;
     private SchemaChangeProcDir schemaChangeProcDir;
 
     private static List<Comparable> job(int jobId, String tableName, String state) {
@@ -57,7 +62,7 @@ public class SchemaChangeProcDirTest {
     @BeforeEach
     public void setUp() {
         db = new Database(10000L, "db1");
-        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler = new SchemaChangeHandler();
         schemaChangeProcDir = new SchemaChangeProcDir(handler, db);
 
         List<List<Comparable>> infos = Lists.newArrayList();
@@ -103,5 +108,32 @@ public class SchemaChangeProcDirTest {
         Assertions.assertEquals(
                 ((BaseProcResult) schemaChangeProcDir.fetchResultByFilter(null, null, null)).getRows(),
                 ((BaseProcResult) schemaChangeProcDir.fetchResult()).getRows());
+    }
+
+    @Test
+    public void testLookupSchemaChangeJobV2() throws AnalysisException {
+        SchemaChangeJobV2 job = new SchemaChangeJobV2(7L, 10000L, 20000L, "tb1", 10000L);
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 7L ? job : null;
+            }
+        };
+
+        Assertions.assertTrue(schemaChangeProcDir.lookup("7") instanceof SchemaChangeJobProcNode);
+    }
+
+    @Test
+    public void testLookupRejectsJobOfOtherType() {
+        LakeTableSchemaChangeJob job = new LakeTableSchemaChangeJob(8L, 10000L, 20000L, "tb1", 10000L);
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 8L ? job : null;
+            }
+        };
+
+        AnalysisException e = Assertions.assertThrows(AnalysisException.class, () -> schemaChangeProcDir.lookup("8"));
+        Assertions.assertTrue(e.getMessage().contains("LakeTableSchemaChangeJob"), e.getMessage());
     }
 }

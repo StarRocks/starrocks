@@ -16,7 +16,11 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterHandler;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.RollupJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.OrderByPair;
@@ -37,6 +41,7 @@ import java.util.List;
 
 public class RollupProcDirTest {
     private Database db;
+    private MaterializedViewHandler handler;
     private RollupProcDir rollupProcDir;
 
     private static List<Comparable> job(int jobId, String tableName, String state) {
@@ -59,7 +64,7 @@ public class RollupProcDirTest {
     @BeforeEach
     public void setUp() {
         db = new Database(10000L, "db1");
-        MaterializedViewHandler handler = new MaterializedViewHandler();
+        handler = new MaterializedViewHandler();
         rollupProcDir = new RollupProcDir(handler, db);
 
         List<List<Comparable>> infos = Lists.newArrayList();
@@ -151,5 +156,32 @@ public class RollupProcDirTest {
         Assertions.assertEquals(8, RollupProcDir.analyzeColumn("State"));
         Assertions.assertEquals(5, RollupProcDir.analyzeColumn("RollupIndexName"));
         Assertions.assertThrows(AnalysisException.class, () -> RollupProcDir.analyzeColumn("SchemaVersion"));
+    }
+
+    @Test
+    public void testLookupRollupJobV2() throws AnalysisException {
+        RollupJobV2 job = new RollupJobV2();
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 7L ? job : null;
+            }
+        };
+
+        Assertions.assertTrue(rollupProcDir.lookup("7") instanceof RollupJobProcNode);
+    }
+
+    @Test
+    public void testLookupRejectsJobOfOtherType() {
+        LakeRollupJob job = new LakeRollupJob();
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 8L ? job : null;
+            }
+        };
+
+        AnalysisException e = Assertions.assertThrows(AnalysisException.class, () -> rollupProcDir.lookup("8"));
+        Assertions.assertTrue(e.getMessage().contains("LakeRollupJob"), e.getMessage());
     }
 }
