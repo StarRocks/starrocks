@@ -50,11 +50,8 @@ public class IcebergConnector implements Connector {
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
-<<<<<<< HEAD
     private ExecutorService refreshOtherFeExecutor;
-=======
     private ExecutorService backgroundJobPlanningExecutor;
->>>>>>> ff73eff ([BugFix] Shut down the Iceberg metadata cache background executor on catalog shutdown (#80598))
     private final IcebergCatalogProperties icebergCatalogProperties;
     private final ConnectorProperties connectorProperties;
 
@@ -148,17 +145,11 @@ public class IcebergConnector implements Connector {
         if (icebergJobPlanningExecutor != null) {
             icebergJobPlanningExecutor.shutdown();
         }
-<<<<<<< HEAD
         if (refreshOtherFeExecutor != null) {
             refreshOtherFeExecutor.shutdown();
-=======
+        }
         if (backgroundJobPlanningExecutor != null) {
             backgroundJobPlanningExecutor.shutdown();
-        }
-        if (commitQueueManager != null) {
-            commitQueueManager.shutdownAll();
-            LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);
->>>>>>> ff73eff ([BugFix] Shut down the Iceberg metadata cache background executor on catalog shutdown (#80598))
         }
     }
 
