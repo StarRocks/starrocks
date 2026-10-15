@@ -1578,7 +1578,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The URI scheme used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client, pointing it to the BE/CN node. The default `http` preserves the original behavior. Set it to `https` to redirect clients to a TLS endpoint (for example, a TLS-terminating sidecar or reverse proxy running in front of the BE/CN HTTP server), enabling an encrypted Stream Load data hop without the BE/CN HTTP server having to serve TLS itself. This parameter affects only the Stream Load redirect; the FE leader redirect is not affected. Typically used together with `stream_load_redirect_port`.
+- Description: The URI scheme used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client, pointing it to the BE/CN node. The default `http` preserves the original behavior. Set it to `https` to redirect clients to a TLS endpoint (for example, a TLS-terminating sidecar or reverse proxy running in front of the BE/CN HTTP server), enabling an encrypted Stream Load data hop without the BE/CN HTTP server having to serve TLS itself. Only `http` and `https` are accepted (case-insensitive); any other or empty value is invalid and the FE falls back to `http` on the backend's real `be_http_port` (scheme and port degrade together, so a custom TLS port is never used with plaintext `http`). The setting is mutable and applied per redirect — no FE restart is required. This parameter affects only the Stream Load redirect; the FE leader redirect is not affected. Typically used together with `stream_load_redirect_port`.
 - Introduced in: -
 
 ### `stream_load_redirect_port`

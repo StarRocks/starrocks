@@ -356,7 +356,15 @@ public class RestBaseAction extends BaseAction {
      * identical to {@link #resolveRedirectTarget(int)}. The port resolution is unchanged.
      */
     public static RedirectTarget resolveRedirectTarget(int backendHttpPort, String forwardedProto) {
-        String scheme = "https".equalsIgnoreCase(Config.stream_load_redirect_scheme) ? "https" : "http";
+        // Determine the scheme and whether it was explicitly a recognized value. An unrecognized
+        // configured scheme (empty/typo) must NOT keep a custom TLS port — otherwise the FE would
+        // emit plaintext http against a TLS-only sidecar port and every Stream Load would fail.
+        String configuredScheme = Config.stream_load_redirect_scheme;
+        boolean schemeRecognized =
+                "https".equalsIgnoreCase(configuredScheme) || "http".equalsIgnoreCase(configuredScheme);
+        String scheme = "https".equalsIgnoreCase(configuredScheme) ? "https" : "http";
+
+        boolean schemeFromForwardedProto = false;
         if (Config.stream_load_redirect_honor_forwarded_proto && forwardedProto != null) {
             String fp = forwardedProto.trim();
             // X-Forwarded-Proto may carry a comma-separated chain ("https, http"); the first (left-most)
@@ -367,10 +375,21 @@ public class RestBaseAction extends BaseAction {
             }
             if ("https".equalsIgnoreCase(fp)) {
                 scheme = "https";
+                schemeFromForwardedProto = true;
             } else if ("http".equalsIgnoreCase(fp)) {
                 scheme = "http";
+                schemeFromForwardedProto = true;
             }
         }
+
+        // If the configured scheme is unrecognized AND no valid X-Forwarded-Proto overrode it,
+        // degrade scheme AND port together to http + the backend's real port.
+        if (!schemeRecognized && !schemeFromForwardedProto) {
+            LOG.warn("Invalid stream_load_redirect_scheme '{}' (only 'http'/'https' accepted); "
+                    + "falling back to http + backend port '{}'", configuredScheme, backendHttpPort);
+            return new RedirectTarget("http", backendHttpPort);
+        }
+
         int configured = Config.stream_load_redirect_port;
         if (configured == 0) {
             return new RedirectTarget(scheme, backendHttpPort);

@@ -138,7 +138,9 @@ public class LoadActionTest extends StarRocksHttpTestCase {
     public void testRedirectInvalidSchemeFallsBackToHttp() throws Exception {
         // An unknown/empty scheme must not break Stream Load; it falls back to http.
         assertBatchWriteRedirect("ftp", 0, "http", 8040);
-        assertBatchWriteRedirect("", 8050, "http", 8050);
+        // Invalid scheme degrades scheme AND port together to http + the backend's real port,
+        // so a custom (TLS) port is never kept with plaintext http against a TLS-only listener.
+        assertBatchWriteRedirect("", 8050, "http", 8040);
     }
 
     @Test

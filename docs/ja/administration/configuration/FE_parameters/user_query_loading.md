@@ -1550,7 +1550,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用される URI スキーム。クライアントを BE/CN ノードに誘導します。デフォルトの `http` は従来の動作を維持します。`https` に設定すると、クライアントを TLS エンドポイント（例：BE/CN HTTP サーバーの前段で TLS を終端するサイドカーやリバースプロキシ）にリダイレクトでき、BE/CN HTTP サーバー自体が TLS を提供しなくても Stream Load のデータ経路を暗号化できます。このパラメータは Stream Load のリダイレクトにのみ影響し、FE リーダーのリダイレクトには影響しません。通常は `stream_load_redirect_port` と併用します。
+- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用される URI スキーム。クライアントを BE/CN ノードに誘導します。デフォルトの `http` は従来の動作を維持します。`https` に設定すると、クライアントを TLS エンドポイント（例：BE/CN HTTP サーバーの前段で TLS を終端するサイドカーやリバースプロキシ）にリダイレクトでき、BE/CN HTTP サーバー自体が TLS を提供しなくても Stream Load のデータ経路を暗号化できます。`http` と `https` のみ（大文字小文字を区別しない）が有効で、それ以外または空の値は無効として扱われ、FE は `http` + BE の実際の `be_http_port` にフォールバックします（スキームとポートがまとめて降格するため、平文 `http` でカスタム TLS ポートが使用されることはありません）。このパラメータは変更可能で、リダイレクトごとに適用され、FE の再起動は不要です。このパラメータは Stream Load のリダイレクトにのみ影響し、FE リーダーのリダイレクトには影響しません。通常は `stream_load_redirect_port` と併用します。
 - 導入時期：-
 
 ### `stream_load_redirect_port`

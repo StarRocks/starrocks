@@ -1577,7 +1577,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的 URI scheme，用于将客户端重定向到 BE/CN 节点。默认值 `http` 保持原有行为。设置为 `https` 可将客户端重定向到 TLS 端点（例如运行在 BE/CN HTTP 服务前面、负责 TLS 终止的 sidecar 或反向代理），从而在不要求 BE/CN HTTP 服务本身提供 TLS 的情况下，实现 Stream Load 数据传输的加密。该参数仅影响 Stream Load 重定向；FE leader 重定向不受影响。通常与 `stream_load_redirect_port` 配合使用。
+- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的 URI scheme，用于将客户端重定向到 BE/CN 节点。默认值 `http` 保持原有行为。设置为 `https` 可将客户端重定向到 TLS 端点（例如运行在 BE/CN HTTP 服务前面、负责 TLS 终止的 sidecar 或反向代理），从而在不要求 BE/CN HTTP 服务本身提供 TLS 的情况下，实现 Stream Load 数据传输的加密。仅接受 `http` 和 `https`（不区分大小写）；其他或空值均视为无效，此时 FE 回退为 `http` + BE 的真实 `be_http_port`（scheme 与端口一起降级，因此绝不会在明文 `http` 下使用自定义 TLS 端口）。该参数可变且按每次重定向生效，无需重启 FE。该参数仅影响 Stream Load 重定向；FE leader 重定向不受影响。通常与 `stream_load_redirect_port` 配合使用。
 - 引入版本: -
 
 ### `stream_load_redirect_port`
