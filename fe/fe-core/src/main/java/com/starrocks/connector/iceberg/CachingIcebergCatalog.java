@@ -545,6 +545,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void shutdown() {
+        delegate.shutdown();
+    }
+
+    @Override
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
