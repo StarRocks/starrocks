@@ -91,6 +91,26 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
     const auto deadline = std::chrono::steady_clock::now() +
                           std::chrono::milliseconds(std::max(0, config::lake_pk_index_publish_wait_timeout_ms));
     bool waited = false;
+    auto trace_rejection = [&](MemTracker* exceeded) {
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_request_bytes", bytes);
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_reserved_bytes", _bytes);
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_tracker_limit_bytes", exceeded->limit());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_tracker_used_bytes", exceeded->consumption());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_read_state_used_bytes", _context->tracker.consumption());
+        // Existing cache gauges are snapshots, not an atomic breakdown of the failing tracker.
+        // Keep them separate from the exact reservation and from transient/open scratch bytes.
+        auto* metrics = StorageMetrics::instance();
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_cached_memtable_bytes",
+                                metrics->lake_pk_index_cache_memtable_bytes.value());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_cached_index_bytes",
+                                metrics->lake_pk_index_cache_index_block_bytes.value());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_cached_filter_bytes",
+                                metrics->lake_pk_index_cache_filter_bytes.value());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_cached_delvec_bytes",
+                                metrics->lake_pk_index_cache_delvec_bytes.value());
+        TRACE_COUNTER_INCREMENT("pindex_sst_rejected_cached_overhead_bytes",
+                                metrics->lake_pk_index_cache_overhead_bytes.value());
+    };
     for (;;) {
         if (process_exit_in_progress()) return Status::Cancelled("SST byte reservation cancelled");
         if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes) {
@@ -118,16 +138,19 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
             TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
             return Status::OK();
         }
-        // Optional filters fall back immediately. An index block bigger than the entire budget
-        // cannot be made possible by waiting or by evicting other tablets.
+        // Optional filters fall back immediately. This open implementation retains compressed
+        // input while allocating decoded output; a rejected peak does not prove that the decoded
+        // index alone exceeds the budget.
         if (!wait || (exceeded->limit() >= 0 && _bytes + bytes > exceeded->limit())) {
             TRACE_COUNTER_INCREMENT("pindex_sst_byte_reservation_rejected", 1);
+            trace_rejection(exceeded);
             return Status::MemoryLimitExceeded(
                     fmt::format("SST read-state working set needs {} bytes; tracker {} limit={} consumption={}",
                                 _bytes + bytes, exceeded->label(), exceeded->limit(), exceeded->consumption()));
         }
         if (std::chrono::steady_clock::now() >= deadline) {
             TRACE_COUNTER_INCREMENT("pindex_sst_byte_reservation_timeout", 1);
+            trace_rejection(exceeded);
             return Status::TimedOut("SST read-state byte reservation exceeded its bounded wait");
         }
         if (!waited) {

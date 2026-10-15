@@ -63,6 +63,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     ReadOptions opt;
     if (options.reserve_read_state_memory) {
         opt.reserve_memory = [&](size_t bytes) { return options.reserve_read_state_memory(bytes, true); };
+        opt.is_index_block = true;
     }
     ReadIOStat iostat;
     opt.stat = &iostat;

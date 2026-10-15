@@ -888,8 +888,20 @@ TEST_F(PersistentIndexSstableTest, test_single_mandatory_index_block_over_budget
     ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
                                                                   context, true));
     const auto read_errors = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
-    const auto status = sst->reopen_read_state();
-    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        const auto status = sst->reopen_read_state();
+        EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+    }
+    std::map<std::string, int64_t> counters;
+    for (const auto& [name, value] : trace->metrics()->Get()) counters[name] = value;
+    EXPECT_EQ(1, counters["sst_index_probe_count"]);
+    EXPECT_GT(counters["sst_index_probe_decoded_bytes"], 0);
+    EXPECT_EQ(4096, counters["pindex_sst_rejected_reserved_bytes"]);
+    EXPECT_EQ(tracker.limit(), counters["pindex_sst_rejected_tracker_limit_bytes"]);
+    EXPECT_EQ(4096, counters["pindex_sst_rejected_read_state_used_bytes"]);
+    EXPECT_EQ(counters["sst_index_probe_open_peak_bytes"], counters["pindex_sst_rejected_request_bytes"]);
     EXPECT_LE(tracker.peak_consumption(), tracker.limit());
     EXPECT_EQ(0, tracker.consumption());
     EXPECT_EQ(0, sst->read_state_memory_demand());

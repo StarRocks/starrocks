@@ -151,6 +151,10 @@ struct ReadOptions {
 
     // ReadBlock calls this before allocating block input/output; ordinary data reads leave it empty.
     std::function<Status(size_t)> reserve_memory;
+
+    // Identify the mandatory Table::Open index probe in the publish trace. Metadata/filter probes
+    // are optional and must not be mistaken for the index working set when diagnosing pressure.
+    bool is_index_block = false;
 };
 
 // Options that control write operations

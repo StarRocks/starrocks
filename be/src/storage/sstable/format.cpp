@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/compression/compression_headers.h"
+#include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "common/status.h"
 #include "fs/fs.h"
@@ -91,6 +92,7 @@ Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const
         char compression = 0;
         RETURN_IF_ERROR(file->read_at_fully(handle.offset() + n, &compression, 1));
         size_t bytes = n + kBlockTrailerSize;
+        size_t decoded = n;
         if (compression == kSnappyCompression) {
             char prefix[5];
             const size_t prefix_size = std::min(n, sizeof(prefix));
@@ -101,8 +103,19 @@ Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const
                 return Status::Corruption("invalid SST block uncompressed length");
             }
             bytes += uncompressed;
+            decoded = uncompressed;
         } else if (compression != kNoCompression) {
             return Status::Corruption("bad block type");
+        }
+        if (options.is_index_block) {
+            // These probes use the normal (possibly decrypting) RandomAccessFile, before bulk
+            // allocation. Encoded+decoded overlap is an open peak, not the decoded index size.
+            // Counters are sums across opens; divide by probe_count only for like-sized files.
+            TRACE_COUNTER_INCREMENT("sst_index_probe_count", 1);
+            TRACE_COUNTER_INCREMENT("sst_index_probe_snappy_count", compression == kSnappyCompression);
+            TRACE_COUNTER_INCREMENT("sst_index_probe_encoded_bytes", n);
+            TRACE_COUNTER_INCREMENT("sst_index_probe_decoded_bytes", decoded);
+            TRACE_COUNTER_INCREMENT("sst_index_probe_open_peak_bytes", bytes);
         }
         RETURN_IF_ERROR(options.reserve_memory(bytes));
         reserved = bytes;

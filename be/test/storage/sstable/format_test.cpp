@@ -16,7 +16,10 @@
 
 #include <gtest/gtest.h>
 
+#include <map>
+
 #include "base/compression/compression_headers.h"
+#include "base/debug/trace.h"
 #include "base/testutil/assert.h"
 #include "fs/fs.h"
 #include "io/array_input_stream.h"
@@ -120,6 +123,38 @@ TEST(SstableFormatTest, changed_probe_cannot_bypass_decompression_reservation) {
     EXPECT_EQ(block.size(), reserved);
     EXPECT_EQ(1, stream->bulk_reads);
     EXPECT_TRUE(contents.data.empty());
+}
+
+TEST(SstableFormatTest, mandatory_index_probe_distinguishes_decoded_size_from_open_peak_before_rejection) {
+    const std::string raw(65536, 'x');
+    for (bool compressed : {false, true}) {
+        auto block = encode_block(raw, compressed);
+        auto stream = std::make_shared<ProbeStream>(block);
+        RandomAccessFile file(stream, "index-probe.sst");
+        BlockHandle handle;
+        handle.set_offset(0);
+        handle.set_size(block.size() - kBlockTrailerSize);
+        ReadOptions options;
+        options.is_index_block = true;
+        options.reserve_memory = [&](size_t) { return Status::MemoryLimitExceeded("unchanged budget cause"); };
+        scoped_refptr<Trace> trace(new Trace);
+        BlockContents contents;
+        {
+            ADOPT_TRACE(trace.get());
+            const auto status = ReadBlock(&file, options, handle, &contents);
+            ASSERT_TRUE(status.is_mem_limit_exceeded());
+            EXPECT_EQ("unchanged budget cause", status.message());
+        }
+        std::map<std::string, int64_t> counters;
+        for (const auto& [name, value] : trace->metrics()->Get()) counters[name] = value;
+        EXPECT_EQ(1, counters["sst_index_probe_count"]);
+        EXPECT_EQ(compressed ? 1 : 0, counters["sst_index_probe_snappy_count"]);
+        EXPECT_EQ(block.size() - kBlockTrailerSize, counters["sst_index_probe_encoded_bytes"]);
+        EXPECT_EQ(raw.size(), counters["sst_index_probe_decoded_bytes"]);
+        EXPECT_EQ(block.size() + (compressed ? raw.size() : 0), counters["sst_index_probe_open_peak_bytes"]);
+        EXPECT_EQ(0, stream->bulk_reads);
+        EXPECT_TRUE(contents.data.empty());
+    }
 }
 
 } // namespace starrocks::sstable
