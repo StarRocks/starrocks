@@ -1295,6 +1295,62 @@ TEST_F(LakePersistentIndexTest, test_partial_eviction_mode_change_reaccounts_unt
     for (size_t i = 0; i < ids.size(); ++i) EXPECT_EQ(legacy[i], _primary_key_mgr->get_index_memory_size(ids[i]));
 }
 
+TEST_F(LakePersistentIndexTest, bounded_merge_rotates_builders_and_preserves_winners) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, false);
+    ensure_kek_in_key_cache();
+    constexpr size_t kKeysPerFile = 4;
+    constexpr size_t kKeys = 17;
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true, kKeysPerFile);
+    for (size_t i = 0; i < kKeys; ++i) {
+        const auto key = "key_" + std::to_string(1000 + i);
+        KeyValueMergerTestIterator original(key, 11, IndexValue((uint64_t{1} << 32) | i), i);
+        ASSERT_OK(merger.merge(&original));
+        if (i % 3 == 0) {
+            KeyValueMergerTestIterator tombstone(key, 12, IndexValue(NullIndexValue), i);
+            ASSERT_OK(merger.merge(&tombstone));
+        }
+    }
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+    ASSERT_EQ(5, outputs.size());
+    size_t next = 0;
+    for (const auto& output : outputs) {
+        PersistentIndexSstablePB pb;
+        pb.set_filename(output.filename);
+        pb.set_filesize(output.filesize);
+        pb.set_encryption_meta(output.encryption_meta);
+        RandomAccessFileOptions file_options;
+        if (!pb.encryption_meta().empty()) {
+            ASSIGN_OR_ABORT(file_options.encryption_info,
+                            KeyCache::instance().unwrap_encryption_meta(pb.encryption_meta()));
+        }
+        ASSIGN_OR_ABORT(auto rf,
+                        fs::new_random_access_file(file_options,
+                                                   _tablet_mgr->sst_location(_tablet_metadata->id(), pb.filename())));
+        PersistentIndexSstable sst;
+        ASSERT_OK(sst.init(std::move(rf), pb, nullptr, false, nullptr, _tablet_metadata, _tablet_mgr.get()));
+        sstable::ReadOptions options;
+        options.verify_checksums = true;
+        std::unique_ptr<sstable::Iterator> iter(sst.new_iterator(options));
+        size_t count = 0;
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ASSERT_LT(next, kKeys);
+            ASSERT_EQ("key_" + std::to_string(1000 + next), iter->key().to_string());
+            IndexValuesWithVerPB value;
+            ASSERT_TRUE(value.ParseFromArray(iter->value().data, iter->value().size));
+            ASSERT_EQ(1, value.values_size());
+            const bool tombstone = next % 3 == 0;
+            EXPECT_EQ(tombstone ? 12 : 11, value.values(0).version());
+            EXPECT_EQ(tombstone ? NullIndexValue : (uint64_t{1} << 32) | next,
+                      (uint64_t{value.values(0).rssid()} << 32) | value.values(0).rowid());
+            ++next;
+            ++count;
+        }
+        ASSERT_OK(iter->status());
+        EXPECT_LE(count, kKeysPerFile);
+    }
+    EXPECT_EQ(kKeys, next);
+}
+
 void LakePersistentIndexTest::check_read_state_reservation_demand(bool deferred_initial_load) {
     ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, deferred_initial_load);
     auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
@@ -1365,6 +1421,181 @@ void LakePersistentIndexTest::check_read_state_reservation_demand(bool deferred_
     EXPECT_EQ(resident, index.cached_sst_bytes());
     EXPECT_EQ(2, opens.load());
     EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+}
+
+TEST_F(LakePersistentIndexTest, bounded_concatenation_preserves_all_encoded_versions) {
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, true);
+    ensure_kek_in_key_cache();
+    KeyValueMerger merger("", 0, false, _tablet_mgr.get(), _tablet_metadata->id(), true, 4, 512);
+    std::map<std::string, std::string> expected;
+    for (size_t i = 0; i < 19; ++i) {
+        IndexValuesWithVerPB versions;
+        for (int v : {12, 11}) {
+            auto* entry = versions.add_values();
+            entry->set_version(v);
+            entry->set_rssid(v == 12 ? UINT32_MAX : 1);
+            entry->set_rowid(v == 12 ? UINT32_MAX : i);
+        }
+        auto key = fmt::format("key_{:04d}", i);
+        auto value = versions.SerializeAsString();
+        ASSERT_OK(merger.append_encoded(key, value));
+        expected.emplace(key, value);
+    }
+    ASSIGN_OR_ABORT(auto outputs, merger.finish());
+    ASSERT_GT(outputs.size(), 1);
+    size_t seen = 0;
+    for (const auto& output : outputs) {
+        PersistentIndexSstablePB pb;
+        pb.set_filename(output.filename);
+        pb.set_filesize(output.filesize);
+        pb.set_encryption_meta(output.encryption_meta);
+        ASSIGN_OR_ABORT(auto sst,
+                        PersistentIndexSstable::new_sstable(
+                                pb, _tablet_mgr->sst_location(_tablet_metadata->id(), pb.filename()), nullptr, false));
+        sstable::ReadOptions options;
+        options.verify_checksums = true;
+        std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(options));
+        for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+            ASSERT_TRUE(expected.contains(iter->key().to_string()));
+            EXPECT_EQ(expected.at(iter->key().to_string()), iter->value().to_string());
+            ++seen;
+        }
+        ASSERT_OK(iter->status());
+    }
+    EXPECT_EQ(expected.size(), seen);
+}
+
+TEST_F(LakePersistentIndexTest, pressure_coalesce_is_bounded_cancel_safe_and_preserves_base_sst) {
+    ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, true);
+    ensure_kek_in_key_cache();
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* base = append_all_key_sstable(metadata.get(), {{"base", 1, IndexValue(7)}}, 7);
+    ASSERT_NE(nullptr, base);
+    const std::string base_filename = base->filename();
+    const auto tail_fileset = UniqueId::gen_uid().to_proto();
+    std::vector<std::string> keys;
+    std::vector<IndexValue> expected;
+    for (int i = 0; i < 32; ++i) {
+        auto key = fmt::format("tail_{:04d}_{}", i, std::string(180, 'x'));
+        auto value = i % 3 == 0 ? IndexValue(NullIndexValue) : IndexValue((uint64_t{2} << 32) | i);
+        auto* pb = append_all_key_sstable(metadata.get(), {{key, 2, value}}, (uint64_t{2} << 32) | 31);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(tail_fileset);
+        keys.push_back(std::move(key));
+        expected.push_back(value);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = tracker->consumption();
+    auto refresh = [&] { _primary_key_mgr->update_index_cache_size(entry); };
+    int checks = 0;
+    auto cancelled = index._coalesce_pressure_filesets(1024 * 1024, refresh, [&] { return ++checks == 17; });
+    ASSERT_TRUE(cancelled.is_cancelled()) << cancelled;
+    EXPECT_EQ(2, index._sstable_filesets.size());
+    EXPECT_EQ(before, tracker->consumption());
+    ASSERT_OK(index._coalesce_pressure_filesets(1024 * 1024, refresh, [] { return false; }));
+    EXPECT_LT(tracker->consumption(), before);
+    std::vector<Slice> slices;
+    for (const auto& key : keys) slices.emplace_back(key);
+    std::vector<IndexValue> found(keys.size());
+    ASSERT_OK(index.get(slices.size(), slices.data(), found.data()));
+    EXPECT_EQ(expected, found);
+    Slice base_key("base");
+    IndexValue base_value;
+    ASSERT_OK(index.get(1, &base_key, &base_value));
+    EXPECT_EQ(IndexValue(7), base_value);
+    PersistentIndexSstableMetaPB committed;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&committed);
+    ASSERT_EQ(2, committed.sstables_size());
+    EXPECT_EQ(base_filename, committed.sstables(0).filename());
+    EXPECT_EQ((uint64_t{2} << 32) | 31, committed.sstables(1).max_rss_rowid());
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
+TEST_F(LakePersistentIndexTest, manager_prepare_refunds_tail_readers_before_quota_and_repeated_mutations) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    const std::string filename = "large-unchanged-prepare.sst";
+    auto fixture = make_large_index_fixture(_tablet_mgr->sst_location(_tablet_metadata->id(), filename), filename);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(fixture.pb);
+    const auto tail_id = UniqueId::gen_uid().to_proto();
+    for (int i = 0; i < 48; ++i) {
+        auto key = fmt::format("z_tail_{:04d}_{}", i, std::string(180, 'x'));
+        auto* pb = append_all_key_sstable(metadata.get(), {{key, 1, IndexValue(i)}}, uint64_t{101} << 32);
+        ASSERT_NE(nullptr, pb);
+        pb->mutable_fileset_id()->CopyFrom(tail_id);
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(fixture.minimum_bytes + 384 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    auto& index = entry->value();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    const auto context = _primary_key_mgr->sst_read_state_memory_context();
+    for (size_t i = 1; i < index._sstable_filesets.size(); ++i) {
+        Status status;
+        index._sstable_filesets[i]->for_each_sstable([&](const auto& sst) {
+            sst.set_read_state_cacheable(true, context);
+            if (status.ok()) status = sst.reopen_read_state();
+        });
+        ASSERT_OK(status);
+    }
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_GT(index.memory_stats().overhead_bytes, 48 * 4096);
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    ASSIGN_OR_ABORT(entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    ASSERT_GT(index.publish_workspace_budget(), 32768);
+    PersistentIndexSstableMetaPB after;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&after);
+    ASSERT_EQ(2, after.sstables_size());
+    EXPECT_EQ(filename, after.sstables(0).filename());
+    std::array<Slice, 8> keys;
+    std::array<IndexValue, 8> expected, values, old;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        keys[i] = fixture.keys[i];
+        expected[i] = IndexValue(i);
+    }
+    for (int epoch = 0; epoch < 24; ++epoch) {
+        index.set_publish_version(epoch + 2);
+        for (size_t i = 0; i < keys.size(); ++i) values[i] = IndexValue((uint64_t{102} << 32) | (epoch * 8 + i));
+        ASSERT_OK(index.upsert(keys.size(), keys.data(), values.data(), old.data()));
+        EXPECT_EQ(expected, old);
+        expected = values;
+        if (epoch % 3 == 0) {
+            ASSERT_OK(index.erase(keys.size(), keys.data(), old.data(), epoch + 2));
+            EXPECT_EQ(expected, old);
+            expected.fill(IndexValue(NullIndexValue));
+        }
+        ASSERT_OK(index.sync_flush_all_memtables(2'000'000, [] { return false; }));
+        _primary_key_mgr->update_index_cache_size(entry);
+        ASSERT_OK(index.prepare_sstable_read_state(
+                0, true, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; }));
+        EXPECT_GT(index.publish_workspace_budget(), 4096);
+        ASSERT_OK(index.get(keys.size(), keys.data(), old.data()));
+        EXPECT_EQ(expected, old);
+        ASSERT_LE(tracker->peak_consumption(), tracker->limit());
+    }
 }
 
 TEST_F(LakePersistentIndexTest, test_large_old_index_keeps_mutations_bounded_and_reclaims_idle_data_blocks) {

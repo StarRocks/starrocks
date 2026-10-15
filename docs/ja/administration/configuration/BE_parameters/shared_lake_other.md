@@ -52,6 +52,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 - 導入バージョン: -
 
+上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_io_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - デフォルト: 30000

@@ -410,6 +410,8 @@ private:
 
     void _unload_without_lock();
 
+    Status _coalesce_pressure_filesets(size_t workspace, const std::function<void()>& refresh_memory,
+                                       const std::function<bool()>& cancelled);
     Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder);
 
     // Open all SSTables in parallel using thread pool.

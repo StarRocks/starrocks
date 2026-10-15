@@ -109,10 +109,13 @@ bool SstReadStateMemoryContext::Reservation::try_add(size_t bytes) {
     return true;
 }
 
-Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
+Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait, const std::function<bool()>& cancelled,
+                                                   int64_t wait_timeout_ms) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_byte_reservation_us");
-    const auto deadline = std::chrono::steady_clock::now() +
-                          std::chrono::milliseconds(std::max(0, config::lake_pk_index_publish_wait_timeout_ms));
+    const auto deadline =
+            std::chrono::steady_clock::now() +
+            std::chrono::milliseconds(wait_timeout_ms < 0 ? std::max(0, config::lake_pk_index_publish_wait_timeout_ms)
+                                                          : wait_timeout_ms);
     bool waited = false;
     if (_context->refresh_usage) _context->refresh_usage();
     auto trace_rejection = [&](MemTracker* exceeded) {
@@ -136,7 +139,8 @@ Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
                                 metrics->lake_pk_index_cache_overhead_bytes.value());
     };
     for (;;) {
-        if (process_exit_in_progress()) return Status::Cancelled("SST byte reservation cancelled");
+        if (process_exit_in_progress() || (cancelled && cancelled()))
+            return Status::Cancelled("SST byte reservation cancelled");
         if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes) {
             return Status::MemoryLimitExceeded("SST read-state reservation overflows");
         }
@@ -547,7 +551,8 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     options.stat = &stat;
     if (state->reservation && config::lake_pk_index_partial_eviction) {
         const auto limit = state->reservation->parent_limit();
-        if (limit > 0 && state->table->memory_usage() > static_cast<size_t>(limit / 2)) {
+        if (_skip_data_block_cache.load() ||
+            (limit > 0 && state->table->memory_usage() > static_cast<size_t>(limit / 2))) {
             options.fill_cache = false;
             TRACE_COUNTER_INCREMENT("pindex_large_sst_data_cache_bypass_count", 1);
         }

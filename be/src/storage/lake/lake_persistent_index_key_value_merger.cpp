@@ -174,26 +174,39 @@ Status KeyValueMerger::flush() {
         value->set_rssid(current.second.get_rssid());
         value->set_rowid(current.second.get_rowid());
 
-        if (_output_builders.empty() ||
-            (_enable_multiple_output_files &&
-             _output_builders.back().table_builder->FileSize() >= config::pk_index_target_file_size)) {
-            // Create a new sst file when current file is empty or exceed target size.
-            RETURN_IF_ERROR(create_table_builder());
-        }
         _flush_serialized_scratch.clear();
         if (!index_value_pb.SerializeToString(&_flush_serialized_scratch)) {
             return Status::InternalError("Failed to serialize IndexValuesWithVerPB");
         }
-        RETURN_IF_ERROR(_output_builders.back().table_builder->Add(Slice(_key), Slice(_flush_serialized_scratch)));
+        RETURN_IF_ERROR(append_encoded(Slice(_key), Slice(_flush_serialized_scratch)));
     }
     _current_value.reset();
 
     return Status::OK();
 }
 
+Status KeyValueMerger::append_encoded(const Slice& key, const Slice& value) {
+    if (_output_builders.empty() || (_max_output_bytes > 0 && _builder_input_bytes >= _max_output_bytes) ||
+        (_max_output_keys > 0 && _output_builders.back().table_builder->NumEntries() >= _max_output_keys) ||
+        (_enable_multiple_output_files &&
+         _output_builders.back().table_builder->FileSize() >= config::pk_index_target_file_size)) {
+        if ((_max_output_keys > 0 || _max_output_bytes > 0) && !_output_builders.empty()) {
+            RETURN_IF_ERROR(finish_bounded_builder());
+        }
+        RETURN_IF_ERROR(create_table_builder());
+    }
+    RETURN_IF_ERROR(_output_builders.back().table_builder->Add(key, value));
+    _builder_input_bytes += 2 * (key.size + value.size) + 128;
+    return Status::OK();
+}
+
 // return list<filename, filesize, encryption_meta>
 StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> KeyValueMerger::finish() {
     RETURN_IF_ERROR(flush());
+    if (_max_output_keys > 0 || _max_output_bytes > 0) {
+        if (!_output_builders.empty()) RETURN_IF_ERROR(finish_bounded_builder());
+        return std::move(_finished_outputs);
+    }
     std::vector<KeyValueMergerOutput> results;
     for (auto& builder_wrapper : _output_builders) {
         RETURN_IF_ERROR(builder_wrapper.table_builder->Finish());
@@ -204,6 +217,27 @@ StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> KeyValueMerger::fini
                 builder_wrapper.table_builder->KeyRange().second.to_string()});
     }
     return results;
+}
+
+Status KeyValueMerger::finish_bounded_builder() {
+    DCHECK_EQ(_output_builders.size(), 1);
+    auto& builder = _output_builders.back();
+    RETURN_IF_ERROR(builder.table_builder->Finish());
+    RETURN_IF_ERROR(builder.wf->close());
+    if (_reserve_output_metadata) {
+        // Covers copies in the result, replacement PB and range map, including vector growth.
+        const auto& range = builder.table_builder->KeyRange();
+        RETURN_IF_ERROR(_reserve_output_metadata(8 * (sizeof(KeyValueMergerOutput) + builder.filename.capacity() +
+                                                      builder.encryption_meta.capacity() + range.first.size +
+                                                      range.second.size + 512)));
+    }
+    _finished_outputs.emplace_back(KeyValueMergerOutput{
+            builder.filename, builder.table_builder->FileSize(), builder.encryption_meta,
+            builder.table_builder->KeyRange().first.to_string(), builder.table_builder->KeyRange().second.to_string()});
+    _output_builders.pop_back();
+    _builder_input_bytes = 0;
+    TRACE_COUNTER_INCREMENT("pindex_pressure_compact_output_files", 1);
+    return Status::OK();
 }
 
 Status KeyValueMerger::create_table_builder() {

@@ -52,6 +52,8 @@ When the full compressed-input plus decoded-output reservation fits immediately,
 
 - Introduced in: -
 
+Before choosing the near-limit workspace, the tablet owner refunds reclaimable read-state objects. It can concatenate nonoverlapping tail SST fragments sequentially, reserving merge memory and destroying completed output builders at rotation; the original large SST is retained. Tail lookups bypass optional data-block caching in this path. Trace counters `pindex_pressure_coalesce_io_us`, `pindex_pressure_coalesce_input_files`, `pindex_pressure_compact_output_files` and `pindex_pressure_coalesce_metadata_freed_bytes` report this recovery work. Cancellation is checked between files and keys; synchronous IO remains subject to its filesystem timeout.
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - Default: 30000

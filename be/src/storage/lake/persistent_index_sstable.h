@@ -57,7 +57,7 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
                              std::function<void(size_t)> reclaim_self = {})
                 : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)) {}
         ~Reservation();
-        Status add(size_t bytes, bool wait);
+        Status add(size_t bytes, bool wait, const std::function<bool()>& cancelled = {}, int64_t wait_timeout_ms = -1);
         bool try_add(size_t bytes);
         void shrink_to(size_t bytes);
         size_t bytes() const { return _bytes; }
@@ -138,6 +138,9 @@ public:
         std::lock_guard<std::mutex> lock(_read_state_mutex);
         _reclaim_self = reclaimer;
     }
+    // Changed only at a joined tablet-owner boundary. Tiny tail SSTs must not populate an
+    // optional data-block cache when a mandatory index already occupies most of update.
+    void set_skip_data_block_cache(bool skip) const { _skip_data_block_cache.store(skip); }
     Status reopen_read_state() const;
     StatusOr<size_t> probe_minimum_read_memory() const;
 
@@ -204,6 +207,7 @@ private:
 
     // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
     // state, so its return value never counts memory that a reader still owns.
+    mutable std::atomic<bool> _skip_data_block_cache{false};
     mutable std::atomic<size_t> _minimum_read_memory{0};
     mutable std::atomic<size_t> _read_state_memory_demand{0};
     mutable std::mutex _read_state_mutex;
