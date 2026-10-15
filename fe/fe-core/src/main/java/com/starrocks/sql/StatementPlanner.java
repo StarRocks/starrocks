@@ -311,6 +311,20 @@ public class StatementPlanner {
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
+<<<<<<< HEAD
+=======
+                // Only pre-resolve external tables when there are internal tables to lock.
+                // This avoids holding meta lock while fetching external metadata.
+                // Check config first (cheapest), then locker state.
+                if (insertStmt == null && Config.enable_experimental_external_table_preparse
+                        && locker != null && !locker.isEmpty()) {
+                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
+                }
+                // An INSERT analyzed before planning (the one a CTAS carries, a replanned statement) has every
+                // relation bound already, so the pre-pass skipped its sources: refresh and reload them here, not
+                // under the lock. The refresh after analysis below then only rebinds them.
+                refreshRemainingInsertSources(statement, session);
+>>>>>>> c491422 ([BugFix][POST-1966] Refresh an analyzed INSERT's sources before taking the planner lock (#80786))
                 takeLock.run();
                 Analyzer.analyze(statement, session);
                 refreshRemainingInsertSources(statement, session);
@@ -323,8 +337,9 @@ public class StatementPlanner {
     /**
      * The pre-pass above refreshes the sources of an INSERT it reaches; this refreshes the rest and rebinds them,
      * now that analysis has expanded every view and subquery. Outside the lock on the deferred path, under it on
-     * the locked one. Only for an INSERT about to be planned: a SUBMIT TASK plans its INSERT when the task runs,
-     * and refreshes then.
+     * the locked one -- where the sources of an already analyzed INSERT were refreshed before the lock, so it only
+     * reaches the connector for a source the analysis under the lock newly bound. Only for an INSERT about to be
+     * planned: a SUBMIT TASK plans its INSERT when the task runs, and refreshes then.
      */
     private static void refreshRemainingInsertSources(StatementBase statement, ConnectContext session) {
         if (statement instanceof InsertStmt insertStmt && InsertSourceRefresher.isEnabled(session)) {
