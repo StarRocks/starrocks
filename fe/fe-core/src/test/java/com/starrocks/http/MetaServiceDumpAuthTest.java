@@ -17,10 +17,10 @@ package com.starrocks.http;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -63,9 +64,10 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         // Authenticate the non-admin user with valid credentials; every other login goes through the real path.
         new MockUp<AuthenticationHandler>() {
             @Mock
-            public UserIdentity authenticateWithClearPassword(Invocation inv, ConnectContext context, String user,
-                                                              String remoteHost, String password) {
-                if (NON_ADMIN_USER.equals(user) && NON_ADMIN_PASSWORD.equals(password)) {
+            public UserIdentity authenticate(Invocation inv, ConnectContext context, String user, String remoteHost,
+                                             byte[] authResponse) {
+                if (NON_ADMIN_USER.equals(user)
+                        && NON_ADMIN_PASSWORD.equals(new String(authResponse, StandardCharsets.UTF_8))) {
                     return UserIdentity.createAnalyzedUserIdentWithIp(NON_ADMIN_USER, "%");
                 }
                 return inv.proceed();
