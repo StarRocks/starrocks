@@ -186,10 +186,17 @@ TEST(FlatJsonQueryRootTest, rebuild_root_from_flat_paths_and_remain) {
             json_col->append_datum(Datum(&json));
         }
 
-        JsonFlattener jf(layout.paths, layout.types, layout.has_remain);
-        jf.flatten(json_col.get());
         auto flat_json = JsonColumn::create();
-        flat_json->set_flat_columns(layout.paths, layout.types, jf.mutable_result());
+        if (layout.paths.empty()) {
+            // the flattener needs a path; a remain-only column is the documents themselves
+            MutableColumns remain;
+            remain.emplace_back(json_col->data_column()->clone());
+            flat_json->set_flat_columns(layout.paths, layout.types, std::move(remain));
+        } else {
+            JsonFlattener jf(layout.paths, layout.types, layout.has_remain);
+            jf.flatten(json_col.get());
+            flat_json->set_flat_columns(layout.paths, layout.types, jf.mutable_result());
+        }
         ASSERT_EQ(layout.has_remain, flat_json->has_remain());
         ColumnPtr input = NullableColumn::create(std::move(flat_json), json_col->null_column()->clone());
 
@@ -690,8 +697,9 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
         std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1, "false"),
         std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1, "value"),
         // Test case to cover the bug fix: empty flat_path should not cause crash when calling substr(1)
-        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range
-        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL")
+        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range.
+        // get_json_string reads the rebuilt document, as it does on a column that is not flat.
+        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( {"k1": 1} )", -1, "NULL")
     ));
 // clang-format on
 
