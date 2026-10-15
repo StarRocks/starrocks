@@ -51,6 +51,9 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
     return crc;
 }
 
+// Returns the active CRC32C engine name: "pmull", "arm_crc32c_scalar", "sse42_simd", or "software".
+const char* ActiveImplementationName();
+
 #ifdef BE_TEST
 // Test-only controls to simulate fallback paths in CI/UT without environment variables.
 void SetArmPmullDisabledForTesting(bool disabled);

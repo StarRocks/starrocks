@@ -336,6 +336,25 @@ uint32_t ExtendFallback(uint32_t crc, const char* buf, size_t size) {
     return ExtendImpl<Fast_CRC32>(crc, buf, size);
 }
 
+const char* ActiveImplementationName() {
+#if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(USE_ARM_PMULL)
+    if (has_arm_pmull()) {
+        return "pmull";
+    }
+#endif
+#if defined(__ARM_FEATURE_CRC32)
+    return "arm_crc32c_scalar";
+#else
+    return "software";
+#endif
+#elif defined(__SSE4_2__)
+    return "sse42_simd";
+#else
+    return "software";
+#endif
+}
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
     if (__builtin_expect(size == 0, 0)) {
         return crc;
