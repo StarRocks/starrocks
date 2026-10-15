@@ -31,7 +31,7 @@ select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
 select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
 select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
 [ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
-function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
 set catalog default_catalog;
 drop catalog paimon_pk_${uuid0};
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_primary_key_merge/${uuid0}/ >/dev/null

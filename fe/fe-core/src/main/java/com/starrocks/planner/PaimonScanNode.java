@@ -385,9 +385,9 @@ public class PaimonScanNode extends ScanNode {
             paimonReaderMode = PaimonReaderMode.NATIVE;
         }
 
-        // Ordinary SDK splits retain the legacy JNI reader under AUTO. IndexedSplit always uses
-        // paimon-cpp so its row ranges are preserved.
-        if (paimonReaderMode == PaimonReaderMode.NATIVE) {
+        // AUTO reaches this path after the raw-file fast path is ruled out. Use paimon-cpp
+        // for data splits; the special split rules above and explicit JNI still take precedence.
+        if (paimonReaderMode == PaimonReaderMode.NATIVE || paimonReaderMode == PaimonReaderMode.AUTO) {
             hdfsScanRange.setUse_paimon_jni_reader(false);
             hdfsScanRange.setUse_paimon_native_reader(true);
             try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {

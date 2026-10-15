@@ -46,7 +46,7 @@ function: assert_paimon_native_profile("select id, c_int, c_smallint from paimon
 | `starrocks` | StarRocks native file reader |
 
 For `paimon_reader_mode = 'auto'`, specify the reader expected for the fixture:
-`starrocks` for `scalar_types`, or `jni` for `pk_merge_v1`. There is no `auto`
+`starrocks` for `scalar_types`, or `native` for `pk_merge_v1`. There is no `auto`
 assertion value. Use a query that scans actual data; an empty scan may have no
 positive reader counter or reader profile section.
 
@@ -60,7 +60,7 @@ rows to verify results as well as the reader path.
 - `test_paimon_reader_modes`: scalar results in NATIVE, JNI and AUTO modes;
   AUTO uses the StarRocks Parquet reader for this fixture.
 - `test_paimon_primary_key_merge`: updates, deletes and inserts across overlapping
-  L0 files in all three modes; AUTO uses JNI for this layout.
+  L0 files in all three modes; AUTO uses paimon-cpp for this layout.
 
 Reader assertions check existing FE EXTERNAL trace counters. NATIVE cases also
 check the BE `PaimonNativeReader` profile. Run their helper tests from `test/` with
