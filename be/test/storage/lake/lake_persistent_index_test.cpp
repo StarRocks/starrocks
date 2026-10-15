@@ -1452,6 +1452,7 @@ void LakePersistentIndexTest::check_manager_prepare_pressure_flush(int outcome) 
     // Load without the manager's prepare phase, representing a cached index from before the
     // mandatory old SST's working-set requirement was known. Its MemTables are still live.
     ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    const auto empty_memtable_bytes = index.memory_stats().memtable_bytes;
     std::atomic<bool> hold{true}, started{false};
     auto* sync = SyncPoint::GetInstance();
     sync->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
@@ -1494,7 +1495,7 @@ void LakePersistentIndexTest::check_manager_prepare_pressure_flush(int outcome) 
         ++checked_charge;
         EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
         EXPECT_LT(entry->size(), old_charge);
-        EXPECT_EQ(0, index.memory_stats().memtable_bytes);
+        EXPECT_EQ(empty_memtable_bytes, index.memory_stats().memtable_bytes);
     });
     std::thread unblock([&] {
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
