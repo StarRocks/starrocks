@@ -263,6 +263,126 @@ public class MVVersionManagerTest {
                         + "connector again");
     }
 
+    /**
+     * Refreshes partition p1 of an external base table on a run that started before the MV's version map was
+     * reset; returns the version entries the MV holds for that table afterwards.
+     */
+    private Map<String, MaterializedView.BasePartitionInfo> refreshP1AcrossAReset(MaterializedView mv,
+                                                                                Runnable resetBeforeCommit) {
+        mockGetPartitionNames(new AtomicInteger());
+        Table externalBaseTable = mock(Table.class);
+        when(externalBaseTable.isNativeTableOrMaterializedView()).thenReturn(false);
+        when(externalBaseTable.getId()).thenReturn(3000L);
+        BaseTableInfo baseTableInfo = mock(BaseTableInfo.class);
+        PCTTableSnapshotInfo snapshot = new PCTTableSnapshotInfo(baseTableInfo, externalBaseTable);
+        snapshot.getRefreshedPartitionInfos().put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
+
+        MvTaskRunContext context = buildContext(null, statusWithProcessStartTime(2000L));
+        context.setVersionMapResetEpoch(mv.getVersionMapResetEpoch());
+        MVVersionManager manager = new MVVersionManager(mv, context, MaterializedView.RefreshMode.PCT);
+        resetBeforeCommit.run();
+        manager.updateMVVersionInfo(Map.of(3000L, snapshot), PCellSortedSet.of(), Set.of(3000L),
+                Map.of(), null, Map.of(snapshot, List.of("p1")), true);
+        return mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap()
+                .getOrDefault(baseTableInfo, Map.of());
+    }
+
+    @Test
+    public void updateMVVersionInfoPublishesNoVersionEntriesAfterAResetDuringTheRun() {
+        // ALTER VIEW (or a base table schema change) inactivated the MV and reset its version map while this run
+        // was computing data from the old definition; recording p1 as refreshed would make a later activation
+        // skip it.
+        MaterializedView mv = buildMv(1000L);
+        Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, mv::resetVisibleVersionMap);
+        Assertions.assertTrue(entries.isEmpty(), "a run that started before the reset published " + entries);
+        // Nor its freshness: within a staleness window it would stand in for the empty version map.
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertEquals(1, editLogCount.get());
+    }
+
+    @Test
+    public void updateMVVersionInfoClearsAgainWhenAResetRacesThePublish() {
+        // The reset takes no MV lock: it can land after the run checked the epoch and before its copy of the
+        // scheme is published, clearing the scheme the publish then replaces.
+        MaterializedView mv = buildMv(1000L);
+        List<ChangeMaterializedViewRefreshSchemeLog> journaled = new LinkedList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+                if (journaled.isEmpty()) {
+                    mv.resetVisibleVersionMap();
+                }
+                journaled.add(log);
+                walApplier.apply(null);
+            }
+        };
+        Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, () -> { });
+        Assertions.assertTrue(entries.isEmpty(), "the reset racing the publish was undone: " + entries);
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        // The run's entry is already in the journal; the clear must be journaled after it, or a replay restores it.
+        Assertions.assertEquals(2, journaled.size());
+        ChangeMaterializedViewRefreshSchemeLog last = journaled.get(1);
+        Assertions.assertTrue(last.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().isEmpty());
+        Assertions.assertEquals(0L, last.getLastFreshnessConfirmedAt());
+    }
+
+    @Test
+    public void updateMVVersionInfoNoticesAResetThatWasInFlightWhenTheRunStarted() {
+        // The inactivation bumps the epoch before journaling and clears the maps in the journal's applier. A run
+        // that starts in between records the bumped epoch, and its publish can straddle the clear.
+        MaterializedView mv = buildMv(1000L);
+        mv.markVersionMapReset();
+        List<ChangeMaterializedViewRefreshSchemeLog> journaled = new LinkedList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+                if (journaled.isEmpty()) {
+                    // the inactivation's applier, landing while this run publishes
+                    mv.getRefreshScheme().clearVersionState();
+                    mv.markVersionMapReset();
+                }
+                journaled.add(log);
+                walApplier.apply(null);
+            }
+        };
+        Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, () -> { });
+        Assertions.assertTrue(entries.isEmpty(), "the in-flight reset was undone: " + entries);
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        // The odd epoch the run started with stops it before its first journal write; nothing has to be undone.
+        Assertions.assertEquals(1, journaled.size());
+        Assertions.assertTrue(journaled.get(0).getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().isEmpty());
+    }
+
+    @Test
+    public void updateMVVersionInfoPublishesNothingWhenTheRunStartedDuringAReset() {
+        // Worst case of the above: the clear lands while this run publishes, and the run is done before the reset's
+        // second bump, so the epoch it compares against never moves. The odd epoch it started with is the tell.
+        MaterializedView mv = buildMv(1000L);
+        mv.markVersionMapReset();
+        List<ChangeMaterializedViewRefreshSchemeLog> journaled = new LinkedList<>();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+                if (journaled.isEmpty()) {
+                    mv.getRefreshScheme().clearVersionState();
+                }
+                journaled.add(log);
+                walApplier.apply(null);
+            }
+        };
+        Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, () -> { });
+        Assertions.assertTrue(entries.isEmpty(), "a run that started during the reset published " + entries);
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+        Assertions.assertTrue(journaled.get(0).getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap().isEmpty());
+    }
+
+    @Test
+    public void updateMVVersionInfoKeepsVersionEntriesWithoutAReset() {
+        MaterializedView mv = buildMv(1000L);
+        Map<String, MaterializedView.BasePartitionInfo> entries = refreshP1AcrossAReset(mv, () -> { });
+        Assertions.assertEquals(Set.of("p1"), entries.keySet());
+    }
+
     private static void mockGetPartitionNames(AtomicInteger resolveCount) {
         new MockUp<PartitionUtil>() {
             @Mock

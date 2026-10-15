@@ -117,6 +117,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.backup.mv.MVRestoreUpdater.checkMvDefinedQuery;
@@ -602,6 +603,41 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
         }
 
+<<<<<<< HEAD
+=======
+        /**
+         * Forgets what the MV's data was confirmed against: the visible version maps, and the freshness a staleness
+         * window would otherwise trust in place of them (see isStalenessSatisfied).
+         */
+        public void clearVersionState() {
+            if (asyncRefreshContext != null) {
+                asyncRefreshContext.clearVisibleVersionMap();
+            }
+            lastFreshnessConfirmedAt = 0;
+        }
+
+        public RefreshMode getLastExecutedRefreshMode() {
+            return lastExecutedRefreshMode;
+        }
+
+        public void setLastExecutedRefreshMode(RefreshMode lastExecutedRefreshMode) {
+            this.lastExecutedRefreshMode = lastExecutedRefreshMode;
+        }
+
+        public RefreshModeReason getLastRefreshModeReason() {
+            return lastRefreshModeReason;
+        }
+
+        public String getLastRefreshModeReasonTable() {
+            return lastRefreshModeReasonTable;
+        }
+
+        public void setLastRefreshModeReason(RefreshModeReason reason, String baseTableName) {
+            this.lastRefreshModeReason = reason;
+            this.lastRefreshModeReasonTable = baseTableName;
+        }
+
+>>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.moment = this.moment;
@@ -736,6 +772,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // Bumped by every active/inactive transition, guarded by this. Lets an asynchronous verdict tell
     // whether the status it was computed for is still the current one, see activateOnReplay.
     private long statusEpoch = 0;
+    // Bumped twice by a version map reset: before the maps are cleared and again after, so it is odd exactly while a
+    // reset is in flight. A refresh run compares it with the value it saw at its start before publishing version
+    // entries, and publishes none if that value was odd or has changed, see MVVersionManager#persistRefreshScheme.
+    private final AtomicLong versionMapResetEpoch = new AtomicLong();
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -804,6 +844,31 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public synchronized boolean isActive() {
         return active;
+    }
+
+    public long getVersionMapResetEpoch() {
+        return versionMapResetEpoch.get();
+    }
+
+    /**
+     * Clears the visible version maps so that the next refresh recomputes everything, because the data the MV
+     * holds no longer matches what its definition reads (a base table or view it depends on changed). Callers do
+     * not hold the MV lock, so a refresh run may be about to publish a copy of the scheme it took before the
+     * clear; the epoch, bumped on both sides of the clear, lets that run notice and drop its version entries.
+     */
+    public void resetVisibleVersionMap() {
+        markVersionMapReset();
+        refreshScheme.clearVersionState();
+        markVersionMapReset();
+    }
+
+    /**
+     * Bumps the reset epoch. {@link #resetVisibleVersionMap} does it on both sides of the clear; a caller that
+     * clears the scheme in a journal write's applier must do the same, the second bump in a finally block so that the
+     * epoch never stays odd.
+     */
+    public void markVersionMapReset() {
+        versionMapResetEpoch.incrementAndGet();
     }
 
     /**

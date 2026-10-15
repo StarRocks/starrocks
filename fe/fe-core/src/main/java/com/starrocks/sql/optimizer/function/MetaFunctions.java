@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.function;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
@@ -45,6 +46,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.SqlUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+>>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -101,6 +107,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static com.starrocks.type.PrimitiveType.BOOLEAN;
@@ -238,8 +245,9 @@ public class MetaFunctions {
         return ConstantOperator.createVarchar(json);
     }
 
+    private static final int UNLOCKED_READ_ATTEMPTS = 3;
+
     public static String inspectMVRefreshInfo(Database db, MaterializedView mv) {
-        Locker locker = new Locker();
         // Compute mvToRefreshPartitions before acquiring the lock to avoid holding the lock
         // during potentially expensive remote IO (e.g. Iceberg PartitionsTable scan).
         Set<String> mvToRefreshPartitions;
@@ -257,70 +265,56 @@ public class MetaFunctions {
             LOG.warn("Failed to get mvToRefreshPartitions for mv [{}], using empty set", mv.getName(), e);
             mvToRefreshPartitions = Sets.newHashSet();
         }
-        // Same reason, for the rest of the remote IO this method does. The lock taken below is
-        // (db, mv); external base tables are not in its protection domain -- the FE has no identity to
-        // lock them by and does not mutate their metadata -- so resolving them and reading their
-        // partition state inside it would buy a connector round trip in exchange for no protection at
-        // all. Internal base tables stay inside, where the lock does cover the partition state read.
-        // Same shape as MVRefreshProcessor#resolveExternalBaseTables.
-        //
-        // The MV's own refresh state, however, IS in that protection domain, and this gathering reads
-        // it: getUpdatedPartitionNamesOfExternalTable compares the connector's partitions against the
-        // MV's AsyncRefreshContext. MVVersionManager replaces the whole MvRefreshScheme object under
-        // the MV WRITE lock, so a refresh committing while we are off the lock would leave the
-        // comparison describing the previous refresh state while the visible-version maps assembled
-        // below describe the new one -- one JSON document reporting two different moments. The scheme
-        // is swapped wholesale, so reference identity is enough to detect that; on a mismatch the
-        // gathering is redone here, where the lock now pins the state it compares against. That costs
-        // a connector call inside the lock, but only in the window where a refresh actually committed,
-        // and a report that describes one moment is worth it.
-        MaterializedView.MvRefreshScheme schemeGatheredAgainst = mv.getRefreshScheme();
-        Map<BaseTableInfo, BaseTableRefreshInfo> externalBaseTables = collectExternalBaseTableRefreshInfos(mv);
+        // The rest of the report compares each base table against the MV's refresh state. It works on a copy of
+        // that state taken under the MV lock and then holds no MV lock: external base tables cost a connector
+        // round trip, and the FE has no identity to lock them by; each internal base table is read under its own
+        // READ lock. The base table locks are never nested inside the MV lock, since paths that alter a base
+        // table go on to lock the MV. Every field of the report is derived from the one copy, so it describes a
+        // single refresh state even if a refresh commits meanwhile.
+        MvRefreshStateCopy mvState = readUnderTableLock(db.getId(), mv.getId(), () -> {
+            MaterializedView.AsyncRefreshContext copied = mv.getRefreshScheme().getAsyncRefreshContext().copy();
+            // copy() shares the per-table partition maps with the live MV, and this copy is read with no lock held.
+            copied.getBaseTableVisibleVersionMap().replaceAll((id, partitions) -> Maps.newHashMap(partitions));
+            copied.getBaseTableInfoVisibleVersionMap().replaceAll((info, partitions) -> Maps.newHashMap(partitions));
+            return new MvRefreshStateCopy(Lists.newArrayList(mv.getBaseTableInfos()), copied);
+        });
+        List<BaseTableInfo> baseTableInfos = mvState.baseTableInfos();
+        MaterializedView.AsyncRefreshContext refreshContext = mvState.refreshContext();
 
-        locker.lockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
-        try {
-            if (mv.getRefreshScheme() != schemeGatheredAgainst) {
-                externalBaseTables = collectExternalBaseTableRefreshInfos(mv);
+        Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
+        Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
+        Map<String, String> tablePartitionInfos = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            BaseTableRefreshInfo refreshInfo = collectBaseTableRefreshInfo(mv, baseTableInfos, refreshContext,
+                    baseTableInfo);
+            Table baseTable = refreshInfo.table();
+            if (CollectionUtils.isNotEmpty(refreshInfo.toUpdatePartitions())) {
+                tableToUpdatePartitions.put(baseTable.getName(), refreshInfo.toUpdatePartitions());
             }
-            Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
-            Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
-            Map<String, String> tablePartitionInfos = Maps.newHashMap();
-            for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-                BaseTableRefreshInfo refreshInfo = externalBaseTables.get(baseTableInfo);
-                if (refreshInfo == null) {
-                    refreshInfo = collectBaseTableRefreshInfo(mv, baseTableInfo);
-                }
-                Table baseTable = refreshInfo.table();
-                if (CollectionUtils.isNotEmpty(refreshInfo.toUpdatePartitions())) {
-                    tableToUpdatePartitions.put(baseTable.getName(), refreshInfo.toUpdatePartitions());
-                }
-                tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
-                tablePartitionInfos.put(baseTable.getName(), refreshInfo.partitionInfo());
-            }
-            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
-                    olapVisibleVersionMap.entrySet().stream()
-                            .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
-                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
-
-            Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
-            Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableVisibleVersionMap =
-                    externalVisibleVersionMap.entrySet().stream()
-                            .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
-                            .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
-
-            MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
-                    mvToRefreshPartitions,
-                    tableToUpdatePartitions,
-                    tablePartitionInfos,
-                    baseOlapTableVisibleVersionMap,
-                    baseExternalTableVisibleVersionMap);
-            return meta.inspect();
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.READ);
+            tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
+            tablePartitionInfos.put(baseTable.getName(), refreshInfo.partitionInfo());
         }
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
+                refreshContext.getBaseTableVisibleVersionMap();
+        Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
+                olapVisibleVersionMap.entrySet().stream()
+                        .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
+                        .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
+                refreshContext.getBaseTableInfoVisibleVersionMap();
+        Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseExternalTableVisibleVersionMap =
+                externalVisibleVersionMap.entrySet().stream()
+                        .map(entry -> Pair.of(entry.getKey().getReadableString(), entry.getValue()))
+                        .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
+
+        MVRefreshInfoMeta meta = new MVRefreshInfoMeta(mv.getName(),
+                mvToRefreshPartitions,
+                tableToUpdatePartitions,
+                tablePartitionInfos,
+                baseOlapTableVisibleVersionMap,
+                baseExternalTableVisibleVersionMap);
+        return meta.inspect();
     }
 
     @ConstantFunction(name = "inspect_table_partition_info", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
@@ -348,29 +342,67 @@ public class MetaFunctions {
 
     /**
      * Everything {@link #inspectMVRefreshInfo(Database, MaterializedView)} needs about one base table.
-     * For a base table in an external catalog all three fields cost a connector round trip, so they are
-     * gathered up front rather than one field at a time inside the loop.
      */
     private record BaseTableRefreshInfo(Table table, Set<String> toUpdatePartitions, String partitionInfo) {
     }
 
-    private static BaseTableRefreshInfo collectBaseTableRefreshInfo(MaterializedView mv, BaseTableInfo baseTableInfo) {
-        Table baseTable = MvUtils.getTableChecked(baseTableInfo);
-        Set<String> toUpdatePartitions = baseTable instanceof OlapTable
-                ? mv.getUpdatedPartitionNamesOfOlapTable((OlapTable) baseTable, false)
-                : mv.getUpdatedPartitionNamesOfExternalTable(baseTable, false);
-        return new BaseTableRefreshInfo(baseTable, toUpdatePartitions, getTablePartitionInfo(baseTable));
+    /** What {@link #inspectMVRefreshInfo(Database, MaterializedView)} reads from the MV, copied at one moment. */
+    private record MvRefreshStateCopy(List<BaseTableInfo> baseTableInfos,
+                                      MaterializedView.AsyncRefreshContext refreshContext) {
     }
 
-    private static Map<BaseTableInfo, BaseTableRefreshInfo> collectExternalBaseTableRefreshInfos(MaterializedView mv) {
-        Map<BaseTableInfo, BaseTableRefreshInfo> externalBaseTables = Maps.newHashMap();
-        for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
-            if (baseTableInfo.isInternalCatalog()) {
-                continue;
-            }
-            externalBaseTables.put(baseTableInfo, collectBaseTableRefreshInfo(mv, baseTableInfo));
+    /**
+     * Compares one base table against {@code refreshContext}, a copy of the MV's refresh state. An internal base
+     * table is resolved and read under its own READ lock; an external one is read with no lock held.
+     */
+    private static BaseTableRefreshInfo collectBaseTableRefreshInfo(MaterializedView mv,
+                                                                    List<BaseTableInfo> baseTableInfos,
+                                                                    MaterializedView.AsyncRefreshContext refreshContext,
+                                                                    BaseTableInfo baseTableInfo) {
+        if (!baseTableInfo.isInternalCatalog()) {
+            return collectBaseTableRefreshInfoUnlocked(mv, baseTableInfos, refreshContext, baseTableInfo);
         }
-        return externalBaseTables;
+        return readUnderTableLock(baseTableInfo.getDbId(), baseTableInfo.getTableId(),
+                () -> collectBaseTableRefreshInfoUnlocked(mv, baseTableInfos, refreshContext, baseTableInfo));
+    }
+
+    /**
+     * Runs {@code read} under a READ lock on one table, and on nothing else. The function is constant-folded while
+     * the statement is planned, and some statements are planned under the planner's locks on the tables they
+     * reference: one more lock taken there could close a wait cycle with another statement and the writers queued
+     * on the two tables. A thread that already holds metadata locks therefore takes none, and retries a read that
+     * a concurrent change broke (the partition maps are plain HashMaps).
+     */
+    private static <T> T readUnderTableLock(long dbId, long tableId, Supplier<T> read) {
+        if (!LockHoldDepth.isUnderLock()) {
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            try {
+                return read.get();
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(dbId, tableId, LockType.READ);
+            }
+        }
+        RuntimeException lastFailure = null;
+        for (int attempt = 0; attempt < UNLOCKED_READ_ATTEMPTS; attempt++) {
+            try {
+                return read.get();
+            } catch (RuntimeException e) {
+                lastFailure = e;
+            }
+        }
+        throw lastFailure;
+    }
+
+    private static BaseTableRefreshInfo collectBaseTableRefreshInfoUnlocked(MaterializedView mv,
+                                                                            List<BaseTableInfo> baseTableInfos,
+                                                                            MaterializedView.AsyncRefreshContext
+                                                                                    refreshContext,
+                                                                            BaseTableInfo baseTableInfo) {
+        Table baseTable = MvUtils.getTableChecked(baseTableInfo);
+        Set<String> toUpdatePartitions =
+                ConnectorPartitionTraits.build(mv, baseTable).getUpdatedPartitionNames(baseTableInfos, refreshContext);
+        return new BaseTableRefreshInfo(baseTable, toUpdatePartitions, getTablePartitionInfo(baseTable));
     }
 
     private static String getTablePartitionInfo(Table table) {

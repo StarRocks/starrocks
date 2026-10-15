@@ -121,6 +121,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         this.mv = (MaterializedView) table;
         // refresh mv until mv is reloaded.
         mv.waitForReloaded();
+<<<<<<< HEAD
+=======
+        observedStatusEpoch = OptionalLong.of(mv.getStatusSnapshot().epoch());
+        // Before the run reads the MV's definition or any base table: a reset after this point means the data
+        // this run writes may come from a definition that no longer holds.
+        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
+>>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating
@@ -157,6 +164,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
         // prepare mv context
         this.mvTaskRunContext = new MvTaskRunContext(context);
+        this.mvTaskRunContext.setVersionMapResetEpoch(versionMapResetEpoch);
         // prepare partition ttl number
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         this.mvTaskRunContext.setPartitionTTLNumber(partitionTTLNumber);
