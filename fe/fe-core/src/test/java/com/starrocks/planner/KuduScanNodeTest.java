@@ -142,8 +142,7 @@ public class KuduScanNodeTest {
     }
 
     @Test
-    public void testGetAllAvailableBackendOrComputeIdsInSharedNothingMode(@Mocked NodeMgr nodeMgr,
-                                                                          @Mocked SystemInfoService systemInfo) {
+    public void testGetAllAvailableBackendOrComputeIdsInSharedNothingMode() {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -151,13 +150,11 @@ public class KuduScanNodeTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public NodeMgr getNodeMgr() {
-                return nodeMgr;
-            }
-        };
-
+        // Do not use @Mocked NodeMgr/SystemInfoService here: @Mocked applies to every instance, including the
+        // mini cluster's NodeMgr used by FE daemons. A daemon calling getClusterInfo() then makes JMockit cascade
+        // and redefine SystemInfoService on its own thread, which can overwrite the MockUp below and make the
+        // faked methods return empty lists.
+        SystemInfoService systemInfo = new SystemInfoService();
         new MockUp<NodeMgr>() {
             @Mock
             public SystemInfoService getClusterInfo() {
