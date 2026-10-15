@@ -531,6 +531,7 @@ public class DatabaseTransactionMgr {
             boolean txnOperated;
             writeLock();
             try {
+                checkPartitionsStillEmptyForPlainInsert(copiedState, db);
                 txnOperated = unprotectedCommitPreparedTransaction(copiedState, db);
             } finally {
                 writeUnlock();
@@ -1518,6 +1519,39 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", copiedState);
         updateTransactionMetrics(copiedState);
         return copiedState;
+    }
+
+    // A column-subset INSERT that InsertAnalyzer planned as a plain insert filled its missing columns
+    // with defaults, which is only correct while no row exists in its target partitions. Any
+    // transaction committed to those partitions since it was planned would have its columns
+    // overwritten. nextVersion advances only under this manager's lock, when a transaction is
+    // assigned its version, so checking it here settles the race for every concurrent writer: the
+    // first one through takes the initial version, every later one sees a larger value and must be
+    // re-planned, which the retry does as a partial update.
+    private void checkPartitionsStillEmptyForPlainInsert(TransactionState transactionState, Database db)
+            throws TransactionCommitFailedException {
+        if (!transactionState.requiresEmptyPartitions()) {
+            return;
+        }
+        for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
+            Table table = globalStateMgr.getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+            if (!(table instanceof OlapTable)) {
+                continue;
+            }
+            OlapTable olapTable = (OlapTable) table;
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                PhysicalPartition partition = olapTable.getPhysicalPartition(partitionCommitInfo.getPhysicalPartitionId());
+                if (partition == null) {
+                    continue;
+                }
+                if (partition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
+                    throw new TransactionCommitFailedException(String.format(
+                            "partition %d of table %s received other writes while this INSERT was planned as a "
+                                    + "plain insert on an empty partition, retry the statement",
+                            partition.getId(), olapTable.getName()));
+                }
+            }
+        }
     }
 
     protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
