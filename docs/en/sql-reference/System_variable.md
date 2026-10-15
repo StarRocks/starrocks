@@ -274,6 +274,21 @@ Used for MySQL client compatibility. No practical usage.
 * **Valid values**: `CIRCULAR`, `RANDOM`
 * **Introduced in**: -
 
+### broadcast_memory_limit_exceeded_cost_multiplier
+
+* **Description**: Sets the multiplier applied to broadcast CPU, memory, and network costs when the estimated build-side size sent to each BE/CN exceeds `exec_mem_limit`. An estimate equal to the limit receives no penalty. The default preserves the existing 1000-fold penalty. Set this variable to `1.0` to remove the penalty; the optimizer still compares other plan costs and checks broadcast eligibility. This variable does not change runtime memory limits or force a broadcast join.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers greater than or equal to `1.0`. Values below `1.0`, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_memory_limit_exceeded_cost_multiplier = 10.0;
+SET GLOBAL broadcast_memory_limit_exceeded_cost_multiplier = 10.0;
+```
+
 ### broadcast_row_limit
 
 * **Scope**: Session

@@ -551,6 +551,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // --------  New planner session variables start --------
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
+    public static final String BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER =
+            "broadcast_memory_limit_exceeded_cost_multiplier";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
@@ -2022,6 +2024,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = FORCE_SCHEDULE_LOCAL)
     private boolean forceScheduleLocal = false;
+
+    // Cost penalty for estimated broadcast inputs above the memory threshold.
+    @VariableMgr.VarAttr(name = BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER)
+    private double broadcastMemoryLimitExceededCostMultiplier = 1000.0;
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
@@ -4897,6 +4903,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getMaxTransformReorderJoins() {
         return this.cboMaxReorderNodeUseExhaustive;
+    }
+
+    public double getBroadcastMemoryLimitExceededCostMultiplier() {
+        return broadcastMemoryLimitExceededCostMultiplier;
+    }
+
+    public void setBroadcastMemoryLimitExceededCostMultiplier(double multiplier) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (!Double.isFinite(multiplier) || multiplier < 1.0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER, multiplier,
+                    "a finite number greater than or equal to 1.0");
+        }
+        this.broadcastMemoryLimitExceededCostMultiplier = multiplier;
     }
 
     public long getBroadcastRowCountLimit() {
