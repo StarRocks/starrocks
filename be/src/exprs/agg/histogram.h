@@ -113,8 +113,7 @@ struct HistogramState {
     using ValueType = AggDataValueType<LT>;
     using Traits = AggDataTypeTraits<LT>;
 
-    void add(const typename Traits::RefType& value, int64_t count = 1)
-    {
+    void add(const typename Traits::RefType& value, int64_t count = 1) {
         CHECK_GT(count, 0);
         CHECK_LE(count, std::numeric_limits<int64_t>::max() - non_null_row_count);
         ValueType value_copy;
@@ -139,8 +138,7 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override
-    {
+                size_t row_num) const override {
         ColumnViewer<LT> viewer(columns[0]->get_ptr());
         auto& histogram_state = this->data(state);
         CHECK_LT(histogram_state.row_count, std::numeric_limits<int64_t>::max());
@@ -151,8 +149,7 @@ public:
     }
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override
-    {
+                                   AggDataPtr __restrict state) const override {
         ColumnViewer<LT> viewer(columns[0]->get_ptr());
         auto& histogram_state = this->data(state);
         CHECK_LE(chunk_size, std::numeric_limits<int64_t>::max() - histogram_state.row_count);
@@ -171,37 +168,31 @@ public:
         CHECK(false);
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override
-    {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         ColumnViewer<TYPE_VARCHAR> serialized_viewer(column->get_ptr());
-        if (serialized_viewer.is_null(row_num))
-        {
+        if (serialized_viewer.is_null(row_num)) {
             ctx->set_error("Invalid histogram intermediate state: NULL payload", false);
             return;
         }
         HistogramState<LT> source;
-        if (!deserialize_state(ctx, serialized_viewer.value(row_num), &source))
-        {
+        if (!deserialize_state(ctx, serialized_viewer.value(row_num), &source)) {
             return;
         }
         auto& target = this->data(state);
         // Check both totals before changing the target; add() also updates the non-NULL total.
         if (source.row_count > std::numeric_limits<int64_t>::max() - target.row_count ||
-            source.non_null_row_count > std::numeric_limits<int64_t>::max() - target.non_null_row_count)
-        {
+            source.non_null_row_count > std::numeric_limits<int64_t>::max() - target.non_null_row_count) {
             ctx->set_error("Invalid histogram intermediate state: row count overflow", false);
             return;
         }
-        for (const auto& [value, count] : source.ordered_map)
-        {
+        for (const auto& [value, count] : source.ordered_map) {
             target.add(AggDataTypeTraits<LT>::get_ref(value), count);
         }
         target.row_count += source.row_count;
     }
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
-                             Column* to) const override
-    {
+                             Column* to) const override {
         std::string serialized;
         const auto& histogram_state = this->data(state);
         const uint64_t value_count = histogram_state.ordered_map.size();
@@ -211,8 +202,7 @@ public:
         append_binary_value(&serialized, value_count);
 
         auto value_column = ColumnType::create();
-        for (const auto& [value, count] : histogram_state.ordered_map)
-        {
+        for (const auto& [value, count] : histogram_state.ordered_map) {
             append_binary_value(&serialized, count);
             value_column->resize(0);
             value_column->append_datum(Datum(AggDataTypeTraits<LT>::get_ref(value)));
@@ -228,8 +218,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     MutableColumnPtr& dst) const override
-    {
+                                     MutableColumnPtr& dst) const override {
         const Column* input_columns[] = {src[0].get()};
         for (size_t i = 0; i < chunk_size; ++i) {
             HistogramState<LT> row_state;
@@ -252,12 +241,9 @@ public:
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
-        if (ctx->get_num_args() == 4)
-        {
+        if (ctx->get_num_args() == 4) {
             finalize_to_column_with_ndv(ctx, state, to);
-        }
-        else
-        {
+        } else {
             finalize_to_column_without_ndv(ctx, state, to);
         }
     }
@@ -266,11 +252,9 @@ public:
 
 private:
     // Decode into a fresh temporary state.
-    static bool deserialize_state(FunctionContext* ctx, const Slice& serialized, HistogramState<LT>* decoded_state)
-    {
+    static bool deserialize_state(FunctionContext* ctx, const Slice& serialized, HistogramState<LT>* decoded_state) {
         constexpr size_t header_size = 2 * sizeof(int64_t) + sizeof(uint64_t);
-        if (serialized.size < header_size)
-        {
+        if (serialized.size < header_size) {
             ctx->set_error("Invalid histogram intermediate state: truncated header", false);
             return false;
         }
@@ -283,37 +267,30 @@ private:
             !read_binary_value(&pos, end, &serialized_non_null_row_count) ||
             !read_binary_value(&pos, end, &value_count) || serialized_non_null_row_count < 0 ||
             serialized_row_count < serialized_non_null_row_count ||
-            value_count > static_cast<uint64_t>(serialized_non_null_row_count))
-        {
+            value_count > static_cast<uint64_t>(serialized_non_null_row_count)) {
             ctx->set_error("Invalid histogram intermediate state: invalid header", false);
             return false;
         }
 
         auto value_column = ColumnType::create();
-        for (uint64_t i = 0; i < value_count; ++i)
-        {
+        for (uint64_t i = 0; i < value_count; ++i) {
             int64_t count;
             uint32_t value_size;
             if (!read_binary_value(&pos, end, &count) || !read_binary_value(&pos, end, &value_size) || count <= 0 ||
                 count > serialized_non_null_row_count - decoded_state->non_null_row_count ||
-                static_cast<size_t>(end - pos) < value_size)
-            {
+                static_cast<size_t>(end - pos) < value_size) {
                 ctx->set_error("Invalid histogram intermediate state: invalid frequency or value size", false);
                 return false;
             }
-            if constexpr (std::is_same_v<AggDataRefType<LT>, Slice>)
-            {
+            if constexpr (std::is_same_v<AggDataRefType<LT>, Slice>) {
                 const uint8_t* string_pos = pos;
                 uint32_t string_size;
                 if (!read_binary_value(&string_pos, pos + value_size, &string_size) ||
-                    string_size != value_size - sizeof(uint32_t))
-                {
+                    string_size != value_size - sizeof(uint32_t)) {
                     ctx->set_error("Invalid histogram intermediate state: invalid string length", false);
                     return false;
                 }
-            }
-            else if (value_size != sizeof(T))
-            {
+            } else if (value_size != sizeof(T)) {
                 ctx->set_error("Invalid histogram intermediate state: invalid fixed value length", false);
                 return false;
             }
@@ -325,8 +302,7 @@ private:
             decoded_state->add(viewer.value(0), count);
             pos = value_end;
         }
-        if (pos != end || decoded_state->non_null_row_count != serialized_non_null_row_count)
-        {
+        if (pos != end || decoded_state->non_null_row_count != serialized_non_null_row_count) {
             ctx->set_error("Invalid histogram intermediate state: inconsistent non-NULL count or trailing bytes",
                            false);
             return false;
@@ -336,15 +312,13 @@ private:
     }
 
     template <typename Value>
-    static void append_binary_value(std::string* dst, const Value& value)
-    {
+    static void append_binary_value(std::string* dst, const Value& value) {
         static_assert(std::is_trivially_copyable_v<Value>);
         dst->append(reinterpret_cast<const char*>(&value), sizeof(Value));
     }
 
     template <typename Value>
-    static bool read_binary_value(const uint8_t** pos, const uint8_t* end, Value* value)
-    {
+    static bool read_binary_value(const uint8_t** pos, const uint8_t* end, Value* value) {
         static_assert(std::is_trivially_copyable_v<Value>);
         if (static_cast<size_t>(end - *pos) < sizeof(Value)) {
             return false;
@@ -366,21 +340,16 @@ private:
         const int64_t bucket_size = histogram_state.row_count / bucket_num;
 
         std::vector<Bucket<LT>> buckets;
-        for (const auto& [v, count] : histogram_state.ordered_map)
-        {
+        for (const auto& [v, count] : histogram_state.ordered_map) {
             const auto value = AggDataTypeTraits<LT>::get_ref(v);
-            if (buckets.empty())
-            {
+            if (buckets.empty()) {
                 Bucket<LT> bucket(value, value, count, count);
                 bucket.count_in_bucket = count;
                 buckets.emplace_back(bucket);
-            }
-            else
-            {
+            } else {
                 Bucket<LT>* last_bucket = &buckets.back();
 
-                if (last_bucket->count_in_bucket >= bucket_size)
-                {
+                if (last_bucket->count_in_bucket >= bucket_size) {
                     Bucket<LT> bucket(value, value, last_bucket->count + count, count);
                     bucket.count_in_bucket = count;
                     buckets.emplace_back(bucket);
@@ -434,23 +403,18 @@ private:
         int64_t count_once = 0;
         // Build bucket
         std::vector<Bucket<LT>> buckets;
-        for (const auto& [v, count] : histogram_state.ordered_map)
-        {
+        for (const auto& [v, count] : histogram_state.ordered_map) {
             const auto value = AggDataTypeTraits<LT>::get_ref(v);
-            if (buckets.empty())
-            {
+            if (buckets.empty()) {
                 Bucket<LT> bucket(value, value, count, count);
                 bucket.count_in_bucket = count;
                 buckets.emplace_back(bucket);
                 sample_distinct = 1;
                 count_once = count == 1;
-            }
-            else
-            {
+            } else {
                 Bucket<LT>* last_bucket = &buckets.back();
 
-                if (last_bucket->count_in_bucket >= bucket_size)
-                {
+                if (last_bucket->count_in_bucket >= bucket_size) {
                     int64_t last_ndv = ndv_estimator->estimate(last_bucket->count_in_bucket, sample_distinct,
                                                                count_once, sample_ratio);
                     last_bucket->distinct_count = last_ndv;
