@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include <limits>
+
 #include "base/time/time.h"
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/workgroup/work_group.h"
@@ -24,6 +26,11 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+// Leave headroom for runtime charged by concurrent executors before the next scheduling operation.
+constexpr int64_t kAccuTimeRebaseThreshold = std::numeric_limits<int64_t>::max() / 4;
+} // namespace
 
 /// QuerySharedDriverQueue.
 double QuerySharedDriverQueue::ratio_of_adjacent_queue() {
@@ -90,6 +97,9 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
 void QuerySharedDriverQueue::_put_back_unlocked(const DriverRawPtr driver, int level, int64_t now_ns) {
     auto& sub_queue = _queues[level];
     if (sub_queue.empty()) {
+        if (_min_accu_time_after_divisor * sub_queue.factor_for_normal >= kAccuTimeRebaseThreshold) {
+            _rebase_accu_time_unlocked();
+        }
         sub_queue.catch_up_accu_time(_min_accu_time_after_divisor);
     }
     sub_queue.put(driver);
@@ -97,6 +107,13 @@ void QuerySharedDriverQueue::_put_back_unlocked(const DriverRawPtr driver, int l
     driver->set_in_ready(true);
     driver->set_in_queue(this);
     driver->update_peak_driver_queue_size_counter(_num_drivers);
+}
+
+void QuerySharedDriverQueue::_rebase_accu_time_unlocked() {
+    for (auto& sub_queue : _queues) {
+        sub_queue.rebase_accu_time(_min_accu_time_after_divisor);
+    }
+    _min_accu_time_after_divisor = 0;
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
@@ -140,6 +157,9 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(const bool block) {
 
         if (queue_idx >= 0) {
             _min_accu_time_after_divisor = std::max(_min_accu_time_after_divisor, target_accu_time);
+            if (target_accu_time * _queues[queue_idx].factor_for_normal >= kAccuTimeRebaseThreshold) {
+                _rebase_accu_time_unlocked();
+            }
             // record queue's index to accumulate time for it.
             driver_ptr = _queues[queue_idx].take(false);
             driver_ptr->set_in_ready(false);
@@ -199,6 +219,8 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
 }
 
 void SubQuerySharedDriverQueue::catch_up_accu_time(double min_accu_time_after_divisor) {
+    // The caller rebases all levels first if this target approaches the int64 limit.
+    DCHECK_LT(min_accu_time_after_divisor * factor_for_normal, kAccuTimeRebaseThreshold);
     const auto min_accu_time = static_cast<int64_t>(min_accu_time_after_divisor * factor_for_normal);
     const int64_t accu_time = _accu_consume_time.load();
     if (accu_time < min_accu_time) {
@@ -207,9 +229,24 @@ void SubQuerySharedDriverQueue::catch_up_accu_time(double min_accu_time_after_di
     }
 }
 
+void SubQuerySharedDriverQueue::rebase_accu_time(double origin) {
+    const int64_t accu_time = _accu_consume_time.load();
+    // Clamp before converting: the scaled origin can exceed int64 for a stale, empty level,
+    // and INT64_MAX itself rounds up to 2^63 as a double.
+    const double scaled_origin = origin * factor_for_normal;
+    const int64_t delta =
+            scaled_origin >= static_cast<double>(accu_time) ? accu_time : static_cast<int64_t>(scaled_origin);
+    // Keep runtime added concurrently after the load, just as catch_up_accu_time() does.
+    _accu_consume_time.fetch_sub(delta);
+}
+
 DriverQueueLevelStats SubQuerySharedDriverQueue::stats() const {
     DriverQueueLevelStats stats;
-    stats.accu_time_ns = static_cast<int64_t>(accu_time_after_divisor());
+    const double accu_time = accu_time_after_divisor();
+    // INT64_MAX rounds up to 2^63 as a double; avoid an out-of-range cast during a metric scrape.
+    stats.accu_time_ns = accu_time >= static_cast<double>(std::numeric_limits<int64_t>::max())
+                                 ? std::numeric_limits<int64_t>::max()
+                                 : static_cast<int64_t>(accu_time);
     stats.wait_time_ns = _wait_time_ns.load(std::memory_order_relaxed);
     stats.schedule_count = _schedule_count.load(std::memory_order_relaxed);
     return stats;

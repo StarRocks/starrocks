@@ -142,7 +142,7 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_accu_time_ns`
 
 - Unit: ns
-- Description: Execution time accumulated by each level of the pipeline driver queue of each resource group, divided by the factor of the level. The `level` label is the level, from 0 to 7, and a driver moves to a higher level as it runs longer. The next driver is taken from the non-empty level with the smallest value. When a level turns from empty to non-empty, its value is raised to at least the value of the level scheduled last.
+- Description: Execution time accumulated by each level of the pipeline driver queue of each resource group, divided by the factor of the level. The `level` label is the level, from 0 to 7, and a driver moves to a higher level as it runs longer. The next driver is taken from the non-empty level with the smallest value. When a level turns from empty to non-empty, its value is raised to at least the value of the level scheduled last. To keep values within the numeric range, all levels and the scheduling watermark occasionally subtract a common time origin. This gauge can decrease during that rebase; the cumulative ready-wait and schedule-count counters are preserved.
 
 ## `resource_group_driver_queue_level_schedule_count`
 

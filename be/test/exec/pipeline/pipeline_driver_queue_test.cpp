@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <thread>
 
 #include "base/testutil/parallel_test.h"
@@ -191,6 +192,81 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_level_of_driver_running_beyond_in
     queue.put_back(driver.get());
     ASSERT_EQ(QuerySharedDriverQueue::QUEUE_SIZE - 1, driver->get_driver_queue_level());
     ASSERT_EQ(driver.get(), queue.take(true).value());
+}
+
+PARALLEL_TEST(QuerySharedDriverQueueTest, test_catch_up_rebases_before_scaled_time_overflows) {
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
+    // Set this queue's factors to ratio=2 without changing the config shared by parallel tests.
+    for (int level = 0; level < QuerySharedDriverQueue::QUEUE_SIZE; ++level) {
+        queue._queues[level].factor_for_normal = std::pow(2, 7 - level);
+    }
+    QueryContext query_context;
+    auto new_driver = [&query_context](int level) {
+        auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                       nullptr, nullptr, nullptr, -1);
+        _set_driver_level(driver.get(), level);
+        return driver;
+    };
+    auto driver7 = new_driver(7);
+    auto driver6 = new_driver(6);
+    auto driver0 = new_driver(0);
+    constexpr int64_t history = 80'000'000'000'000'000;
+    constexpr int64_t lead = 1'000'000;
+    queue._queues[7]._accu_consume_time = history;
+    queue._queues[6]._accu_consume_time = (history + lead) * 2;
+    queue.put_back(driver7.get());
+    queue.put_back(driver6.get());
+    ASSERT_EQ(driver7.get(), queue.take(true).value());
+
+    // Catching L0 up to history * 128 would exceed INT64_MAX. Rebase the queued L6 too,
+    // preserving its lead, and allow L7 to run again after L0 has consumed one slice.
+    queue.put_back(driver0.get());
+    auto stats = queue.level_stats();
+    EXPECT_EQ(0, stats[0].accu_time_ns);
+    EXPECT_EQ(lead, stats[6].accu_time_ns);
+    EXPECT_EQ(0, stats[7].accu_time_ns);
+    EXPECT_EQ(1, stats[7].schedule_count);
+    ASSERT_EQ(driver0.get(), queue.take(true).value());
+    driver0->driver_acct().update_last_time_spent(1'000'000);
+    queue.update_statistics(driver0.get());
+    queue.put_back(driver0.get());
+    queue.put_back(driver7.get());
+    ASSERT_EQ(driver7.get(), queue.take(true).value());
+}
+
+PARALLEL_TEST(QuerySharedDriverQueueTest, test_rebase_at_int64_limit) {
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
+    QueryContext query_context;
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                   nullptr, nullptr, nullptr, -1);
+    _set_driver_level(driver.get(), 7);
+    queue._queues[7]._accu_consume_time = std::numeric_limits<int64_t>::max();
+    // The metric scrape itself must not cast the rounded double value 2^63 to int64.
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), queue.level_stats()[7].accu_time_ns);
+    queue.put_back(driver.get());
+    ASSERT_EQ(driver.get(), queue.take(true).value());
+    EXPECT_EQ(0, queue.level_stats()[7].accu_time_ns);
+    driver->driver_acct().update_last_time_spent(1'000'000);
+    queue.update_statistics(driver.get());
+    EXPECT_EQ(1'000'000, queue.level_stats()[7].accu_time_ns);
+}
+
+PARALLEL_TEST(QuerySharedDriverQueueTest, test_rebase_keeps_concurrent_runtime) {
+    SubQuerySharedDriverQueue queue;
+    queue.factor_for_normal = 128;
+    queue._accu_consume_time = 128'000 + 1234;
+    QueryContext query_context;
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
+                                                   nullptr, nullptr, nullptr, -1);
+    driver->driver_acct().update_last_time_spent(1);
+    std::thread updater([&] {
+        for (int i = 0; i < 100'000; ++i) queue.update_accu_time(driver.get());
+    });
+    queue.rebase_accu_time(1000);
+    updater.join();
+    EXPECT_EQ(1234 + 100'000, queue._accu_consume_time.load());
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_level_stats) {

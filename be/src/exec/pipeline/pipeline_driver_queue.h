@@ -55,6 +55,8 @@ public:
 
     // Raise the accumulated time, so that accu_time_after_divisor() is not less than min_accu_time_after_divisor.
     void catch_up_accu_time(double min_accu_time_after_divisor);
+    // Subtract a common normalized origin; levels behind the origin restart at zero.
+    void rebase_accu_time(double origin);
 
     void update_wait_time(int64_t wait_time_ns) {
         _wait_time_ns.fetch_add(wait_time_ns, std::memory_order_relaxed);
@@ -118,6 +120,7 @@ private:
     int _compute_driver_level(const DriverRawPtr driver) const;
     // Should be guarded by _global_mutex.
     void _put_back_unlocked(const DriverRawPtr driver, int level, int64_t now_ns);
+    void _rebase_accu_time_unlocked();
 
 private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
@@ -132,11 +135,12 @@ private:
 
     size_t _num_drivers = 0;
 
-    // The largest accu_time_after_divisor() of the levels picked by take() so far. It never decreases, and no
+    // The largest accu_time_after_divisor() of the levels picked since the last common rebase. No
     // non-empty level is below it, because a level turning from empty to non-empty catches up to it.
     // Without the catch-up, a level that has been empty for a long time, such as a level of heavy queries,
     // would keep its small accumulated time and be picked before every other level until it caught up,
     // which could starve level 0 for seconds.
+    // Rebase all levels and this watermark together before a catch-up target approaches the int64 limit.
     double _min_accu_time_after_divisor = 0;
 
     mutable std::mutex _global_mutex;

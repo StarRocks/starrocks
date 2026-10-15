@@ -142,7 +142,7 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_accu_time_ns`
 
 - 单位：纳秒
-- 描述：每个资源组的 Pipeline 执行队列中，各层级累计的执行时间除以该层级的系数。`level` 标签为层级（0–7），Driver 执行得越久，所在层级越高。执行线程从该值最小的非空层级取下一个 Driver。层级由空变为非空时，该值会被提高到不低于最近一次调度的层级的值。
+- 描述：每个资源组的 Pipeline 执行队列中，各层级累计的执行时间除以该层级的系数。`level` 标签为层级（0–7），Driver 执行得越久，所在层级越高。执行线程从该值最小的非空层级取下一个 Driver。层级由空变为非空时，该值会被提高到不低于最近一次调度的层级的值。 为避免超出数值范围，所有层级和调度水位会在必要时减去同一个时间原点。此 Gauge 可在该调整时下降；累计就绪等待时间和调度次数计数器保持不变。
 
 ## `resource_group_driver_queue_level_schedule_count`
 
