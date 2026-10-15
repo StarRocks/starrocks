@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "base/time/time.h"
 #include "common/config_exec_flow_fwd.h"
 #include "compute_env/workgroup/work_group.h"
 #include "exec/runtime/schedule/utils.h"
@@ -59,13 +60,11 @@ void QuerySharedDriverQueue::close() {
 void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
+    const int64_t now_ns = MonotonicNanos();
     {
         std::lock_guard<std::mutex> lock(_global_mutex);
         DCHECK(!driver->is_in_ready());
-        _queues[level].put(driver);
-        driver->set_in_ready(true);
-        driver->set_in_queue(this);
-        driver->update_peak_driver_queue_size_counter(_num_drivers);
+        _put_back_unlocked(driver, level, now_ns);
         _cv.notify_one();
         ++_num_drivers;
     }
@@ -78,16 +77,26 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
         levels[i] = _compute_driver_level(drivers[i]);
         drivers[i]->set_driver_queue_level(levels[i]);
     }
+    const int64_t now_ns = MonotonicNanos();
     std::lock_guard<std::mutex> lock(_global_mutex);
     for (int i = 0; i < drivers.size(); i++) {
-        _queues[levels[i]].put(drivers[i]);
-        drivers[i]->set_in_ready(true);
-        drivers[i]->set_in_queue(this);
-        drivers[i]->update_peak_driver_queue_size_counter(_num_drivers);
+        _put_back_unlocked(drivers[i], levels[i], now_ns);
         _cv.notify_one();
     }
     _num_drivers += drivers.size();
     _metrics->driver_queue_len.increment(drivers.size());
+}
+
+void QuerySharedDriverQueue::_put_back_unlocked(const DriverRawPtr driver, int level, int64_t now_ns) {
+    auto& sub_queue = _queues[level];
+    if (sub_queue.empty()) {
+        sub_queue.catch_up_accu_time(_min_accu_time_after_divisor);
+    }
+    sub_queue.put(driver);
+    driver->driver_acct().set_enter_ready_queue_timestamp(now_ns);
+    driver->set_in_ready(true);
+    driver->set_in_queue(this);
+    driver->update_peak_driver_queue_size_counter(_num_drivers);
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
@@ -130,9 +139,12 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(const bool block) {
         }
 
         if (queue_idx >= 0) {
+            _min_accu_time_after_divisor = std::max(_min_accu_time_after_divisor, target_accu_time);
             // record queue's index to accumulate time for it.
             driver_ptr = _queues[queue_idx].take(false);
             driver_ptr->set_in_ready(false);
+            _queues[queue_idx].update_wait_time(MonotonicNanos() -
+                                                driver_ptr->driver_acct().get_enter_ready_queue_timestamp());
 
             --_num_drivers;
             _metrics->driver_queue_len.increment(-1);
@@ -166,8 +178,17 @@ void QuerySharedDriverQueue::update_statistics(const DriverRawPtr driver) {
     _queues[driver->get_driver_queue_level()].update_accu_time(driver);
 }
 
+std::vector<DriverQueueLevelStats> QuerySharedDriverQueue::level_stats() const {
+    std::vector<DriverQueueLevelStats> stats;
+    stats.reserve(QUEUE_SIZE);
+    for (const auto& sub_queue : _queues) {
+        stats.emplace_back(sub_queue.stats());
+    }
+    return stats;
+}
+
 int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) const {
-    int time_spent = driver->driver_acct().get_accumulated_time_spent();
+    int64_t time_spent = driver->driver_acct().get_accumulated_time_spent();
     for (int i = driver->get_driver_queue_level(); i < QUEUE_SIZE; ++i) {
         if (time_spent < _level_time_slices[i]) {
             return i;
@@ -175,6 +196,23 @@ int QuerySharedDriverQueue::_compute_driver_level(const DriverRawPtr driver) con
     }
 
     return QUEUE_SIZE - 1;
+}
+
+void SubQuerySharedDriverQueue::catch_up_accu_time(double min_accu_time_after_divisor) {
+    const auto min_accu_time = static_cast<int64_t>(min_accu_time_after_divisor * factor_for_normal);
+    const int64_t accu_time = _accu_consume_time.load();
+    if (accu_time < min_accu_time) {
+        // Add the difference rather than store the target, to keep the time added by update_accu_time() concurrently.
+        _accu_consume_time.fetch_add(min_accu_time - accu_time);
+    }
+}
+
+DriverQueueLevelStats SubQuerySharedDriverQueue::stats() const {
+    DriverQueueLevelStats stats;
+    stats.accu_time_ns = static_cast<int64_t>(accu_time_after_divisor());
+    stats.wait_time_ns = _wait_time_ns.load(std::memory_order_relaxed);
+    stats.schedule_count = _schedule_count.load(std::memory_order_relaxed);
+    return stats;
 }
 
 void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
