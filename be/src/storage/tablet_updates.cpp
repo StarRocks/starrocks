@@ -2377,6 +2377,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     Status apply_st;
     // If `use_light_apply_compaction` is true, we don't need compaction state to generate delvec.
     const bool use_light_apply_compaction = _use_light_apply_compaction(output_rowset);
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_apply_compaction_commit:output_rowset", output_rowset);
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
@@ -2408,7 +2409,10 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     google::protobuf::Arena arena;
     auto* index_meta = google::protobuf::Arena::CreateMessage<PersistentIndexMetaPB>(&arena);
 
-    bool rebuild_index = (version_info.rowsets.size() == 1 && config::enable_pindex_rebuild_in_compaction);
+    // Light publish replaces existing keys and must preserve the loaded index and its key count.
+    // Only non-light publish can rebuild an empty index by inserting every output key.
+    const bool rebuild_index = !use_light_apply_compaction && version_info.rowsets.size() == 1 &&
+                               config::enable_pindex_rebuild_in_compaction;
     // only one output rowset, compaction pick all rowsets, so we can skip pindex read and rebuild index
     if (rebuild_index) {
         st = index.reset(&_tablet, version_info.version, index_meta);
