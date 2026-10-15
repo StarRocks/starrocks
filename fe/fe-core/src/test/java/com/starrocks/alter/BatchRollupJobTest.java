@@ -49,6 +49,8 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +77,17 @@ public class BatchRollupJobTest {
     public void before() throws Exception {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         alterJobs.clear();
+    }
+
+    // The rollup scheduler runs every 10 ms and the jobs finish quickly, so a job can finish
+    // before CANCEL reaches it. Keep the scheduler from running jobs for the rest of the test.
+    // Must be called before the rollup jobs are created.
+    private static void pauseRollupScheduler() {
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            protected void runAfterLeaseValid() {
+            }
+        };
     }
 
     @Test
@@ -126,6 +139,7 @@ public class BatchRollupJobTest {
 
     @Test
     public void testCancelBatchRollup() throws Exception {
+        pauseRollupScheduler();
         starRocksAssert.withTable("create table db1.tbl2(k1 int, k2 int, k3 int) " +
                 "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
@@ -162,6 +176,7 @@ public class BatchRollupJobTest {
 
     @Test
     public void testCancelRollupWithRepeatedJobIds() throws Exception {
+        pauseRollupScheduler();
         starRocksAssert.withTable("create table db1.tbl4(k1 int, k2 int, k3 int) " +
                 "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
@@ -195,6 +210,7 @@ public class BatchRollupJobTest {
 
     @Test
     public void testCancelRollupWithoutJobIds() throws Exception {
+        pauseRollupScheduler();
         starRocksAssert.withTable("create table db1.tbl3(k1 int, k2 int, k3 int) " +
                 "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
