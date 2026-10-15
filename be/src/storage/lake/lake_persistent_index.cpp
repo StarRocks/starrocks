@@ -2108,9 +2108,9 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
         fileset->for_each_sstable([&](const auto& sst) { old_bytes += sst.metadata_memory_usage(); });
         replacement->for_each_sstable([&](const auto& sst) { new_bytes += sst.metadata_memory_usage(); });
         if (new_bytes >= old_bytes) continue;
-        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_metadata_freed_bytes", old_bytes - new_bytes);
         if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
         fileset = std::move(replacement);
+        TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_metadata_freed_bytes", old_bytes - new_bytes);
         // The old entry charge backs the temporary replacement until here; workspace covers
         // protobuf/builders. Install only a smaller skeleton, then refund before further IO.
         if (refresh_memory) refresh_memory();
