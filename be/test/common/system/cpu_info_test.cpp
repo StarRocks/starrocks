@@ -14,9 +14,11 @@
 
 #include "common/system/cpu_info.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
+#include "base/hash/crc32c.h"
 #include "gtest/gtest.h"
 
 namespace starrocks {
@@ -56,6 +58,26 @@ TEST_F(CpuInfoTest, test_fail_cpu_flags_check) {
     *flags |= CpuInfo::AVX2;
 #else
     GTEST_SKIP() << "avx2 is not supported, skip the test!";
+#endif
+}
+
+TEST_F(CpuInfoTest, ArmPmullNotStartupFatal) {
+    std::vector<std::string> unsupported = CpuInfo::unsupported_cpu_flags_from_current_env();
+    auto it = std::find(unsupported.begin(), unsupported.end(), "ARM_PMULL");
+    EXPECT_EQ(it, unsupported.end()) << "ARM_PMULL must never be required at startup on baseline builds";
+    auto it_pmull = std::find(unsupported.begin(), unsupported.end(), "pmull");
+    EXPECT_EQ(it_pmull, unsupported.end()) << "pmull must never be required at startup on baseline builds";
+}
+
+TEST_F(CpuInfoTest, CpuInfoAndCrc32cAgreeOnPmull) {
+#if defined(__ARM_NEON) && defined(__aarch64__) && defined(USE_ARM_PMULL)
+    bool cpuinfo_has_pmull = CpuInfo::is_supported(CpuInfo::ARM_PMULL);
+    const char* active_impl = starrocks::crc32c::ActiveImplementationName();
+    if (cpuinfo_has_pmull) {
+        EXPECT_STREQ(active_impl, "pmull");
+    } else {
+        EXPECT_STRNE(active_impl, "pmull");
+    }
 #endif
 }
 
@@ -397,7 +419,7 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
 
     // 2. Fail-closed verification (P2):
     // When sysctl queries fail, unknown capability state must fail closed (0 flags).
-    auto mock_sysctl_fail_all = [](const char * /*name*/) -> bool { return false; };
+    auto mock_sysctl_fail_all = [](const char* /*name*/) -> bool { return false; };
     int64_t flags_fail_closed = CpuInfo::TEST_init_arm_darwin(mock_sysctl_fail_all);
     EXPECT_EQ(0, flags_fail_closed) << "Darwin detection must fail closed if capabilities cannot be verified";
 
