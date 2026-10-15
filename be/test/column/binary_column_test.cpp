@@ -739,7 +739,7 @@ PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_non_binary_unsupported) {
 }
 
 // Regression test for the ASAN global-buffer-overflow reported as StarRocksTest#12188:
-//   BinaryColumnBase<uint32_t>::deserialize_and_append_batch_nullable() <- NullableColumn::
+//   BinaryColumn::deserialize_and_append_batch_nullable() <- NullableColumn::
 //   deserialize_and_append_batch() <- AggHashSetOfSerializedKey::insert_keys_to_columns() <-
 //   Aggregator::convert_hash_set_to_chunk().
 //
@@ -762,7 +762,9 @@ PARALLEL_TEST(BinaryColumnTest, test_deserialize_and_append_batch_zero_chunk_siz
     column->deserialize_and_append_batch(srcs, 0);
     ASSERT_EQ(0u, column->size());
 
-    auto large_column = LargeBinaryColumn::create();
+    auto large_column = BinaryColumn::create();
+    large_column->get_offset().ensure_width_for_value(uint64_t{1} << 32);
+    ASSERT_TRUE(large_column->get_offset().is_large());
     large_column->deserialize_and_append_batch(srcs, 0);
     ASSERT_EQ(0u, large_column->size());
 

@@ -1116,20 +1116,14 @@ const uint8_t* BinaryColumn::deserialize_and_append(const uint8_t* pos) {
     return pos + string_size;
 }
 
-<<<<<<< HEAD
 void BinaryColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    // max size of one string is 2^32, so use uint32_t
-=======
-template <typename T>
-void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     // Callers hand down a full-size slice buffer and a row count, and the entries past that count
     // may still be default constructed -- Slice() points its data at a 1-byte "" literal. Bail out
     // before the reserve heuristic peeks at srcs[0], which would read past that literal.
     if (chunk_size == 0) {
         return;
     }
-    // max size of one string is 2^32, so use uint32_t not T
->>>>>>> c1bdafcf532... [BugFix] Fix read overflow in convert_hash_set_to_chunk (#62571)
+    // max size of one string is 2^32, so use uint32_t
     uint32_t string_size = *((uint32_t*)srcs[0].data);
     get_bytes().reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
@@ -1189,19 +1183,13 @@ void BinaryColumn::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t
     }
 }
 
-<<<<<<< HEAD
 void BinaryColumn::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                          Buffer<uint8_t>& is_nulls, bool& has_null) {
-=======
-template <typename T>
-void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
-                                                                Buffer<uint8_t>& is_nulls, bool& has_null) {
     // See deserialize_and_append_batch(): srcs[0] is only guaranteed to be a real key when there
     // is at least one row to append.
     if (chunk_size == 0) {
         return;
     }
->>>>>>> c1bdafcf532... [BugFix] Fix read overflow in convert_hash_set_to_chunk (#62571)
     const uint32_t string_size = *((bool*)srcs[0].data) // is null
                                          ? 4
                                          : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
