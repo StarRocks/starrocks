@@ -518,6 +518,20 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void invalidateTableCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        tables.invalidate(key);
+    }
+
+    @Override
+    public void shutdown() {
+        delegate.shutdown();
+    }
+
+    @Override
+>>>>>>> d013e03 ([BugFix] Close the Iceberg REST catalog when its connector shuts down (#80712))
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);

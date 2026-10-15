@@ -146,6 +146,9 @@ public class IcebergConnector implements Connector {
         if (refreshOtherFeExecutor != null) {
             refreshOtherFeExecutor.shutdown();
         }
+        if (icebergNativeCatalog != null) {
+            icebergNativeCatalog.shutdown();
+        }
     }
 
     @Override
