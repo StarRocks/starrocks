@@ -514,6 +514,13 @@ public class MetaService {
             return true;
         }
 
+        // Called by operators rather than by peer FEs, so the client-is-FE check is off. MetaBaseAction skips
+        // authentication, and needAdmin() only takes effect once needPassword() is on, so turn it on here.
+        @Override
+        public boolean needPassword() {
+            return true;
+        }
+
         @Override
         protected boolean needCheckClientIsFe() {
             return false;

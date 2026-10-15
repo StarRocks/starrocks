@@ -35,8 +35,8 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * /dump and /dump_starmgr are called by operators, not by peer FEs, so they skip the client-is-FE check and must
- * require an authenticated admin instead.
+ * /dump, /dump_starmgr and /service_id are called by operators, not by peer FEs, so they skip the client-is-FE check
+ * and must require an authenticated admin instead.
  */
 public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
 
@@ -137,6 +137,19 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
     }
 
     @Test
+    public void testServiceIdRequiresAuthentication() throws IOException {
+        try (Response response = get("/service_id", null)) {
+            Assertions.assertEquals(401, response.code(), response.body().string());
+        }
+        try (Response response = get("/service_id", rootAuth)) {
+            String body = response.body().string();
+            // The UT cluster runs in shared-nothing mode, so an authenticated admin gets 404 rather than an id.
+            Assertions.assertEquals(404, response.code(), body);
+            Assertions.assertTrue(body.contains("does not support service id"), body);
+        }
+    }
+
+    @Test
     public void testNonAdminUserIsRejected() throws IOException {
         // Valid credentials of a user without NODE privilege or an admin role must not pass needAdmin().
         try (Response response = get("/dump", nonAdminAuth)) {
@@ -144,6 +157,9 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         }
         Assertions.assertEquals(0, dumpCount.get());
         try (Response response = get("/dump_starmgr", nonAdminAuth)) {
+            Assertions.assertEquals(401, response.code(), response.body().string());
+        }
+        try (Response response = get("/service_id", nonAdminAuth)) {
             Assertions.assertEquals(401, response.code(), response.body().string());
         }
 
@@ -155,6 +171,10 @@ public class MetaServiceDumpAuthTest extends StarRocksHttpTestCase {
         Assertions.assertEquals(1, dumpCount.get());
         try (Response response = get("/dump_starmgr", nonAdminAuth)) {
             Assertions.assertEquals(200, response.code(), response.body().string());
+        }
+        try (Response response = get("/service_id", nonAdminAuth)) {
+            // Past authentication; 404 only because the UT cluster is shared-nothing.
+            Assertions.assertEquals(404, response.code(), response.body().string());
         }
     }
 }
