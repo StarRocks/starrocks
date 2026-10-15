@@ -501,6 +501,8 @@ CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 // set this value to none zero if auto algorithm isn't working well
 CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "500");
+// Maximum number of level -1 rowsets selected per size-tiered primary key compaction. Values below 2 are treated as 2.
+CONF_mInt64(max_update_compaction_num_level_minus_one_rowsets, "10000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
 // This config controls the io amp ratio of delvec files.
