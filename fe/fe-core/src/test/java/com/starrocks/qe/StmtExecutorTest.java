@@ -29,6 +29,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
@@ -62,6 +63,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QualifiedName;
@@ -83,26 +85,32 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PlainInsertOnEmptyPartitionsConflictException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
+import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 public class StmtExecutorTest {
     private static class DummyPlanNode extends PlanNode {
@@ -2627,5 +2635,237 @@ public class StmtExecutorTest {
         } finally {
             Config.max_query_retry_time = oldRetryTime;
         }
+    }
+
+    // ---- a plain insert on never-written partitions that lost the race at commit is retried once ----
+
+    private static final AtomicInteger DML_ATTEMPTS = new AtomicInteger();
+    private static final AtomicBoolean PLAN_PLAIN_INSERT = new AtomicBoolean();
+    // The transaction id each planning attempt found on the statement.
+    private static final List<Long> PLAN_TXN_IDS = Lists.newArrayList();
+    // Whether each planning attempt found the statement without a resolved target table.
+    private static final List<Boolean> PLAN_TARGET_WAS_NULL = Lists.newArrayList();
+    // clearExternalResources() calls on the coordinator, sampled when each DML attempt starts.
+    private static final AtomicInteger COORD_CLEARS = new AtomicInteger();
+    private static final List<Integer> COORD_CLEARS_AT_ATTEMPT_START = Lists.newArrayList();
+
+    private static ConnectContext newInsertCtx() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        return ctx;
+    }
+
+    // Runs an INSERT through execute() with the plan and handleDMLStmt stubbed (the profile wrapper
+    // around it is real): the plan is flagged (or not) as a plain insert on empty partitions, and
+    // attempt n fails with failureOfAttempt(n) the way handleDMLStmt reports a failure, or succeeds
+    // when that is null. Each plan "begins" a transaction by stamping a txn id on the statement.
+    private static void executeInsertWithStubbedDml(ConnectContext ctx, boolean plainInsertOnEmptyPartitions,
+                                                    Function<Integer, Throwable> failureOfAttempt,
+                                                    List<TUniqueId> executionIds,
+                                                    DefaultCoordinator coordinator) throws Exception {
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        COORD_CLEARS.set(0);
+        COORD_CLEARS_AT_ATTEMPT_START.clear();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void clearExternalResources() {
+                COORD_CLEARS.incrementAndGet();
+            }
+        };
+
+        // This harness has no leader elected, so keep execute() on the local path.
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public boolean isForwardToLeader() {
+                return false;
+            }
+
+            @Mock
+            public void handleDMLStmt(Invocation invocation, ExecPlan execPlan, DmlStmt dmlStmt) throws Exception {
+                int attempt = DML_ATTEMPTS.incrementAndGet();
+                executionIds.add(ctx.getExecutionId());
+                COORD_CLEARS_AT_ATTEMPT_START.add(COORD_CLEARS.get());
+                // What the real handleDMLStmt does first: this attempt's coordinator becomes the executor's.
+                Field coordField = StmtExecutor.class.getDeclaredField("coord");
+                coordField.setAccessible(true);
+                coordField.set(invocation.getInvokedInstance(), coordinator);
+                Throwable failure = failureOfAttempt.apply(attempt);
+                if (failure != null) {
+                    // What handleDMLStmt leaves behind on a failure: the error state, and the cause
+                    // wrapped once more.
+                    ctx.getState().setError(failure.getMessage());
+                    throw new StarRocksException(failure.getMessage(), failure);
+                }
+                ctx.getState().setOk();
+            }
+        };
+        // No warehouse is registered in this harness; the counter is not what is under test.
+        new MockUp<WarehouseMetricMgr>() {
+            @Mock
+            public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                // nothing to count in this harness
+            }
+        };
+        PLAN_COUNT.set(0);
+        DML_ATTEMPTS.set(0);
+        PLAN_TXN_IDS.clear();
+        PLAN_TARGET_WAS_NULL.clear();
+        PLAN_PLAIN_INSERT.set(plainInsertOnEmptyPartitions);
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase plannedStmt, ConnectContext ignoredCtx) {
+                // StatementPlanner.beginTransaction only opens a transaction for a statement that
+                // carries none; record what this attempt found and stamp this attempt's.
+                PLAN_TXN_IDS.add(((DmlStmt) plannedStmt).getTxnId());
+                ((DmlStmt) plannedStmt).setTxnId(1000 + PLAN_COUNT.incrementAndGet());
+                // InsertAnalyzer resolves the target only when the statement carries none; record that and
+                // leave a resolved target behind, as analysis does.
+                InsertStmt planned = (InsertStmt) plannedStmt;
+                PLAN_TARGET_WAS_NULL.add(planned.getTargetTable() == null);
+                planned.setTargetTable(new Table(Table.TableType.OLAP));
+                ExecPlan plan = buildMinimalExecPlan(1);
+                plan.setPlainInsertOnEmptyPartitions(PLAN_PLAIN_INSERT.get());
+                return plan;
+            }
+        };
+
+        executor.execute();
+    }
+
+    // The conflict as it reaches StmtExecutor: thrown by DatabaseTransactionMgr under the commit lock and
+    // wrapped by GlobalTransactionMgr.retryCommitOnRateLimitExceeded.
+    private static Throwable plainInsertCommitConflict() {
+        String msg = "partition 10001 of table t0 received other writes while this INSERT was planned as a "
+                + "plain insert on an empty partition, retry the statement";
+        return new StarRocksException("fail to execute commit task: " + msg,
+                new PlainInsertOnEmptyPartitionsConflictException(msg));
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictIsRetriedOnce(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext ctx = newInsertCtx();
+        ctx.getSessionVariable().setEnableProfile(true);
+        List<TUniqueId> executionIds = Lists.newArrayList();
+        List<String> removedProfiles = Lists.newArrayList();
+        new MockUp<ProfileManager>() {
+            @Mock
+            public void removeProfile(String queryId) {
+                removedProfiles.add(queryId);
+            }
+        };
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> attempt == 1 ? plainInsertCommitConflict() : null,
+                executionIds, coordinator);
+
+        Assertions.assertEquals(2, DML_ATTEMPTS.get(), "the lost race must be retried once");
+        Assertions.assertEquals(2, PLAN_COUNT.get(),
+                "the retry must re-plan: that is where it sees the advanced partition version");
+        Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                "the retry runs under a new execution id, so it gets a new transaction label");
+        // The first attempt's transaction was aborted; the statement must not carry its id into the
+        // re-plan, or StatementPlanner.beginTransaction would keep it instead of opening a new one.
+        Assertions.assertEquals(2, PLAN_TXN_IDS.size());
+        Assertions.assertTrue(PLAN_TXN_IDS.stream().allMatch(txnId -> txnId == DmlStmt.INVALID_TXN_ID),
+                "planning attempts saw txn ids " + PLAN_TXN_IDS);
+        // The target the first attempt resolved is dropped too, so the re-plan resolves the name again,
+        // the same way beginTransaction does for the new transaction: a table replaced in between is then
+        // either consistently written or consistently rejected.
+        Assertions.assertEquals(List.of(true, true), PLAN_TARGET_WAS_NULL,
+                "the re-plan must not reuse the first attempt's target table");
+        // The first attempt's coordinator may hold connector scan resources (INSERT ... SELECT from an
+        // external table); they are released before the retry replaces it, not only at the very end.
+        Assertions.assertEquals(List.of(0, 1), COORD_CLEARS_AT_ATTEMPT_START,
+                "the first coordinator must be cleared before the second attempt starts");
+        // The failed attempt's profile is dropped, not queued: the async profile task would read the
+        // executor's coord and profile, which the retry replaces.
+        Assertions.assertEquals(List.of(DebugUtil.printId(executionIds.get(0))), removedProfiles);
+        Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testDMLCancelledWhileItsCoordinatorIsCreatedDoesNotRun(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        // A KILL that lands while the statement is being planned, or while its coordinator is being created
+        // (for the conflict retry: after the first coordinator finished), can only cancel the coordinator the
+        // executor holds at that moment, which is not the one about to run. handleDMLStmt must re-read the
+        // flag once the new coordinator is installed, or a killed statement would still write and commit.
+        MetricRepo.init();
+        ConnectContext ctx = newInsertCtx();
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        Table targetTable = new Table(Table.TableType.BLACKHOLE);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                executor.cancel("killed while the coordinator was being created");
+                return coordinator;
+            }
+        };
+        AtomicInteger executions = new AtomicInteger();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void exec() {
+                executions.incrementAndGet();
+            }
+        };
+
+        Exception ex = Assertions.assertThrows(Exception.class,
+                () -> executor.handleDMLStmt(buildMinimalExecPlan(1), stmt));
+
+        Assertions.assertTrue(ex.getMessage() != null && ex.getMessage().contains("cancelled"), ex.getMessage());
+        Assertions.assertEquals(0, executions.get(), "a cancelled statement must not run its coordinator");
+        Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictIsRetriedOnlyOnce(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        ConnectContext ctx = newInsertCtx();
+        List<TUniqueId> executionIds = Lists.newArrayList();
+
+        executeInsertWithStubbedDml(ctx, true, attempt -> plainInsertCommitConflict(), executionIds, coordinator);
+
+        Assertions.assertEquals(2, DML_ATTEMPTS.get());
+        Assertions.assertEquals(2, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertTrue(ctx.getState().getErrorMessage().contains("received other writes"),
+                ctx.getState().getErrorMessage());
+    }
+
+    @Test
+    public void testPlainInsertOnEmptyPartitionsConflictNotRetriedForOtherPlansOrFailures(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        // The same conflict on a plan that was not a plain insert on empty partitions: not ours to retry.
+        ConnectContext ctx = newInsertCtx();
+        executeInsertWithStubbedDml(ctx, false, attempt -> plainInsertCommitConflict(), Lists.newArrayList(),
+                coordinator);
+        Assertions.assertEquals(1, DML_ATTEMPTS.get());
+        Assertions.assertEquals(1, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
+
+        // A flagged plan failing at commit for any other reason: no retry either.
+        ctx = newInsertCtx();
+        executeInsertWithStubbedDml(ctx, true, attempt -> new StarRocksException(
+                "fail to execute commit task: disable_load_job is set to true, all load jobs are prevented",
+                new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented")),
+                Lists.newArrayList(), coordinator);
+        Assertions.assertEquals(1, DML_ATTEMPTS.get());
+        Assertions.assertEquals(1, PLAN_COUNT.get());
+        Assertions.assertTrue(ctx.getState().isError());
     }
 }

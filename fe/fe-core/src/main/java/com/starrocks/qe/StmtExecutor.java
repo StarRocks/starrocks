@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -282,6 +283,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.PlainInsertOnEmptyPartitionsConflictException;
 import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
@@ -1257,8 +1259,8 @@ public class StmtExecutor {
                 handleSetCatalogStmt();
             } else if (parsedStmt instanceof CreateTableAsSelectStmt) {
                 handleCreateTableAsSelectStmt(beginTimeInNanoSecond);
-            } else if (parsedStmt instanceof DmlStmt) {
-                handleDMLStmtWithProfile(execPlan, (DmlStmt) parsedStmt);
+            } else if (parsedStmt instanceof DmlStmt dmlStmt) {
+                execPlan = handleDMLStmtRetryingPlainInsertConflict(execPlan, dmlStmt);
             } else if (parsedStmt instanceof DdlStmt) {
                 handleDdlStmt();
             } else if (parsedStmt instanceof ShowStmt) {
@@ -3393,32 +3395,100 @@ public class StmtExecutor {
      * `handleDMLStmtWithProfile` executes DML statement and write profile at the end.
      * NOTE: `writeProfile` can only be called once, otherwise the profile detail will be lost.
      */
+    // Runs the DML once. If it was a plain insert on never-written partitions and lost the commit race
+    // (another transaction committed to one of them first), runs it once more: re-planned, it reads the
+    // advanced partition version and keeps the partial update. Returns the plan of the attempt that ran.
+    private ExecPlan handleDMLStmtRetryingPlainInsertConflict(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        try {
+            handleDMLStmtWithProfile(execPlan, stmt, 0);
+            return execPlan;
+        } catch (Exception e) {
+            if (!shouldRetryPlainInsertOnEmptyPartitions(execPlan, e)) {
+                throw e;
+            }
+            // Nothing of the first attempt is left: handleDMLStmt aborted its transaction and cancelled
+            // its load job. Release its coordinator's connector resources now (execute() only clears the
+            // coordinator it finds at the end, which will be the retry's), then plan again under a new
+            // execution id. The statement still carries two results of the first attempt that the re-plan
+            // must not reuse: the aborted transaction's id (StatementPlanner.beginTransaction opens a new
+            // transaction only for a statement without one) and the resolved target table (InsertAnalyzer
+            // keeps a target it finds set, while beginTransaction resolves the name again; a table replaced
+            // in between must be consistently written or consistently rejected, not planned on the old
+            // tablets under a transaction on the new id).
+            LOG.info("retry INSERT {} as a partial update: {}", DebugUtil.printId(context.getQueryId()),
+                    e.getMessage());
+            if (coord != null) {
+                coord.clearExternalResources();
+            }
+            context.getState().reset();
+            context.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+            stmt.setTxnId(DmlStmt.INVALID_TXN_ID);
+            if (stmt instanceof InsertStmt insertStmt) {
+                insertStmt.setTargetTable(null);
+            }
+            ExecPlan retryPlan = StatementPlanner.plan(stmt, context);
+            lastExecPlan = retryPlan;
+            handleDMLStmtWithProfile(retryPlan, stmt, 1);
+            return retryPlan;
+        }
+    }
+
     public void handleDMLStmtWithProfile(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+        handleDMLStmtWithProfile(execPlan, stmt, 0);
+    }
+
+    // Only the conflict DatabaseTransactionMgr raises for a plain insert on never-written partitions is
+    // retried, and only when this plan was such an insert; every other failure keeps its meaning. The
+    // conflict arrives wrapped by GlobalTransactionMgr and handleDMLStmt, so look down the cause chain.
+    private boolean shouldRetryPlainInsertOnEmptyPartitions(ExecPlan execPlan, Throwable t) {
+        return parsedStmt instanceof InsertStmt
+                && execPlan != null && execPlan.isPlainInsertOnEmptyPartitions()
+                && !isCancelled()
+                && Throwables.getCausalChain(t).stream()
+                        .anyMatch(PlainInsertOnEmptyPartitionsConflictException.class::isInstance);
+    }
+
+    // retryIndex is the attempt number of this statement, 0 for the first; it only labels the profile.
+    public void handleDMLStmtWithProfile(ExecPlan execPlan, DmlStmt stmt, int retryIndex) throws Exception {
+        boolean retryFollows = false;
         try {
             handleDMLStmt(execPlan, stmt);
         } catch (Throwable t) {
             LOG.warn("DML statement({}) process failed.", getRedactedOriginStmtInString(), t);
+            retryFollows = retryIndex == 0 && shouldRetryPlainInsertOnEmptyPartitions(execPlan, t);
             throw t;
         } finally {
-            boolean isAsync = false;
-            try {
-                if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
-                    isAsync = tryProcessProfileAsync(execPlan, 0);
-                    if (parsedStmt.isExplain() &&
-                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                        handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
-                                profile, null, context.getSessionVariable().getColorExplainOutput()));
-                    }
+            if (retryFollows) {
+                // execute() is about to run this statement again under a new execution id. As the query
+                // retry loop does, drop this attempt's profile instead of queuing it: the async profile
+                // task reads the executor's coord and profile fields, which the next attempt replaces.
+                ProfileManager.getInstance().removeProfile(DebugUtil.printId(context.getExecutionId()));
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            } else {
+                processDMLProfile(execPlan, retryIndex);
+            }
+        }
+    }
+
+    private void processDMLProfile(ExecPlan execPlan, int retryIndex) {
+        boolean isAsync = false;
+        try {
+            if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
+                isAsync = tryProcessProfileAsync(execPlan, retryIndex);
+                if (parsedStmt.isExplain() &&
+                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                            profile, null, context.getSessionVariable().getColorExplainOutput()));
                 }
-            } catch (Exception e) {
-                LOG.warn("Failed to process profile async", e);
-            } finally {
-                if (isAsync) {
-                    QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
-                            context.getSessionVariable().getProfileTimeout() * 1000L);
-                } else {
-                    QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
-                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to process profile async", e);
+        } finally {
+            if (isAsync) {
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            } else {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             }
         }
     }
@@ -3606,6 +3676,14 @@ public class StmtExecutor {
         try {
             coord = getCoordinatorFactory().createInsertScheduler(
                     context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
+            // A KILL that landed while this statement was being planned, or while the coordinator above was
+            // being created, could only reach the coordinator the executor held at that moment: none for a
+            // first attempt, the finished one for the plain insert retry. Re-read the flag now that the new
+            // coordinator is installed (a later cancel reaches it directly), or the killed statement would
+            // still write and commit; the catch below aborts the transaction.
+            if (isCancelled()) {
+                throw new StarRocksException("Statement has been cancelled");
+            }
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean needQuery = false;
