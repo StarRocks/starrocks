@@ -343,7 +343,34 @@ public class RestBaseAction extends BaseAction {
      * Resolving here (before the address/URL is built) ensures callers never lose the real backend port.
      */
     public static RedirectTarget resolveRedirectTarget(int backendHttpPort) {
+        return resolveRedirectTarget(backendHttpPort, null);
+    }
+
+    /**
+     * Scheme-preserving variant. {@code forwardedProto} is the inbound request's
+     * {@code X-Forwarded-Proto} value (or null). When
+     * {@code stream_load_redirect_honor_forwarded_proto} is enabled and {@code forwardedProto} is a
+     * recognized scheme ({@code http}/{@code https}, case-insensitive), it overrides the configured
+     * {@code stream_load_redirect_scheme} for this request — making the redirect match the scheme the
+     * client actually used to reach a TLS-terminating proxy in front of the FE. Otherwise behavior is
+     * identical to {@link #resolveRedirectTarget(int)}. The port resolution is unchanged.
+     */
+    public static RedirectTarget resolveRedirectTarget(int backendHttpPort, String forwardedProto) {
         String scheme = "https".equalsIgnoreCase(Config.stream_load_redirect_scheme) ? "https" : "http";
+        if (Config.stream_load_redirect_honor_forwarded_proto && forwardedProto != null) {
+            String fp = forwardedProto.trim();
+            // X-Forwarded-Proto may carry a comma-separated chain ("https, http"); the first (left-most)
+            // entry is the original client-facing scheme.
+            int comma = fp.indexOf(',');
+            if (comma >= 0) {
+                fp = fp.substring(0, comma).trim();
+            }
+            if ("https".equalsIgnoreCase(fp)) {
+                scheme = "https";
+            } else if ("http".equalsIgnoreCase(fp)) {
+                scheme = "http";
+            }
+        }
         int configured = Config.stream_load_redirect_port;
         if (configured == 0) {
             return new RedirectTarget(scheme, backendHttpPort);

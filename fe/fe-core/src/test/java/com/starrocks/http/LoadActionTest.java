@@ -25,6 +25,7 @@ import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -147,6 +148,48 @@ public class LoadActionTest extends StarRocksHttpTestCase {
         // backend's plaintext HTTP port (which would make the load fail).
         assertBatchWriteRedirect("https", 70000, "http", 8040);
         assertBatchWriteRedirect("https", -5, "http", 8040);
+    }
+
+    @Test
+    public void testRedirectForwardedProtoPreservesScheme() throws Exception {
+        // Scheme-preserving redirect: when honor-forwarded-proto is enabled, the inbound
+        // X-Forwarded-Proto (set by a TLS-terminating proxy in front of the FE) overrides the
+        // configured scheme per-request, so HTTP and HTTPS clients coexist without a cluster-wide flag.
+        String origScheme = Config.stream_load_redirect_scheme;
+        int origPort = Config.stream_load_redirect_port;
+        boolean origHonor = Config.stream_load_redirect_honor_forwarded_proto;
+        try {
+            Config.stream_load_redirect_scheme = "http";
+            Config.stream_load_redirect_port = 8050;
+
+            // Flag OFF (default): X-Forwarded-Proto is ignored -> configured scheme (http) used.
+            Config.stream_load_redirect_honor_forwarded_proto = false;
+            RestBaseAction.RedirectTarget t = RestBaseAction.resolveRedirectTarget(8040, "https");
+            Assertions.assertEquals("http", t.scheme);
+            Assertions.assertEquals(8050, t.port);
+
+            // Flag ON: X-Forwarded-Proto=https -> https; port resolution unchanged.
+            Config.stream_load_redirect_honor_forwarded_proto = true;
+            t = RestBaseAction.resolveRedirectTarget(8040, "https");
+            Assertions.assertEquals("https", t.scheme);
+            Assertions.assertEquals(8050, t.port);
+
+            // Flag ON, X-Forwarded-Proto=http -> http even though... (config is http here anyway).
+            t = RestBaseAction.resolveRedirectTarget(8040, "http");
+            Assertions.assertEquals("http", t.scheme);
+
+            // Chained header "https, http" -> left-most (original client scheme) wins -> https.
+            t = RestBaseAction.resolveRedirectTarget(8040, "https, http");
+            Assertions.assertEquals("https", t.scheme);
+
+            // Null / unknown header -> fall back to configured scheme (http).
+            Assertions.assertEquals("http", RestBaseAction.resolveRedirectTarget(8040, null).scheme);
+            Assertions.assertEquals("http", RestBaseAction.resolveRedirectTarget(8040, "spdy").scheme);
+        } finally {
+            Config.stream_load_redirect_scheme = origScheme;
+            Config.stream_load_redirect_port = origPort;
+            Config.stream_load_redirect_honor_forwarded_proto = origHonor;
+        }
     }
 
     /**

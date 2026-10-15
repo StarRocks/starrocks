@@ -1562,6 +1562,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用されるポート。デフォルトの `0` は、FE が BE の実際の `be_http_port` を使用することを意味します（従来の動作）。`1`〜`65535` の範囲の有効な TCP ポートを設定すると、TLS を終端して BE/CN HTTP ポートに転送するサイドカー/プロキシのポートにクライアントをリダイレクトできます。範囲外の値（負の値または `65535` を超える値）は無効として扱われ、FE はスキームとポートをまとめて `http` + BE の実際の `be_http_port` にフォールバックします（そのため、明文の BE ポートに対して HTTPS を送信することはありません）。通常は `stream_load_redirect_scheme = https` と併用します。
 - 導入時期：-
 
+### `stream_load_redirect_honor_forwarded_proto`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：`true` に設定すると、入力リクエストに `X-Forwarded-Proto` ヘッダーが存在する場合、FE はそのヘッダーから Stream Load リダイレクトのスキームを導出し、リクエストごとに `stream_load_redirect_scheme` を上書きします。これによりリダイレクトは「スキーム保持」になります。TLS 終端プロキシ（`X-Forwarded-Proto: https` を設定）経由で HTTPS により FE に到達したクライアントは `https` にリダイレクトされ、平文クライアントは `http` にリダイレクトされるため、クラスター全体の設定なしに両者が共存できます。`false`（デフォルト）の場合、またはヘッダーが存在しない場合は、従来どおり `stream_load_redirect_scheme` が使用されます（完全な後方互換）。`http`/`https`（大文字小文字を区別しない）のみが有効で、カンマ区切りのチェーンの場合は最も左（元のクライアント）の値が使用されます。ポートの解決ロジックは変更されません。
+- 導入時期：-
+
 ### `transaction_clean_interval_second`
 
 - デフォルト：30

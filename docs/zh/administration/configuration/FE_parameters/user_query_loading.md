@@ -1589,6 +1589,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的端口。默认值 `0` 表示 FE 使用 BE 的真实 `be_http_port`（原有行为）。设置为 `1`–`65535` 范围内的有效 TCP 端口，可将客户端重定向到负责 TLS 终止并转发到 BE/CN HTTP 端口的 sidecar/代理端口。任何超出范围的值（负数或大于 `65535`）都被视为无效；此时 FE 会同时将 scheme 和端口回退为 `http` + BE 的真实 `be_http_port`（二者一起降级，因此绝不会向明文的 BE 端口发送 HTTPS）。通常与 `stream_load_redirect_scheme = https` 配合使用。
 - 引入版本: -
 
+### `stream_load_redirect_honor_forwarded_proto`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 当设置为 `true` 时，若入站请求包含 `X-Forwarded-Proto` 头，FE 将根据该头推导 Stream Load 重定向的 scheme，从而按请求覆盖 `stream_load_redirect_scheme`。这使重定向具有“scheme 保持”特性：通过 TLS 终止代理（会设置 `X-Forwarded-Proto: https`）以 HTTPS 到达 FE 的客户端会被重定向到 `https`，而明文客户端会被重定向到 `http`，二者无需集群级设置即可共存。当为 `false`（默认）或请求不含该头时，仍按原有方式使用 `stream_load_redirect_scheme`（完全向后兼容）。仅识别 `http`/`https`（不区分大小写）；若为逗号分隔的链，则取最左侧（最初客户端）的值。端口解析逻辑不变。
+- 引入版本: -
+
 ### `transaction_clean_interval_second`
 
 - 默认值: 30

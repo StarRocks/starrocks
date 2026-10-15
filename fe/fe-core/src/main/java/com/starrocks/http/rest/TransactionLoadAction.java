@@ -274,7 +274,8 @@ public class TransactionLoadAction extends RestBaseAction {
         // redirectAddress (handler-provided for multi-table/channel transactions, or the node-built
         // address above). The handler/node address carries the backend's real HTTP port; swap in the
         // configured proxy scheme/port when set so HTTPS redirects reach the TLS endpoint.
-        RedirectTarget target = resolveRedirectTarget(redirectAddress.getPort());
+        RedirectTarget target = resolveRedirectTarget(redirectAddress.getPort(),
+                request.getRequest().headers().get("X-Forwarded-Proto"));
         redirectAddress = new TNetworkAddress(redirectAddress.getHostname(), target.port);
 
         LOG.info("Redirect transaction action to destination={}, scheme: {}, db: {}, table: {}, op: {}, label: {}",

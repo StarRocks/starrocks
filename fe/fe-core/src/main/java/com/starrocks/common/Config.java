@@ -635,6 +635,19 @@ public class Config extends ConfigBase {
     public static int stream_load_redirect_port = 0;
 
     /**
+     * When {@code true}, the Stream Load redirect scheme is derived from the inbound request's
+     * {@code X-Forwarded-Proto} header when present (set by a TLS-terminating proxy in front of
+     * the FE), overriding {@code stream_load_redirect_scheme} on a per-request basis. This makes
+     * the redirect scheme-preserving: a client that reached the FE over HTTPS (via the proxy) is
+     * redirected to {@code https}, while a plaintext client keeps {@code http} — so both coexist
+     * without a cluster-wide setting. When {@code false} (default) or when the header is absent,
+     * {@code stream_load_redirect_scheme} is used as before (fully backward-compatible).
+     * Only honored for values {@code http}/{@code https} (case-insensitive); any other value is ignored.
+     */
+    @ConfField(mutable = true)
+    public static boolean stream_load_redirect_honor_forwarded_proto = false;
+
+    /**
      * The interval of the load history syncer.
      */
     @ConfField(mutable = true)
