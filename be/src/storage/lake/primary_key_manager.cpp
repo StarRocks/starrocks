@@ -212,6 +212,8 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     if (config::lake_pk_index_partial_eviction) {
         index.record_cache_access();
     }
+    index.set_read_state_reclaimer(
+            [this, index_entry](size_t bytes) { _reclaim_active_index_read_state(index_entry, bytes); });
     TEST_SYNC_POINT("PrimaryKeyManager::prepare_primary_index:before_load");
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     update_index_cache_size(index_entry);
@@ -289,17 +291,16 @@ void PrimaryKeyManager::refresh_index_cache_eviction_policy() {
         for (auto* entry : entries) _index_cache.release(entry);
         _accounted_partial_mode.store(partial);
     }
-    if (partial)
-        _evict_index_cache(_index_cache.capacity());
-    else
-        _index_cache.try_evict(_index_cache.capacity());
+    _evict_index_cache(_index_cache.capacity());
 }
 
 void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
     _maybe_refresh_index_cache_eviction_policy();
-    const bool partial = config::lake_pk_index_partial_eviction;
+    TEST_SYNC_POINT("PrimaryKeyManager::update_index_cache_size:before_accounting_lock");
+    bool partial;
     {
         std::lock_guard<std::mutex> lock(_index_accounting_mutex);
+        partial = config::lake_pk_index_partial_eviction;
         auto& index = index_entry->value();
         size_t charge = index.refresh_cache_memory_metrics();
         if (partial) charge += index.cached_metadata_bytes();
@@ -307,6 +308,24 @@ void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
         _index_cache.update_object_size(index_entry, charge, !partial, charge - direct);
     }
     if (partial) _evict_index_cache(_index_cache_target());
+}
+
+void PrimaryKeyManager::_reclaim_active_index_read_state(IndexEntry* entry, size_t bytes) {
+    // This callback belongs to an index operation whose owner holds the tablet guard and cache
+    // pin. Worker threads may call it; none holds an SST mutex while reserving/opening state.
+    std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
+    if (!config::lake_pk_index_partial_eviction) return;
+    const auto limit = _primary_key_mem_tracker->limit();
+    if (limit < 0) return;
+    const size_t available = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
+    if (bytes <= available) return;
+    auto& index = entry->value();
+    const size_t freed = index.evict_sstable_read_state(bytes - available);
+    if (freed == 0) return;
+    const size_t charge = index.refresh_sstable_cache_memory_metrics() + index.cached_metadata_bytes();
+    _index_cache.update_object_size(entry, charge, false,
+                                    charge - std::min(charge, index.directly_accounted_sst_bytes()));
+    TRACE_COUNTER_INCREMENT("pindex_cache_owner_evict_bytes", freed);
 }
 
 void PrimaryKeyManager::release_primary_index_cache(IndexEntry* index_entry) {
@@ -1755,6 +1774,10 @@ Status PrimaryKeyManager::_handle_index_op(int64_t tablet_id, int64_t base_versi
     if (config::lake_pk_index_partial_eviction) {
         index.record_cache_access();
     }
+    if (need_lock) {
+        index.set_read_state_reclaimer(
+                [this, index_entry](size_t bytes) { _reclaim_active_index_read_state(index_entry, bytes); });
+    }
     op(index);
     // The lazy SST fallback can reopen read state, including when an operation fails partway.
     update_index_cache_size(index_entry);
@@ -2179,9 +2202,12 @@ size_t PrimaryKeyManager::_index_cache_target() const {
 
 void PrimaryKeyManager::_evict_index_cache(size_t target_bytes) {
     _maybe_refresh_index_cache_eviction_policy();
-    if (!config::lake_pk_index_partial_eviction) {
-        _index_cache.try_evict(target_bytes);
-        return;
+    {
+        std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
+        if (!config::lake_pk_index_partial_eviction) {
+            _index_cache.try_evict(target_bytes);
+            return;
+        }
     }
     target_bytes = std::min(target_bytes, _index_cache_target());
     if (_index_cache.size() <= target_bytes) {
@@ -2233,7 +2259,9 @@ void PrimaryKeyManager::_evict_index_cache(size_t target_bytes) {
         }
         const size_t size = _index_cache.size();
         const size_t to_free = std::min(excess(i), size - std::min(size, target_bytes));
+        TEST_SYNC_POINT("PrimaryKeyManager::evict_index_cache:before_accounting_lock");
         std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
+        if (!config::lake_pk_index_partial_eviction) break;
         const size_t freed = index.evict_sstable_read_state(to_free);
         if (freed > 0) {
             const size_t resident_charge = index.refresh_cache_memory_metrics();
@@ -2248,7 +2276,8 @@ void PrimaryKeyManager::_evict_index_cache(size_t target_bytes) {
     }
     // Memtables and metadata have a finite budget too. Whole-entry LRU is the final fallback only
     // when fixed bytes alone cannot fit; expiration remains the normal way to retire cold skeletons.
-    if (fixed_bytes > target_bytes) {
+    std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
+    if (config::lake_pk_index_partial_eviction && fixed_bytes > target_bytes) {
         TRACE_COUNTER_INCREMENT("pindex_cache_skeleton_fallback_count", 1);
         _index_cache.try_evict(target_bytes);
     }
@@ -2550,7 +2579,11 @@ Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memor
     // Preserve the existing setter's capacity semantics in both modes. Startup configuration is
     // the authoritative update tracker limit; reconciling this setter is a separate change.
     const size_t capacity = byte_limits * update_mem_percent;
-    _index_cache.set_capacity(capacity, !config::lake_pk_index_partial_eviction);
+    _maybe_refresh_index_cache_eviction_policy();
+    {
+        std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
+        _index_cache.set_capacity(capacity, !config::lake_pk_index_partial_eviction);
+    }
     if (config::lake_pk_index_partial_eviction) {
         _evict_index_cache(_index_cache_target());
     }

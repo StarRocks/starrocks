@@ -15,6 +15,8 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -51,7 +53,9 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
     explicit SstReadStateMemoryContext(MemTracker* parent) : tracker(-1, "lake_pk_index_sst_read_state", parent) {}
     class Reservation {
     public:
-        explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context) : _context(std::move(context)) {}
+        explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context,
+                             std::function<void(size_t)> reclaim_self = {})
+                : _context(std::move(context)), _reclaim_self(std::move(reclaim_self)) {}
         ~Reservation();
         Status add(size_t bytes, bool wait);
         void shrink_to(size_t bytes);
@@ -59,6 +63,7 @@ struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadSt
 
     private:
         std::shared_ptr<SstReadStateMemoryContext> _context;
+        std::function<void(size_t)> _reclaim_self;
         size_t _bytes = 0;
     };
     MemTracker tracker;
@@ -82,7 +87,7 @@ public:
                 bool need_filter = true, DelVectorPtr delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
                 TabletManager* tablet_mgr = nullptr,
                 const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr,
-                bool defer_read_state = false);
+                bool defer_read_state = false, std::function<void(size_t)> reclaim_self = {});
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
@@ -124,6 +129,11 @@ public:
         std::lock_guard<std::mutex> lock(_read_state_mutex);
         _memory_context = context;
     }
+    // Owner holds its tablet lock and has joined readers before changing this callback.
+    void set_read_state_reclaimer(const std::function<void(size_t)>& reclaimer) const {
+        std::lock_guard<std::mutex> lock(_read_state_mutex);
+        _reclaim_self = reclaimer;
+    }
     Status reopen_read_state() const;
 
     // Last known full read-state size, retained after eviction for cache share calculation.
@@ -135,6 +145,14 @@ public:
     size_t memory_usage() const;
     // Resident table and read-state object bytes reserved directly on update, excluded from cache tracker charge.
     size_t directly_accounted_memory_usage() const;
+    size_t reserved_read_state_overhead() const;
+    struct ReadStateMemoryUsage {
+        size_t index = 0;
+        size_t filter = 0;
+        size_t direct = 0;
+        size_t objects = 0;
+    };
+    ReadStateMemoryUsage read_state_memory_usage() const;
 
     // Bytes of the delete vector attached to this sstable, if any. Not part of memory_usage().
     size_t delvec_memory_usage() const;
@@ -162,18 +180,24 @@ public:
             const PersistentIndexSstablePB& sstable_pb, const std::string& location, Cache* cache,
             bool need_filter = true, const DelVectorPtr& delvec = nullptr, const TabletMetadataPtr& metadata = nullptr,
             TabletManager* tablet_mgr = nullptr,
-            const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr, bool defer_read_state = false);
+            const std::shared_ptr<SstReadStateMemoryContext>& memory_context = nullptr, bool defer_read_state = false,
+            std::function<void(size_t)> reclaim_self = {});
 
 private:
     struct ReadState;
     StatusOr<std::unique_ptr<RandomAccessFile>> _open_file() const;
-    StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf) const;
+    StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf,
+                                                          const std::shared_ptr<SstReadStateMemoryContext>& context,
+                                                          const std::function<void(size_t)>& reclaim_self) const;
     StatusOr<std::shared_ptr<ReadState>> _get_read_state() const;
 
     // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
     // state, so its return value never counts memory that a reader still owns.
     mutable std::atomic<size_t> _read_state_memory_demand{0};
     mutable std::mutex _read_state_mutex;
+    mutable std::condition_variable _read_state_cv;
+    mutable bool _read_state_opening = false;
+    mutable std::function<void(size_t)> _reclaim_self;
     mutable std::shared_ptr<ReadState> _read_state;
     mutable std::weak_ptr<ReadState> _transient_read_state;
     mutable std::shared_ptr<SstReadStateMemoryContext> _memory_context;

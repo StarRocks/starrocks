@@ -253,6 +253,10 @@ public:
     // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
     // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.
     size_t refresh_cache_memory_metrics();
+    // Owner-side reclaim can run in a parallel lookup worker. Preserve the last MemTable charge
+    // rather than reading a concurrently changing tree; refresh only immutable SST read state.
+    size_t refresh_sstable_cache_memory_metrics();
+    void set_read_state_reclaimer(std::function<void(size_t)> reclaimer);
 
     // Lock-free snapshots for eviction: no index lock is acquired while inspecting active tablets.
     size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
@@ -399,7 +403,7 @@ private:
     // Returns opened SSTables in the same order as sstable_meta.sstables().
     static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
             const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id,
-            Cache* cache, const TabletMetadataPtr& metadata);
+            Cache* cache, const TabletMetadataPtr& metadata, const std::function<void(size_t)>& reclaim_self);
 
     bool is_memtable_full() const;
 
@@ -464,6 +468,8 @@ private:
     int64_t _publish_version{0};
     // What refresh_cache_memory_metrics() last added to the lake_pk_index_cache_* gauges.
     LakePersistentIndexMemoryStats _reported_memory_stats;
+    size_t _reported_sst_object_bytes = 0;
+    std::function<void(size_t)> _reclaim_read_state;
     bool _partial_read_state = false;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};

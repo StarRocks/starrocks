@@ -87,6 +87,7 @@ static void move_cache_memory_metrics(const LakePersistentIndexMemoryStats& from
 void LakePersistentIndex::_reset_index_state() {
     move_cache_memory_metrics(_reported_memory_stats, {});
     _reported_memory_stats = {};
+    _reported_sst_object_bytes = 0;
     _cached_sst_bytes.store(0);
     _cached_legacy_charge.store(0);
     _directly_accounted_sst_bytes.store(0);
@@ -118,7 +119,7 @@ void LakePersistentIndex::_reset_index_state() {
 
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
         const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
-        const TabletMetadataPtr& metadata) {
+        const TabletMetadataPtr& metadata, const std::function<void(size_t)>& reclaim_self) {
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
 
@@ -131,7 +132,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
                                                 config::lake_pk_index_partial_eviction
                                                         ? tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
                                                         : nullptr,
-                                                config::lake_pk_index_partial_eviction));
+                                                config::lake_pk_index_partial_eviction, reclaim_self));
         return Status::OK();
     };
 
@@ -161,7 +162,7 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     {
         int64_t t_open = GetCurrentTimeMicros();
         ASSIGN_OR_RETURN(sstables, _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(),
-                                                           metadata));
+                                                           metadata, _reclaim_read_state));
         sst_open_us = GetCurrentTimeMicros() - t_open;
     }
 
@@ -231,6 +232,7 @@ bool LakePersistentIndex::too_many_rebuild_rows() const {
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
+    sstable->set_read_state_reclaimer(_reclaim_read_state);
     // Track SST flush stats for publish phase monitoring
     _publish_sst_flush_count++;
     _publish_sst_flush_bytes += sstable->sstable_pb().filesize();
@@ -854,7 +856,7 @@ Status LakePersistentIndex::apply_opcompaction(const TabletMetadataPtr& metadata
                 /*need_filter=*/true, /*delvec=*/nullptr, metadata, _tablet_mgr,
                 config::lake_pk_index_partial_eviction ? _tablet_mgr->primary_key_mgr()->sst_read_state_memory_context()
                                                        : nullptr,
-                config::lake_pk_index_partial_eviction);
+                config::lake_pk_index_partial_eviction, _reclaim_read_state);
     };
 
     // Handle multiple output sstables (from parallel compaction).
@@ -1804,18 +1806,59 @@ size_t LakePersistentIndex::refresh_cache_memory_metrics() {
     _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
     size_t demand = 0;
     size_t directly_accounted = 0;
+    size_t object_bytes = 0;
     for (const auto& fileset : _sstable_filesets) {
         if (fileset) {
             fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
                 demand += sst.read_state_memory_demand();
                 directly_accounted += sst.directly_accounted_memory_usage();
+                object_bytes += sst.reserved_read_state_overhead();
             });
         }
     }
     _sst_memory_demand.store(demand);
     _directly_accounted_sst_bytes.store(directly_accounted);
     _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
+    _reported_sst_object_bytes = object_bytes;
     return stats.charged_bytes();
+}
+
+size_t LakePersistentIndex::refresh_sstable_cache_memory_metrics() {
+    auto stats = _reported_memory_stats;
+    stats.index_block_bytes = 0;
+    stats.filter_bytes = 0;
+    stats.overhead_bytes -= std::min(stats.overhead_bytes, _reported_sst_object_bytes);
+    size_t direct = 0, demand = 0, object_bytes = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (!fileset) continue;
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+            const auto usage = sst.read_state_memory_usage();
+            stats.index_block_bytes += usage.index;
+            stats.filter_bytes += usage.filter;
+            direct += usage.direct;
+            demand += sst.read_state_memory_demand();
+            object_bytes += usage.objects;
+        });
+    }
+    stats.overhead_bytes += object_bytes;
+    move_cache_memory_metrics(_reported_memory_stats, stats);
+    _reported_memory_stats = stats;
+    _reported_sst_object_bytes = object_bytes;
+    _cached_legacy_charge.store(stats.charged_bytes());
+    _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
+    _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
+    _directly_accounted_sst_bytes.store(direct);
+    _sst_memory_demand.store(demand);
+    return stats.charged_bytes();
+}
+
+void LakePersistentIndex::set_read_state_reclaimer(std::function<void(size_t)> reclaimer) {
+    _reclaim_read_state = std::move(reclaimer);
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset)
+            fileset->for_each_sstable(
+                    [&](const PersistentIndexSstable& sst) { sst.set_read_state_reclaimer(_reclaim_read_state); });
+    }
 }
 
 Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial) {

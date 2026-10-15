@@ -739,6 +739,48 @@ TEST_F(PersistentIndexSstableTest, test_transient_read_state_bounds_memory_and_s
     EXPECT_EQ(demand, sst->read_state_memory_demand());
 }
 
+TEST_F(PersistentIndexSstableTest, test_shared_reopen_wait_is_bounded_and_does_not_poison_first_open) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::lake_pk_index_publish_wait_timeout_ms = old_timeout;
+    });
+    const std::string path = lake::join_path(kTestDir, "shared-open.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 1000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("shared-open.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                  context, true));
+    sst->set_read_state_cacheable(true, context);
+    std::promise<void> paused, resume;
+    auto continuing = resume.get_future().share();
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) {
+        paused.set_value();
+        continuing.wait();
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    auto first = std::async(std::launch::async, [&] { return sst->reopen_read_state(); });
+    EXPECT_EQ(std::future_status::ready, paused.get_future().wait_for(std::chrono::seconds(2)));
+    config::lake_pk_index_publish_wait_timeout_ms = 0;
+    EXPECT_TRUE(sst->reopen_read_state().is_time_out());
+    resume.set_value();
+    ASSERT_OK(first.get());
+    ASSERT_OK(sst->reopen_read_state());
+    EXPECT_GT(sst->evict_read_state(), 0);
+    EXPECT_EQ(0, tracker.consumption());
+}
+
 TEST_F(PersistentIndexSstableTest, test_unknown_sst_demand_reserves_before_allocating_and_drops_optional_filter) {
     const bool old_partial = config::lake_pk_index_partial_eviction;
     config::lake_pk_index_partial_eviction = true;

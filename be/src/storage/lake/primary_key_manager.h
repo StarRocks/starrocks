@@ -265,6 +265,7 @@ private:
     size_t _index_cache_target() const;
     void _relieve_update_pressure();
     void _maybe_refresh_index_cache_eviction_policy();
+    void _reclaim_active_index_read_state(IndexEntry* entry, size_t bytes);
     // Index lock -> accounting lock -> cache lock. Mode transition uses snapshots under the
     // accounting lock and never waits for a tablet lock or performs SST IO.
     std::mutex _index_accounting_mutex;
