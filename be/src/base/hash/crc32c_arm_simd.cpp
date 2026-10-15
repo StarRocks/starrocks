@@ -21,11 +21,11 @@
 #include <cstdint>
 
 #if defined(__clang__)
-#define TARGET_CRYPTO __attribute__((target("arch=armv8-a+crc+crypto")))
+#define TARGET_ARM_CRYPTO __attribute__((target("arch=armv8-a+crc+crypto")))
 #elif defined(__GNUC__)
-#define TARGET_CRYPTO __attribute__((target("+crypto")))
+#define TARGET_ARM_CRYPTO __attribute__((target("+crypto")))
 #else
-#define TARGET_CRYPTO
+#define TARGET_ARM_CRYPTO
 #endif
 
 namespace starrocks::crc32c {
@@ -38,21 +38,21 @@ alignas(16) const uint64_t poly[] = {0x105ec76f1ULL, 0x0dea713f1ULL};
 alignas(16) const uint32_t mask_data[4] = {0xffffffff, 0, 0xffffffff, 0};
 } // namespace
 
-static inline TARGET_CRYPTO uint8x16_t clmul_00(uint8x16_t a, uint8x16_t b) {
+static inline TARGET_ARM_CRYPTO uint8x16_t clmul_00(uint8x16_t a, uint8x16_t b) {
     return vreinterpretq_u8_p128(
             vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u8(a), 0), vgetq_lane_p64(vreinterpretq_p64_u8(b), 0)));
 }
 
-static inline TARGET_CRYPTO uint8x16_t clmul_11(uint8x16_t a, uint8x16_t b) {
+static inline TARGET_ARM_CRYPTO uint8x16_t clmul_11(uint8x16_t a, uint8x16_t b) {
     return vreinterpretq_u8_p128(vmull_high_p64(vreinterpretq_p64_u8(a), vreinterpretq_p64_u8(b)));
 }
 
-static inline TARGET_CRYPTO uint8x16_t clmul_01(uint8x16_t a, uint8x16_t b) {
+static inline TARGET_ARM_CRYPTO uint8x16_t clmul_01(uint8x16_t a, uint8x16_t b) {
     return vreinterpretq_u8_p128(
             vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u8(a), 0), vgetq_lane_p64(vreinterpretq_p64_u8(b), 1)));
 }
 
-TARGET_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len) {
+TARGET_ARM_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len) {
     assert(len >= 64 && (len % 16 == 0) && "crc32c_pmull_simd requires len >= 64 and 16-byte alignment");
     uint8x16_t x0, x1, x2, x3, x4, x5, x6, x7, x8, y5, y6, y7, y8;
 
