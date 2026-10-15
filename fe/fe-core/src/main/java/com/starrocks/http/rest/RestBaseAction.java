@@ -315,12 +315,30 @@ public class RestBaseAction extends BaseAction {
     }
 
     /**
+     * Resolve the effective Stream Load redirect port given the backend's real HTTP port.
+     * Returns the configured {@code stream_load_redirect_port} when it is a valid TCP port
+     * (1..65535); otherwise (0 = unset, or an out-of-range value) returns {@code backendHttpPort}.
+     * Centralizing this here ensures the port is validated BEFORE it is baked into the redirect
+     * address, so callers never lose the real backend port.
+     */
+    public static int effectiveRedirectPort(int backendHttpPort) {
+        int configured = Config.stream_load_redirect_port;
+        if (configured > 0 && configured <= 65535) {
+            return configured;
+        }
+        if (configured != 0) {
+            LOG.warn("Invalid stream_load_redirect_port '{}' (valid range 1..65535, or 0 to use the "
+                    + "backend http port); falling back to backend port '{}'", configured, backendHttpPort);
+        }
+        return backendHttpPort;
+    }
+
+    /**
      * Scheme/port-aware redirect. Lets callers (e.g. Stream Load) emit an https:// Location
      * and/or a different port (e.g. a TLS-terminating sidecar/proxy in front of the BE/CN),
      * without changing the default behavior for other callers.
-     * Defensively sanitizes the scheme/port so an invalid runtime config value cannot break
-     * the redirect: an unknown scheme falls back to "http", and an out-of-range port falls
-     * back to the address's own port.
+     * The scheme is defensively sanitized (unknown scheme falls back to "http"). Callers are
+     * expected to pass a valid port (see {@link #effectiveRedirectPort(int)}).
      */
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr,
                            String scheme, int port)
@@ -331,18 +349,13 @@ public class RestBaseAction extends BaseAction {
             LOG.warn("Invalid redirect scheme '{}', falling back to 'http'", scheme);
             effectiveScheme = "http";
         }
-        int effectivePort = port;
-        if (effectivePort <= 0 || effectivePort > 65535) {
-            LOG.warn("Invalid redirect port '{}', falling back to '{}'", port, addr.getPort());
-            effectivePort = addr.getPort();
-        }
         String urlStr = request.getRequest().uri();
         URI urlObj;
         URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI(effectiveScheme, null, addr.getHostname(),
-                    effectivePort, urlObj.getPath(), urlObj.getQuery(), null);
+                    port, urlObj.getPath(), urlObj.getQuery(), null);
         } catch (URISyntaxException e) {
             LOG.warn(e.getMessage(), e);
             throw new DdlException(e.getMessage());

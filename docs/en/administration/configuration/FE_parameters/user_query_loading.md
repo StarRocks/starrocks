@@ -1587,7 +1587,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The port used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client. The default `0` means the FE uses the backend's real `be_http_port` (original behavior). Set it to a non-zero port to redirect clients to a sidecar/proxy port that terminates TLS and forwards to the BE/CN HTTP port. Typically used together with `stream_load_redirect_scheme = https`.
+- Description: The port used in the HTTP 307 redirect `Location` that the FE returns to a Stream Load client. The default `0` means the FE uses the backend's real `be_http_port` (original behavior). Set it to a valid TCP port in the range `1`–`65535` to redirect clients to a sidecar/proxy port that terminates TLS and forwards to the BE/CN HTTP port. Any out-of-range value (negative or greater than `65535`) is treated as invalid and the FE falls back to the backend's real `be_http_port`. Typically used together with `stream_load_redirect_scheme = https`.
 - Introduced in: -
 
 ### `transaction_clean_interval_second`

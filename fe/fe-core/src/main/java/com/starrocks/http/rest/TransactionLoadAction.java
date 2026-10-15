@@ -268,15 +268,20 @@ public class TransactionLoadAction extends RestBaseAction {
                     coordinatorMgr.allocate(label, txnOperationParams.getWarehouseName()) :
                     coordinatorMgr.get(label, txnOperationParams.getDbName());
 
-            int redirectPort = Config.stream_load_redirect_port > 0
-                    ? Config.stream_load_redirect_port : node.getHttpPort();
-            redirectAddress = new TNetworkAddress(node.getHost(), redirectPort);
+            redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
+
+        // Apply the configured Stream Load redirect port/scheme to whichever address path produced
+        // redirectAddress (handler-provided for multi-table/channel transactions, or the node-built
+        // address above). The handler/node address carries the backend's real HTTP port; swap in the
+        // configured proxy port when set so HTTPS redirects reach the TLS endpoint.
+        int redirectPort = effectiveRedirectPort(redirectAddress.getPort());
+        redirectAddress = new TNetworkAddress(redirectAddress.getHostname(), redirectPort);
 
         LOG.info("Redirect transaction action to destination={}, scheme: {}, db: {}, table: {}, op: {}, label: {}",
                 redirectAddress, Config.stream_load_redirect_scheme, txnOperationParams.getDbName(),
                 txnOperationParams.getTableName(), txnOperation, label);
-        redirectTo(request, response, redirectAddress, Config.stream_load_redirect_scheme, redirectAddress.getPort());
+        redirectTo(request, response, redirectAddress, Config.stream_load_redirect_scheme, redirectPort);
     }
 
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws

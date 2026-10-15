@@ -279,8 +279,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend or compute node alive.");
         }
 
-        int redirectPort = Config.stream_load_redirect_port > 0
-                ? Config.stream_load_redirect_port : node.getHttpPort();
+        int redirectPort = effectiveRedirectPort(node.getHttpPort());
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
 
         LOG.info("redirect load action to destination={}, scheme: {}, db: {}, tbl: {}, label: {}, warehouse: {}",
@@ -307,8 +306,7 @@ public class LoadAction extends RestBaseAction {
         List<ComputeNode> nodes = result.getValue();
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
-        int redirectPort = Config.stream_load_redirect_port > 0
-                ? Config.stream_load_redirect_port : node.getHttpPort();
+        int redirectPort = effectiveRedirectPort(node.getHttpPort());
         TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
         LOG.info("redirect batch write to destination={}, scheme: {}, db: {}, tbl: {}",
                 redirectAddr, Config.stream_load_redirect_scheme, dbName, tableName);

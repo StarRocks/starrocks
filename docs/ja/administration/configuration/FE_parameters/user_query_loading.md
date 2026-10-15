@@ -1559,7 +1559,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用されるポート。デフォルトの `0` は、FE が BE の実際の `be_http_port` を使用することを意味します（従来の動作）。非ゼロのポートに設定すると、TLS を終端して BE/CN HTTP ポートに転送するサイドカー/プロキシのポートにクライアントをリダイレクトできます。通常は `stream_load_redirect_scheme = https` と併用します。
+- 説明：FE が Stream Load クライアントに返す HTTP 307 リダイレクトの `Location` ヘッダーで使用されるポート。デフォルトの `0` は、FE が BE の実際の `be_http_port` を使用することを意味します（従来の動作）。`1`〜`65535` の範囲の有効な TCP ポートを設定すると、TLS を終端して BE/CN HTTP ポートに転送するサイドカー/プロキシのポートにクライアントをリダイレクトできます。範囲外の値（負の値または `65535` を超える値）は無効として扱われ、FE は BE の実際の `be_http_port` にフォールバックします。通常は `stream_load_redirect_scheme = https` と併用します。
 - 導入時期：-
 
 ### `transaction_clean_interval_second`
