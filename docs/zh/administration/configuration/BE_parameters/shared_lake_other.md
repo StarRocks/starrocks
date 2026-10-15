@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。 同时限制 MemTable 增长预留的等待；trace 计数器记录预留、批次、刷新和超时。
+- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。 同时限制 MemTable 增长预留的等待，多个 inactive MemTable 刷新共用剩余等待预算，进程退出会取消等待。主动刷新 IO 属于实际工作，使用自身的 IO 超时；该参数不保证整个预留调用的墙钟上限。trace 分别记录预留、批次、刷新等待、主动刷新 IO 和超时。两种模式都记录实际 process/update 上限及 index/block cache 容量，并提供预算采样次数。
 - 引入版本：-
 
 ### cloud_native_pk_index_rebuild_files_threshold

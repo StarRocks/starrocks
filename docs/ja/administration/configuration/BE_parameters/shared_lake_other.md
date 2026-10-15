@@ -56,7 +56,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: Yes
-- 説明: `lake_pk_index_partial_eviction` が有効な場合の Publish 受付または SST 読み取り状態のメモリ許可の最大待機時間。Publish の受付は tablet と shard のロック取得前に待機します。許可の解放で待機処理を起こし、プロセス終了時にはキャンセルします。タイムアウトはエラーを返し、update メモリ上限エラーとは区別されます。内部 Publish trace は受付時間、待機、タイムアウト、キャンセル、SST 一時読み取りバイト数、部分退避と骨格退避のフォールバックを記録します。 MemTable 増加分の予約待機にも適用され、trace に予約、バッチ、フラッシュ、タイムアウトを記録します。
+- 説明: `lake_pk_index_partial_eviction` が有効な場合の Publish 受付または SST 読み取り状態のメモリ許可の最大待機時間。Publish の受付は tablet と shard のロック取得前に待機します。許可の解放で待機処理を起こし、プロセス終了時にはキャンセルします。タイムアウトはエラーを返し、update メモリ上限エラーとは区別されます。内部 Publish trace は受付時間、待機、タイムアウト、キャンセル、SST 一時読み取りバイト数、部分退避と骨格退避のフォールバックを記録します。 MemTable 増加分の予約待機にも適用され、非アクティブな MemTable のフラッシュ待機は残りの時間を共有します。終了時は待機をキャンセルします。実際のフラッシュ IO は固有の IO タイムアウトに従うため、予約呼び出し全体の経過時間をこの値で制限することはできません。trace に予約、バッチ、フラッシュ待機、実行中のフラッシュ IO、タイムアウトを個別に記録します。両モードで実際の process/update 上限と index/block cache 容量、および予算のサンプル数も記録します。
 - 導入バージョン: -
 
 ### cloud_native_pk_index_rebuild_files_threshold

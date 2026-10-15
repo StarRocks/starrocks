@@ -14,6 +14,7 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <utility>
@@ -307,20 +308,36 @@ Status PersistentIndexMemtable::flush_status() const {
     return _flush_status;
 }
 
-Status PersistentIndexMemtable::wait_for_flush(int64_t timeout_us) {
+Status PersistentIndexMemtable::wait_for_flush(int64_t timeout_us, const std::function<bool()>& cancelled) {
     std::unique_lock<std::mutex> lk(_flush_mutex);
     auto finished = [this]() { return _sstable != nullptr || !_flush_status.ok(); };
+    auto timeout = [&] {
+        const auto cause = strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id);
+        return Status::TimedOut(cancelled ? "PK MemTable growth flush wait: " + cause : cause);
+    };
+    const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::microseconds(std::max<int64_t>(0, timeout_us));
+    if (cancelled && cancelled()) return Status::Cancelled("PK MemTable growth flush wait cancelled");
     if (!finished()) {
         if (timeout_us <= 0) {
-            return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+            return timeout();
         }
-        _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), finished);
+        if (!cancelled) {
+            _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), finished);
+        } else {
+            while (!finished() && std::chrono::steady_clock::now() < deadline) {
+                if (cancelled()) return Status::Cancelled("PK MemTable growth flush wait cancelled");
+                _flush_cv.wait_until(
+                        lk, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(10)),
+                        finished);
+            }
+        }
     }
     if (!_flush_status.ok()) {
         return _flush_status;
     }
     if (_sstable == nullptr) {
-        return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+        return timeout();
     }
     return Status::OK();
 }

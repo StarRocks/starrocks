@@ -15,6 +15,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <functional>
 #include <mutex>
 
 #include "base/phmap/btree.h"
@@ -101,7 +102,7 @@ public:
     // Block until async flush (`run()`) or `cancel()` has published a result, or |timeout_us|
     // elapses. OK means `release_sstable()` can take the SST. A memtable that was flushed
     // synchronously before being queued as inactive returns immediately.
-    Status wait_for_flush(int64_t timeout_us);
+    Status wait_for_flush(int64_t timeout_us, const std::function<bool()>& cancelled = {});
 
 private:
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);

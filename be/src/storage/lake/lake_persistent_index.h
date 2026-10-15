@@ -311,7 +311,9 @@ public:
 
     Status flush_memtable(bool force = false);
 
-    Status sync_flush_all_memtables(int64_t wait_timeout_us);
+    // A cancellation predicate opts pressure recovery into one shared inactive-flush wait budget.
+    // Active flush IO is not interruptible here and has its own trace duration.
+    Status sync_flush_all_memtables(int64_t wait_timeout_us, const std::function<bool()>& cancelled = {});
 
     // Publish-phase SST flush stats tracking
     void reset_publish_sst_stats() {

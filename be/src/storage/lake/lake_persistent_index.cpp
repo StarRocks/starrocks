@@ -325,23 +325,45 @@ Status LakePersistentIndex::ingest_sst(const FileMetaPB& sst_meta, const Persist
     return Status::OK();
 }
 
-Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us) {
+Status LakePersistentIndex::sync_flush_all_memtables(int64_t wait_timeout_us, const std::function<bool()>& cancelled) {
     if (_memtable == nullptr) {
         return Status::OK(); // nothing built yet; a no-op, as before the merge
     }
     TRACE_COUNTER_SCOPE_LATENCY_US("sync_flush_all_memtables_us");
+    // Pressure recovery shares the remaining deadline, rather than restarting a full wait for
+    // each inactive MemTable. Keep successful handoffs retired even if a later wait fails.
+    const int64_t deadline_us = MonotonicMicros() + std::max<int64_t>(0, wait_timeout_us);
+    size_t retired = 0;
+    DeferOp retire_completed([&] {
+        if (cancelled) _inactive_memtables.erase(_inactive_memtables.begin(), _inactive_memtables.begin() + retired);
+    });
     // 1. flush inactive memtables
     for (auto& memtable : _inactive_memtables) {
-        RETURN_IF_ERROR(memtable->wait_for_flush(wait_timeout_us));
+        Status wait_status;
+        if (cancelled) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_growth_flush_wait_us");
+            wait_status = memtable->wait_for_flush(std::max<int64_t>(0, deadline_us - MonotonicMicros()), cancelled);
+        } else {
+            wait_status = memtable->wait_for_flush(wait_timeout_us);
+        }
+        // Only an exhausted wait budget carries a pressure prefix. An asynchronous flush's
+        // original IO error (including TimedOut) must remain distinguishable and unchanged.
+        RETURN_IF_ERROR(wait_status);
         auto sstable = memtable->release_sstable();
         if (sstable == nullptr) {
             return Status::TimedOut(fmt::format("wait memtable flush timeout for tablet {}", _tablet_id));
         }
         RETURN_IF_ERROR(merge_sstable_into_fileset(sstable));
+        ++retired;
     }
     _inactive_memtables.clear();
+    retired = 0;
+    if (cancelled && cancelled()) return Status::Cancelled("PK MemTable growth flush cancelled");
     // 2. flush current memtable
     if (_memtable && !_memtable->empty()) {
+        // This is active work, not a CV/memory wait. Preserve its original IO status; callers
+        // must not describe the reservation's wall time as bounded by the wait configuration.
+        TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_active_flush_io_us");
         RETURN_IF_ERROR(_memtable->flush());
         auto sstable = _memtable->release_sstable();
         DCHECK(sstable != nullptr);

@@ -363,9 +363,18 @@ Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes)
             // No accounting/cache lock is held during flush or SST IO.
             TRACE_COUNTER_INCREMENT("pindex_memtable_growth_flush_count", 1);
             TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_growth_flush_us");
-            RETURN_IF_ERROR(entry->value().sync_flush_all_memtables(
-                    config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+            const auto remaining_us = std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                   deadline - std::chrono::steady_clock::now())
+                                                                   .count());
+            const auto flush_status = entry->value().sync_flush_all_memtables(
+                    std::min<int64_t>(remaining_us,
+                                      int64_t{config::pk_index_memtable_max_wait_flush_timeout_ms} * 1000),
+                    [] { return process_exit_in_progress(); });
+            // A partial handoff can release memory even when a later inactive wait fails.
             update_index_cache_size(entry);
+            if (flush_status.is_time_out()) TRACE_COUNTER_INCREMENT("pindex_memtable_growth_flush_timeout", 1);
+            if (flush_status.is_cancelled()) TRACE_COUNTER_INCREMENT("pindex_memtable_growth_cancelled", 1);
+            RETURN_IF_ERROR(flush_status);
             flushed = true;
             continue;
         }
@@ -2204,6 +2213,14 @@ void PrimaryKeyManager::expire_cache() {
 
 StatusOr<std::unique_ptr<PkIndexPublishLimiter::Permit>> PrimaryKeyManager::acquire_publish_slot() {
     _maybe_refresh_index_cache_eviction_policy();
+    // Record actual limits in both variants, rather than inferring cache capacity from a
+    // percentage setter. Sum-valued samples can be reconciled with pindex_budget_samples.
+    TRACE_COUNTER_INCREMENT("pindex_budget_samples", 1);
+    TRACE_COUNTER_INCREMENT("pindex_process_limit_bytes", RuntimeEnv::GetInstance()->process_mem_limit());
+    TRACE_COUNTER_INCREMENT("pindex_update_limit_bytes", _primary_key_mem_tracker->limit());
+    TRACE_COUNTER_INCREMENT("pindex_index_cache_capacity_bytes", _index_cache.capacity());
+    TRACE_COUNTER_INCREMENT("pindex_block_cache_capacity_bytes", _block_cache->cache()->get_capacity());
+    TRACE_COUNTER_INCREMENT("pindex_update_used_before_admission_bytes", _primary_key_mem_tracker->consumption());
     if (config::lake_pk_index_partial_eviction) {
         _relieve_update_pressure();
         _evict_index_cache(_index_cache_target());

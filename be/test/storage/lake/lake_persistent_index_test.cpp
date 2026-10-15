@@ -27,6 +27,7 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <thread>
 #include <utility>
@@ -1091,6 +1092,81 @@ void LakePersistentIndexTest::check_read_state_reclaim_progress(bool same_tablet
     EXPECT_EQ(same_tablet ? 1 : 2, _primary_key_mgr->index_cache().object_size());
 }
 
+TEST_F(LakePersistentIndexTest, test_growth_reservation_uses_short_flush_wait_and_preserves_state) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 50);
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const auto old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = false;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        _mem_tracker->set_limit(old_limit);
+    });
+    Tablet tablet(_tablet_mgr.get(), _tablet_metadata->id());
+    MetaFileBuilder builder(tablet, _tablet_metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(_tablet_metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    std::vector<int32_t> raw_keys(2000);
+    std::iota(raw_keys.begin(), raw_keys.end(), 0);
+    std::vector<Slice> keys;
+    std::vector<IndexValue> values;
+    for (auto& key : raw_keys) {
+        keys.emplace_back(reinterpret_cast<const char*>(&key), sizeof(key));
+        values.emplace_back(uint64_t{1} << 32 | uint32_t(key));
+    }
+    ASSERT_OK(index.insert(keys.size(), keys.data(), values.data(), 1));
+    std::atomic<bool> hold{true};
+    std::atomic<bool> started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        started.store(true);
+        while (hold.load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp drain([&] {
+        hold.store(false);
+        _mem_tracker->set_limit(old_limit);
+        (void)index.sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index.flush_memtable(true));
+    const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!started.load() && std::chrono::steady_clock::now() < start_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_TRUE(started.load());
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto before = _mem_tracker->consumption();
+    _mem_tracker->set_limit(before + 32768);
+    const Slice fresh("not-inserted-before-flush");
+    const IndexValue fresh_value(uint64_t{2} << 32);
+    const auto begin = std::chrono::steady_clock::now();
+    auto status = index.insert(1, &fresh, &fresh_value, 2);
+    EXPECT_TRUE(status.is_time_out()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("PK MemTable growth flush wait"));
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds(1));
+    EXPECT_EQ(before, _mem_tracker->consumption()); // no mutation or leaked growth credit
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    std::vector<IndexValue> found(keys.size());
+    ASSERT_OK(index.get(keys.size(), keys.data(), found.data()));
+    EXPECT_EQ(values, found);
+    IndexValue absent;
+    ASSERT_OK(index.get(1, &fresh, &absent));
+    EXPECT_EQ(IndexValue(NullIndexValue), absent);
+    hold.store(false);
+    ASSERT_OK(index.sync_flush_all_memtables(10'000'000));
+    _primary_key_mgr->update_index_cache_size(entry);
+    ASSERT_OK(index.insert(1, &fresh, &fresh_value, 2));
+    ASSERT_OK(index.get(1, &fresh, &absent));
+    EXPECT_EQ(fresh_value, absent);
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+}
+
 TEST_F(LakePersistentIndexTest, test_active_tablet_reclaims_own_unpinned_ssts_before_waiting) {
     check_read_state_reclaim_progress(true);
 }
@@ -1674,6 +1750,80 @@ TEST_F(LakePersistentIndexTest, test_sync_flush_times_out_without_1s_poll) {
                     .count();
     EXPECT_TRUE(st.is_time_out()) << st;
     EXPECT_LT(wait_ms, 800) << "timeout should honor remaining wait budget, not usleep(1s); took " << wait_ms << "ms";
+}
+
+TEST_F(LakePersistentIndexTest, test_pressure_flush_preserves_async_io_timeout_cause) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    const Slice key("async-io-timeout");
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key, &value, 1));
+    const auto original = Status::TimedOut("injected asynchronous flush IO timeout");
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void* arg) {
+        *static_cast<std::pair<const std::string*, Status*>*>(arg)->second = original;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&] {
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index->flush_memtable(true));
+    const auto result = index->sync_flush_all_memtables(1'000'000, [] { return false; });
+    EXPECT_EQ(original.to_string(), result.to_string());
+}
+
+TEST_F(LakePersistentIndexTest, test_pressure_flush_shares_deadline_and_retires_successful_handoffs) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 3);
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+    std::array<std::string, 2> strings = {"first-flush", "second-flush"};
+    std::array<Slice, 2> keys = {Slice(strings[0]), Slice(strings[1])};
+    std::array<IndexValue, 2> values = {IndexValue(uint64_t{1} << 32), IndexValue(uint64_t{2} << 32)};
+    std::atomic<int> started{0};
+    std::array<std::atomic<bool>, 2> hold = {true, true};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        const auto id = started.fetch_add(1);
+        while (id < hold.size() && hold[id].load()) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp drain([&] {
+        for (auto& flag : hold) flag.store(false);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    ASSERT_OK(index->insert(1, &keys[0], &values[0], 1));
+    ASSERT_OK(index->flush_memtable(true));
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (started.load() == 0 && std::chrono::steady_clock::now() < started_deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ASSERT_GT(started.load(), 0);
+    ASSERT_OK(index->insert(1, &keys[1], &values[1], 1));
+    ASSERT_OK(index->flush_memtable(true));
+    std::thread finish_first([&] {
+        std::this_thread::sleep_for(std::chrono::milliseconds(220));
+        hold[0].store(false);
+    });
+    DeferOp join([&] {
+        if (finish_first.joinable()) finish_first.join();
+    });
+    const auto begin = std::chrono::steady_clock::now();
+    const auto status = index->sync_flush_all_memtables(300'000, [] { return false; });
+    EXPECT_TRUE(status.is_time_out()) << status;
+    EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::milliseconds(420));
+    hold[1].store(false);
+    // The first SST was handed off before the second timed out. It must have been retired:
+    // waiting for its already-consumed _sstable again would time out on this retry.
+    ASSERT_OK(index->sync_flush_all_memtables(2'000'000, [] { return false; }));
+    std::array<IndexValue, 2> found;
+    ASSERT_OK(index->get(keys.size(), keys.data(), found.data()));
+    EXPECT_EQ(values, found);
 }
 
 TEST_F(LakePersistentIndexTest, test_sync_flush_wakes_when_async_flush_finishes) {

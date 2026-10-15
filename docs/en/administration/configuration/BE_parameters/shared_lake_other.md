@@ -56,7 +56,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: Maximum wait for publish admission or an SST read-state memory permit when `lake_pk_index_partial_eviction` is enabled. Waiting occurs before tablet and shard locks for publish admission. Permit release wakes waiting work; shutdown cancels it. A timeout returns an error and is distinct from an update memory-limit error. Internal publish trace counters report admission time, waits, timeouts, cancellations, SST transient bytes, partial eviction and skeleton fallback. Also bounds waits for MemTable growth reservations; trace counters report reservation, batch, flush and timeout activity.
+- Description: Maximum wait for publish admission or an SST read-state memory permit when `lake_pk_index_partial_eviction` is enabled. Waiting occurs before tablet and shard locks for publish admission. Permit release wakes waiting work; shutdown cancels it. A timeout returns an error and is distinct from an update memory-limit error. Internal publish trace counters report admission time, waits, timeouts, cancellations, SST transient bytes, partial eviction and skeleton fallback. Also bounds waits for MemTable growth reservations and shares the remaining wait budget across inactive MemTable flushes. Shutdown cancels these waits. Active flush IO is work with its own IO timeouts; this parameter does not bound the complete reservation call. Trace counters report reservation, batch, flush wait, active flush IO and timeout activity. Both modes record actual process/update limits and index/block cache capacities with a budget sample count.
 - Introduced in: -
 
 ### cloud_native_pk_index_rebuild_files_threshold
