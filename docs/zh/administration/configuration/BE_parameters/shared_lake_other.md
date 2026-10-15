@@ -51,6 +51,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 计算接近内存上限的工作配额前，tablet 持锁方会先归还可回收读状态对象的记账。它可以按顺序合并键范围不重叠的尾部 SST 碎片，预留合并内存，并在输出文件轮换时销毁已完成的 builder；保留原大 SST。此路径的尾部查找不填充可选的数据块缓存。Trace 计数器 `pindex_pressure_coalesce_io_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files` 和 `pindex_pressure_coalesce_metadata_freed_bytes` 记录该回收工作。在文件和 key 之间检查取消；同步 IO 仍遵循文件系统超时。
 
+先完成 pending MemTable 的交接和重新记账，再预留该合并工作区。数据块读取必须符合已预付的工作内存额度；数据块过大时跳过这次可选连接并保留原 fileset。`pindex_pressure_coalesce_memory_fallback_count` 记录该回退，`pindex_pressure_coalesce_data_block_read_bytes` 记录数据块 IO。
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - 默认值：30000

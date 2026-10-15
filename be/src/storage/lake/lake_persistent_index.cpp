@@ -2050,39 +2050,69 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
                 std::make_unique<KeyValueMerger>("", 0, false, _tablet_mgr, _tablet_id, true, 4096, output_bytes,
                                                  [&](size_t bytes) { return reserve(metadata_reservation, bytes); });
         uint64_t max_rss_rowid = 0;
-        for (const auto* original : inputs) {
-            const auto& pb = original->sstable_pb();
-            if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
-            max_rss_rowid = std::max(max_rss_rowid, pb.max_rss_rowid());
-            // A temporary resident state does not acquire the transient single-reader permit
-            // already held by prepare. Its allocations still reserve against the update root.
-            ASSIGN_OR_RETURN(auto input, PersistentIndexSstable::new_sstable(
-                                                 pb, _tablet_mgr->sst_location(_tablet_id, pb.filename()), nullptr,
-                                                 false, nullptr, nullptr, _tablet_mgr, context));
-            sstable::ReadOptions options;
-            options.fill_cache = false;
-            options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
-            options.max_rss_rowid = pb.max_rss_rowid();
-            std::unique_ptr<sstable::Iterator> iter(input->new_iterator(options));
-            for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+        auto copy_inputs = [&]() -> Status {
+            for (const auto* original : inputs) {
+                const auto& pb = original->sstable_pb();
                 if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
-                // Bound the builder by actual bytes, independently of compression. A single
-                // entry also has to fit the prepaid merge workspace.
-                if (iter->key().size > output_bytes || iter->value().size > output_bytes) {
-                    return Status::MemoryLimitExceeded("PK pressure coalesce entry exceeds its workspace");
+                max_rss_rowid = std::max(max_rss_rowid, pb.max_rss_rowid());
+                // A temporary resident state does not acquire the transient single-reader permit
+                // already held by prepare. Its allocations still reserve against the update root.
+                ASSIGN_OR_RETURN(auto input, PersistentIndexSstable::new_sstable(
+                                                     pb, _tablet_mgr->sst_location(_tablet_id, pb.filename()), nullptr,
+                                                     false, nullptr, nullptr, _tablet_mgr, context));
+                sstable::ReadIOStat io;
+                DeferOp report_io([&] {
+                    TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_data_block_read_bytes", io.bytes_from_file);
+                });
+                sstable::ReadOptions options;
+                options.stat = &io;
+                options.fill_cache = false;
+                options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+                options.max_rss_rowid = pb.max_rss_rowid();
+                // The root reservation above prepays writer plus iterator scratch. Bound each
+                // data-block input/output request too; two-level iteration may briefly retain
+                // the previous decoded block while opening its successor. A giant data value
+                // is left to the normal reader rather than making this optional merge fail publish.
+                const size_t block_allowance = std::max<size_t>(1, workspace / 32);
+                options.reserve_memory = [block_allowance](size_t bytes) {
+                    return bytes <= block_allowance
+                                   ? Status::OK()
+                                   : Status::MemoryLimitExceeded(
+                                             "PK pressure coalesce data block exceeds prepaid scratch");
+                };
+                options.try_reserve_memory = [block_allowance](size_t bytes) { return bytes <= block_allowance; };
+                options.check_read_cancelled = [&] {
+                    return cancelled && cancelled() ? Status::Cancelled("PK pressure coalesce cancelled")
+                                                    : Status::OK();
+                };
+                std::unique_ptr<sstable::Iterator> iter(input->new_iterator(options));
+                for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+                    if (cancelled && cancelled()) return Status::Cancelled("PK pressure coalesce cancelled");
+                    // Bound the builder by actual bytes, independently of compression. A single
+                    // entry also has to fit the prepaid merge workspace.
+                    if (iter->key().size > output_bytes || iter->value().size > output_bytes) {
+                        return Status::MemoryLimitExceeded("PK pressure coalesce entry exceeds its workspace");
+                    }
+                    RETURN_IF_ERROR(merger->append_encoded(iter->key(), iter->value()));
                 }
-                RETURN_IF_ERROR(merger->append_encoded(iter->key(), iter->value()));
+                const auto read_status = iter->status();
+                if (read_status.is_corruption()) {
+                    StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+                    LOG(WARNING) << "PK pressure coalesce hit corruption, tablet_id=" << _tablet_id
+                                 << ", file=" << pb.filename() << ", error: " << read_status;
+                    (void)drop_corrupted_sstable_cache(_tablet_mgr->sst_location(_tablet_id, pb.filename()));
+                }
+                RETURN_IF_ERROR(read_status);
+                TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_input_files", 1);
             }
-            const auto read_status = iter->status();
-            if (read_status.is_corruption()) {
-                StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-                LOG(WARNING) << "PK pressure coalesce hit corruption, tablet_id=" << _tablet_id
-                             << ", file=" << pb.filename() << ", error: " << read_status;
-                (void)drop_corrupted_sstable_cache(_tablet_mgr->sst_location(_tablet_id, pb.filename()));
-            }
-            RETURN_IF_ERROR(read_status);
-            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_input_files", 1);
+            return Status::OK();
+        };
+        const auto copy_status = copy_inputs();
+        if (copy_status.is_mem_limit_exceeded()) {
+            TRACE_COUNTER_INCREMENT("pindex_pressure_coalesce_memory_fallback_count", 1);
+            continue;
         }
+        RETURN_IF_ERROR(copy_status);
         ASSIGN_OR_RETURN(auto outputs, merger->finish());
         if (outputs.size() >= count) continue;
         std::vector<std::unique_ptr<PersistentIndexSstable>> new_ssts;
@@ -2152,16 +2182,13 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
             // and create one SST per row on every subsequent attempt.
             evict_sstable_read_state(std::numeric_limits<size_t>::max());
             if (refresh_memory) refresh_memory();
-            const size_t merge_workspace = std::min<size_t>(8 * 1024 * 1024, limit / 2);
-            RETURN_IF_ERROR(_coalesce_pressure_filesets(merge_workspace, refresh_memory, cancelled));
-            collect_ssts();
-            const auto stats = memory_stats();
-            const size_t fixed = stats.overhead_bytes + stats.delvec_bytes + 65536;
             const size_t room = static_cast<size_t>(limit) - std::min(static_cast<size_t>(limit), minimum_read);
-            const size_t available = room - std::min(room, fixed);
-            _publish_workspace_budget = std::max<size_t>(1, available / 4);
-            TRACE_COUNTER_INCREMENT("pindex_minimum_sst_open_bytes", minimum_read);
-            TRACE_COUNTER_INCREMENT("pindex_publish_workspace_budget_bytes", _publish_workspace_budget);
+            auto choose_workspace = [&] {
+                const auto stats = memory_stats();
+                const size_t fixed = stats.overhead_bytes + stats.delvec_bytes + 65536;
+                return std::max<size_t>(1, (room - std::min(room, fixed)) / 4);
+            };
+            _publish_workspace_budget = choose_workspace();
             // Flush only at this joined owner boundary, before the next mutations/old-rowid
             // lookups start. A reservation inside an upsert must never flush its new values.
             if (!_inactive_memtables.empty() || (_memtable && _memtable->memory_usage() > _publish_workspace_budget)) {
@@ -2180,6 +2207,12 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
                 // Flush may append another SST/fileset. Include it in context and cache selection.
                 collect_ssts();
             }
+            const size_t merge_workspace = std::min<size_t>(8 * 1024 * 1024, limit / 2);
+            RETURN_IF_ERROR(_coalesce_pressure_filesets(merge_workspace, refresh_memory, cancelled));
+            collect_ssts();
+            _publish_workspace_budget = choose_workspace();
+            TRACE_COUNTER_INCREMENT("pindex_minimum_sst_open_bytes", minimum_read);
+            TRACE_COUNTER_INCREMENT("pindex_publish_workspace_budget_bytes", _publish_workspace_budget);
         }
     }
     // Keep already resident SSTs first, then use the remaining reservation to reopen missing SSTs.
