@@ -1312,7 +1312,12 @@ MySQL クライアント互換性のために使用されます。実際の用�
 
 ### paimon_reader_mode
 
-* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。`AUTO` は StarRocks が適切な Reader を自動的に選択します。`JNI` は常に JNI Reader を使用します。`NATIVE` は paimon-cpp ネイティブ Reader を使用します。なお、`paimon_force_jni_reader` はこの変数より優先されます。`true` に設定されている場合、常に JNI Reader が使用されます。
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。
+
+  * `AUTO` は、データ split を対応する raw ファイルに変換できる場合、StarRocks ファイル Reader を優先します。それ以外の通常のデータ split には paimon-cpp ネイティブ Reader を使用します。FILE/BLOB 列を読み取るクエリには paimon-cpp を使用します。
+  * `JNI` は通常のデータ split に Paimon Java Reader を選択し、`NATIVE` は paimon-cpp を選択します。
+  * システムテーブルの split は引き続き JNI を使用します。グローバルインデックスの split は、指定されたモードや `paimon_force_jni_reader=true` に関係なく paimon-cpp を使用します。その他のデータ split では、`paimon_force_jni_reader=true` がこの変数より優先され、JNI を選択します。
+  * ネイティブ読み取りが失敗しても、JNI に切り替えて自動再試行することはありません。
 * **デフォルト**: AUTO
 * **データ型**: String
 * **導入バージョン**: v4.2

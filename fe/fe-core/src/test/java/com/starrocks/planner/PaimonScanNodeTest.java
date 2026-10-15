@@ -243,15 +243,15 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(split.bucket(), deserializedSplit.bucket());
             Assertions.assertEquals(split.bucketPath(), deserializedSplit.bucketPath());
 
-            // Under AUTO, SDK splits keep the legacy JNI reader; only an explicit NATIVE routes
-            // them to paimon-cpp.
+            // Under AUTO, SDK data splits use paimon-cpp after the raw-file fast path is ruled out.
             PaimonScanNode autoScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
             autoScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.AUTO, split, null, 200L);
             THdfsScanRange autoRange = autoScanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertTrue(autoRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(autoRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(autoRange.isSetPaimon_split_info_binary());
+            Assertions.assertFalse(autoRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(autoRange.isUse_paimon_native_reader());
+            Assertions.assertArrayEquals(hdfsScanRange.getPaimon_split_info_binary(),
+                    autoRange.getPaimon_split_info_binary());
 
             PaimonScanNode jniScanNode = new PaimonScanNode(new PlanNodeId(1), desc, "XXX");
             jniScanNode.addSDKSplitScanRangeLocations(PaimonReaderMode.JNI, split, null, 200L);
@@ -266,7 +266,7 @@ public class PaimonScanNodeTest {
     }
 
     @Test
-    public void testSetupScanRangeLocationsAutoRoutesRawAndUnknownFormats(
+    public void testSetupScanRangeLocationsAutoRoutesRawSdkAndSystemSplits(
             @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
         ConnectContext ctx = new ConnectContext();
         // With GlobalStateMgr mocked, the ConnectContext-created SessionVariable is a cascaded mock
@@ -276,8 +276,8 @@ public class PaimonScanNodeTest {
         try {
             DeletionFile deletionFile = new DeletionFile("delete-file", 7, 11, 0L);
             DataSplit parquetSplit = createRawConvertibleDataSplit("parquet", List.of(deletionFile));
-            DataSplit unknownSplit = createRawConvertibleDataSplit("unknown", List.of());
-            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, unknownSplit);
+            DataSplit avroSplit = createRawConvertibleDataSplit("avro", List.of());
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(parquetSplit, avroSplit, new TestSplit());
             new Expectations() {
                 {
                     GlobalStateMgr.getCurrentState();
@@ -294,7 +294,7 @@ public class PaimonScanNodeTest {
             PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
             scanNode.setupScanRangeLocations(desc, null, -1);
 
-            Assertions.assertEquals(2, scanNode.getScanRangeLocations(10).size());
+            Assertions.assertEquals(3, scanNode.getScanRangeLocations(10).size());
             THdfsScanRange parquetRange = scanNode.getScanRangeLocations(10).get(0)
                     .getScan_range().getHdfs_scan_range();
             Assertions.assertEquals(THdfsFileFormat.PARQUET, parquetRange.getFile_format());
@@ -302,14 +302,18 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(deletionFile.path(), parquetRange.getPaimon_deletion_file().getPath());
             Assertions.assertFalse(parquetRange.isUse_paimon_jni_reader());
 
-            THdfsScanRange unknownRange = scanNode.getScanRangeLocations(10).get(1)
+            THdfsScanRange avroRange = scanNode.getScanRangeLocations(10).get(1)
                     .getScan_range().getHdfs_scan_range();
-            Assertions.assertEquals(THdfsFileFormat.UNKNOWN, unknownRange.getFile_format());
-            // Under AUTO, a split that cannot be read as raw files keeps the legacy JNI reader;
-            // paimon-cpp is only chosen by an explicit NATIVE mode.
-            Assertions.assertTrue(unknownRange.isUse_paimon_jni_reader());
-            Assertions.assertFalse(unknownRange.isUse_paimon_native_reader());
-            Assertions.assertFalse(unknownRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(THdfsFileFormat.UNKNOWN, avroRange.getFile_format());
+            Assertions.assertFalse(avroRange.isUse_paimon_jni_reader());
+            Assertions.assertTrue(avroRange.isUse_paimon_native_reader());
+            Assertions.assertTrue(avroRange.isSetPaimon_split_info_binary());
+
+            THdfsScanRange systemRange = scanNode.getScanRangeLocations(10).get(2)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(systemRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(systemRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(systemRange.isSetPaimon_split_info_binary());
         } finally {
             ConnectContext.remove();
         }

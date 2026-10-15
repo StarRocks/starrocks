@@ -110,7 +110,7 @@ select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 1
 1
 4
 -- !result
-function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
 -- result:
 None
 -- !result
