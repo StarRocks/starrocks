@@ -142,8 +142,10 @@ public:
     DEFINE_VECTORIZED_FN(h3_to_boundary);
     DEFINE_VECTORIZED_FN(h3_polygon_to_cells);
 
-    static Status h3_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
-    static Status h3_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+    static Status h3_polygon_to_cells_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status h3_polygon_to_cells_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
 
     static Status native_geo_transform_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
             __attribute__((used));

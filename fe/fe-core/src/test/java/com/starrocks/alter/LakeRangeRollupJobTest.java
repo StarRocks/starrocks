@@ -37,6 +37,8 @@ import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,6 +52,8 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -260,6 +264,50 @@ public class LakeRangeRollupJobTest {
         target.replay(replayed);
         assertEquals(source.getShadowIndexMetaId(), target.getShadowIndexMetaId());
         assertEquals(AlterJobV2.JobType.ROLLUP, target.getType());
+    }
+
+    @Test
+    public void testRunningRewriteCompletionCopyGsonReplaySkipsEvictedTxn() throws Exception {
+        List<Column> schema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob source = newConfiguredRollupJobWithReservedCommit(List.of(schema.get(1), schema.get(0)));
+        source.setJobState(AlterJobV2.JobState.RUNNING);
+        source.watershedTxnId = 555060L;
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long id = partition.getId();
+        LakeOnlineRewriteJobBase.PartitionRewriteState state = source.stateOf(id);
+        state.shadowIndex = partition.getLatestIndex(source.getShadowIndexMetaId());
+        state.watershedVersion = 1L;
+        state.rewriteTxnId = 555061L;
+        state.sourceEmpty = true;
+        state.rewriteFinished = true;
+        LakeRangeRollupJob copied = (LakeRangeRollupJob) source.copyForPersist();
+        String json = GsonUtils.GSON.toJson(copied, AlterJobV2.class);
+        LakeRangeRollupJob replayed = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        LakeRangeRollupJob target = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        target.partitionStates.get(id).rewriteFinished = false;
+        target.partitionStates.get(id).sourceEmpty = null;
+        target.replay(replayed);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long txnId) {
+                return null;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 entry, WALApplier applier) {
+                applier.apply(entry);
+            }
+        };
+        for (LakeRangeRollupJob restored : List.of(copied, target)) {
+            restored.setRewriteExecutor((context, stmt) -> {
+                throw new AssertionError("a persisted completed rollup must not execute again");
+            });
+            restored.runRunningJob();
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, restored.getJobState());
+            assertEquals(555061L, restored.getRewriteTxnId(id).longValue());
+            assertEquals(Boolean.TRUE, restored.getSourceEmpty(id));
+        }
     }
 
     // ---- getRollupIndexName test --------------------------------------------

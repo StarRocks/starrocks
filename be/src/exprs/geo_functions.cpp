@@ -16,8 +16,10 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -1124,6 +1126,27 @@ StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& column
     return result;
 }
 
+bool is_valid_canonical_geography_point(Slice wkb) {
+    // A finite XY POINT in canonical little-endian WKB needs no normalization.
+    // Checking its complete structure and CRS84 coordinates here avoids a
+    // geometry allocation and a decode/encode round trip at the SQL boundary.
+    constexpr std::array<uint8_t, 5> kPointHeader = {1, 1, 0, 0, 0};
+    if (wkb.size != kPointHeader.size() + 2 * sizeof(double) ||
+        std::memcmp(wkb.data, kPointHeader.data(), kPointHeader.size()) != 0) {
+        return false;
+    }
+    std::array<uint64_t, 2> coordinates;
+    std::memcpy(coordinates.data(), wkb.data + kPointHeader.size(), sizeof(coordinates));
+    if constexpr (std::endian::native != std::endian::little) {
+        coordinates[0] = std::byteswap(coordinates[0]);
+        coordinates[1] = std::byteswap(coordinates[1]);
+    }
+    const double longitude = std::bit_cast<double>(coordinates[0]);
+    const double latitude = std::bit_cast<double>(coordinates[1]);
+    return std::isfinite(longitude) && std::isfinite(latitude) && longitude >= -180 && longitude <= 180 &&
+           latitude >= -90 && latitude <= 90;
+}
+
 template <LogicalType InputType>
 StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns& columns, bool text) {
     const size_t size = columns[0]->size();
@@ -1139,8 +1162,12 @@ StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns&
             result->append_nulls(1);
             continue;
         }
-        WkbGeometry geometry;
         const Slice value = input.value(row);
+        if (!text && is_valid_canonical_geography_point(value)) {
+            result->append_datum(Datum(value));
+            continue;
+        }
+        WkbGeometry geometry;
         Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry)
                              : WkbCodec::parse_wkb(value, &geometry);
         std::string wkb;

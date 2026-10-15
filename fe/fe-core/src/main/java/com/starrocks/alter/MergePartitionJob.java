@@ -38,6 +38,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
@@ -555,6 +556,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             rewriteTask.setLastVersion(partitionLastVersion.get(tmpPartitionName));
             // use half of the alter timeout as rewrite task timeout
             rewriteTask.getProperties().put(SessionVariable.INSERT_TIMEOUT, String.valueOf(timeoutMs / 2000));
+            // A re-run of this job after a leader change cancels itself on the task name collision, so the task must
+            // stay registered while the job can still run. It expires no earlier than one task TTL after the job
+            // deadline, and TaskManager removes it then.
+            rewriteTask.setExpireTime(rewriteTask.getCreateTime() + timeoutMs + Config.task_ttl_second * 1000L);
             rewriteTasks.add(rewriteTask);
         });
 

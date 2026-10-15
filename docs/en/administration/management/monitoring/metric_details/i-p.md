@@ -291,6 +291,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Counter of successful lake compaction jobs.
 
+## `lake_pk_index_cache_delvec_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the delete vectors attached to the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. Only SST files ingested together with a delete vector, such as compaction output, carry one. This memory is not charged to the Primary Key index cache, so `INDEX_MEM` in `information_schema.be_tablets` does not include it.
+
+## `lake_pk_index_cache_filter_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the Bloom filters of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_index_block_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table found the tablet's Primary Key index already loaded in the Primary Key index cache. Together with `lake_pk_index_load_total`, the hit ratio of the cache is `hit / (hit + load)`.
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the index blocks of the Primary Key index SST files of the tablets whose Primary Key index is cached on this BE. `lake_pk_index_cache_memtable_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
+
+## `lake_pk_index_load_duration_us`
+
+- Unit: us
+- Type: Cumulative
+- Description: Shared-data only. Total time spent on the Primary Key index loads counted by `lake_pk_index_load_total`. Divide it by `lake_pk_index_load_total` to get the average time to load the index of one tablet.
+
+## `lake_pk_index_load_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
+
 ## `lake_segment_cache_hit_minute`
 
 - Unit: Count

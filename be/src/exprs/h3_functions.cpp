@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/geo_functions.h"
-
-#ifdef WITH_H3
 #include <h3/h3api.h>
-#endif
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstring>
@@ -36,45 +33,12 @@
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
+#include "exprs/geo_functions.h"
 #include "geo/geo_measurements.h"
 #include "geo/wkb.h"
 #include "types/geo_wkb.h"
 
 namespace starrocks {
-#ifndef WITH_H3
-namespace {
-Status h3_unavailable() {
-    return Status::NotSupported("H3 capability is unavailable in this BE build");
-}
-} // namespace
-Status GeoFunctions::h3_prepare(FunctionContext*, FunctionContext::FunctionStateScope) {
-    return Status::OK();
-}
-Status GeoFunctions::h3_close(FunctionContext*, FunctionContext::FunctionStateScope) {
-    return Status::OK();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_parent(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-#else
 namespace {
 
 constexpr double kRadiansPerDegree = 0.017453292519943295769236907684886;
@@ -143,6 +107,48 @@ StatusOr<WkbGeometry> h3_parse_geo(const H3GeoInput& input, size_t row, bool pol
     return geometry;
 }
 
+template <typename T>
+T read_wkb_number(const char* data, bool little_endian) {
+    T value;
+    std::memcpy(&value, data, sizeof(value));
+    if (little_endian != (std::endian::native == std::endian::little)) value = std::byteswap(value);
+    return value;
+}
+
+// An H3_FromGeo argument. POINT EMPTY (an all-NaN XY tuple) maps to NULL.
+struct H3Point {
+    WkbCoordinate coordinate{};
+    bool empty = false;
+};
+
+// Decodes an XY POINT without building a WkbGeometry. inspect_geo_wkb accepts an XY
+// POINT only as exactly 21 bytes with byte order 0 or 1 and type code 1, so every
+// other payload is rejected here; inspect_geo_wkb supplies the structural diagnostic.
+// Coordinate checks and messages match WkbCodec::parse_wkb with CRS84 semantics.
+// Producer validation metadata is never trusted.
+StatusOr<H3Point> h3_decode_point(Slice wkb) {
+    constexpr size_t kTypeOffset = 1;
+    constexpr size_t kXOffset = kTypeOffset + sizeof(uint32_t);
+    constexpr size_t kYOffset = kXOffset + sizeof(double);
+    constexpr size_t kPointWkbSize = kYOffset + sizeof(double);
+    const bool known_order = wkb.size == kPointWkbSize && (wkb.data[0] == 0 || wkb.data[0] == 1);
+    const bool little_endian = known_order && wkb.data[0] == 1;
+    if (!known_order || read_wkb_number<uint32_t>(wkb.data + kTypeOffset, little_endian) != 1) {
+        RETURN_IF_ERROR(inspect_geo_wkb(wkb).status());
+        return Status::InvalidArgument("H3_FromGeo requires XY POINT");
+    }
+    const double x = std::bit_cast<double>(read_wkb_number<uint64_t>(wkb.data + kXOffset, little_endian));
+    const double y = std::bit_cast<double>(read_wkb_number<uint64_t>(wkb.data + kYOffset, little_endian));
+    if (std::isnan(x) && std::isnan(y)) return H3Point{{x, y}, true};
+    if (!std::isfinite(x) || !std::isfinite(y)) {
+        return Status::InvalidArgument("Invalid WKB: POINT coordinates must be finite or both NaN for EMPTY");
+    }
+    if (x < -180 || x > 180 || y < -90 || y > 90) {
+        return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
+    }
+    return H3Point{{x, y}, false};
+}
+
 struct H3PreparedGeo {
     bool constant = false;
     Status parse_status = Status::OK();
@@ -203,13 +209,15 @@ struct H3ArrayBuilder {
 
 } // namespace
 
-Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+Status GeoFunctions::h3_polygon_to_cells_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context == nullptr || context->get_num_args() == 0 ||
         !context->is_constant_column(0)) {
         return Status::OK();
     }
     const auto* type = context->get_arg_type(0);
-    if (type == nullptr || type->type != TYPE_GEOGRAPHY) return Status::OK();
+    if (type == nullptr || type->type != TYPE_GEOGRAPHY) {
+        return Status::OK();
+    }
     auto state = std::make_unique<H3PreparedGeo>();
     state->constant = true;
     const auto& column = context->get_constant_column(0);
@@ -218,8 +226,7 @@ Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::Funct
         if (!input.ok()) {
             state->parse_status = input.status();
         } else {
-            const bool polygon = context->get_return_type().type == TYPE_ARRAY;
-            auto parsed = h3_parse_geo(input.value(), 0, polygon);
+            auto parsed = h3_parse_geo(input.value(), 0, true);
             if (parsed.ok()) {
                 state->geometry.emplace(std::move(parsed.value()));
             } else {
@@ -231,7 +238,7 @@ Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::Funct
     return Status::OK();
 }
 
-Status GeoFunctions::h3_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+Status GeoFunctions::h3_polygon_to_cells_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         delete reinterpret_cast<H3PreparedGeo*>(context->get_function_state(scope));
         context->set_function_state(scope, nullptr);
@@ -239,33 +246,27 @@ Status GeoFunctions::h3_close(FunctionContext* context, FunctionContext::Functio
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext*, const Columns& columns) {
     const size_t size = columns[0]->size();
     if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
     ASSIGN_OR_RETURN(const auto input, h3_geo_input(columns[0]));
     ColumnViewer<TYPE_INT> resolutions(columns[1]);
     const bool constant = ColumnHelper::is_all_const(columns);
-    ColumnBuilder<TYPE_BIGINT> result(constant ? 1 : size);
-    const auto* prepared = context == nullptr ? nullptr
-                                              : reinterpret_cast<const H3PreparedGeo*>(
-                                                        context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    std::optional<WkbGeometry> local;
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_BIGINT> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row) || resolutions.is_null(row)) {
             result.append_null();
             continue;
         }
         const int resolution = resolutions.value(row);
         RETURN_IF_ERROR(validate_h3_resolution(resolution));
-        WkbGeometry varying;
-        ASSIGN_OR_RETURN(const auto* point, h3_geometry(input, row, false, prepared, &local, &varying));
-        if (point->empty) {
+        ASSIGN_OR_RETURN(const H3Point point, h3_decode_point(input.wkb(row)));
+        if (point.empty) {
             result.append_null();
             continue;
         }
-        ASSIGN_OR_RETURN(const bool valid, spherical_is_valid(*point));
-        if (!valid) return Status::InvalidArgument("H3_FromGeo requires a valid GEOGRAPHY POINT");
-        const LatLng latlng{point->coordinates[0].y * kRadiansPerDegree, point->coordinates[0].x * kRadiansPerDegree};
+        const LatLng latlng{point.coordinate.y * kRadiansPerDegree, point.coordinate.x * kRadiansPerDegree};
         H3Index cell = 0;
         const H3Error error = latLngToCell(&latlng, resolution, &cell);
         if (error != E_SUCCESS) return h3_error("H3_FromGeo", error);
@@ -537,5 +538,4 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
     return result.build(size, constant);
 }
 
-#endif // WITH_H3
 } // namespace starrocks

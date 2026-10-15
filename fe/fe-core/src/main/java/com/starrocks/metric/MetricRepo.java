@@ -508,6 +508,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
     public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
     public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
+    public static LongCounterMetric COUNTER_THRIFT_CLIENT_RETRIES;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -554,6 +555,11 @@ public final class MetricRepo {
                 "total connections the thrift server closed unserved because they waited in the pending "
                         + "queue longer than thrift_server_queue_timeout_ms");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
+
+        COUNTER_THRIFT_CLIENT_RETRIES = new LongCounterMetric(
+                "thrift_client_retries_total", MetricUnit.REQUESTS,
+                "total requests FE thrift rpc calls resent on a reopened connection after the previous one broke");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_CLIENT_RETRIES);
 
         // 1. gauge
         // build info

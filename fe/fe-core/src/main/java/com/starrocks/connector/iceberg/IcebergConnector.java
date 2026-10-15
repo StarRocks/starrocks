@@ -179,6 +179,9 @@ public class IcebergConnector implements Connector {
             commitQueueManager.shutdownAll();
             LOG.info("IcebergCommitQueueManager shutdown for catalog {}", catalogName);
         }
+        if (icebergNativeCatalog != null) {
+            icebergNativeCatalog.shutdown();
+        }
     }
 
     @Override
