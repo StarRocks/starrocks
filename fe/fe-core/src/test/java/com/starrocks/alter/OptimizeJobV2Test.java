@@ -25,15 +25,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
-<<<<<<< HEAD
-=======
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.TaskRunManager;
-import com.starrocks.scheduler.TaskRunScheduler;
->>>>>>> 323a97d ([BugFix] Expire the rewrite tasks of optimize and merge-partition jobs (#80718))
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -49,13 +45,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
-<<<<<<< HEAD
-=======
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
->>>>>>> 323a97d ([BugFix] Expire the rewrite tasks of optimize and merge-partition jobs (#80718))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -69,6 +59,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @BeforeAll
     public static void beforeAll() {
         DDLTestBase.beforeAll();
+        UtFrameUtils.setUpForPersistTest();
         // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
         // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
         // the spy, so its failure cancels the job and drops the spy's temp partitions.
@@ -85,6 +76,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
         String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         Config.enable_online_optimize_table = false;
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
     }
 
     @AfterEach
@@ -770,142 +763,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         }
         return spy;
     }
-<<<<<<< HEAD
-=======
-
-    // ---- pruning the per-partition data of a done job -------------------------------------------
-
-    @Test
-    public void testLeaderPrunesFinishedJob() throws Exception {
-        OlapTable table = createPartitionedTable("t_optimize_prune_finished");
-        OptimizeJobV2 job = submitOptimize(table);
-        runToRunning(job);
-        Assertions.assertEquals(List.of(2, 2, 0, 0), partitionListSizes(job));
-
-        runToFinished(job);
-
-        assertPruned(job);
-        List<OptimizeJobV2> entries = readJournaledEntries(job.getJobId());
-        OptimizeJobV2 finishedEntry = entries.get(entries.size() - 1);
-        Assertions.assertEquals(JobState.FINISHED, finishedEntry.getJobState());
-        Assertions.assertEquals(List.of(2, 2, 2, 2), partitionListSizes(finishedEntry));
-        // The temp partitions replaced the source ones before the prune.
-        Assertions.assertEquals(new HashSet<>(finishedEntry.getTmpPartitionIds()), partitionIds(table.getPartitions()));
-        Assertions.assertEquals(2, table.getDefaultDistributionInfo().getBucketNum());
-        assertShowAlterUnchangedByPrune(finishedEntry);
-    }
-
-    @Test
-    public void testLeaderPrunesCancelledJob() throws Exception {
-        OlapTable table = createPartitionedTable("t_optimize_prune_cancelled");
-        OptimizeJobV2 job = submitOptimize(table);
-        runToRunning(job);
-        List<Long> tempTabletIds = tabletIds(table.getTempPartitions());
-        assertInInvertedIndex(tempTabletIds);
-
-        Assertions.assertTrue(job.cancel("cancel"));
-
-        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
-        assertPruned(job);
-        assertTempPartitionsDropped(table, tempTabletIds);
-        List<OptimizeJobV2> entries = readJournaledEntries(job.getJobId());
-        OptimizeJobV2 cancelledEntry = entries.get(entries.size() - 1);
-        Assertions.assertEquals(JobState.CANCELLED, cancelledEntry.getJobState());
-        Assertions.assertEquals(List.of(2, 2, 0, 0), partitionListSizes(cancelledEntry));
-        assertShowAlterUnchangedByPrune(cancelledEntry);
-    }
-
-    @Test
-    public void testFollowerReplayPrunesFinishedJob() throws Exception {
-        OlapTable table = createPartitionedTable("t_optimize_follower_finished");
-        // The follower starts from the catalog as it was before the optimize.
-        UtFrameUtils.PseudoImage initialImage = saveMetastore();
-        OptimizeJobV2 job = submitOptimize(table);
-        runToRunning(job);
-        runToFinished(job);
-
-        LocalMetastore followerMetastore = loadMetastore(initialImage);
-        OlapTable followerTable = tableIn(followerMetastore, table);
-        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
-        OptimizeJobV2 finishedEntry =
-                (OptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 1);
-        // The handler keeps the first replayed entry and applies the later ones to it.
-        OptimizeJobV2 retained = (OptimizeJobV2) followerHandler.getAlterJobsV2().get(job.getJobId());
-        Assertions.assertEquals(JobState.WAITING_TXN, retained.getJobState());
-        Assertions.assertEquals(List.of(0, 2, 0, 0), partitionListSizes(retained));
-        Assertions.assertEquals(new HashSet<>(finishedEntry.getTmpPartitionIds()),
-                partitionIds(followerTable.getPartitions()));
-        Assertions.assertEquals(OlapTableState.OPTIMIZE, followerTable.getState());
-
-        replayOn(followerMetastore, followerHandler, finishedEntry);
-
-        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
-        Assertions.assertEquals(JobState.FINISHED, retained.getJobState());
-        assertPruned(retained);
-        // The retained job took over the partition names of the entry; pruning it left the entry intact.
-        Assertions.assertEquals(List.of(2, 2, 2, 2), partitionListSizes(finishedEntry));
-        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
-    }
-
-    @Test
-    public void testFollowerReplayDropsTempPartitionsOfCancelledJob() throws Exception {
-        OlapTable table = createPartitionedTable("t_optimize_follower_cancelled");
-        // The follower starts from the catalog as it was before the optimize.
-        UtFrameUtils.PseudoImage initialImage = saveMetastore();
-        OptimizeJobV2 job = submitOptimize(table);
-        runToRunning(job);
-        Assertions.assertTrue(job.cancel("cancel"));
-
-        LocalMetastore followerMetastore = loadMetastore(initialImage);
-        OlapTable followerTable = tableIn(followerMetastore, table);
-        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
-        OptimizeJobV2 cancelledEntry =
-                (OptimizeJobV2) replayUpToFinalEntry(followerMetastore, followerHandler, job.getJobId(), 0);
-        OptimizeJobV2 retained = (OptimizeJobV2) followerHandler.getAlterJobsV2().get(job.getJobId());
-        Assertions.assertEquals(List.of(0, 2, 0, 0), partitionListSizes(retained));
-        Assertions.assertEquals(new HashSet<>(retained.getTmpPartitionIds()),
-                partitionIds(followerTable.getTempPartitions()));
-        List<Long> tempTabletIds = tabletIds(followerTable.getTempPartitions());
-        assertInInvertedIndex(tempTabletIds);
-
-        replayOn(followerMetastore, followerHandler, cancelledEntry);
-
-        // The CANCELLED replay drops the temp partitions the retained job lists; the prune comes after it.
-        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
-        Assertions.assertEquals(JobState.CANCELLED, retained.getJobState());
-        assertPruned(retained);
-        assertTempPartitionsDropped(followerTable, tempTabletIds);
-        Assertions.assertEquals(catalogSnapshot(table), catalogSnapshot(followerTable));
-    }
-
-    @Test
-    public void testLoadPrunesDoneJobFromImage() throws Exception {
-        OlapTable table = createPartitionedTable("t_optimize_prune_image");
-        OptimizeJobV2 job = submitOptimize(table);
-        runToRunning(job);
-        runToFinished(job);
-        // Images written by older versions hold the done job with its partition lists, as the journal entry does.
-        List<OptimizeJobV2> entries = readJournaledEntries(job.getJobId());
-        OptimizeJobV2 doneJob = entries.get(entries.size() - 1);
-        Assertions.assertEquals(List.of(2, 2, 2, 2), partitionListSizes(doneJob));
-        AlterJobMgr alterJobMgr = newAlterJobMgr();
-        alterJobMgr.getSchemaChangeHandler().addAlterJobV2(doneJob);
-        // SHOW ALTER of the loaded job must match that of a job that went through the same serialization.
-        List<List<Comparable>> expectedRows = new ArrayList<>();
-        gsonCopy(doneJob).getInfo(expectedRows);
-
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        alterJobMgr.save(image.getImageWriter());
-        AlterJobMgr restoredMgr = loadAlterJobMgr(image);
-
-        OptimizeJobV2 restored =
-                (OptimizeJobV2) restoredMgr.getSchemaChangeHandler().getAlterJobsV2().get(job.getJobId());
-        assertPruned(restored);
-        List<List<Comparable>> restoredRows = new ArrayList<>();
-        restored.getInfo(restoredRows);
-        Assertions.assertFalse(expectedRows.isEmpty());
-        Assertions.assertEquals(expectedRows, restoredRows);
-    }
 
     // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
 
@@ -1027,202 +884,4 @@ public class OptimizeJobV2Test extends DDLTestBase {
         job.runWaitingTxnJob();
         Assertions.assertEquals(JobState.RUNNING, job.getJobState());
     }
-
-    /**
-     * Marks every rewrite task as succeeded and drives the job to FINISHED through run(), the scheduler's entry point.
-     */
-    private static void runToFinished(OptimizeJobV2 job) {
-        for (OptimizeTask task : job.getOptimizeTasks()) {
-            task.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
-        }
-        job.run();
-        Assertions.assertEquals(JobState.FINISHED, job.getJobState(), job.errMsg);
-    }
-
-    private static AlterJobV2 nextJobEntry(long jobId) throws Exception {
-        AlterJobV2 entry =
-                (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
-        Assertions.assertEquals(jobId, entry.getJobId());
-        return entry;
-    }
-
-    /**
-     * Reads the journal entries of the job, from the one that submitted it to the one of its final state.
-     */
-    private static List<OptimizeJobV2> readJournaledEntries(long jobId) throws Exception {
-        List<OptimizeJobV2> entries = new ArrayList<>();
-        AlterJobV2 entry;
-        do {
-            entry = nextJobEntry(jobId);
-            entries.add((OptimizeJobV2) entry);
-        } while (!entry.isDone());
-        Assertions.assertEquals(JobState.PENDING, entries.get(0).getJobState());
-        return entries;
-    }
-
-    /**
-     * Replays what the leader journaled for the job on a follower, in journal order: the PENDING entry, the temp
-     * partitions, the WAITING_TXN entry and the given number of partition swaps. Returns the entry of the final
-     * state without replaying it.
-     */
-    private static AlterJobV2 replayUpToFinalEntry(LocalMetastore metastore, SchemaChangeHandler handler, long jobId,
-                                                   int partitionSwaps) throws Exception {
-        AlterJobV2 pending = nextJobEntry(jobId);
-        Assertions.assertEquals(JobState.PENDING, pending.getJobState());
-        replayOn(metastore, handler, pending);
-        AddPartitionsInfoV2 tempPartitions = (AddPartitionsInfoV2) UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_ADD_PARTITIONS_V2);
-        for (PartitionPersistInfoV2 info : tempPartitions.getAddPartitionInfos()) {
-            Assertions.assertTrue(info.isTempPartition());
-            metastore.replayAddPartition(info);
-        }
-        AlterJobV2 waitingTxn = nextJobEntry(jobId);
-        Assertions.assertEquals(JobState.WAITING_TXN, waitingTxn.getJobState());
-        replayOn(metastore, handler, waitingTxn);
-        for (int i = 0; i < partitionSwaps; i++) {
-            ReplacePartitionOperationLog swap = (ReplacePartitionOperationLog) UtFrameUtils.PseudoJournalReplayer
-                    .replayNextJournal(OperationType.OP_REPLACE_TEMP_PARTITION);
-            forgetRecycledSourcePartitions(metastore, swap);
-            metastore.replayReplaceTempPartition(swap);
-        }
-        AlterJobV2 finalEntry = nextJobEntry(jobId);
-        Assertions.assertTrue(finalEntry.isDone());
-        return finalEntry;
-    }
-
-    /**
-     * The swap moves the source partitions to the recycle bin, which the leader already did in the one recycle bin
-     * the test has; take them out so that the follower can move them there again.
-     */
-    private static void forgetRecycledSourcePartitions(LocalMetastore metastore, ReplacePartitionOperationLog swap) {
-        OlapTable olapTable = (OlapTable) metastore.getTable(swap.getDbId(), swap.getTblId());
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
-        for (String partitionName : swap.getPartitions()) {
-            long partitionId = olapTable.getPartition(partitionName).getId();
-            if (recycleBin.getPartition(partitionId) != null) {
-                recycleBin.removePartitionFromRecycleBin(partitionId);
-            }
-        }
-    }
-
-    /**
-     * Replays the journal entry into the handler against the given catalog, as a follower does.
-     */
-    private static void replayOn(LocalMetastore metastore, SchemaChangeHandler handler, AlterJobV2 entry) {
-        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
-        try {
-            handler.replayAlterJobV2(entry);
-        } finally {
-            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
-        }
-    }
-
-    private static UtFrameUtils.PseudoImage saveMetastore() throws Exception {
-        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(image.getImageWriter());
-        return image;
-    }
-
-    private static LocalMetastore loadMetastore(UtFrameUtils.PseudoImage image) throws Exception {
-        LocalMetastore metastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        metastore.load(reader);
-        reader.close();
-        return metastore;
-    }
-
-    private static OlapTable tableIn(LocalMetastore metastore, OlapTable table) {
-        return (OlapTable) metastore.getTable(GlobalStateMgrTestUtil.testDb1, table.getName());
-    }
-
-    private static AlterJobV2 gsonCopy(AlterJobV2 job) {
-        return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job, AlterJobV2.class), AlterJobV2.class);
-    }
-
-    private static AlterJobMgr newAlterJobMgr() {
-        return new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
-    }
-
-    private static AlterJobMgr loadAlterJobMgr(UtFrameUtils.PseudoImage image) throws Exception {
-        AlterJobMgr alterJobMgr = newAlterJobMgr();
-        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-        alterJobMgr.load(reader);
-        reader.close();
-        return alterJobMgr;
-    }
-
-    /**
-     * What the job changes in the catalog: the table state, its partitions and temp partitions, and its bucket count.
-     */
-    private static List<Object> catalogSnapshot(OlapTable olapTable) {
-        Map<String, Long> partitions = new TreeMap<>();
-        for (Partition partition : olapTable.getPartitions()) {
-            partitions.put(partition.getName(), partition.getId());
-        }
-        return List.of(olapTable.getState(), partitions, partitionIds(olapTable.getTempPartitions()),
-                olapTable.getDefaultDistributionInfo().getBucketNum());
-    }
-
-    private static Set<Long> partitionIds(Collection<Partition> partitions) {
-        return partitions.stream().map(Partition::getId).collect(Collectors.toSet());
-    }
-
-    private static List<Long> tabletIds(Collection<Partition> partitions) {
-        List<Long> tabletIds = new ArrayList<>();
-        for (Partition partition : partitions) {
-            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
-                    .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                index.getTablets().forEach(tablet -> tabletIds.add(tablet.getId()));
-            }
-        }
-        return tabletIds;
-    }
-
-    private static void assertInInvertedIndex(List<Long> tabletIds) {
-        Assertions.assertFalse(tabletIds.isEmpty());
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long tabletId : tabletIds) {
-            Assertions.assertNotNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
-        }
-    }
-
-    private static void assertTempPartitionsDropped(OlapTable olapTable, List<Long> tempTabletIds) {
-        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (long tabletId : tempTabletIds) {
-            Assertions.assertNull(invertedIndex.getTabletMeta(tabletId), "tablet " + tabletId);
-        }
-        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
-    }
-
-    /**
-     * SHOW ALTER of a done job reads none of the data the prune drops.
-     */
-    private static void assertShowAlterUnchangedByPrune(OptimizeJobV2 doneJob) {
-        List<List<Comparable>> rowsBefore = new ArrayList<>();
-        doneJob.getInfo(rowsBefore);
-        doneJob.pruneMeta();
-        assertPruned(doneJob);
-        List<List<Comparable>> rowsAfter = new ArrayList<>();
-        doneJob.getInfo(rowsAfter);
-        Assertions.assertEquals(1, rowsBefore.size());
-        Assertions.assertEquals(rowsBefore, rowsAfter);
-    }
-
-    /**
-     * The numbers of rewrite tasks, temp partition ids, source partition names and temp partition names of the job.
-     */
-    private static List<Integer> partitionListSizes(OptimizeJobV2 job) {
-        List<String> sourcePartitionNames = Deencapsulation.getField(job, "sourcePartitionNames");
-        List<String> tmpPartitionNames = Deencapsulation.getField(job, "tmpPartitionNames");
-        return List.of(job.getOptimizeTasks().size(), job.getTmpPartitionIds().size(),
-                sourcePartitionNames.size(), tmpPartitionNames.size());
-    }
-
-    private static void assertPruned(OptimizeJobV2 job) {
-        Assertions.assertEquals(List.of(0, 0, 0, 0), partitionListSizes(job));
-        Assertions.assertNull(Deencapsulation.getField(job, "optimizeClause"));
-    }
->>>>>>> 323a97d ([BugFix] Expire the rewrite tasks of optimize and merge-partition jobs (#80718))
 }
