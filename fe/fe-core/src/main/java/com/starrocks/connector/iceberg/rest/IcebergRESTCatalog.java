@@ -43,6 +43,7 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.BadRequestException;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotAuthorizedException;
 import org.apache.iceberg.exceptions.RESTException;
 import org.apache.iceberg.rest.RESTSessionCatalog;
@@ -62,9 +63,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
@@ -236,10 +235,16 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     private List<String> listNamespaces(SessionCatalog.SessionContext sessionContext, Namespace parent) {
-        return delegate.get().listNamespaces(sessionContext, parent).stream().
-                flatMap(child -> Stream.concat(Stream.of(child.toString()),
-                        listNamespaces(sessionContext, child).stream()))
-                .collect(toImmutableList());
+        ImmutableList.Builder<String> namespaces = ImmutableList.builder();
+        for (Namespace child : delegate.get().listNamespaces(sessionContext, parent)) {
+            namespaces.add(child.toString());
+            try {
+                namespaces.addAll(listNamespaces(sessionContext, child));
+            } catch (NoSuchNamespaceException e) {
+                LOG.info("Namespace {} was dropped while listing nested namespaces, skip its children", child);
+            }
+        }
+        return namespaces.build();
     }
 
     @Override
