@@ -431,10 +431,12 @@ public class CostModel {
                     result = CostEstimate.of(outputSize * aliveBackendNumber,
                             outputSize * beNum,
                             Math.max(outputSize * beNum, 1));
-                    if (outputSize > sessionVariable.getMaxExecMemByte()) {
+                    long broadcastMemExceedThreshold = sessionVariable.getBroadcastMemExceedThreshold();
+                    if (outputSize > broadcastMemExceedThreshold) {
                         result = result.multiplyBy(StatisticsEstimateCoefficient.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
-                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
+                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}, broadcastMemExceedThreshold: {}.",
+                            aliveBackendNumber, beNum, outputSize, broadcastMemExceedThreshold);
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,

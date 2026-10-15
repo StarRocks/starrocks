@@ -551,6 +551,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NEW_PLANER_AGG_STAGE = "new_planner_agg_stage";
     public static final String ENABLE_COST_BASED_MULTI_STAGE_AGG = "enable_cost_based_multi_stage_agg";
     public static final String BROADCAST_ROW_LIMIT = "broadcast_row_limit";
+    public static final String BROADCAST_MEM_EXCEED_THRESHOLD = "broadcast_mem_exceed_threshold";
     public static final String BROADCAST_RIGHT_TABLE_SCALE_FACTOR =
             "broadcast_right_table_scale_factor";
     public static final String NEW_PLANNER_OPTIMIZER_TIMEOUT = "new_planner_optimize_timeout";
@@ -2013,6 +2014,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = BROADCAST_ROW_LIMIT)
     private long broadcastRowCountLimit = 15000000;
+
+    // Estimated broadcast bytes per backend above which the optimizer applies a cost penalty.
+    @VariableMgr.VarAttr(name = BROADCAST_MEM_EXCEED_THRESHOLD)
+    private long broadcastMemExceedThreshold = 2147483648L; // 2GB
 
     @VariableMgr.VarAttr(name = BROADCAST_RIGHT_TABLE_SCALE_FACTOR, flag = VariableMgr.INVISIBLE)
     private double broadcastRightTableScaleFactor = 10.0;
@@ -4880,6 +4885,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBroadcastRowCountLimit(long broadcastRowCountLimit) {
         this.broadcastRowCountLimit = broadcastRowCountLimit;
+    }
+
+    public long getBroadcastMemExceedThreshold() {
+        return broadcastMemExceedThreshold;
+    }
+
+    public void setBroadcastMemExceedThreshold(long broadcastMemExceedThreshold) {
+        // SET_VAR hints reach this setter without going through SetStmtAnalyzer.
+        if (broadcastMemExceedThreshold < 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_VALUE,
+                    BROADCAST_MEM_EXCEED_THRESHOLD, broadcastMemExceedThreshold, "a non-negative integer");
+        }
+        this.broadcastMemExceedThreshold = broadcastMemExceedThreshold;
     }
 
     public double getBroadcastRightTableScaleFactor() {
