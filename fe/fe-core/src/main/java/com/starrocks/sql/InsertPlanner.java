@@ -29,6 +29,8 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
@@ -220,6 +222,59 @@ public class InsertPlanner {
         return GenColumnDependency.PARTIALLY_DEPEND_ON_TARGET_COLUMNS;
     }
 
+    // A column-subset INSERT into a primary key table only needs the partial update machinery when
+    // its rows may land on existing rows. If no transaction has ever committed to any target
+    // partition there are no existing rows, so the INSERT can be a plain insert that fills the
+    // missing columns with their defaults and skips the publish-time segment rewrite. "Never
+    // committed" is read off the partition's nextVersion, which only advances when a transaction is
+    // assigned its version at commit. The value read here is an optimistic snapshot: the commit
+    // re-checks it under the transaction manager lock (see DatabaseTransactionMgr), so a writer that
+    // got in between cannot have its columns overwritten by the filled defaults.
+    private static boolean canPlanAsPlainInsertOnEmptyPartitions(InsertStmt insertStmt, OlapTable olapTable,
+                                                                 ConnectContext session) {
+        if (insertStmt.isOverwrite() || insertStmt.isShadowRewrite() || insertStmt.getTargetColumnNames() == null) {
+            return false;
+        }
+        // Inside an explicit transaction (BEGIN ... COMMIT) an earlier statement of the same
+        // transaction may already have written rows to these partitions. Those rows are not
+        // committed, so nextVersion cannot show them, and the commit re-check could not catch the
+        // overwrite either; the explicit-transaction path also builds its own commit attachment.
+        // Keep the partial update there: ExplicitTxnStatementValidator already governs it.
+        if (session.getTxnId() != 0) {
+            return false;
+        }
+        Set<String> mentionedColumns = insertStmt.getTargetColumnNames().stream()
+                .map(String::toLowerCase).collect(Collectors.toSet());
+        for (Column column : olapTable.getBaseSchema()) {
+            if (mentionedColumns.contains(column.getName().toLowerCase()) || column.isGeneratedColumn()) {
+                continue;
+            }
+            // The plain insert path must be able to fill the column itself. An auto increment column
+            // is left to the partial update path, which has its own handling for it; a NOT NULL
+            // column without a default cannot be filled at all.
+            if (column.isAutoIncrement()) {
+                return false;
+            }
+            if (column.getDefaultValueType() == Column.DefaultValueType.NULL && !column.isAllowNull()) {
+                return false;
+            }
+        }
+        // An automatic-partition table may have no partition yet: the ones this load creates start at
+        // the initial version, and the commit check covers whatever it actually wrote to.
+        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                return false;
+            }
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                if (physicalPartition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static boolean checkIfUseColumnUpsertMode(ConnectContext session,
                                                       InsertStmt insertStmt,
                                                       OlapTable olapTable) {
@@ -396,7 +451,15 @@ public class InsertPlanner {
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
 
-        if (insertStmt.usePartialUpdate()) {
+        // Decided per planning attempt and recorded on this attempt's ExecPlan, never on the statement:
+        // planWithRetry re-analyzes and re-plans the same InsertStmt, and a decision left over from an
+        // earlier attempt could flag a plan that is in fact a partial update.
+        final boolean plainInsertOnEmptyPartitions = insertStmt.usePartialUpdate() &&
+                targetTable instanceof OlapTable &&
+                canPlanAsPlainInsertOnEmptyPartitions(insertStmt, (OlapTable) targetTable, session);
+        final boolean partialUpdate = insertStmt.usePartialUpdate() && !plainInsertOnEmptyPartitions;
+
+        if (partialUpdate) {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
@@ -476,6 +539,7 @@ public class InsertPlanner {
 
             ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
                     queryRelation, targetTable);
+            execPlan.setPlainInsertOnEmptyPartitions(plainInsertOnEmptyPartitions);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -563,7 +627,7 @@ public class InsertPlanner {
                         olapTable.writeQuorum(),
                         forceReplicatedStorage ? true : olapTable.enableReplicatedStorage(),
                         nullExprInAutoIncrement, enableAutomaticPartition, session.getCurrentComputeResource());
-                if (insertStmt.usePartialUpdate()) {
+                if (partialUpdate) {
                     TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.AUTO_MODE;
                     if (checkIfUseColumnUpsertMode(session, insertStmt, olapTable)) {
                         partialUpdateMode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
