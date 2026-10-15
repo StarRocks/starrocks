@@ -263,7 +263,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int64
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: In a shared-data cluster, how long a load waits for one attempt to write the combined transaction log of a partition to object storage. If the attempt has not finished by then, it is left running and another attempt is started alongside it; the first one that succeeds wins. Together with `lake_put_combined_txn_log_max_attempts`, this bounds how long a slow object-storage write can hold up a load. A value less than or equal to `0` waits for each attempt without a time limit.
+- Description: In a shared-data cluster, how long a load waits for one attempt to write the combined transaction log of a partition to object storage, counted from when the attempt starts running. If the attempt has not finished by then, it is left running and another attempt is started alongside it; the first one that succeeds wins. Together with `lake_put_combined_txn_log_max_attempts`, this bounds how long a slow object-storage write can hold up a load. A value less than or equal to `0` waits for each attempt without a time limit.
 - Introduced in: -
 
 ### lake_put_combined_txn_log_max_attempts
@@ -272,7 +272,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int32
 - Unit: -
 - Is mutable: Yes
-- Description: In a shared-data cluster, the maximum number of attempts to write the combined transaction log of a partition to object storage. A failed attempt is retried at once, and an attempt that exceeds `lake_put_combined_txn_log_attempt_timeout_ms` gets another attempt alongside it. When all attempts have failed, or none of them has finished in time, the load fails. Set it to `1`, and `lake_put_combined_txn_log_attempt_timeout_ms` to `-1`, to write with a single attempt and no time limit.
+- Description: In a shared-data cluster, the maximum number of attempts to write the combined transaction log of a partition to object storage. An attempt that exceeds `lake_put_combined_txn_log_attempt_timeout_ms` gets another attempt alongside it, and when every attempt so far has failed, the next one starts at once. When all attempts have failed, or none of them has finished in time, the load fails. Set it to `1`, and `lake_put_combined_txn_log_attempt_timeout_ms` to `-1`, to write with a single attempt and no time limit.
 - Introduced in: -
 
 ### lake_put_txn_log_timeout_guard_ms

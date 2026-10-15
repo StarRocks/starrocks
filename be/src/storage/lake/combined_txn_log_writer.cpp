@@ -32,6 +32,7 @@
 #include "base/concurrency/countdown_latch.h"
 #include "base/testutil/sync_point.h"
 #include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
 #include "common/thread/threadpool.h"
 #include "runtime/runtime_env.h"
@@ -143,8 +144,10 @@ struct PartitionTxnLogWrite {
     std::shared_ptr<const CombinedTxnLogPB> logs;
     std::shared_ptr<const std::set<int64_t>> expected_tablet_ids;
     int started = 0;
-    int running = 0;
-    // When another attempt is started if none of the running ones has finished by then.
+    // Attempts submitted and not finished yet, whether queued or running.
+    int pending = 0;
+    // When another attempt is started if none has finished by then. The clock starts when the latest attempt starts
+    // running, so the time it waits for a pool thread does not count.
     int64_t next_attempt_ns = std::numeric_limits<int64_t>::max();
     bool succeeded = false;
     Status last_error;
@@ -154,16 +157,44 @@ struct TxnLogWriteState {
     std::mutex mutex;
     std::condition_variable cond;
     std::vector<PartitionTxnLogWrite> writes;
+    int64_t timeout_ns = 0;
+    // Set once the writer has returned. An attempt that starts after that, or after its partition was written, is
+    // skipped.
+    bool writer_done = false;
 };
 
-// Called with state->mutex held.
-void start_attempt(const std::shared_ptr<TxnLogWriteState>& state, size_t index, int64_t now_ns, int64_t timeout_ns) {
+// Called with state->mutex held. Returns false if the attempt could not be queued; it then counts as failed.
+bool submit_attempt(const std::shared_ptr<TxnLogWriteState>& state, size_t index) {
     auto& write = state->writes[index];
-    ++write.started;
-    ++write.running;
-    write.next_attempt_ns = timeout_ns > 0 ? now_ns + timeout_ns : std::numeric_limits<int64_t>::max();
-    auto submit_st = RuntimeEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit_func([state, index]() {
+    const int attempt = ++write.started;
+    ++write.pending;
+    write.next_attempt_ns = std::numeric_limits<int64_t>::max();
+    auto finish = [state, index](Status st) {
+        std::lock_guard l(state->mutex);
         auto& write = state->writes[index];
+        --write.pending;
+        if (st.ok()) {
+            write.succeeded = true;
+        } else {
+            write.last_error = std::move(st);
+        }
+        state->cond.notify_all();
+    };
+    auto run = [state, index, attempt, finish]() {
+        auto& write = state->writes[index];
+        {
+            std::lock_guard l(state->mutex);
+            if (write.succeeded || state->writer_done) {
+                --write.pending;
+                state->cond.notify_all();
+                return;
+            }
+            if (attempt == write.started) {
+                write.next_attempt_ns = state->timeout_ns > 0 ? MonotonicNanos() + state->timeout_ns
+                                                              : std::numeric_limits<int64_t>::max();
+                state->cond.notify_all();
+            }
+        }
         Status st;
         try {
             TEST_SYNC_POINT_CALLBACK("write_combined_txn_logs:attempt", nullptr);
@@ -174,36 +205,38 @@ void start_attempt(const std::shared_ptr<TxnLogWriteState>& state, size_t index,
         } catch (...) {
             st = Status::Unknown("Unknown exception in write combined txn log task");
         }
-        std::lock_guard l(state->mutex);
-        --write.running;
-        if (st.ok()) {
-            write.succeeded = true;
-        } else {
-            write.last_error = std::move(st);
-        }
-        state->cond.notify_all();
+        finish(std::move(st));
+    };
+    auto task = std::make_shared<CancellableRunnable>(std::move(run), [finish]() {
+        finish(Status::Cancelled("write combined txn log task has been cancelled"));
     });
+    auto submit_st = RuntimeEnv::GetInstance()->put_combined_txn_log_thread_pool()->submit(std::move(task));
     if (!submit_st.ok()) {
-        --write.running;
+        --write.pending;
         write.last_error = std::move(submit_st);
+        return false;
     }
+    return true;
 }
 
 // Writes every partition of |writes| at the same time; see write_combined_txn_logs().
 Status write_with_bounded_attempts(std::vector<PartitionTxnLogWrite> writes) {
     const int max_attempts = std::max(1, config::lake_put_combined_txn_log_max_attempts);
     const int64_t timeout_ms = config::lake_put_combined_txn_log_attempt_timeout_ms;
-    const int64_t timeout_ns = timeout_ms > 0 ? timeout_ms * 1000000 : 0;
     auto state = std::make_shared<TxnLogWriteState>();
     state->writes = std::move(writes);
+    state->timeout_ns = timeout_ms > 0 ? timeout_ms * 1000000 : 0;
 
     std::unique_lock lock(state->mutex);
+    // Declared after |lock|, so it runs while the lock is still held.
+    DeferOp mark_writer_done([&state] { state->writer_done = true; });
     for (size_t i = 0; i < state->writes.size(); ++i) {
-        start_attempt(state, i, MonotonicNanos(), timeout_ns);
+        submit_attempt(state, i);
     }
     while (true) {
         const int64_t now_ns = MonotonicNanos();
         bool all_succeeded = true;
+        bool submit_failed = false;
         int64_t wake_ns = std::numeric_limits<int64_t>::max();
         for (size_t i = 0; i < state->writes.size(); ++i) {
             auto& write = state->writes[i];
@@ -211,7 +244,7 @@ Status write_with_bounded_attempts(std::vector<PartitionTxnLogWrite> writes) {
                 continue;
             }
             all_succeeded = false;
-            const bool failed = write.running == 0;
+            const bool failed = write.pending == 0;
             if (failed || now_ns >= write.next_attempt_ns) {
                 const int64_t txn_id = write.logs->txn_logs(0).txn_id();
                 if (write.started >= max_attempts) {
@@ -228,12 +261,19 @@ Status write_with_bounded_attempts(std::vector<PartitionTxnLogWrite> writes) {
                              << ", reason="
                              << (failed ? write.last_error.to_string()
                                         : fmt::format("no attempt finished within {} ms", timeout_ms));
-                start_attempt(state, i, now_ns, timeout_ns);
+                if (!submit_attempt(state, i)) {
+                    submit_failed = true;
+                    continue;
+                }
             }
             wake_ns = std::min(wake_ns, write.next_attempt_ns);
         }
         if (all_succeeded) {
             return Status::OK();
+        }
+        if (submit_failed) {
+            // Nothing will notify for an attempt that never got queued: count it as failed right away.
+            continue;
         }
         if (wake_ns == std::numeric_limits<int64_t>::max()) {
             state->cond.wait(lock);

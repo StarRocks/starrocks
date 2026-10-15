@@ -37,9 +37,9 @@ Status write_combined_txn_log_parallel(const std::map<int64_t, CombinedTxnLogPB>
 
 // Writes the combined txn log of every partition in |txn_log_map|, as a load does when its sink closes: all partitions
 // at once with enable_put_combinded_txn_log_parallel, one after another otherwise. The write of a partition is bounded
-// by lake_put_combined_txn_log_attempt_timeout_ms and lake_put_combined_txn_log_max_attempts: an attempt that fails
-// is retried, and one that has not finished in time gets another attempt alongside it. Must not be called from the
-// put_combined_txn_log thread pool, which runs the attempts.
+// by lake_put_combined_txn_log_attempt_timeout_ms and lake_put_combined_txn_log_max_attempts: an attempt that has not
+// finished in time gets another attempt alongside it, and a new attempt starts at once when all previous ones failed.
+// Must not be called from the put_combined_txn_log thread pool, which runs the attempts.
 Status write_combined_txn_logs(const std::map<int64_t, CombinedTxnLogPB>& txn_log_map,
                                const ExpectedTabletsByPartition& expected_by_partition);
 

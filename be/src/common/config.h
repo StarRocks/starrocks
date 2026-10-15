@@ -2542,11 +2542,11 @@ CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // Shared-data only. Bounds how long a load waits for the combined txn log of one partition. An attempt that has not
-// finished within lake_put_combined_txn_log_attempt_timeout_ms is left running and a new attempt is started
-// alongside it; a failed attempt is retried at once. Whichever attempt succeeds first wins. After
-// lake_put_combined_txn_log_max_attempts attempts the load fails with the last error, or with TimedOut when none of
-// them finished in time. A timeout <= 0 waits for each attempt indefinitely; max_attempts 1 with timeout <= 0 is the
-// former behaviour: one attempt, no time limit.
+// finished within lake_put_combined_txn_log_attempt_timeout_ms of starting is left running and a new attempt is
+// started alongside it; when every attempt so far has failed, the next one starts at once. Whichever attempt succeeds
+// first wins. After lake_put_combined_txn_log_max_attempts attempts the load fails with the last error, or with
+// TimedOut when none of them finished in time. A timeout <= 0 waits for each attempt indefinitely; max_attempts 1
+// with timeout <= 0 is the former behaviour: one attempt, no time limit.
 CONF_mInt64(lake_put_combined_txn_log_attempt_timeout_ms, "2000");
 CONF_mInt32(lake_put_combined_txn_log_max_attempts, "3");
 // Shared-data only. When true, a node that writes txn logs for the load coordinator returns the

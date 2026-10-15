@@ -22,13 +22,14 @@
 #include <memory>
 #include <mutex>
 #include <set>
-#include <thread>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "runtime/runtime_env.h"
 
 namespace starrocks::lake {
 
@@ -134,7 +135,6 @@ struct AttemptHook {
     std::mutex mutex;
     std::condition_variable cond;
     int started = 0;
-    int returned = 0;
     bool released = false;
     std::function<bool(int attempt)> hold = [](int) { return false; };
 };
@@ -174,21 +174,18 @@ protected:
             if (hook->hold(attempt)) {
                 hook->cond.wait(l, [&] { return hook->released; });
             }
-            ++hook->returned;
-            hook->cond.notify_all();
         });
     }
 
-    // An attempt the writer gave up on may still be held. Let it go, and wait until it is past the fail point it
-    // relies on, before a test switches the fail points off.
+    // An attempt the writer gave up on may still be held or queued. Let it go and wait for the pool to drain, so that
+    // no attempt reaches put_combined_txn_log() after a test switched the fail points off.
     void release_held_attempts() {
         {
-            std::unique_lock l(_hook->mutex);
+            std::lock_guard l(_hook->mutex);
             _hook->released = true;
             _hook->cond.notify_all();
-            _hook->cond.wait_for(l, std::chrono::seconds(10), [&] { return _hook->returned == _hook->started; });
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        RuntimeEnv::GetInstance()->put_combined_txn_log_thread_pool()->wait();
     }
 
     int started_attempts() {
@@ -235,7 +232,8 @@ TEST_F(BoundedCombinedTxnLogWriteTest, starts_another_attempt_when_one_hangs) {
         ASSERT_OK(write_combined_txn_logs(txn_log_map, {}));
         const auto elapsed = std::chrono::steady_clock::now() - begin;
         ASSERT_LT(elapsed, std::chrono::seconds(5)) << "parallel=" << parallel;
-        ASSERT_EQ(static_cast<int>(txn_log_map.size()) + 1, started_attempts()) << "parallel=" << parallel;
+        // The first attempt is still held, so the write can only have succeeded through a later one.
+        ASSERT_GE(started_attempts(), static_cast<int>(txn_log_map.size()) + 1) << "parallel=" << parallel;
         release_held_attempts();
     }
 }
