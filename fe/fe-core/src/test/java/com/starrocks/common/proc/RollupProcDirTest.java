@@ -16,6 +16,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterHandler;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJobV2;
@@ -159,10 +161,10 @@ public class RollupProcDirTest {
     @Test
     public void testLookupRollupJobV2() throws AnalysisException {
         RollupJobV2 job = new RollupJobV2();
-        new Expectations(handler) {
-            {
-                handler.getUnfinishedAlterJobV2ByJobId(7L);
-                result = job;
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 7L ? job : null;
             }
         };
 
@@ -172,10 +174,10 @@ public class RollupProcDirTest {
     @Test
     public void testLookupRejectsJobOfOtherType() {
         LakeRollupJob job = new LakeRollupJob();
-        new Expectations(handler) {
-            {
-                handler.getUnfinishedAlterJobV2ByJobId(8L);
-                result = job;
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 8L ? job : null;
             }
         };
 

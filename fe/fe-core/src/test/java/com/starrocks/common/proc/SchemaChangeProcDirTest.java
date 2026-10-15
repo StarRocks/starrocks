@@ -15,6 +15,8 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterHandler;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
@@ -111,10 +113,10 @@ public class SchemaChangeProcDirTest {
     @Test
     public void testLookupSchemaChangeJobV2() throws AnalysisException {
         SchemaChangeJobV2 job = new SchemaChangeJobV2(7L, 10000L, 20000L, "tb1", 10000L);
-        new Expectations(handler) {
-            {
-                handler.getUnfinishedAlterJobV2ByJobId(7L);
-                result = job;
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 7L ? job : null;
             }
         };
 
@@ -124,10 +126,10 @@ public class SchemaChangeProcDirTest {
     @Test
     public void testLookupRejectsJobOfOtherType() {
         LakeTableSchemaChangeJob job = new LakeTableSchemaChangeJob(8L, 10000L, 20000L, "tb1", 10000L);
-        new Expectations(handler) {
-            {
-                handler.getUnfinishedAlterJobV2ByJobId(8L);
-                result = job;
+        new MockUp<AlterHandler>() {
+            @Mock
+            public AlterJobV2 getUnfinishedAlterJobV2ByJobId(long jobId) {
+                return jobId == 8L ? job : null;
             }
         };
 
