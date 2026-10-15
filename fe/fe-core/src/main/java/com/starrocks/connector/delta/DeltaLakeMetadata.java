@@ -169,7 +169,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         // with both versions empty. Resolve to the table's pinned snapshot, matching the version key that
         // getTableStatistics()/DeltaLakeScanNode build from deltaSnapshot.getVersion() - otherwise the scan
         // operator keeps the TvrVersionRange.empty() default, prepareMetadata() treats that as "nothing to
-        // do" (item.getVersion().end().isEmpty()), and pre-collection becomes a no-op for ordinary scans.
+        // do" (item.getVersion().isEmpty()), and pre-collection becomes a no-op for ordinary scans.
         if (startVersion.isPresent() || endVersion.isPresent()) {
             return TvrTableSnapshot.empty();
         }
@@ -182,7 +182,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
     @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
-        if (!(item.getTable() instanceof DeltaLakeTable) || item.getVersion() == null || item.getVersion().end().isEmpty()) {
+        if (!(item.getTable() instanceof DeltaLakeTable) || item.getVersion() == null || item.getVersion().isEmpty()) {
             return true;
         }
 
@@ -384,27 +384,29 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             }
 
             private void ensureOpen() {
-                synchronized (snapshot) {
-                    try {
-                        if (scanFilesAsBatches == null) {
+                try {
+                    if (scanFilesAsBatches == null) {
+                        // Guard that first touch so concurrent scans of the same snapshot don't
+                        // serialize their whole file-listing I/O on it.
+                        synchronized (snapshot) {
                             scanFilesAsBatches = scan.getScanFiles(engine, true);
                         }
-                        while (scanFileRows == null || !scanFileRows.hasNext()) {
-                            if (!scanFilesAsBatches.hasNext()) {
-                                scanFilesAsBatches.close();
-                                hasMore = false;
-                                break;
-                            }
-                            if (scanFileRows != null) {
-                                scanFileRows.close();
-                            }
-                            FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
-                            scanFileRows = scanFileBatch.getRows();
-                        }
-                    } catch (IOException e) {
-                        LOG.error("Failed to get delta lake scan files", e);
-                        throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
                     }
+                    while (scanFileRows == null || !scanFileRows.hasNext()) {
+                        if (!scanFilesAsBatches.hasNext()) {
+                            scanFilesAsBatches.close();
+                            hasMore = false;
+                            break;
+                        }
+                        if (scanFileRows != null) {
+                            scanFileRows.close();
+                        }
+                        FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+                        scanFileRows = scanFileBatch.getRows();
+                    }
+                } catch (IOException e) {
+                    LOG.error("Failed to get delta lake scan files", e);
+                    throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
                 }
             }
 
