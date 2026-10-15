@@ -4,13 +4,14 @@
 
 #include "storage/sstable/format.h"
 
+#include <algorithm>
+#include <limits>
 #include <string>
 
 #include "base/compression/compression_headers.h"
 #include "base/hash/crc32c.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/sstable/coding.h"
 
 namespace starrocks::sstable {
@@ -79,6 +80,33 @@ Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const
     // Read the block contents as well as the type/crc footer.
     // See table_builder.cc for the code that built this structure.
     size_t n = static_cast<size_t>(handle.size());
+    size_t reserved = 0;
+    if (options.reserve_memory) {
+        // Read only the compression tag and Snappy length prefix before reserving. In particular,
+        // never allocate a large, previously unseen index/filter block just to discover its size.
+        if (handle.size() > std::numeric_limits<size_t>::max() - kBlockTrailerSize ||
+            handle.offset() > std::numeric_limits<uint64_t>::max() - handle.size() - kBlockTrailerSize) {
+            return Status::Corruption("SST block extent overflows");
+        }
+        char compression = 0;
+        RETURN_IF_ERROR(file->read_at_fully(handle.offset() + n, &compression, 1));
+        size_t bytes = n + kBlockTrailerSize;
+        if (compression == kSnappyCompression) {
+            char prefix[5];
+            const size_t prefix_size = std::min(n, sizeof(prefix));
+            RETURN_IF_ERROR(file->read_at_fully(handle.offset(), prefix, prefix_size));
+            size_t uncompressed = 0;
+            if (!snappy::GetUncompressedLength(prefix, prefix_size, &uncompressed) ||
+                uncompressed > std::numeric_limits<size_t>::max() - bytes) {
+                return Status::Corruption("invalid SST block uncompressed length");
+            }
+            bytes += uncompressed;
+        } else if (compression != kNoCompression) {
+            return Status::Corruption("bad block type");
+        }
+        RETURN_IF_ERROR(options.reserve_memory(bytes));
+        reserved = bytes;
+    }
     char* buf = new char[n + kBlockTrailerSize];
     //Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
     Status s = file->read_at_fully(handle.offset(), buf, n + kBlockTrailerSize);
@@ -131,6 +159,22 @@ Status ReadBlock(RandomAccessFile* input_file, const ReadOptions& options, const
         if (!snappy::GetUncompressedLength(data, n, &ulength)) {
             delete[] buf;
             return Status::Corruption("corrupted compressed block contents");
+        }
+        if (options.reserve_memory) {
+            // Validate the bytes actually read as well. Corrupt cache data must not turn a
+            // smaller header probe into an unreserved decompression allocation.
+            if (ulength > std::numeric_limits<size_t>::max() - n - kBlockTrailerSize) {
+                delete[] buf;
+                return Status::Corruption("SST uncompressed block size overflows");
+            }
+            const size_t actual = n + kBlockTrailerSize + ulength;
+            if (actual > reserved) {
+                auto status = options.reserve_memory(actual - reserved);
+                if (!status.ok()) {
+                    delete[] buf;
+                    return status;
+                }
+            }
         }
         char* ubuf = new char[ulength];
         if (!snappy::RawUncompress(data, n, ubuf)) {

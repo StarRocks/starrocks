@@ -5,9 +5,11 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
+#include "common/status.h"
 #include "storage/del_vector.h"
 
 namespace starrocks {
@@ -97,6 +99,10 @@ struct Options {
     // Many applications will benefit from passing the result of
     // NewBloomFilterPolicy() here.
     const FilterPolicy* filter_policy = nullptr;
+
+    // Optional open-time budget. Called before allocating an index/meta/filter block, including
+    // compressed input and decompression output. Filters are optional; index blocks are mandatory.
+    std::function<Status(size_t, bool)> reserve_read_state_memory;
 };
 
 struct ReadIOStat {
@@ -142,6 +148,9 @@ struct ReadOptions {
 
     // Use for multi-thread read scenario, to avoid multiple threads read same file concurrently
     RandomAccessFile* file = nullptr;
+
+    // ReadBlock calls this before allocating block input/output; ordinary data reads leave it empty.
+    std::function<Status(size_t)> reserve_memory;
 };
 
 // Options that control write operations

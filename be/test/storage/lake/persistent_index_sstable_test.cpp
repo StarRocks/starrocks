@@ -699,7 +699,7 @@ TEST_F(PersistentIndexSstableTest, test_transient_read_state_bounds_memory_and_s
     ASSERT_TRUE(iterator->Valid());
     const size_t demand = sst->read_state_memory_demand();
     EXPECT_GT(demand, 0);
-    EXPECT_EQ(demand, tracker.consumption());
+    EXPECT_EQ(demand + 4096, tracker.consumption());
     EXPECT_EQ(0, sst->memory_usage()); // transient memory belongs to the active reader, not the cache
 
     std::vector<std::future<Status>> readers;
@@ -717,13 +717,13 @@ TEST_F(PersistentIndexSstableTest, test_transient_read_state_bounds_memory_and_s
     for (auto& reader : readers) {
         ASSERT_OK(reader.get());
     }
-    EXPECT_EQ(demand, tracker.consumption());
+    EXPECT_EQ(demand + 4096, tracker.consumption());
     const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
     DeferOp restore([&] { config::lake_pk_index_publish_wait_timeout_ms = old_timeout; });
     config::lake_pk_index_publish_wait_timeout_ms = 0;
     // Another SST cannot accumulate a second transient read state while the first is pinned.
     EXPECT_TRUE(other->reopen_read_state().is_time_out());
-    EXPECT_EQ(demand, tracker.consumption());
+    EXPECT_EQ(demand + 4096, tracker.consumption());
     iterator.reset();
     EXPECT_EQ(0, tracker.consumption());
     ASSERT_OK(other->reopen_read_state());
@@ -732,9 +732,135 @@ TEST_F(PersistentIndexSstableTest, test_transient_read_state_bounds_memory_and_s
     sst->set_read_state_cacheable(true, context);
     ASSERT_OK(sst->reopen_read_state());
     EXPECT_EQ(demand, sst->memory_usage());
-    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(demand + 4096, tracker.consumption());
+    EXPECT_EQ(demand + 4096, sst->directly_accounted_memory_usage());
     EXPECT_EQ(demand, sst->evict_read_state());
+    EXPECT_EQ(0, tracker.consumption());
     EXPECT_EQ(demand, sst->read_state_memory_demand());
+}
+
+TEST_F(PersistentIndexSstableTest, test_unknown_sst_demand_reserves_before_allocating_and_drops_optional_filter) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    const std::string path = lake::join_path(kTestDir, "unknown-budget.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 10000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("unknown-budget.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    // Measure the mandatory index input/decompression peak on this real SST, without a filter.
+    ASSIGN_OR_ABORT(auto index_only, PersistentIndexSstable::new_sstable(pb, path, nullptr, false, nullptr, nullptr,
+                                                                         nullptr, context, true));
+    ASSERT_OK(index_only->reopen_read_state());
+    const int64_t mandatory_peak = tracker.peak_consumption();
+    EXPECT_GT(mandatory_peak, 4096);
+    EXPECT_EQ(0, tracker.consumption());
+    tracker.set_limit(mandatory_peak);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                  context, true));
+    EXPECT_EQ(0, sst->read_state_memory_demand()); // first open cannot rely on a remembered estimate
+    auto iterator = std::unique_ptr<sstable::Iterator>(sst->new_iterator({}));
+    ASSERT_OK(iterator->status());
+    iterator->SeekToFirst();
+    ASSERT_TRUE(iterator->Valid());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+    // The optional filter cannot fit on top of the mandatory index reservation.
+    EXPECT_EQ(index_only->read_state_memory_demand(), sst->read_state_memory_demand());
+    EXPECT_EQ(index_only->read_state_memory_demand() + 4096, tracker.consumption());
+    Slice key("key_0003");
+    IndexValue value(NullIndexValue);
+    KeyIndexSet found;
+    ASSERT_OK(sst->multi_get(&key, {0}, 1, &value, &found));
+    EXPECT_EQ(IndexValue(3), value);
+    EXPECT_EQ(KeyIndexSet{0}, found);
+    iterator.reset();
+    EXPECT_EQ(0, tracker.consumption());
+}
+
+TEST_F(PersistentIndexSstableTest, test_unknown_sst_waits_for_inflight_work_to_release_bytes) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const int old_timeout = config::lake_pk_index_publish_wait_timeout_ms;
+    config::lake_pk_index_partial_eviction = true;
+    config::lake_pk_index_publish_wait_timeout_ms = 5000;
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::lake_pk_index_publish_wait_timeout_ms = old_timeout;
+    });
+    const std::string path = lake::join_path(kTestDir, "inflight-budget.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 10000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("inflight-budget.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(1024 * 1024);
+    MemTracker inflight(-1, "already_admitted_publish", &tracker);
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                  context, true));
+    // Model work admitted before the switch was enabled. Only the object reservation fits;
+    // the first unknown index block must wait without allocating or exceeding the root limit.
+    inflight.consume(tracker.limit() - 4096);
+    DeferOp release_inflight([&] { inflight.release(inflight.consumption()); });
+    std::promise<void> waiting;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("SstReadStateMemoryContext::Reservation::waiting", [&](void*) { waiting.set_value(); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    auto reader = std::async(std::launch::async, [&] {
+        Slice key("key_0003");
+        IndexValue value(NullIndexValue);
+        KeyIndexSet found;
+        RETURN_IF_ERROR(sst->multi_get(&key, {0}, 1, &value, &found));
+        EXPECT_EQ(IndexValue(3), value);
+        EXPECT_EQ(KeyIndexSet{0}, found);
+        return Status::OK();
+    });
+    EXPECT_EQ(std::future_status::ready, waiting.get_future().wait_for(std::chrono::seconds(2)));
+    EXPECT_EQ(tracker.limit(), tracker.consumption());
+    EXPECT_EQ(0, sst->read_state_memory_demand());
+    inflight.release(inflight.consumption());
+    EXPECT_EQ(std::future_status::ready, reader.wait_for(std::chrono::seconds(2)));
+    ASSERT_OK(reader.get());
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+    EXPECT_EQ(0, tracker.consumption());
+}
+
+TEST_F(PersistentIndexSstableTest, test_single_mandatory_index_block_over_budget_is_rejected_before_allocation) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = true;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    const std::string path = lake::join_path(kTestDir, "oversized-index.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize, 10000);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("oversized-index.sst");
+    pb.set_filesize(filesize);
+    MemTracker tracker(4097); // objects fit; the indivisible index block does not
+    auto context = std::make_shared<SstReadStateMemoryContext>(&tracker);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr, true, nullptr, nullptr, nullptr,
+                                                                  context, true));
+    const auto read_errors = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    const auto status = sst->reopen_read_state();
+    EXPECT_TRUE(status.is_mem_limit_exceeded()) << status;
+    EXPECT_LE(tracker.peak_consumption(), tracker.limit());
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(0, sst->read_state_memory_demand());
+    EXPECT_EQ(read_errors, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    // This is an explicit unsupported working-set boundary, not success or an unbounded wait.
+    // Increasing the test budget only verifies that rejection did not poison the SST object.
+    tracker.set_limit(1024 * 1024);
+    Slice key("key_0003");
+    IndexValue value(NullIndexValue);
+    KeyIndexSet found;
+    ASSERT_OK(sst->multi_get(&key, {0}, 1, &value, &found));
+    EXPECT_EQ(IndexValue(3), value);
+    EXPECT_EQ(0, tracker.consumption());
 }
 
 TEST_F(PersistentIndexSstableTest, test_evict_read_state_reopens_all_read_paths) {

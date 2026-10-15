@@ -48,6 +48,23 @@ TEST(DynamicCacheTest, owner_can_account_and_resize_before_partial_eviction) {
     EXPECT_EQ(cache.size(), tracker.consumption());
 }
 
+TEST(DynamicCacheTest, separately_reserved_bytes_are_not_charged_twice_or_released_twice) {
+    MemTracker tracker(100);
+    DynamicCache<int, int> cache(100);
+    cache.set_mem_tracker(&tracker);
+    tracker.consume(60); // read-state reservation owned outside the cache
+    auto* entry = cache.get_or_create(1);
+    ASSERT_TRUE(cache.update_object_size(entry, 80, false, 20));
+    EXPECT_EQ(80, cache.size());
+    EXPECT_EQ(80, tracker.consumption());
+    cache.release(entry);
+    cache.try_evict(0);
+    EXPECT_EQ(0, cache.size());
+    EXPECT_EQ(60, tracker.consumption());
+    tracker.release(60);
+    EXPECT_EQ(0, tracker.consumption());
+}
+
 TEST(DynamicCacheTest, cache) {
     DynamicCache<int32_t, int64_t> cache(10);
     for (int i = 0; i < 20; i++) {

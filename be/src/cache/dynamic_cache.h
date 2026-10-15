@@ -23,6 +23,7 @@
 #include <limits>
 #include <list>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -64,6 +65,7 @@ public:
         Handle _handle;
         Key _key;
         size_t _size = 0;
+        size_t _tracker_size = 0;
         int64_t _expire_ms = std::numeric_limits<int64_t>::max();
         std::atomic<uint32_t> _ref;
         T _value;
@@ -151,6 +153,7 @@ public:
             _map[key] = ret;
             (*ret)->_ref++;
             (*ret)->_size = init_size;
+            (*ret)->_tracker_size = init_size;
             _object_size++;
             if (insert->_size > 0) {
                 _size += insert->_size;
@@ -205,7 +208,7 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_size);
+            _tracker_release(entry->_tracker_size);
             delete entry;
             return true;
         }
@@ -231,7 +234,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_size);
+            _tracker_release(entry->_tracker_size);
             delete entry;
         }
         return true;
@@ -255,7 +258,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_size);
+            _tracker_release(entry->_tracker_size);
             delete entry;
         }
         return true;
@@ -270,14 +273,19 @@ public:
     // tenann handles back into the same cache) cannot self-deadlock on _lock.
     // Set evict=false when the owner performs partial eviction after this accounting update.
     // The owner must restore its budget outside _lock. Existing users retain automatic LRU.
-    bool update_object_size(Entry* entry, size_t new_size, bool evict = true) {
+    // tracker_size can exclude bytes directly reserved on another tracker (e.g. SST read state),
+    // while new_size continues to represent all resident bytes for eviction and monitoring.
+    bool update_object_size(Entry* entry, size_t new_size, bool evict = true,
+                            std::optional<size_t> tracker_size = std::nullopt) {
         std::vector<Entry*> entry_list;
         bool ret;
         {
             std::lock_guard<Lock> lg(_lock);
             _size += new_size - entry->_size;
-            _tracker_consume(new_size - entry->_size);
+            const size_t new_tracker_size = tracker_size.value_or(new_size);
+            _tracker_consume(static_cast<int64_t>(new_tracker_size) - static_cast<int64_t>(entry->_tracker_size));
             entry->_size = new_size;
+            entry->_tracker_size = new_tracker_size;
             ret = evict ? _evict(_capacity, &entry_list) : _size <= _capacity;
         }
         for (Entry* e : entry_list) {
@@ -300,7 +308,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    _tracker_release(entry->_size);
+                    _tracker_release(entry->_tracker_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -326,7 +334,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    _tracker_release(entry->_size);
+                    _tracker_release(entry->_tracker_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -422,7 +430,7 @@ private:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_size);
+            _tracker_release(entry->_tracker_size);
             delete entry;
         }
     }
@@ -438,7 +446,7 @@ private:
                 itr = _list.erase(itr);
                 _object_size--;
                 _size -= entry->_size;
-                _tracker_release(entry->_size);
+                _tracker_release(entry->_tracker_size);
                 entry_list->push_back(entry);
             } else {
                 itr++;

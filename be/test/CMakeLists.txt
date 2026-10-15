@@ -404,6 +404,7 @@ SET(DW_TEST_FILES
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
     ./storage/sort_key_sampler_test.cpp
+    ./storage/sstable/format_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
     ./storage/storage_env_test.cpp

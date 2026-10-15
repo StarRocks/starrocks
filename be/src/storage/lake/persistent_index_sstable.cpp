@@ -17,6 +17,8 @@
 #include <butil/time.h> // NOLINT
 
 #include <algorithm>
+#include <chrono>
+#include <limits>
 
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
@@ -72,17 +74,71 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
 #endif
 }
 
+SstReadStateMemoryContext::Reservation::~Reservation() {
+    shrink_to(0);
+}
+
+void SstReadStateMemoryContext::Reservation::shrink_to(size_t bytes) {
+    DCHECK_LE(bytes, _bytes);
+    _context->tracker.release(_bytes - bytes);
+    _bytes = bytes;
+    _context->memory_cv.notify_all();
+}
+
+Status SstReadStateMemoryContext::Reservation::add(size_t bytes, bool wait) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_byte_reservation_us");
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(std::max(0, config::lake_pk_index_publish_wait_timeout_ms));
+    bool waited = false;
+    for (;;) {
+        if (process_exit_in_progress()) return Status::Cancelled("SST byte reservation cancelled");
+        if (bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - _bytes) {
+            return Status::MemoryLimitExceeded("SST read-state reservation overflows");
+        }
+        auto* exceeded = _context->tracker.try_consume(bytes);
+        if (!exceeded) {
+            _bytes += bytes;
+            TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
+            return Status::OK();
+        }
+        if (_context->reclaim) _context->reclaim(bytes);
+        exceeded = _context->tracker.try_consume(bytes);
+        if (!exceeded) {
+            _bytes += bytes;
+            TRACE_COUNTER_INCREMENT("pindex_sst_reserved_bytes", bytes);
+            return Status::OK();
+        }
+        // Optional filters fall back immediately. An index block bigger than the entire budget
+        // cannot be made possible by waiting or by evicting other tablets.
+        if (!wait || (exceeded->limit() >= 0 && _bytes + bytes > exceeded->limit())) {
+            TRACE_COUNTER_INCREMENT("pindex_sst_byte_reservation_rejected", 1);
+            return Status::MemoryLimitExceeded(
+                    fmt::format("SST read-state working set needs {} bytes; tracker {} limit={} consumption={}",
+                                _bytes + bytes, exceeded->label(), exceeded->limit(), exceeded->consumption()));
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            TRACE_COUNTER_INCREMENT("pindex_sst_byte_reservation_timeout", 1);
+            return Status::TimedOut("SST read-state byte reservation exceeded its bounded wait");
+        }
+        if (!waited) {
+            TRACE_COUNTER_INCREMENT("pindex_sst_byte_reservation_wait_count", 1);
+            waited = true;
+            TEST_SYNC_POINT_CALLBACK("SstReadStateMemoryContext::Reservation::waiting", nullptr);
+        }
+        std::unique_lock<std::mutex> lock(_context->memory_mutex);
+        _context->memory_cv.wait_until(
+                lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)));
+    }
+}
+
 struct PersistentIndexSstable::ReadState {
     ~ReadState() {
         table.reset();
-        if (memory_context) {
-            memory_context->tracker.release(transient_bytes);
-        }
+        reservation.reset();
         permit.reset();
     }
-    std::shared_ptr<SstReadStateMemoryContext> memory_context;
+    std::shared_ptr<SstReadStateMemoryContext::Reservation> reservation;
     std::unique_ptr<PkIndexPublishLimiter::Permit> permit;
-    size_t transient_bytes = 0;
     // Destroy the table before the file and filter policy its iterators/options refer to.
     std::unique_ptr<sstable::FilterPolicy> filter_policy;
     std::unique_ptr<RandomAccessFile> rf;
@@ -109,8 +165,18 @@ StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::_open_file()
 StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_open_read_state(
         std::unique_ptr<RandomAccessFile> rf) const {
     auto state = std::make_shared<ReadState>();
+    if (_memory_context && config::lake_pk_index_partial_eviction) {
+        state->reservation = std::make_shared<SstReadStateMemoryContext::Reservation>(_memory_context);
+        // Table/iterator/filter-policy objects and open-time bookkeeping are small but nonzero.
+        RETURN_IF_ERROR(state->reservation->add(4096, true));
+    }
     state->rf = std::move(rf);
     sstable::Options options;
+    if (state->reservation) {
+        options.reserve_read_state_memory = [reservation = state->reservation](size_t bytes, bool wait) {
+            return reservation->add(bytes, wait);
+        };
+    }
     if (_need_filter) {
         state->filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
         options.filter_policy = state->filter_policy.get();
@@ -125,6 +191,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         auto drop_status = drop_corrupted_sstable_cache(_filename);
         if (drop_status.ok()) {
             state->table.reset();
+            if (state->reservation) state->reservation->shrink_to(4096);
             ASSIGN_OR_RETURN(state->rf, _open_file());
             open_st = sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table,
                                            _block_cache_id);
@@ -132,11 +199,17 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         }
     }
     if (!open_st.ok()) {
-        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        if (!open_st.is_mem_limit_exceeded() && !open_st.is_time_out() && !open_st.is_cancelled()) {
+            StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        }
         LOG(WARNING) << "Failed to open PersistentIndex SST file: " << _sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
     _read_state_memory_demand.store(state->table->memory_usage());
+    if (state->reservation) {
+        // Open scratch and the metaindex block are gone; retain only resident bytes plus objects.
+        state->reservation->shrink_to(state->table->memory_usage() + 4096);
+    }
     return state;
 }
 
@@ -166,12 +239,9 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     if (cacheable || !_memory_context) {
         _read_state = state;
     } else {
-        state->memory_context = _memory_context;
         state->permit = std::move(permit);
-        state->transient_bytes = state->table->memory_usage();
-        _memory_context->tracker.consume(state->transient_bytes);
         _transient_read_state = state;
-        TRACE_COUNTER_INCREMENT("pindex_sst_transient_bytes", state->transient_bytes);
+        TRACE_COUNTER_INCREMENT("pindex_sst_transient_bytes", state->table->memory_usage());
     }
     return state;
 }
@@ -473,6 +543,20 @@ size_t PersistentIndexSstable::filter_memory_usage() const {
 size_t PersistentIndexSstable::memory_usage() const {
     std::lock_guard<std::mutex> lock(_read_state_mutex);
     return _read_state ? _read_state->table->memory_usage() : 0;
+}
+
+size_t PersistentIndexSstable::metadata_memory_usage() const {
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    size_t bytes = sizeof(*this) + _sstable_pb.SpaceUsedLong() + _filename.capacity() + delvec_memory_usage();
+    if (_read_state && _read_state->reservation) {
+        bytes += _read_state->reservation->bytes() - _read_state->table->memory_usage();
+    }
+    return bytes;
+}
+
+size_t PersistentIndexSstable::directly_accounted_memory_usage() const {
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    return _read_state && _read_state->reservation ? _read_state->reservation->bytes() : 0;
 }
 
 size_t PersistentIndexSstable::delvec_memory_usage() const {

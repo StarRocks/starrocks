@@ -178,6 +178,7 @@ public:
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+    void refresh_index_cache_eviction_policy();
     StatusOr<std::unique_ptr<PkIndexPublishLimiter::Permit>> acquire_publish_slot();
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
@@ -263,6 +264,11 @@ private:
     void _evict_index_cache(size_t target_bytes);
     size_t _index_cache_target() const;
     void _relieve_update_pressure();
+    void _maybe_refresh_index_cache_eviction_policy();
+    // Index lock -> accounting lock -> cache lock. Mode transition uses snapshots under the
+    // accounting lock and never waits for a tablet lock or performs SST IO.
+    std::mutex _index_accounting_mutex;
+    std::atomic<bool> _accounted_partial_mode{false};
     std::mutex _index_eviction_mutex;
     PkIndexPublishLimiter _publish_limiter;
     std::shared_ptr<SstReadStateMemoryContext> _sst_memory_context;

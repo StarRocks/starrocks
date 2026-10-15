@@ -989,6 +989,44 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_lower_tail_watermark) 
     EXPECT_EQ(IndexValue(kTailValue), values[1]);
 }
 
+TEST_F(LakePersistentIndexTest, test_partial_eviction_mode_change_reaccounts_untouched_memtable_only_entries) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    config::lake_pk_index_partial_eviction = false;
+    DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });
+    std::vector<uint64_t> ids;
+    std::vector<size_t> legacy;
+    std::vector<size_t> metadata_bytes;
+    for (int i = 0; i < 2; ++i) {
+        auto meta = std::make_shared<TabletMetadata>(*_tablet_metadata);
+        meta->set_id(next_id());
+        ids.push_back(meta->id());
+        auto* entry = _primary_key_mgr->index_cache().get_or_create(meta->id());
+        auto guard = entry->value().fetch_guard();
+        ASSERT_OK(entry->value().lake_load(_tablet_mgr.get(), meta, 1, nullptr));
+        Slice key("tail");
+        IndexValue value(i);
+        ASSERT_OK(entry->value().insert(1, &key, &value, 2));
+        _primary_key_mgr->update_index_cache_size(entry);
+        legacy.push_back(entry->size());
+        metadata_bytes.push_back(entry->value().cached_metadata_bytes());
+        ASSERT_GT(metadata_bytes.back(), 0);
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    }
+    const auto order_before = _primary_key_mgr->index_cache().get_entry_sizes();
+    config::lake_pk_index_partial_eviction = true;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    for (size_t i = 0; i < ids.size(); ++i) {
+        EXPECT_EQ(legacy[i] + metadata_bytes[i], _primary_key_mgr->get_index_memory_size(ids[i]));
+    }
+    // No entry freed SST bytes, and neither was accessed through prepare/lookup after the flip.
+    EXPECT_EQ(2, _primary_key_mgr->index_cache().object_size());
+    config::lake_pk_index_partial_eviction = false;
+    _primary_key_mgr->refresh_index_cache_eviction_policy();
+    EXPECT_EQ(order_before, _primary_key_mgr->index_cache().get_entry_sizes());
+    for (size_t i = 0; i < ids.size(); ++i) EXPECT_EQ(legacy[i], _primary_key_mgr->get_index_memory_size(ids[i]));
+}
+
 TEST_F(LakePersistentIndexTest, test_partial_eviction_sync_resize_pressure_and_rollback) {
     const bool old_partial = config::lake_pk_index_partial_eviction;
     DeferOp restore([&] { config::lake_pk_index_partial_eviction = old_partial; });

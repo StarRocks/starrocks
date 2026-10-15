@@ -256,7 +256,9 @@ public:
 
     // Lock-free snapshots for eviction: no index lock is acquired while inspecting active tablets.
     size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
+    size_t cached_legacy_charge() const { return _cached_legacy_charge.load(); }
     size_t sst_memory_demand() const { return _sst_memory_demand.load(); }
+    size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.
     Status prepare_sstable_read_state(size_t budget, bool partial);
@@ -465,6 +467,8 @@ private:
     bool _partial_read_state = false;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};
+    std::atomic<size_t> _cached_legacy_charge{0};
+    std::atomic<size_t> _directly_accounted_sst_bytes{0};
     std::atomic<size_t> _sst_memory_demand{0};
     mutable std::mutex _frequency_mutex;
     double _access_frequency = 0;

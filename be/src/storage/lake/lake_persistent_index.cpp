@@ -88,6 +88,8 @@ void LakePersistentIndex::_reset_index_state() {
     move_cache_memory_metrics(_reported_memory_stats, {});
     _reported_memory_stats = {};
     _cached_sst_bytes.store(0);
+    _cached_legacy_charge.store(0);
+    _directly_accounted_sst_bytes.store(0);
     _sst_memory_demand.store(0);
     _cached_metadata_bytes.store(0);
     _partial_read_state = false;
@@ -1798,16 +1800,20 @@ size_t LakePersistentIndex::refresh_cache_memory_metrics() {
     const auto stats = memory_stats();
     move_cache_memory_metrics(_reported_memory_stats, stats);
     _reported_memory_stats = stats;
+    _cached_legacy_charge.store(stats.charged_bytes());
     _cached_sst_bytes.store(stats.index_block_bytes + stats.filter_bytes);
     size_t demand = 0;
-
+    size_t directly_accounted = 0;
     for (const auto& fileset : _sstable_filesets) {
         if (fileset) {
-            fileset->for_each_sstable(
-                    [&](const PersistentIndexSstable& sst) { demand += sst.read_state_memory_demand(); });
+            fileset->for_each_sstable([&](const PersistentIndexSstable& sst) {
+                demand += sst.read_state_memory_demand();
+                directly_accounted += sst.directly_accounted_memory_usage();
+            });
         }
     }
     _sst_memory_demand.store(demand);
+    _directly_accounted_sst_bytes.store(directly_accounted);
     _cached_metadata_bytes.store(stats.overhead_bytes + stats.delvec_bytes);
     return stats.charged_bytes();
 }
@@ -1829,10 +1835,11 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
     std::vector<const PersistentIndexSstable*> reopen;
     for (const auto* sst : ssts) {
         const size_t demand = sst->read_state_memory_demand();
-        const bool cacheable = !partial || (demand > 0 && demand <= budget);
+        const size_t cost = demand + 4096; // read-state objects are reserved separately from table blocks
+        const bool cacheable = !partial || (demand > 0 && cost >= demand && cost <= budget);
         sst->set_read_state_cacheable(cacheable, context);
         if (cacheable) {
-            budget -= std::min(budget, demand);
+            budget -= std::min(budget, partial ? cost : demand);
             if (sst->memory_usage() == 0) {
                 reopen.push_back(sst);
             }

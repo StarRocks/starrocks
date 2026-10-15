@@ -47,10 +47,26 @@ namespace lake {
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
-struct SstReadStateMemoryContext {
-    explicit SstReadStateMemoryContext(MemTracker* parent) : tracker(-1, "lake_pk_index_transient_sst", parent) {}
+struct SstReadStateMemoryContext : public std::enable_shared_from_this<SstReadStateMemoryContext> {
+    explicit SstReadStateMemoryContext(MemTracker* parent) : tracker(-1, "lake_pk_index_sst_read_state", parent) {}
+    class Reservation {
+    public:
+        explicit Reservation(std::shared_ptr<SstReadStateMemoryContext> context) : _context(std::move(context)) {}
+        ~Reservation();
+        Status add(size_t bytes, bool wait);
+        void shrink_to(size_t bytes);
+        size_t bytes() const { return _bytes; }
+
+    private:
+        std::shared_ptr<SstReadStateMemoryContext> _context;
+        size_t _bytes = 0;
+    };
     MemTracker tracker;
     PkIndexPublishLimiter limiter;
+    // Try-lock eviction only; called without any cache lock before retrying a byte reservation.
+    std::function<void(size_t)> reclaim;
+    std::mutex memory_mutex;
+    std::condition_variable memory_cv;
 };
 
 // Drop the local cache copy of `path` so subsequent reads go to remote storage.
@@ -100,9 +116,7 @@ public:
     // progress. Subsequent reads reopen the file on demand; concurrent opens share one read state.
     size_t evict_read_state() const;
 
-    size_t metadata_memory_usage() const {
-        return sizeof(*this) + _sstable_pb.SpaceUsedLong() + _filename.capacity() + delvec_memory_usage();
-    }
+    size_t metadata_memory_usage() const;
 
     // Caller holds the tablet index lock; used only between joined index operations.
     void set_read_state_cacheable(bool cacheable, const std::shared_ptr<SstReadStateMemoryContext>& context) const;
@@ -119,6 +133,8 @@ public:
     size_t index_block_memory_usage() const;
     size_t filter_memory_usage() const;
     size_t memory_usage() const;
+    // Resident table and read-state object bytes reserved directly on update, excluded from cache tracker charge.
+    size_t directly_accounted_memory_usage() const;
 
     // Bytes of the delete vector attached to this sstable, if any. Not part of memory_usage().
     size_t delvec_memory_usage() const;

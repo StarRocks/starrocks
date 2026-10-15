@@ -16,6 +16,8 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <chrono>
+#include <future>
 #include <map>
 #include <optional>
 #include <random>
@@ -1908,6 +1910,94 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
         EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     }
     _primary_key_mgr->mem_tracker()->set_limit(old_limit);
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growth_before_tablet_locks) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const bool old_strict = config::enable_pk_strict_memcheck;
+    const int64_t old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = true;
+    config::enable_pk_strict_memcheck = true;
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::enable_pk_strict_memcheck = old_strict;
+        _mem_tracker->set_limit(old_limit);
+    });
+    constexpr int kPublishers = 4;
+    constexpr int kRows = 40000;
+    std::vector<TabletMetadataPtr> metadata;
+    std::vector<int64_t> txns;
+    auto [chunk, indexes] = gen_data_and_index(kRows, 0, true, true);
+    for (int i = 0; i < kPublishers; ++i) {
+        metadata.push_back(new_cloud_native_pk_tablet());
+        txns.push_back(next_id());
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(metadata.back()->id())
+                                             .set_txn_id(txns.back())
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+    }
+    std::promise<void> first_prepared;
+    std::promise<void> all_queued;
+    std::promise<void> grow;
+    auto growth = grow.get_future().share();
+    std::atomic<int> queued{0};
+    std::atomic<int> entered{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PkIndexPublishLimiter::queued", [&](void*) {
+        if (++queued == kPublishers) all_queued.set_value();
+    });
+    sync->SetCallBack("PrimaryKeyManager::prepare_primary_index:before_load", [&](void*) {
+        if (++entered == 1) {
+            first_prepared.set_value();
+            growth.wait();
+        }
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    const int64_t loads_before = StorageMetrics::instance()->lake_pk_index_load_total.value();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    std::vector<std::future<Status>> publishes;
+    for (int i = 0; i < kPublishers; ++i) {
+        publishes.push_back(std::async(
+                std::launch::async, [&, i] { return publish_single_version(metadata[i]->id(), 2, txns[i]).status(); }));
+    }
+    EXPECT_EQ(std::future_status::ready, first_prepared.get_future().wait_for(std::chrono::seconds(5)));
+    EXPECT_EQ(std::future_status::ready, all_queued.get_future().wait_for(std::chrono::seconds(5)));
+    // Four requests see low initial usage, but only the oldest may start growing its index.
+    EXPECT_EQ(1, entered.load());
+    grow.set_value();
+    for (auto& publish : publishes) {
+        EXPECT_EQ(std::future_status::ready, publish.wait_until(deadline));
+        ASSERT_OK(publish.get()); // any update-memory error / FE-style retry fails this test
+    }
+    EXPECT_EQ(kPublishers, entered.load());
+    EXPECT_EQ(loads_before + kPublishers, StorageMetrics::instance()->lake_pk_index_load_total.value());
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    for (const auto& meta : metadata) {
+        ASSIGN_OR_ABORT(auto actual, read(meta->id(), 2));
+        ASSERT_EQ(kRows, actual->num_rows());
+        const auto& keys = down_cast<const Int32Column*>(actual->get_column_by_index(0).get())->get_data();
+        const auto& values = down_cast<const Int32Column*>(actual->get_column_by_index(1).get())->get_data();
+        int64_t key_sum = 0;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            EXPECT_EQ(keys[i] * 3, values[i]);
+            key_sum += keys[i];
+        }
+        EXPECT_EQ(int64_t{kRows} * (kRows - 1) / 2, key_sum);
+    }
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {

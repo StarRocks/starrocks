@@ -91,6 +91,15 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
           _pk_index_shards(config::pk_index_map_shard_size) {
     _primary_key_mem_tracker = mem_tracker;
     _sst_memory_context = std::make_shared<SstReadStateMemoryContext>(mem_tracker);
+    _sst_memory_context->reclaim = [this](size_t bytes) {
+        const auto limit = _primary_key_mem_tracker->limit();
+        if (limit < 0) return;
+        const int64_t available = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
+        if (bytes <= available) return;
+        const size_t shortage = bytes - available;
+        const size_t size = _index_cache.size();
+        _evict_index_cache(size - std::min(size, shortage));
+    };
     const int64_t primary_key_mem_limit = _primary_key_mem_tracker->limit();
     const int64_t preload_mem_limit =
             primary_key_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
@@ -107,6 +116,7 @@ PrimaryKeyManager::PrimaryKeyManager(std::shared_ptr<LocationProvider> location_
     const int64_t block_cache_mem_limit =
             primary_key_mem_limit * std::max(std::min(100, config::lake_pk_index_block_cache_limit_percent), 0) / 100;
     _block_cache = std::make_unique<PersistentIndexBlockCache>(mem_tracker, block_cache_mem_limit);
+    _accounted_partial_mode.store(config::lake_pk_index_partial_eviction);
 }
 
 PrimaryKeyManager::~PrimaryKeyManager() {
@@ -202,6 +212,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     if (config::lake_pk_index_partial_eviction) {
         index.record_cache_access();
     }
+    TEST_SYNC_POINT("PrimaryKeyManager::prepare_primary_index:before_load");
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     update_index_cache_size(index_entry);
     if (st.ok()) {
@@ -257,17 +268,45 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     return index_entry;
 }
 
+void PrimaryKeyManager::_maybe_refresh_index_cache_eviction_policy() {
+    if (_accounted_partial_mode.load() != config::lake_pk_index_partial_eviction) {
+        refresh_index_cache_eviction_policy();
+    }
+}
+
+void PrimaryKeyManager::refresh_index_cache_eviction_policy() {
+    bool partial;
+    {
+        std::lock_guard<std::mutex> lock(_index_accounting_mutex);
+        partial = config::lake_pk_index_partial_eviction;
+        auto entries = _index_cache.get_all_entries();
+        for (auto* entry : entries) {
+            const auto& index = entry->value();
+            const size_t charge = index.cached_legacy_charge() + (partial ? index.cached_metadata_bytes() : 0);
+            _index_cache.update_object_size(entry, charge, false,
+                                            charge - std::min(charge, index.directly_accounted_sst_bytes()));
+        }
+        for (auto* entry : entries) _index_cache.release(entry);
+        _accounted_partial_mode.store(partial);
+    }
+    if (partial)
+        _evict_index_cache(_index_cache.capacity());
+    else
+        _index_cache.try_evict(_index_cache.capacity());
+}
+
 void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
+    _maybe_refresh_index_cache_eviction_policy();
     const bool partial = config::lake_pk_index_partial_eviction;
-    auto& index = index_entry->value();
-    size_t charge = index.refresh_cache_memory_metrics();
-    if (partial) {
-        charge += index.cached_metadata_bytes();
+    {
+        std::lock_guard<std::mutex> lock(_index_accounting_mutex);
+        auto& index = index_entry->value();
+        size_t charge = index.refresh_cache_memory_metrics();
+        if (partial) charge += index.cached_metadata_bytes();
+        const size_t direct = std::min(charge, index.directly_accounted_sst_bytes());
+        _index_cache.update_object_size(index_entry, charge, !partial, charge - direct);
     }
-    _index_cache.update_object_size(index_entry, charge, !partial);
-    if (partial) {
-        _evict_index_cache(_index_cache_target());
-    }
+    if (partial) _evict_index_cache(_index_cache_target());
 }
 
 void PrimaryKeyManager::release_primary_index_cache(IndexEntry* index_entry) {
@@ -671,7 +710,7 @@ Status PrimaryKeyManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_
                                                          current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
-    }     // end batch loop
+    } // end batch loop
     if (async_compact_cb) {
         TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
         RETURN_IF_ERROR(async_compact_cb->wait_for());
@@ -2067,11 +2106,11 @@ void PrimaryKeyManager::expire_cache() {
 }
 
 StatusOr<std::unique_ptr<PkIndexPublishLimiter::Permit>> PrimaryKeyManager::acquire_publish_slot() {
-    if (!config::lake_pk_index_partial_eviction) {
-        return std::unique_ptr<PkIndexPublishLimiter::Permit>();
+    _maybe_refresh_index_cache_eviction_policy();
+    if (config::lake_pk_index_partial_eviction) {
+        _relieve_update_pressure();
+        _evict_index_cache(_index_cache_target());
     }
-    _relieve_update_pressure();
-    _evict_index_cache(_index_cache_target());
     return _publish_limiter.acquire(
             std::max(0, config::lake_pk_index_publish_wait_timeout_ms),
             [&]() -> size_t {
@@ -2085,7 +2124,10 @@ StatusOr<std::unique_ptr<PkIndexPublishLimiter::Permit>> PrimaryKeyManager::acqu
                     // Active publishers and background pressure relief can free memory meanwhile.
                     return 0;
                 }
-                return limit >= 0 && used >= limit / 2 ? 1 : 4;
+                // A snapshot cannot reserve future MemTable/update-state growth. Until a byte-
+                // reserved multi-publisher scheduler is validated, admit one publisher in ON mode.
+                // OFF permits are also observed, so enabling ON drains already running publishers.
+                return 1;
             },
             [] { return process_exit_in_progress(); });
 }
@@ -2136,6 +2178,7 @@ size_t PrimaryKeyManager::_index_cache_target() const {
 }
 
 void PrimaryKeyManager::_evict_index_cache(size_t target_bytes) {
+    _maybe_refresh_index_cache_eviction_policy();
     if (!config::lake_pk_index_partial_eviction) {
         _index_cache.try_evict(target_bytes);
         return;
@@ -2190,10 +2233,13 @@ void PrimaryKeyManager::_evict_index_cache(size_t target_bytes) {
         }
         const size_t size = _index_cache.size();
         const size_t to_free = std::min(excess(i), size - std::min(size, target_bytes));
+        std::lock_guard<std::mutex> accounting_lock(_index_accounting_mutex);
         const size_t freed = index.evict_sstable_read_state(to_free);
         if (freed > 0) {
             const size_t resident_charge = index.refresh_cache_memory_metrics();
-            _index_cache.update_object_size(entry, resident_charge + index.cached_metadata_bytes(), false);
+            const size_t charge = resident_charge + index.cached_metadata_bytes();
+            _index_cache.update_object_size(entry, charge, false,
+                                            charge - std::min(charge, index.directly_accounted_sst_bytes()));
             TRACE_COUNTER_INCREMENT("pindex_cache_partial_evict_bytes", freed);
         }
     }
@@ -2501,8 +2547,9 @@ int64_t PrimaryKeyManager::get_primary_index_data_version(int64_t tablet_id) {
 Status PrimaryKeyManager::update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
     int64_t byte_limits = RuntimeEnv::GetInstance()->process_mem_limit();
     int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
-    // Keep the percentage in bytes, matching construction and the shared update tracker.
-    const size_t capacity = byte_limits * update_mem_percent / 100;
+    // Preserve the existing setter's capacity semantics in both modes. Startup configuration is
+    // the authoritative update tracker limit; reconciling this setter is a separate change.
+    const size_t capacity = byte_limits * update_mem_percent;
     _index_cache.set_capacity(capacity, !config::lake_pk_index_partial_eviction);
     if (config::lake_pk_index_partial_eviction) {
         _evict_index_cache(_index_cache_target());
@@ -2514,12 +2561,13 @@ void PrimaryKeyManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _primary_key_mem_tracker != nullptr) {
         LOG(INFO) << strings::Substitute(
-                "[lake update manager memory]index:$0 update_state:$1 compact_state:$2 total:$3/$4",
+                "[lake update manager memory]index:$0 update_state:$1 compact_state:$2 total:$3/$4 sst_read_state:$5",
                 PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
                 PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
                 PrettyPrinter::print_bytes(_compaction_state_mem_tracker->consumption()),
                 PrettyPrinter::print_bytes(_primary_key_mem_tracker->consumption()),
-                PrettyPrinter::print_bytes(_primary_key_mem_tracker->limit()));
+                PrettyPrinter::print_bytes(_primary_key_mem_tracker->limit()),
+                PrettyPrinter::print_bytes(_sst_memory_context->tracker.consumption()));
         last_print_ts.store(time(nullptr));
     }
 }

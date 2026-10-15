@@ -44,7 +44,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，最多同时执行四个，update 内存紧张时降为一个。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。
+- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；必需索引块超过整个 update 预算仍是明确的错误边界。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。
 - 引入版本：-
 
 ### lake_pk_index_publish_wait_timeout_ms
