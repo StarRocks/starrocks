@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/geo_functions.h"
-
-#ifdef WITH_H3
 #include <h3/h3api.h>
-#endif
 
 #include <algorithm>
 #include <bit>
@@ -37,45 +33,12 @@
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
+#include "exprs/geo_functions.h"
 #include "geo/geo_measurements.h"
 #include "geo/wkb.h"
 #include "types/geo_wkb.h"
 
 namespace starrocks {
-#ifndef WITH_H3
-namespace {
-Status h3_unavailable() {
-    return Status::NotSupported("H3 capability is unavailable in this BE build");
-}
-} // namespace
-Status GeoFunctions::h3_polygon_to_cells_prepare(FunctionContext*, FunctionContext::FunctionStateScope) {
-    return Status::OK();
-}
-Status GeoFunctions::h3_polygon_to_cells_close(FunctionContext*, FunctionContext::FunctionStateScope) {
-    return Status::OK();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_parent(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_resolution(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext*, const Columns&) {
-    return h3_unavailable();
-}
-#else
 namespace {
 
 constexpr double kRadiansPerDegree = 0.017453292519943295769236907684886;
@@ -575,5 +538,4 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
     return result.build(size, constant);
 }
 
-#endif // WITH_H3
 } // namespace starrocks
