@@ -14,22 +14,15 @@
 
 package com.starrocks.authentication;
 
-import com.google.re2j.Pattern;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class JWTSecurityIntegration extends SecurityIntegration {
+public class JWTSecurityIntegration extends JWTBaseSecurityIntegration {
 
-    public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
-            SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
-            JWTAuthenticationProvider.JWT_JWKS_URL,
-            JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD));
-
-    private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
+    public static final Set<String> REQUIRED_PROPERTIES = Set.of(
+            SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, JWKS_URL, PRINCIPAL_FIELD);
 
     public JWTSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
@@ -37,6 +30,7 @@ public class JWTSecurityIntegration extends SecurityIntegration {
 
     @Override
     public AuthenticationProvider getAuthenticationProvider() {
+<<<<<<< HEAD
         String jwksUrl = propertyMap.get(JWTAuthenticationProvider.JWT_JWKS_URL);
         String principalFiled = propertyMap.get(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD);
         String commaSeparatedIssuer = propertyMap.get(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER);
@@ -46,6 +40,10 @@ public class JWTSecurityIntegration extends SecurityIntegration {
         String[] requireAudiences = commaSeperatedRequireAudiences == null ?
                 new String[0] : COMMA_SPLIT.split(commaSeperatedRequireAudiences.trim());
         return new JWTAuthenticationProvider(jwksUrl, principalFiled, requireIssuer, requireAudiences);
+=======
+        return new JWTAuthenticationProvider(getJwksUrl(), getPrincipalField(), getRequiredIssuer(),
+                getRequiredAudience(), getGroupSource(), getGroupClaim(), name);
+>>>>>>> dc172843477... [Feature] [PRE-574] Read a security integration user's groups from a claim of the verified token (#63504)
     }
 
     @Override
@@ -55,5 +53,6 @@ public class JWTSecurityIntegration extends SecurityIntegration {
                 throw new SemanticException("missing required property: " + s);
             }
         });
+        super.checkProperty();
     }
 }

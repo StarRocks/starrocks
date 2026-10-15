@@ -814,6 +814,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 <EditionSpecificFEItem />
 
+### `arrow_flight_max_header_size`
+
+- 默认值: 32768
+- 类型: Int
+- 单位: Bytes
+- 是否可变: No
+- 描述: Arrow Flight SQL 服务端接受的请求头总大小上限（字节），按一个 gRPC 请求的所有请求头合计。Arrow Flight SQL 会话的第一个请求在请求头里携带客户端凭据，而列出用户所属组的 JWT 会随组数变大：Microsoft Entra ID 在一个 token 里最多放 200 个组 ID，约 10 KB。gRPC 默认的 8 KB 会在认证开始之前就拒绝这样的请求，因此默认值与 `http_max_header_size` 保持一致。客户端发送的 token 更大时请调大该值。修改后需要重启 FE。
+- 引入版本: v4.2
+
 ### `brpc_idle_wait_max_time`
 
 - 默认值: 10000

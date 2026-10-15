@@ -374,7 +374,7 @@ public class ExecuteAsExecutorTest {
 
         // Stand in for a login that resolved groups from the original user's own entry.
         String originalOnly = "Original Only Group";
-        context.getAccessControlContext().setMemberOfGroups(Set.of(originalOnly));
+        context.getAccessControlContext().setAuthenticatorGroups(Set.of(originalOnly));
         context.setGroups(Set.of(originalOnly));
 
         ExecuteAsExecutor.execute(new ExecuteAsStmt(new UserRef("u1", "%"), false), context);
@@ -382,7 +382,7 @@ public class ExecuteAsExecutorTest {
         // u1 gets its own groups from the group provider, and nothing of the original user's.
         Assertions.assertEquals(Set.of("group1"), context.getGroups());
         Assertions.assertFalse(context.getGroups().contains(originalOnly));
-        Assertions.assertTrue(context.getAccessControlContext().getMemberOfGroups().isEmpty(),
+        Assertions.assertTrue(context.getAccessControlContext().getAuthenticatorGroups().isEmpty(),
                 "the memberOf groups of the original user must not survive the identity switch");
     }
 

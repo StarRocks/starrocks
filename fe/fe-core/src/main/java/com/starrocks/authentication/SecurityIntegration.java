@@ -73,6 +73,15 @@ public abstract class SecurityIntegration {
         }
     }
 
+    /**
+     * Validate the properties an {@code ALTER SECURITY INTEGRATION} sets, before they are merged
+     * into this integration's. ALTER does not go through {@link #checkProperty()}, and must not:
+     * only what the statement mentions is checked, so an integration created before a validation
+     * existed can still be altered. Types with no per-property rules keep this no-op.
+     */
+    public void checkAlteredProperties(Map<String, String> alteredProperties) throws SemanticException {
+    }
+
     public List<String> getGroupProviderName() {
         return splitCommaSeparated(propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER));
     }
@@ -87,7 +96,7 @@ public abstract class SecurityIntegration {
      * only removed whitespace that followed a comma, which left a trailing blank on items such as "a "
      * and made them compare unequal to everything.
      */
-    private static List<String> splitCommaSeparated(String property) {
+    protected static List<String> splitCommaSeparated(String property) {
         if (property == null || property.isBlank()) {
             return List.of();
         }

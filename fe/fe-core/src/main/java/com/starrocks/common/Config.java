@@ -2629,6 +2629,24 @@ public class Config extends ConfigBase {
     public static boolean authentication_ldap_case_insensitive = false;
 
     /**
+     * Whether a group name from a login matches a {@code GRANT ... TO EXTERNAL GROUP} entry or a
+     * {@code permitted_groups} entry that differs from it only in case.
+     * <p>
+     * On by default because the first source of such groups was LDAP, whose {@code cn} is
+     * case-insensitive in the directory: a GRANT written in another case than the directory
+     * returns must not silently have no effect. An identity provider that distinguishes groups by
+     * case (groups read from a JWT claim, for instance) wants this off, so that {@code Admins} and
+     * {@code admins} stay two groups.
+     * <p>
+     * Only the comparison is affected. The names are stored and reported exactly as they arrived,
+     * and handed to Apache Ranger unchanged, whatever this is set to.
+     */
+    @ConfField(mutable = true, comment = "Whether group names are matched ignoring case in " +
+            "GRANT ... TO EXTERNAL GROUP and in the permitted_groups of a security integration. " +
+            "Names are never rewritten; only the comparison changes.")
+    public static boolean authentication_group_case_insensitive = true;
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -4938,6 +4956,18 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int arrow_flight_port = -1;
+
+    /**
+     * Largest request header block, in bytes, the Arrow Flight SQL server accepts - all headers of
+     * one gRPC request together. The first request of a session carries the client's credential in
+     * a header, and a JWT that lists many groups grows with them: two hundred group IDs, the most
+     * Microsoft Entra ID puts into a token, come to about 10 KB. gRPC's own default is 8 KB, which
+     * would refuse such a token before authentication even starts; the default here matches
+     * http_max_header_size so the same token works on both channels.
+     */
+    @ConfField(comment = "Maximum size in bytes of the request header block the Arrow Flight SQL server "
+            + "accepts. Raise it when clients send large JWTs, for example ones that list many groups.")
+    public static int arrow_flight_max_header_size = 32768;
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
