@@ -85,7 +85,7 @@ public class BatchRollupJobTest {
     private static void pauseRollupScheduler() {
         new MockUp<MaterializedViewHandler>() {
             @Mock
-            protected void runAfterCatalogReady() {
+            protected void runAfterLeaseValid() {
             }
         };
     }
