@@ -1692,7 +1692,7 @@ under the License.
             <dependency>
                 <groupId>org.openjdk.nashorn</groupId>
                 <artifactId>nashorn-core</artifactId>
-                <version>15.4</version>
+                <version>15.6</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
