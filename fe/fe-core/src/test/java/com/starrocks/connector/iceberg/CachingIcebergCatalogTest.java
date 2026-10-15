@@ -129,7 +129,7 @@ public class CachingIcebergCatalogTest {
         executor.shutdown();
         IcebergTable table = IcebergTable.builder().setSrTableName("test")
                 .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
-        ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
         SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
         boolean previous = sv.isEnableConnectorAsyncListPartitions();
         sv.setEnableConnectorAsyncListPartitions(true);
