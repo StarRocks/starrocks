@@ -34,12 +34,33 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TFileFormatType;
+import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.thrift.TStreamLoadPutRequest;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,6 +135,45 @@ public class VectorIndexTest extends PlanTestBase {
                 + " c2 array<float>"
                 + ") "
                 + "DUPLICATE KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
+        starRocksAssert.withTable("CREATE TABLE test.test_pk_vector ("
+                + " c0 INT NOT NULL,"
+                + " c1 array<float> NOT NULL,"
+                + " c2 VARCHAR(20),"
+                + " c3 INT,"
+                + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'l2_distance', "
+                + "'is_vector_normed' = 'false', 'M' = '16', 'index_type' = 'hnsw', 'dim'='5') "
+                + ") "
+                + "PRIMARY KEY(c0) "
+                + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                + "PROPERTIES ('replication_num'='1');");
+
+        for (String[] t : new String[][] {
+                {"test_pk_vector_default", "l2_distance", "false", "[0, 0, 0, 0, 0]"},
+                {"test_pk_vector_empty_default", "l2_distance", "false", "[]"},
+                {"test_pk_vector_normed_default", "cosine_similarity", "true", "[1, 0, 0, 0, 0]"},
+                {"test_pk_vector_unnormed_default", "cosine_similarity", "true", "[1, 1, 0, 0, 0]"}}) {
+            starRocksAssert.withTable("CREATE TABLE test." + t[0] + " ("
+                    + " c0 INT NOT NULL,"
+                    + " c1 array<float> NOT NULL DEFAULT " + t[3] + ","
+                    + " c2 VARCHAR(20),"
+                    + " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = '" + t[1] + "', "
+                    + "'is_vector_normed' = '" + t[2] + "', 'M' = '16', 'index_type' = 'hnsw', 'dim'='5') "
+                    + ") "
+                    + "PRIMARY KEY(c0) "
+                    + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
+                    + "PROPERTIES ('replication_num'='1');");
+        }
+
+        starRocksAssert.withTable("CREATE TABLE test.test_pk_no_vector_index ("
+                + " c0 INT NOT NULL,"
+                + " c1 array<float> NOT NULL,"
+                + " c2 VARCHAR(20),"
+                + " c3 INT"
+                + ") "
+                + "PRIMARY KEY(c0) "
                 + "DISTRIBUTED BY HASH(c0) BUCKETS 1 "
                 + "PROPERTIES ('replication_num'='1');");
     }
@@ -1003,6 +1063,200 @@ public class VectorIndexTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboUseDBLock(originalLock);
         }
+    }
+
+    // A PK partial update gives the omitted vector column of a new-key row an empty vector, which BE only
+    // rejects at publish and then retries forever; FE refuses such writes up front.
+    private static final String MISSING_VECTOR_COLUMN =
+            "Partial update of table test_pk_vector must include vector index column c1";
+
+    @Test
+    public void testInsertPartialUpdateWithoutVectorColumnIsRejected() {
+        String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        try {
+            for (String mode : List.of("row", "column", "auto")) {
+                connectContext.getSessionVariable().setPartialUpdateMode(mode);
+                assertThatThrownBy(() -> planDml("insert into test_pk_vector (c0, c2) values (1, 'a')"))
+                        .as("partial_update_mode=%s", mode)
+                        .isInstanceOf(SemanticException.class)
+                        .hasMessageContaining(MISSING_VECTOR_COLUMN);
+                assertThatThrownBy(() -> planDml("insert into test_pk_vector (c0, c2, c3) "
+                        + "select c0, c2, c3 from test_pk_no_vector_index"))
+                        .as("partial_update_mode=%s", mode)
+                        .isInstanceOf(SemanticException.class)
+                        .hasMessageContaining(MISSING_VECTOR_COLUMN);
+            }
+        } finally {
+            connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
+        }
+    }
+
+    @Test
+    public void testPartialUpdateKeepingVectorColumnIsAllowed() throws Exception {
+        String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        try {
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            ExecPlan plan = planDml("insert into test_pk_vector (c0, c1) values (1, [1, 2, 3, 4, 5])");
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, sinkOf(plan).getPartialUpdateMode());
+
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            plan = planDml("insert into test_pk_vector (c0, c1, c2) values (1, [1, 2, 3, 4, 5], 'a')");
+            assertEquals(TPartialUpdateMode.AUTO_MODE, sinkOf(plan).getPartialUpdateMode());
+
+            // A full-row write is not a partial update at all.
+            plan = planDml("insert into test_pk_vector values (1, [1, 2, 3, 4, 5], 'a', 1)");
+            assertEquals(TPartialUpdateMode.UNKNOWN_MODE, sinkOf(plan).getPartialUpdateMode());
+        } finally {
+            connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
+        }
+    }
+
+    @Test
+    public void testUpdateOfNonVectorColumnIsAllowed() throws Exception {
+        String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        try {
+            // UPDATE only rewrites existing rows, so it may leave the vector column out.
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            ExecPlan plan = planDml("update test_pk_vector set c2 = 'b' where c0 = 1");
+            assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE, sinkOf(plan).getPartialUpdateMode());
+
+            connectContext.getSessionVariable().setPartialUpdateMode("auto");
+            plan = planDml("update test_pk_vector set c2 = 'b'");
+            assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE, sinkOf(plan).getPartialUpdateMode());
+        } finally {
+            connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
+        }
+    }
+
+    @Test
+    public void testPartialUpdateOfTableWithoutVectorIndexIsAllowed() throws Exception {
+        String originalMode = connectContext.getSessionVariable().getPartialUpdateMode();
+        try {
+            connectContext.getSessionVariable().setPartialUpdateMode("column");
+            ExecPlan plan = planDml("insert into test_pk_no_vector_index (c0, c2) values (1, 'a')");
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, sinkOf(plan).getPartialUpdateMode());
+        } finally {
+            connectContext.getSessionVariable().setPartialUpdateMode(originalMode);
+        }
+        planStreamLoad("test_pk_no_vector_index", "c0,c2");
+    }
+
+    @Test
+    public void testStreamLoadPartialUpdateWithoutVectorColumnIsRejected() throws Exception {
+        assertThatThrownBy(() -> planStreamLoad("test_pk_vector", "c0,c2"))
+                .isInstanceOf(DdlException.class)
+                .hasMessageContaining(MISSING_VECTOR_COLUMN);
+        // Pipeline stream load, transaction stream load, merge commit and routine load plan through LoadPlanner.
+        assertThatThrownBy(() -> newStreamLoadPlanner("test_pk_vector", "c0,tmp,c2=upper(tmp)").plan())
+                .isInstanceOf(DdlException.class)
+                .hasMessageContaining(MISSING_VECTOR_COLUMN);
+
+        planStreamLoad("test_pk_vector", "c0,c1");
+        newStreamLoadPlanner("test_pk_vector", "c0,c1").plan();
+    }
+
+    // A key-only delete cannot create a row, so it may leave the vector column out; any other __op may upsert.
+    @Test
+    public void testConstantDeleteLoadMayOmitVectorColumn() throws Exception {
+        planStreamLoad("test_pk_vector", "c0,__op='delete'");
+        planStreamLoad("test_pk_vector", "c0,__op=1");
+        newStreamLoadPlanner("test_pk_vector", "c0,__op='delete'").plan();
+
+        for (String columns : List.of("c0,__op", "c0,__op='upsert'", "c0,c2,__op=0")) {
+            assertThatThrownBy(() -> planStreamLoad("test_pk_vector", columns))
+                    .as("columns: %s", columns)
+                    .isInstanceOf(DdlException.class)
+                    .hasMessageContaining(MISSING_VECTOR_COLUMN);
+        }
+    }
+
+    // New-key rows take the column default; that is safe only if the default is a vector the index accepts.
+    @Test
+    public void testLoadMayOmitVectorColumnWithValidDefault() throws Exception {
+        planStreamLoad("test_pk_vector_default", "c0,c2");
+        planStreamLoad("test_pk_vector_normed_default", "c0,c2");
+
+        for (String table : List.of("test_pk_vector_empty_default", "test_pk_vector_unnormed_default")) {
+            assertThatThrownBy(() -> planStreamLoad(table, "c0,c2"))
+                    .as("table: %s", table)
+                    .isInstanceOf(DdlException.class)
+                    .hasMessageContaining("Partial update of table " + table + " must include vector index column c1");
+        }
+    }
+
+    @Test
+    public void testBrokerLoadPartialUpdateWithoutVectorColumnIsRejected() throws Exception {
+        assertThatThrownBy(() -> planBrokerLoad("(c0, c2)"))
+                .isInstanceOf(DdlException.class)
+                .hasMessageContaining(MISSING_VECTOR_COLUMN);
+
+        planBrokerLoad("(c0, c1, c2)");
+    }
+
+    private static ExecPlan planDml(String sql) throws Exception {
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+    }
+
+    private static OlapTableSink sinkOf(ExecPlan plan) {
+        return (OlapTableSink) plan.getFragments().get(0).getSink();
+    }
+
+    private static long beginTransaction(Database db, OlapTable table, TransactionState.LoadJobSourceType sourceType)
+            throws Exception {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
+                Lists.newArrayList(table.getId()), "vi_partial_update_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                sourceType, 600);
+    }
+
+    private static StreamLoadInfo partialUpdateStreamLoadInfo(Database db, OlapTable table, String columns)
+            throws Exception {
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(beginTransaction(db, table, TransactionState.LoadJobSourceType.BACKEND_STREAMING));
+        request.setLoadId(UUIDUtil.genTUniqueId());
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
+        request.setPartial_update(true);
+        request.setColumns(columns);
+        return StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+    }
+
+    private static void planStreamLoad(String tableName, String columns) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", tableName);
+        StreamLoadInfo info = partialUpdateStreamLoadInfo(db, table, columns);
+        new StreamLoadPlanner(connectContext, db, table, info).plan(info.getId());
+    }
+
+    private static LoadPlanner newStreamLoadPlanner(String tableName, String columns) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", tableName);
+        StreamLoadInfo info = partialUpdateStreamLoadInfo(db, table, columns);
+        return new LoadPlanner(1L, info.getId(), info.getTxnId(), db.getId(), db.getFullName(), table, false,
+                "Asia/Shanghai", true, null, null, 1L << 30, 1L << 30, false, 1,
+                info.getColumnExprDescs(), info, "vi_partial_update", 3600);
+    }
+
+    private static void planBrokerLoad(String columnList) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "test_pk_vector");
+        String file = "hdfs://127.0.0.1:8020/vi_partial_update/file1";
+        LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(
+                "LOAD LABEL test.vi_partial_update (DATA INFILE('" + file + "') INTO TABLE test_pk_vector "
+                        + "COLUMNS TERMINATED BY ',' " + columnList + ") WITH BROKER "
+                        + "PROPERTIES ('partial_update' = 'true', 'partial_update_mode' = 'column')",
+                connectContext);
+        DataDescription desc = loadStmt.getDataDescriptions().get(0);
+        BrokerFileGroup fileGroup = new BrokerFileGroup(desc);
+        fileGroup.parse(db, desc);
+        long txnId = beginTransaction(db, table, TransactionState.LoadJobSourceType.BATCH_LOAD_JOB);
+        LoadPlanner planner = new LoadPlanner(1L, UUIDUtil.genTUniqueId(), txnId, db.getId(), table, false,
+                "Asia/Shanghai", 3600, 0, true, null, new HashMap<>(), 1L << 30, 1L << 30,
+                loadStmt.getBrokerDesc(), Lists.newArrayList(fileGroup),
+                Lists.<List<TBrokerFileStatus>>newArrayList(
+                        Lists.newArrayList(new TBrokerFileStatus(file, false, 1024, true))), 1);
+        planner.setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPSERT_MODE);
+        planner.plan();
     }
 
     private static long countColumns(OlapTable table, String columnName) {
