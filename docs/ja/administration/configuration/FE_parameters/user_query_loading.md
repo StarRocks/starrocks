@@ -69,7 +69,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。false の場合、生のタスク定義が返されます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
+- 説明：true の場合、StarRocks は `information_schema.tasks` および `information_schema.task_runs` で返される前に、タスク SQL 定義から資格情報を編集します。これは、DEFINITION 列に SqlCredentialRedactor.redact を適用することで行われます。`information_schema.task_runs` では、定義がタスク実行ステータスから来るか、空の場合にタスク定義ルックアップから来るかに関係なく、同じ編集が適用されます。完了したタスク実行を `_statistics_.task_run_history` にアーカイブする前にも同じ編集が適用されるため、履歴テーブルに資格情報が平文で保存されることはありません。false の場合、生のタスク定義が返され、そのままアーカイブされます (資格情報が公開される可能性があります)。マスキングは CPU/文字列処理作業であり、タスクまたは `task_runs` の数が大きい場合は時間がかかる場合があります。非編集定義が必要であり、セキュリティリスクを受け入れる場合にのみ無効にしてください。
 - 導入時期：v3.5.6
 
 ### `privilege_max_role_depth`
@@ -90,6 +90,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーが持つことができるロールの最大数。
 - 導入時期：v3.0.0
 
+### `ranger_hive_catalog_prefix_enabled`
+
+- デフォルト：false
+- タイプ：Boolean
+- Unit: -
+- 変更可能：Yes
+- 説明：Ranger Hive Service (`ranger.plugin.hive.service.name`) を使用する External Catalog のプロパティ `ranger.plugin.hive.catalog_prefix.enabled` のデフォルト値。有効値が `true` の場合、StarRocks は Ranger に送る `database` リソースとして素のデータベース名ではなく `<catalog_name><separator><database_name>` を使用し、1 つの Ranger Hive Service を共有する複数の Catalog が同名のデータベースで衝突しないようにします。Catalog 側でこのプロパティを明示的に設定した場合はそちらが優先されます。変更は、それを受け取ったすべての FE で即時に有効になります。
+- 導入時期：v4.2
+
+### `ranger_hive_catalog_prefix_separator`
+
+- デフォルト：_
+- タイプ：String
+- Unit: -
+- 変更可能：Yes
+- 説明：`ranger_hive_catalog_prefix_enabled` (または Catalog プロパティ `ranger.plugin.hive.catalog_prefix.enabled`) が `true` の場合に、Catalog 名とデータベース名の間に挿入する区切り文字。1 つの Ranger Hive Service を共有するすべての Catalog で同じ区切り文字を使う必要があるため、この項目はグローバルにのみ設定できます。
+- 導入時期：v4.2
+
 ## クエリエンジン
 
 ### `ai_default_chat_endpoint`
@@ -107,7 +125,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：prompt のみを指定する SYSTEM `ai_complete` 形式で使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：FILE オーバーロードを含む、モデルを明示しない SYSTEM `ai_complete` 呼び出しで使用するデフォルトモデル。この値には C0 制御文字（`U+0000` から `U+001F`）または DEL（`U+007F`）を含めることはできません。すべての呼び出しで空白ではないモデルを明示的に指定する場合、この値は空のままにできます。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_chat_provider`
@@ -115,9 +133,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`qwen_compatible`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。値は正確に `openai_compatible` でなければならず、空の値や制御文字を含む追加文字がある場合は解析に失敗します。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
+- 説明：SYSTEM `ai_complete` が使用する provider プロトコル。正確に `openai_compatible` または `qwen_compatible` を指定する必要があり、空または未対応の値は解析に失敗します。両方のプロトコルがテキストと inline 画像 FILE に対応し、inline MP4 動画は `qwen_compatible` のみが対応します。選択したモデルは入力のモダリティに対応している必要があります。プロトコルを endpoint やモデル名から推定することはありません。変更は FE の再起動なしで動的に反映されますが、変更後に新しく解析および計画されたクエリにのみ適用されます。すでに構築されたプランは、計画時に取得した endpoint、model、provider のスナップショットを保持します。
 - 導入時期：-
 
 ### `ai_default_embedding_endpoint`
@@ -143,9 +161,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：空文字列
 - タイプ：String
 - 単位：-
-- 有効な値：`openai_compatible`
+- 有効な値：`openai_compatible`、`dashscope_multimodal`
 - 変更可能：Yes
-- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。正確に `openai_compatible` を指定する必要があります。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
+- 説明：SYSTEM `ai_embed` のプロバイダープロトコル。テキスト用の `openai_compatible`、またはテキストと inline JPEG、PNG、WebP 画像 FILE 用の `dashscope_multimodal` を正確に指定します。選択したモデルは入力のモダリティに対応している必要があります。動画 FILE の埋め込みは未対応です。デフォルトの空値では SYSTEM 埋め込み呼び出しは使用できず、チャットのプロバイダー設定も再利用しません。プロトコルを endpoint やモデル名から推定することはありません。変更に FE の再起動は不要で、新しく解析・計画されるクエリに適用されます。既存のプランはスナップショットを保持します。
 - 導入時期：-
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -1176,7 +1194,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `history_job_keep_max_num`
 
-- デフォルト：1000
+- デフォルト：10000
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes

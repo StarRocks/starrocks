@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
@@ -86,6 +87,22 @@ public final class InsertSourceRefresher {
         for (TableRelation relation : collector.relations) {
             Table bound = relation.getTable();
             Table reloaded = refreshedTable(session, bound);
+            if (!CatalogMgr.isExternalCatalog(bound.getCatalogName())) {
+                // A table of an internal database (CREATE EXTERNAL TABLE ... ENGINE=HIVE from a RESOURCE) is not the
+                // table its own catalog names resolve to: those name the resource's catalog, which hands back the
+                // metastore's table, not the one the DDL declared. Drop what that catalog cached and keep the
+                // declared table.
+                if (reloaded == null) {
+                    if (bound.getCatalogName() != null) {
+                        session.getGlobalStateMgr().getMetadataMgr().invalidateTableForRead(bound.getCatalogName(),
+                                bound.getCatalogDBName(), bound);
+                        Tracers.count(Tracers.Module.EXTERNAL, "InsertSourceRefreshed", 1);
+                        refreshed++;
+                    }
+                    session.getPreResolvedState().put(PreResolvedState.REFRESHED_SOURCE, keyOf(bound), bound);
+                }
+                continue;
+            }
             if (reloaded == null) {
                 // The table's own names: the relation's resolved name is its alias when it has one.
                 reloaded = refreshAndReload(session, bound.getCatalogName(), bound.getCatalogDBName(),

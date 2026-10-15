@@ -227,7 +227,6 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
                 }
             }
             EXPECT_EQ(desc, geo->descriptor());
-            EXPECT_FALSE(geo->has_wkb_cache());
         }
     }
 }

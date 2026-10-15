@@ -890,11 +890,8 @@ public class AlterJobMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             schemaChangeHandler.addAlterJobV2(alterJobV2);
-            // Images written by older versions or by follower checkpoints still carry both
-            // schemas of every finished job.
-            if (alterJobV2 instanceof SchemaChangeJobV2 && alterJobV2.isDone()) {
-                alterJobV2.pruneMeta();
-            }
+            // Images written by older versions still carry the per-tablet data of every done job.
+            alterJobV2.pruneIfDone();
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
             // to prevent TabletInvertedIndex data loss,
@@ -907,6 +904,8 @@ public class AlterJobMgr {
 
         reader.readCollection(AlterJobV2.class, alterJobV2 -> {
             materializedViewHandler.addAlterJobV2(alterJobV2);
+            // Images written by older versions still carry the per-tablet data of every done job.
+            alterJobV2.pruneIfDone();
 
             // ATTN : we just want to add tablet into TabletInvertedIndex when only PendingJob is checkpoint
             // to prevent TabletInvertedIndex data loss,

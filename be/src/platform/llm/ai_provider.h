@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -23,6 +24,7 @@
 
 #include "base/statusor.h"
 #include "platform/llm/ai_http_client.h"
+#include "platform/llm/ai_media_input.h"
 #include "platform/llm/ai_provider_options.h"
 #include "platform/llm/ai_rate_limiter.h"
 
@@ -35,6 +37,8 @@ struct AIChatRequest {
     std::string_view prompt;
     const AIProviderOptions* options = nullptr;
     AICapability capability = AICapability::CHAT;
+    // Borrowed only for the synchronous build_request call.
+    const AIMediaInput* media = nullptr;
 };
 
 struct AIProviderHttpRequest {
@@ -63,6 +67,9 @@ enum class AIProviderErrorAction : uint8_t {
 };
 
 AIProviderErrorAction ai_provider_error_action(AIProviderErrorCode code);
+
+// Unrecognized safe identifiers are UNKNOWN; unsafe identifiers are absent. Never retains provider text.
+std::optional<AIProviderErrorCode> parse_ai_provider_error_code(std::string_view identifier);
 
 struct AIProviderUsage {
     std::optional<int64_t> prompt_tokens;
@@ -96,5 +103,8 @@ public:
     virtual AIProviderParseResult parse_response(std::string_view body,
                                                  AICapability capability = AICapability::CHAT) const = 0;
 };
+
+Status validate_ai_protocol(std::string_view protocol, AICapability capability);
+StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(std::string_view protocol, AICapability capability);
 
 } // namespace starrocks

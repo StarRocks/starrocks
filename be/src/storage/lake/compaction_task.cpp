@@ -22,11 +22,11 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/runtime_env.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
-#include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
 
@@ -134,7 +134,8 @@ Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
             if (_context->subtask_id >= 0) {
                 return Status::OK();
             }
-            RETURN_IF_ERROR(_tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(metadata, txn_log));
+            RETURN_IF_ERROR(
+                    _tablet.tablet_manager()->primary_key_mgr()->execute_index_major_compaction(metadata, txn_log));
             if (txn_log->has_op_compaction() && !txn_log->op_compaction().input_sstables().empty()) {
                 size_t total_input_sstable_file_size = 0;
                 for (const auto& input_sstable : txn_log->op_compaction().input_sstables()) {

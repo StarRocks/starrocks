@@ -123,7 +123,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
@@ -284,7 +284,7 @@ TEST_P(LakePartialUpdateTest, test_write) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
@@ -981,7 +981,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
@@ -1328,7 +1328,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // remove pk index, to make it reload again
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // partial update
     for (int i = 0; i < 3; i++) {
@@ -1596,7 +1596,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
     _tablet_mgr->prune_metacache();
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
@@ -1691,7 +1691,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
@@ -1799,7 +1799,7 @@ public:
     }
 
     void TearDown() override {
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
@@ -2711,8 +2711,8 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     // partial update, and make it generate two segment files in one rowset
     const int64_t old_size = config::write_buffer_size;
     config::write_buffer_size = 1;
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1);
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1);
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -2745,7 +2745,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
         }
     }
     config::write_buffer_size = old_size;
-    _update_mgr->update_state_mem_tracker()->set_limit(old_limit);
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit);
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 6 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
@@ -2921,7 +2921,7 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 namespace {
@@ -4014,10 +4014,10 @@ TEST_F(LakeColumnUpsertModeTest, test_error_handling_scenarios) {
     }
 
     // Test with memory pressure to trigger error paths during upsert index operations
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
 
-    DeferOp defer([&]() { _update_mgr->update_state_mem_tracker()->set_limit(old_limit); });
+    DeferOp defer([&]() { _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit); });
 
     // This should still succeed but may trigger some error handling paths
     {
@@ -5198,7 +5198,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
     }
 }
 
-// A column-mode partial update publishes its del files through UpdateManager::_handle_delete_files,
+// A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
 // which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
 // tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
 // sstable no publisher ingests: it never enters sstable_meta(), so only a full vacuum's orphan scan

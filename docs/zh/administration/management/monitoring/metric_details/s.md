@@ -214,6 +214,12 @@ description: "Alphabetical s"
 - 类型: 累积值
 - 描述: 在 compaction 过程中 `HyperJsonTransformer` 因输入 flat JSON schema 与上一段不同而重新初始化的次数。数值偏高表示参与 compaction 的 segment 间 schema 抖动。
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- 单位: 计数
+- 类型: 累积值
+- 描述: 在 `starrocks_be_flat_json_compaction_total` 计入的 flat JSON compaction 中，边读边写、不再缓存整个输出 segment 的次数。当已缓存的输入超过 `compaction_memory_limit_per_worker` 的八分之一且全部具有相同的扁平布局时触发。
+
 ## `starrocks_be_flat_json_compaction_total`
 
 - 单位: 计数

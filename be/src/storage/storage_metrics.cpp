@@ -83,6 +83,13 @@ void StorageMetrics::install(MetricRegistry* registry) {
     REGISTER_STORAGE_METRIC(primary_key_wait_apply_done_total);
     REGISTER_STORAGE_METRIC(pk_index_sst_read_error_total);
     REGISTER_STORAGE_METRIC(pk_index_sst_write_error_total);
+    REGISTER_STORAGE_METRIC(lake_pk_index_cache_memtable_bytes);
+    REGISTER_STORAGE_METRIC(lake_pk_index_cache_index_block_bytes);
+    REGISTER_STORAGE_METRIC(lake_pk_index_cache_filter_bytes);
+    REGISTER_STORAGE_METRIC(lake_pk_index_cache_delvec_bytes);
+    REGISTER_STORAGE_METRIC(lake_pk_index_cache_hit_total);
+    REGISTER_STORAGE_METRIC(lake_pk_index_load_total);
+    REGISTER_STORAGE_METRIC(lake_pk_index_load_duration_us);
 
     REGISTER_STORAGE_METRIC(readable_blocks_total);
     REGISTER_STORAGE_METRIC(writable_blocks_total);

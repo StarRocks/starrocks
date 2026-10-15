@@ -896,9 +896,14 @@ CONF_String(flamegraph_tool_dir, "${STARROCKS_HOME}/bin/flamegraph");
 // to forward compatibility, will be removed later
 CONF_mBool(enable_token_check, "true");
 
-// Whether to require Basic Auth for external BE HTTP endpoints. Internal endpoints
-// (BE-to-BE clone, internal load download, health probe, Prometheus metrics) are always
-// exempt. Default false for backward compatibility. Immutable; requires a BE restart to change.
+// Whether to require Basic Auth for the BE HTTP endpoints. Default false for backward
+// compatibility. Immutable; requires a BE restart to change. When true:
+// - Exempt are the token-gated internal transport (BE-to-BE tablet clone and internal load
+//   download: /api/_tablet/_download, /api/_download_load), and the Stream Load and transaction
+//   endpoints, which authenticate inside the handler.
+// - Every other endpoint requires a user the FE leader authenticates, including the health probe
+//   and the Prometheus metrics (/api/health, /metrics, /metrics/memory), which need no privilege.
+//   Most admin endpoints also require a SYSTEM privilege, such as OPERATE.
 CONF_Bool(enable_http_auth, "false");
 
 // Whether to enable the BE `/api/_stop_be` HTTP endpoint. When `false`, requests
@@ -2572,6 +2577,8 @@ CONF_mInt64(ai_function_request_timeout_ms, "600000");
 // A zero connect timeout disables the independent connection cap.
 CONF_mInt64(ai_function_connect_timeout_ms, "10000");
 CONF_mInt64(ai_function_max_response_bytes, "8388608");
+// Maximum raw inline FILE bytes before copying into the AI payload or encoding. Must be positive.
+CONF_mInt64(ai_function_max_input_file_bytes, "10485760");
 CONF_mInt32(ai_function_worker_thread_num, "16");
 CONF_mInt32(ai_function_sub_chunk_size, "64");
 CONF_mInt32(ai_function_max_retries, "3");
@@ -2616,12 +2623,5 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
-// Limits for one H3 function row/worker; all values must be positive.
-CONF_mInt64(h3_max_cells_per_row, "100000");
-CONF_mInt32(h3_max_grid_disk_k, "128");
-CONF_mInt64(h3_max_polygon_vertices, "10000");
-CONF_mInt32(h3_max_polygon_components, "256");
-CONF_mInt64(h3_max_working_bytes, "67108864");
-CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
 
 } // namespace starrocks::config

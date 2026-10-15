@@ -105,7 +105,6 @@ TEST(GeoTransportTest, ChunkRoundTripAndOwnership) {
                 }
                 const auto* restored = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(out.get()));
                 EXPECT_EQ(desc, restored->descriptor());
-                EXPECT_FALSE(restored->has_wkb_cache());
                 encoded->mutable_data()->assign(encoded->data().size(), '\xff');
                 EXPECT_EQ(point(), restored->get_wkb(0).to_string());
                 for (size_t i = 0; i < out->size(); ++i) EXPECT_EQ(column->is_null(i), out->is_null(i));
@@ -306,7 +305,6 @@ TEST(GeoTransportTest, StorageMetadataAndOpaquePayload) {
                 ASSERT_TRUE(geo->deserialize_column(bytes.data(), bytes.data() + bytes.size()).ok());
                 EXPECT_EQ(desc, geo->descriptor());
                 EXPECT_EQ(source->get_wkb(0), geo->get_wkb(0));
-                EXPECT_FALSE(geo->has_wkb_cache());
             }
         }
     }

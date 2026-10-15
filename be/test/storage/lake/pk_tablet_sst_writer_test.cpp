@@ -365,7 +365,7 @@ TEST_F(PkTabletSSTWriterTest, test_publish_multi_segments_with_sst) {
         EXPECT_EQ(txn_log->op_write().ssts_size(), 1);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // Compaction
@@ -552,7 +552,7 @@ TEST_F(PkTabletSSTWriterTest, test_parallel_execution_data_import) {
     EXPECT_GT(txn_log->op_write().ssts_size(), 0);
 
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-    EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+    EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
 
     // Verify the imported data by reading rows
     int64_t expected_rows = 300; // chunk0(100) + chunk1(100) + chunk2(100)
@@ -857,7 +857,7 @@ TEST_F(PkTabletSSTWriterTest, test_publish_with_parallel_index_get) {
         EXPECT_EQ(txn_log->op_write().ssts_size(), 1);
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
     // Compaction
@@ -928,7 +928,7 @@ TEST_F(PkTabletSSTWriterTest, test_publish_early_sst_compact) {
         // Publish version - this is where early_sst_compact should be triggered
         // when the number of filesets exceeds pk_index_early_sst_compaction_threshold
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
-        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
         version++;
     }
 
