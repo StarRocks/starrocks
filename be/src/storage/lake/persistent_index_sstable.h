@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -76,12 +77,17 @@ public:
     Status multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version, IndexValue* values,
                      KeyIndexSet* found_key_indexes) const;
 
-    sstable::Iterator* new_iterator(const sstable::ReadOptions& options) { return _sst->NewIterator(options); }
+    sstable::Iterator* new_iterator(const sstable::ReadOptions& options);
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
     // Full path of the underlying sstable file. Only valid after a successful init().
-    std::string filename() const { return _rf->filename(); }
+    std::string filename() const { return _filename; }
+
+    // Release the SST's index/filter blocks and file handle, preserving metadata and the delete vector.
+    // Returns bytes actually freed, or zero if a reader/iterator pins the read state or an open is in
+    // progress. Subsequent reads reopen the file on demand; concurrent opens share one read state.
+    size_t evict_read_state() const;
 
     // Resident bytes of the index block and bloom filter; memory_usage() is their sum.
     size_t index_block_memory_usage() const;
@@ -118,9 +124,18 @@ public:
                                                                  TabletManager* tablet_mgr = nullptr);
 
 private:
-    std::unique_ptr<sstable::Table> _sst{nullptr};
-    std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
-    std::unique_ptr<RandomAccessFile> _rf{nullptr};
+    struct ReadState;
+    StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf) const;
+    StatusOr<std::shared_ptr<ReadState>> _get_read_state() const;
+
+    // Readers keep a shared_ptr until their operation (or iterator) finishes. Eviction skips pinned
+    // state, so its return value never counts memory that a reader still owns.
+    mutable std::mutex _read_state_mutex;
+    mutable std::shared_ptr<ReadState> _read_state;
+    std::string _filename;
+    Cache* _cache = nullptr;
+    bool _need_filter = true;
+    uint64_t _block_cache_id = 0;
     PersistentIndexSstablePB _sstable_pb;
     DelVectorPtr _delvec;
 };

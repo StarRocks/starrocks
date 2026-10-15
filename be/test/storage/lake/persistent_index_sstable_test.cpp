@@ -17,10 +17,14 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <ctime>
+#include <future>
 #include <map>
 #include <set>
 #include <string_view>
+#include <thread>
 
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
@@ -672,6 +676,221 @@ static void build_test_sst(const std::string& path, uint64_t* filesize) {
     CHECK_OK(wf->close());
 }
 
+TEST_F(PersistentIndexSstableTest, test_evict_read_state_reopens_all_read_paths) {
+    const std::string path = lake::join_path(kTestDir, "read_state.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("read_state.sst");
+    pb.set_filesize(filesize);
+    std::unique_ptr<Cache> cache(new_lru_cache(1024 * 1024));
+    for (bool need_filter : {false, true}) {
+        ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, cache.get(), need_filter));
+        const size_t bytes = sst->memory_usage();
+        const size_t filter_bytes = sst->filter_memory_usage();
+        ASSERT_GT(bytes, 0);
+        EXPECT_EQ(need_filter, filter_bytes > 0);
+        std::vector<std::string> separators;
+        ASSERT_OK(sst->sample_keys(&separators, 0));
+        std::vector<std::string> data_keys;
+        ASSERT_OK(sst->sample_data_keys(&data_keys, Slice(), Slice(), 10));
+        ASSERT_FALSE(data_keys.empty());
+
+        EXPECT_EQ(bytes, sst->evict_read_state());
+        EXPECT_EQ(0, sst->evict_read_state());
+        EXPECT_EQ(0, sst->index_block_memory_usage());
+        EXPECT_EQ(0, sst->filter_memory_usage());
+        EXPECT_EQ(path, sst->filename());
+        EXPECT_EQ(pb.SerializeAsString(), sst->sstable_pb().SerializeAsString());
+
+        Slice key("key_0003");
+        IndexValue value(NullIndexValue);
+        KeyIndexSet found;
+        ASSERT_OK(sst->multi_get(&key, {0}, 1, &value, &found));
+        EXPECT_EQ(KeyIndexSet{0}, found);
+        EXPECT_EQ(IndexValue(3), value);
+        EXPECT_EQ(bytes, sst->memory_usage());
+        EXPECT_EQ(filter_bytes, sst->filter_memory_usage());
+
+        EXPECT_EQ(bytes, sst->evict_read_state());
+        std::vector<std::string> reopened_separators;
+        ASSERT_OK(sst->sample_keys(&reopened_separators, 0));
+        EXPECT_EQ(separators, reopened_separators);
+        EXPECT_EQ(bytes, sst->evict_read_state());
+        std::vector<std::string> reopened_data_keys;
+        ASSERT_OK(sst->sample_data_keys(&reopened_data_keys, Slice(), Slice(), 10));
+        EXPECT_EQ(data_keys, reopened_data_keys);
+
+        EXPECT_EQ(bytes, sst->evict_read_state());
+        std::unique_ptr<sstable::Iterator> iter(sst->new_iterator({}));
+        iter->Seek(key);
+        ASSERT_TRUE(iter->Valid());
+        EXPECT_EQ(key, iter->key());
+        ASSERT_OK(iter->status());
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_read_state_eviction_skips_pinned_readers) {
+    const std::string path = lake::join_path(kTestDir, "pinned_read_state.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("pinned_read_state.sst");
+    pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr));
+    const auto bytes = sst->memory_usage();
+    bool checked_reader = false;
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::multi_get:opened_file", [&](void*) {
+        EXPECT_EQ(0, sst->evict_read_state());
+        EXPECT_EQ(bytes, sst->memory_usage());
+        checked_reader = true;
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callback([] {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    });
+    Slice key("key_0003");
+    IndexValue value(NullIndexValue);
+    KeyIndexSet found;
+    ASSERT_OK(sst->multi_get(&key, {0}, -1, &value, &found));
+    EXPECT_TRUE(checked_reader);
+    EXPECT_EQ(IndexValue(3), value);
+
+    std::unique_ptr<sstable::Iterator> iter(sst->new_iterator({}));
+    EXPECT_EQ(0, sst->evict_read_state());
+    iter->Seek(key);
+    ASSERT_TRUE(iter->Valid());
+    iter.reset();
+    EXPECT_EQ(bytes, sst->evict_read_state());
+
+    // The iterator owns its read state even after the SST wrapper is destroyed.
+    iter.reset(sst->new_iterator({}));
+    sst.reset();
+    iter->Seek(key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(key, iter->key());
+    ASSERT_OK(iter->status());
+}
+
+TEST_F(PersistentIndexSstableTest, test_reopen_preserves_data_block_cache_identity) {
+    const std::string path = lake::join_path(kTestDir, "cached_read_state.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("cached_read_state.sst");
+    pb.set_filesize(filesize);
+    std::unique_ptr<Cache> cache(new_lru_cache(1024 * 1024));
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, cache.get()));
+    sstable::ReadIOStat stat;
+    sstable::ReadOptions options;
+    options.stat = &stat;
+    {
+        std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(options));
+        iter->SeekToFirst();
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_OK(iter->status());
+    }
+    EXPECT_GT(stat.block_cnt_from_file, 0);
+    EXPECT_GT(sst->evict_read_state(), 0);
+    stat = {};
+    {
+        std::unique_ptr<sstable::Iterator> iter(sst->new_iterator(options));
+        iter->SeekToFirst();
+        ASSERT_TRUE(iter->Valid());
+        ASSERT_OK(iter->status());
+    }
+    EXPECT_GT(stat.block_cnt_from_cache, 0);
+    EXPECT_EQ(0, stat.block_cnt_from_file);
+}
+
+TEST_F(PersistentIndexSstableTest, test_failed_reopen_is_retryable) {
+    const std::string path = lake::join_path(kTestDir, "failed_reopen.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("failed_reopen.sst");
+    pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr));
+    const auto bytes = sst->evict_read_state();
+    ASSERT_GT(bytes, 0);
+    const auto errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error", [](void* arg) {
+        *static_cast<Status*>(arg) = Status::IOError("injected reopen error");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callback([] {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    });
+    std::vector<std::string> keys;
+    const auto status = sst->sample_keys(&keys, 0);
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_NE(std::string::npos, status.to_string().find("injected reopen error"));
+    std::unique_ptr<sstable::Iterator> iter(sst->new_iterator({}));
+    EXPECT_FALSE(iter->Valid());
+    EXPECT_TRUE(iter->status().is_io_error());
+    EXPECT_EQ(0, sst->memory_usage());
+    EXPECT_EQ(errors_before + 2, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+
+    SyncPoint::GetInstance()->DisableProcessing();
+    ASSERT_OK(sst->sample_keys(&keys, 0));
+    EXPECT_EQ(bytes, sst->memory_usage());
+}
+
+TEST_F(PersistentIndexSstableTest, test_concurrent_reopen_and_eviction) {
+    const std::string path = lake::join_path(kTestDir, "concurrent_read_state.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("concurrent_read_state.sst");
+    pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr));
+    ASSERT_GT(sst->evict_read_state(), 0);
+    std::atomic<int> opens{0};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) { ++opens; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callback([] {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+    });
+
+    auto run_readers = [&](bool evict) {
+        std::promise<void> ready;
+        auto start = ready.get_future().share();
+        std::array<Status, 8> statuses;
+        std::vector<std::thread> readers;
+        for (size_t i = 0; i < statuses.size(); ++i) {
+            readers.emplace_back([&, i] {
+                start.wait();
+                for (int j = 0; j < 20; ++j) {
+                    Slice key("key_0003");
+                    IndexValue value(NullIndexValue);
+                    KeyIndexSet found;
+                    statuses[i] = sst->multi_get(&key, {0}, -1, &value, &found);
+                    if (!statuses[i].ok()) return;
+                    if (value != IndexValue(3) || found != KeyIndexSet{0}) {
+                        statuses[i] = Status::InternalError("wrong value after reopening SST");
+                        return;
+                    }
+                }
+            });
+        }
+        ready.set_value();
+        if (evict) {
+            for (int i = 0; i < 20; ++i) {
+                sst->evict_read_state();
+                std::this_thread::yield();
+            }
+        }
+        for (auto& reader : readers) reader.join();
+        for (const auto& status : statuses) EXPECT_TRUE(status.ok()) << status;
+    };
+    run_readers(false);
+    EXPECT_EQ(1, opens.load());
+    run_readers(true);
+}
+
 TEST_F(PersistentIndexSstableTest, test_metric_build_sstable_write_error) {
     const std::string path = lake::join_path(kTestDir, "metric_write_error.sst");
     ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(path));
@@ -945,6 +1164,7 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_rssi
     sstable_pb.mutable_fileset_id()->CopyFrom(UniqueId::gen_uid().to_proto());
     sstable_pb.set_rssid_offset(kOffset);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    ASSERT_GT(sst->evict_read_state(), 0);
 
     std::vector<std::string> key_str(kNumTombstones);
     std::vector<Slice> keys(kNumTombstones);
@@ -1000,6 +1220,7 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_shar
     sstable_pb.set_shared_rssid(kSharedRssid);
     sstable_pb.set_shared_version(kSharedVersion);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    ASSERT_GT(sst->evict_read_state(), 0);
 
     std::vector<std::string> key_str(kNumTombstones);
     std::vector<Slice> keys(kNumTombstones);
@@ -1390,6 +1611,30 @@ TEST_F(PersistentIndexSstableTest, test_sample_data_keys_scoped_to_range) {
     const std::string beyond_key = fmt::format("test_key_{:016X}", N + 1000);
     ASSERT_OK(sst->sample_data_keys(&beyond_samples, Slice(beyond_key), Slice(), kMaxSamples));
     EXPECT_TRUE(beyond_samples.empty());
+}
+
+TEST_F(PersistentIndexSstableTest, test_read_state_reopen_trace) {
+    const std::string path = lake::join_path(kTestDir, "read_state_trace.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("read_state_trace.sst");
+    pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr));
+    const auto bytes = sst->memory_usage();
+    scoped_refptr<Trace> trace(new Trace);
+    {
+        ADOPT_TRACE(trace.get());
+        EXPECT_EQ(bytes, sst->evict_read_state());
+        std::vector<std::string> samples;
+        ASSERT_OK(sst->sample_keys(&samples, 0));
+        ASSERT_OK(sst->sample_keys(&samples, 0));
+    }
+    const auto metrics = trace->metrics()->Get();
+    EXPECT_EQ(bytes, find_trace_metric(metrics, "pindex_sst_read_state_evict_bytes"));
+    EXPECT_EQ(1, find_trace_metric(metrics, "pindex_sst_reopen_count"));
+    EXPECT_EQ(bytes, find_trace_metric(metrics, "pindex_sst_reopen_bytes"));
+    EXPECT_GT(find_trace_metric(metrics, "pindex_sst_reopen_us"), 0);
 }
 
 } // namespace starrocks::lake

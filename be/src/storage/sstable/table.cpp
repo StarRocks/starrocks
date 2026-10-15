@@ -42,7 +42,8 @@ struct Table::Rep {
     Block* index_block = nullptr;
 };
 
-Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table) {
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table,
+                   uint64_t cache_id) {
     if (size < Footer::kEncodedLength) {
         return Status::Corruption("file is too short to be an sstable");
     }
@@ -76,7 +77,7 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->file = file;
         rep->metaindex_handle = footer.metaindex_handle();
         rep->index_block = index_block;
-        rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
+        rep->cache_id = options.block_cache ? (cache_id != 0 ? cache_id : options.block_cache->new_id()) : 0;
         rep->filter_data = nullptr;
         rep->filter = nullptr;
         table.reset(new Table(rep));
@@ -84,6 +85,10 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
     }
 
     return s;
+}
+
+uint64_t Table::cache_id() const {
+    return rep_->cache_id;
 }
 
 Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {

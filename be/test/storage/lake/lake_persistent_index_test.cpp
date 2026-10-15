@@ -1059,6 +1059,37 @@ TEST_F(LakePersistentIndexTest, test_memory_stats_add_up_to_memory_usage) {
     index->refresh_cache_memory_metrics();
     EXPECT_EQ(after, gauges());
 
+    // Partial eviction frees only the SST read state. The tail must stay usable without a tablet
+    // reload, and ingested delete vectors must still filter the SST after it reopens.
+    EXPECT_EQ(0, index->evict_sstable_read_state(0));
+    const auto freed = index->evict_sstable_read_state(1);
+    EXPECT_EQ(stats.index_block_bytes + stats.filter_bytes, freed);
+    EXPECT_EQ(0, index->evict_sstable_read_state(1));
+    const auto evicted = index->memory_stats();
+    EXPECT_EQ(stats.memtable_bytes, evicted.memtable_bytes);
+    EXPECT_EQ(stats.delvec_bytes, evicted.delvec_bytes);
+    EXPECT_EQ(0, evicted.index_block_bytes);
+    EXPECT_EQ(0, evicted.filter_bytes);
+    EXPECT_EQ(stats.charged_bytes() - freed, index->refresh_cache_memory_metrics());
+    const auto evicted_gauges = gauges();
+    EXPECT_EQ(after[0], evicted_gauges[0]);
+    EXPECT_EQ(before[1], evicted_gauges[1]);
+    EXPECT_EQ(before[2], evicted_gauges[2]);
+    EXPECT_EQ(after[3], evicted_gauges[3]);
+
+    // A memtable-only lookup must not reopen the SST.
+    IndexValue value(NullIndexValue);
+    ASSERT_OK(index->get(1, &mem_key_slices[0], &value));
+    EXPECT_EQ(mem_values[0], value);
+    EXPECT_EQ(0, index->memory_stats().index_block_bytes);
+    std::array<Slice, 2> sst_keys{Slice("sst-key-0001"), Slice("sst-key-0002")};
+    std::array<IndexValue, 2> sst_values{IndexValue(NullIndexValue), IndexValue(NullIndexValue)};
+    ASSERT_OK(index->get(sst_keys.size(), sst_keys.data(), sst_values.data()));
+    EXPECT_EQ(NullIndexValue, sst_values[0].get_value());
+    EXPECT_EQ(IndexValue((uint64_t{100} << 32) | 2), sst_values[1]);
+    EXPECT_EQ(stats.charged_bytes(), index->refresh_cache_memory_metrics());
+    EXPECT_EQ(after, gauges());
+
     index.reset();
     EXPECT_EQ(before, gauges());
 }

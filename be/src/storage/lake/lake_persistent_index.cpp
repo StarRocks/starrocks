@@ -1773,6 +1773,24 @@ size_t LakePersistentIndex::refresh_cache_memory_metrics() {
     return stats.charged_bytes();
 }
 
+size_t LakePersistentIndex::evict_sstable_read_state(size_t bytes_to_free) {
+    size_t freed_bytes = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (freed_bytes >= bytes_to_free) {
+            break;
+        }
+        if (fileset == nullptr) {
+            continue;
+        }
+        fileset->for_each_sstable([&](const PersistentIndexSstable& sstable) {
+            if (freed_bytes < bytes_to_free) {
+                freed_bytes += sstable.evict_read_state();
+            }
+        });
+    }
+    return freed_bytes;
+}
+
 // ---- Row-oriented publish API ------------------------------------------------------------------
 //
 // The batch methods above take encoded keys as a Slice array. These take a rowset's primary-key

@@ -242,6 +242,12 @@ public:
     // memory_usage() split by component, plus the sstable delete vectors it leaves out.
     LakePersistentIndexMemoryStats memory_stats() const;
 
+    // Try to free bytes_to_free of SST index/filter blocks, rounded up to whole SST read states.
+    // Preserve memtables, metadata, versions and delete vectors. Caller holds the tablet index lock
+    // and must refresh the cache entry's charge after eviction (and after reads reopen SST state).
+    // This is a mechanism only: the index cache's eviction policy decides when/how much to release.
+    size_t evict_sstable_read_state(size_t bytes_to_free);
+
     // Publish this index's current memory_stats() to the lake_pk_index_cache_* gauges and return
     // memory_usage(). PrimaryKeyManager calls this whenever it resizes the index's cache entry, so the gauges
     // track what the cache holds; _reset_index_state() takes the index back out. Caller holds the index lock.

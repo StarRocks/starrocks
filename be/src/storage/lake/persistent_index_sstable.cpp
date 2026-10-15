@@ -70,47 +70,106 @@ Status drop_corrupted_sstable_cache(const std::string& path) {
 #endif
 }
 
-Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
-                                    Cache* cache, bool need_filter, DelVectorPtr delvec,
-                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
-    sstable::Options options;
-    if (need_filter) {
-        _filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
-        options.filter_policy = _filter_policy.get();
-    }
-    options.block_cache = cache;
-    // Verify block checksums when reading the index/meta blocks, so corrupted bytes
-    // (usually from the local cache) fail deterministically as Corruption instead of
-    // being misparsed, and can be healed by the drop-cache-and-retry below.
-    options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
+struct PersistentIndexSstable::ReadState {
+    // Destroy the table before the file and filter policy its iterators/options refer to.
+    std::unique_ptr<sstable::FilterPolicy> filter_policy;
+    std::unique_ptr<RandomAccessFile> rf;
     std::unique_ptr<sstable::Table> table;
-    auto open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
+};
+
+StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_open_read_state(
+        std::unique_ptr<RandomAccessFile> rf) const {
+    auto state = std::make_shared<ReadState>();
+    state->rf = std::move(rf);
+    sstable::Options options;
+    if (_need_filter) {
+        state->filter_policy.reset(const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+        options.filter_policy = state->filter_policy.get();
+    }
+    options.block_cache = _cache;
+    // Preserve checksum verification and the local-cache corruption retry on both initial open and reopen.
+    options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
+    auto open_st =
+            sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table, _block_cache_id);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_error", &open_st);
     if (open_st.is_corruption()) {
-        auto drop_status = drop_corrupted_sstable_cache(rf->filename());
+        auto drop_status = drop_corrupted_sstable_cache(_filename);
         if (drop_status.ok()) {
-            if (tablet_mgr == nullptr) {
-                return Status::InvalidArgument("tablet_mgr is null when loading sst file");
-            }
+            state->table.reset();
             RandomAccessFileOptions opts;
-            if (!sstable_pb.encryption_meta().empty()) {
-                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            if (!_sstable_pb.encryption_meta().empty()) {
+                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
                 opts.encryption_info = std::move(info);
             }
-            ASSIGN_OR_RETURN(rf, fs::new_random_access_file(
-                                         opts, tablet_mgr->sst_location(metadata->id(), sstable_pb.filename())));
-            open_st = sstable::Table::Open(options, rf.get(), sstable_pb.filesize(), table);
+            ASSIGN_OR_RETURN(state->rf, fs::new_random_access_file(opts, _filename));
+            open_st = sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table,
+                                           _block_cache_id);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
         }
     }
     if (!open_st.ok()) {
         StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
-        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << sstable_pb.filename() << ", error: " << open_st;
+        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << _sstable_pb.filename() << ", error: " << open_st;
         return open_st;
     }
-    _sst = std::move(table);
-    _rf = std::move(rf);
+    return state;
+}
+
+StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_get_read_state() const {
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    if (_read_state) {
+        return _read_state;
+    }
+    if (_filename.empty()) {
+        return Status::InvalidArgument("SSTable is not initialized");
+    }
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_reopen_us");
+    TRACE_COUNTER_INCREMENT("pindex_sst_reopen_count", 1);
+    RandomAccessFileOptions opts;
+    if (!_sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _filename));
+    ASSIGN_OR_RETURN(auto state, _open_read_state(std::move(rf)));
+    TRACE_COUNTER_INCREMENT("pindex_sst_reopen_bytes", state->table->memory_usage());
+    _read_state = std::move(state);
+    return _read_state;
+}
+
+size_t PersistentIndexSstable::evict_read_state() const {
+    std::unique_lock<std::mutex> lock(_read_state_mutex, std::try_to_lock);
+    if (!lock.owns_lock() || !_read_state || _read_state.use_count() != 1) {
+        return 0;
+    }
+    const size_t bytes = _read_state->table->memory_usage();
+    _read_state.reset();
+    TRACE_COUNTER_INCREMENT("pindex_sst_read_state_evict_bytes", bytes);
+    return bytes;
+}
+
+sstable::Iterator* PersistentIndexSstable::new_iterator(const sstable::ReadOptions& options) {
+    auto state_or = _get_read_state();
+    if (!state_or.ok()) {
+        return sstable::NewErrorIterator(state_or.status());
+    }
+    auto state = std::move(state_or).value();
+    auto* iterator = state->table->NewIterator(options);
+    iterator->RegisterCleanup([](void* ptr, void*) { delete static_cast<std::shared_ptr<ReadState>*>(ptr); },
+                              new std::shared_ptr<ReadState>(std::move(state)), nullptr);
+    return iterator;
+}
+
+Status PersistentIndexSstable::init(std::unique_ptr<RandomAccessFile> rf, const PersistentIndexSstablePB& sstable_pb,
+                                    Cache* cache, bool need_filter, DelVectorPtr delvec,
+                                    const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    _filename = rf->filename();
     _sstable_pb.CopyFrom(sstable_pb);
+    _cache = cache;
+    _need_filter = need_filter;
+    _block_cache_id = 0;
+    ASSIGN_OR_RETURN(_read_state, _open_read_state(std::move(rf)));
+    _block_cache_id = _read_state->table->cache_id();
     // load delvec
     if (_sstable_pb.has_delvec() && _sstable_pb.delvec().size() > 0) {
         if (delvec) {
@@ -208,6 +267,7 @@ Status PersistentIndexSstable::build_tombstone_sstable(const Slice* sorted_keys,
 
 Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                          IndexValue* values, KeyIndexSet* found_key_indexes) const {
+    ASSIGN_OR_RETURN(auto state, _get_read_state());
     std::vector<std::string> index_value_with_vers(key_indexes.size());
     sstable::ReadIOStat stat;
     sstable::ReadOptions options;
@@ -224,7 +284,7 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
         opts.encryption_info = std::move(info);
     }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _rf->filename()));
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _filename));
     // Test seam: the per-call handle is the only thing the IO-breakdown counters below measure, so a
     // UT has to be able to wrap it in a stream that reports synthetic local/remote statistics. A
     // shared-nothing POSIX file exposes none, which would leave the counters pinned at zero.
@@ -236,12 +296,14 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
     // be read by the persistent index by designed. So even we provide a predicate, all keys read by multi_get
     // will always meet the condition.
     auto start_ts = butil::gettimeofday_us();
-    auto multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+    auto multiget_st =
+            state->table->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
     TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:error", &multiget_st);
     if (multiget_st.is_corruption()) {
-        auto drop_status = drop_corrupted_sstable_cache(_rf->filename());
+        auto drop_status = drop_corrupted_sstable_cache(_filename);
         if (drop_status.ok()) {
-            multiget_st = _sst->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(), &index_value_with_vers);
+            multiget_st = state->table->MultiGet(options, keys, key_indexes.begin(), key_indexes.end(),
+                                                 &index_value_with_vers);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::multi_get:retry_error", &multiget_st);
         }
     }
@@ -331,15 +393,18 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
 }
 
 size_t PersistentIndexSstable::index_block_memory_usage() const {
-    return (_sst != nullptr) ? _sst->index_block_memory_usage() : 0;
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    return _read_state ? _read_state->table->index_block_memory_usage() : 0;
 }
 
 size_t PersistentIndexSstable::filter_memory_usage() const {
-    return (_sst != nullptr) ? _sst->filter_memory_usage() : 0;
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    return _read_state ? _read_state->table->filter_memory_usage() : 0;
 }
 
 size_t PersistentIndexSstable::memory_usage() const {
-    return (_sst != nullptr) ? _sst->memory_usage() : 0;
+    std::lock_guard<std::mutex> lock(_read_state_mutex);
+    return _read_state ? _read_state->table->memory_usage() : 0;
 }
 
 size_t PersistentIndexSstable::delvec_memory_usage() const {
@@ -347,26 +412,22 @@ size_t PersistentIndexSstable::delvec_memory_usage() const {
 }
 
 Status PersistentIndexSstable::sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const {
-    if (_sst == nullptr) {
-        return Status::InvalidArgument("SSTable is not initialized");
-    }
-    return _sst->sample_keys(keys, sample_interval_bytes);
+    ASSIGN_OR_RETURN(auto state, _get_read_state());
+    return state->table->sample_keys(keys, sample_interval_bytes);
 }
 
 Status PersistentIndexSstable::sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key,
                                                 const Slice& stop_key, size_t max_samples) const {
-    if (_sst == nullptr) {
-        return Status::InvalidArgument("SSTable is not initialized");
-    }
+    ASSIGN_OR_RETURN(auto state, _get_read_state());
     std::vector<std::string> separators;
-    RETURN_IF_ERROR(_sst->sample_keys_in_range(&separators, seek_key, stop_key, max_samples));
+    RETURN_IF_ERROR(state->table->sample_keys_in_range(&separators, seek_key, stop_key, max_samples));
 
     sstable::ReadOptions options;
     options.fill_cache = false;
     // The seeks below read real data blocks; catch corrupted bytes as Corruption
     // instead of letting them feed wrong keys into the split samples.
     options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
-    std::unique_ptr<sstable::Iterator> iterator(_sst->NewIterator(options));
+    std::unique_ptr<sstable::Iterator> iterator(state->table->NewIterator(options));
     for (const auto& separator : separators) {
         iterator->Seek(Slice(separator));
         if (!iterator->Valid()) {
