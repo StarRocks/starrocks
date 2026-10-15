@@ -55,6 +55,29 @@ public class BasicActionTest {
         uri = "/api/metrics?all=true";
         result = WebUtils.sanitizeHttpReqUri(uri);
         Assertions.assertEquals(uri, result);
+
+        Assertions.assertEquals("/api/metrics", WebUtils.sanitizeHttpReqUri("/api/metrics"));
+    }
+
+    @Test
+    public void testSanitizeHttpReqUriParsesQueryAsActionsDo() throws Exception {
+        // Each of these passes token=TopSecret to the action, which parses the query with QueryStringDecoder: ';' is
+        // a separator too, a leading '=' in a name is skipped, and an escaped '&' is part of the value.
+        String[] uris = {
+                "/api/bootstrap?label=1;token=TopSecret",
+                "/api/bootstrap?label=1&=token=TopSecret",
+                "/api/bootstrap?label=1&token=Top%26Secret",
+        };
+        for (String uri : uris) {
+            Assertions.assertEquals("/api/bootstrap?label=1&token=*", WebUtils.sanitizeHttpReqUri(uri), uri);
+        }
+
+        // The other parameters keep their order, and are encoded again; what is not parsed as a parameter, like the
+        // fragment, is left out.
+        Assertions.assertEquals("/api/get_small_file?label=a+b&file_id=*&flag=",
+                WebUtils.sanitizeHttpReqUri("/api/get_small_file?label=a%20b&file_id=1&flag"));
+        Assertions.assertEquals("http://fe:8030/api/bootstrap?token=*&token=*",
+                WebUtils.sanitizeHttpReqUri("http://fe:8030/api/bootstrap?token=a&token=b#Secret"));
     }
 
 }

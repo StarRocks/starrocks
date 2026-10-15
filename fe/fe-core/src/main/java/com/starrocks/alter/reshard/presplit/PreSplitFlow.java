@@ -45,9 +45,10 @@ import java.util.function.BooleanSupplier;
  * kinds:
  * <ul>
  *   <li>{@link #dispatch} — partitioned-vs-unpartitioned routing, including the
- *       automatic-partition gate that conservatively skips manually
- *       list/range-partitioned targets (those cannot pre-create partitions from
- *       sampled values).</li>
+ *       partitioning gate: automatic targets and manually range-partitioned ones
+ *       (whose existing partitions the grouper maps samples onto) take the
+ *       multi-partition flow; manual list and expression-range targets are
+ *       skipped.</li>
  *   <li>{@link #runSinglePartitionFlow} — resolve the unique partition + base
  *       tablet, build a {@link DefaultPreSplitPipeline}, submit via
  *       {@link TabletPreSplitCoordinator#submitAsynchronously}, then sync-await
@@ -119,11 +120,21 @@ final class PreSplitFlow {
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context,
                          PreSplitPartitionScope partitionScope) {
         if (target.getPartitionInfo().isPartitioned()) {
-            // Manually list/range-partitioned targets do not support pre-creating partitions
-            // from sampled values; skip conservatively, let the load proceed.
             if (!Boolean.TRUE.equals(target.supportedAutomaticPartition())) {
-                PreSplitProfile.recordOutcome("SKIPPED: MANUAL_PARTITIONING");
-                return;
+                // A manual RANGE target already declares every partition the load can write, so the
+                // grouper maps samples onto those and never creates one. Manual LIST and
+                // expression-range targets have no such mapping yet; skip them, let the load proceed.
+                if (!PartitionSampleGrouper.isManualRangePartitioned(target)) {
+                    PreSplitProfile.recordOutcome("SKIPPED: MANUAL_PARTITIONING");
+                    return;
+                }
+                // Only an empty single-tablet partition can be split; skip before sampling when the
+                // load cannot reach one, which is the common case for a repeatedly loaded table.
+                if (!PartitionSampleGrouper.hasEmptySingleTabletPartition(database.getId(), target, partitionScope)) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_EMPTY);
+                    PreSplitProfile.recordOutcome("SKIPPED: NO_EMPTY_PARTITION");
+                    return;
+                }
             }
             runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context, partitionScope);
         } else {
@@ -419,13 +430,20 @@ final class PreSplitFlow {
      * (the footer min/max tuples span the whole sort key), so the BE's {@code
      * validate_new_tablet_ranges} accepts them just as it does data-tier boundaries.
      *
+     * <p>Serves both file-backed load kinds, so a Broker Load into a partitioned range-bucket table
+     * plans its cuts from footers exactly as the equivalent {@code INSERT INTO ... SELECT FROM FILES()}
+     * does. The per-kind provider ({@link DefaultPreSplitPipeline#rowGroupStatisticsProviderFor})
+     * applies its own source guards — Broker Load defers to the data tier for a broker-backed or
+     * non-identity file group — and raises {@link MetaTierUnavailableException}, which this method's
+     * catch turns into the same data-tier fallback.
+     *
      * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
      * the footer path cannot serve: a load kind without Parquet footers, a rollup target
      * (secondary-index sort keys the footer path does not carry), a partition source column absent
      * from the sort key, or too few usable footer statistics.
      */
     static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
-        if (loadKind != LoadKind.INSERT_FROM_FILES) {
+        if (loadKind != LoadKind.INSERT_FROM_FILES && loadKind != LoadKind.BROKER_LOAD) {
             return null;
         }
         if (!prepared.secondaryIndexSpecs().isEmpty()) {
@@ -456,7 +474,8 @@ final class PreSplitFlow {
                     prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
                     partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
-            List<RowGroupStatistics> rowGroups = new InsertFromFilesRowGroupStatisticsProvider().fetch(request);
+            List<RowGroupStatistics> rowGroups =
+                    DefaultPreSplitPipeline.rowGroupStatisticsProviderFor(loadKind).fetch(request);
             if (rowGroups == null || rowGroups.isEmpty()) {
                 return null;
             }
@@ -518,6 +537,7 @@ final class PreSplitFlow {
             return new SampleSet(sortKeyTuples, partitionSourceTuples,
                     new Estimates(prepared.estimatedBytes(), 0L));
         } catch (StarRocksException | RuntimeException metaTierFailure) {
+            PreSplitProfile.recordMetaTierFallbackReason(metaTierFailure);
             LOG.info("Pre-split meta tier (multi-partition) unavailable for table {}; falling back to "
                     + "data tier: {}", table.getName(), metaTierFailure.getMessage());
             return null;

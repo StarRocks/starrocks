@@ -128,8 +128,8 @@ void close_expr_contexts_noexcept(const std::vector<ExprContext*>& contexts, Run
 } // namespace
 
 StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProjection::create(
-        AIProjectProjectionSpec spec) {
-    if (spec.empty()) {
+        AIProjectProjectionSpec spec, size_t max_input_file_bytes) {
+    if (spec.empty() || max_input_file_bytes == 0) {
         return invalid_projection();
     }
 
@@ -178,13 +178,15 @@ StatusOr<std::shared_ptr<AIProjectExpressionProjection>> AIProjectExpressionProj
                 return invalid_projection();
             }
         }
-        return std::shared_ptr<AIProjectExpressionProjection>(new AIProjectExpressionProjection(std::move(spec)));
+        return std::shared_ptr<AIProjectExpressionProjection>(
+                new AIProjectExpressionProjection(std::move(spec), max_input_file_bytes));
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("Failed to allocate AI project expression projection");
     }
 }
 
-AIProjectExpressionProjection::AIProjectExpressionProjection(AIProjectProjectionSpec spec) : _spec(std::move(spec)) {}
+AIProjectExpressionProjection::AIProjectExpressionProjection(AIProjectProjectionSpec spec, size_t max_input_file_bytes)
+        : _spec(std::move(spec)), _max_input_file_bytes(max_input_file_bytes) {}
 
 AIProjectExpressionProjection::~AIProjectExpressionProjection() {
     close(_prepared_state);
@@ -428,7 +430,8 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             ASSIGN_OR_RETURN(AIFunctionInputBatch batch,
                              ai_expression->build_input_batch(
                                      context, input.get(),
-                                     _spec.model_configs().at(std::string(ai_expression->model_config_id())).model));
+                                     _spec.model_configs().at(std::string(ai_expression->model_config_id())).model,
+                                     _max_input_file_bytes));
             if (batch.rows.size() != rows) {
                 return Status::InternalError("AI project expression returned an invalid input batch");
             }
@@ -505,6 +508,7 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
+            ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
             if (model_config.source == TAIModelSource::SYSTEM) {
                 if (!model_config.api_key.empty() || model_config.timeout_ms.has_value() ||
                     model_config.dimensions.has_value()) {
@@ -532,8 +536,8 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 }
                 route.api_key = api_key;
             } else if (model_config.source == TAIModelSource::PROVIDER) {
-                if (id == kSystemChatConfigId || id == kSystemEmbeddingConfigId ||
-                    contains_only_ascii_whitespace(model_config.model) ||
+                if (model_config.protocol != "openai_compatible" || id == kSystemChatConfigId ||
+                    id == kSystemEmbeddingConfigId || contains_only_ascii_whitespace(model_config.model) ||
                     contains_control_character(model_config.api_key) ||
                     (model_config.timeout_ms.has_value() &&
                      (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
@@ -555,6 +559,11 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
             }
             route.resolved_endpoint =
                     std::make_shared<const ResolvedHttpEndpoint>(std::move(resolved_endpoint).value());
+            route.dispatcher = std::make_unique<AITaskDispatcher>(
+                    services->admission_controller, services->http_client, route.provider.get(),
+                    services->completion_executor, services->clock, services->random, services->metrics,
+                    AITaskDispatcherOptions{.max_retries = config.max_retries,
+                                            .max_throttle_retries = config.max_retries_on_throttle});
             routes.emplace(id, std::move(route));
         }
         return std::shared_ptr<AIProjectDispatcherSubmitter>(new AIProjectDispatcherSubmitter(
@@ -572,18 +581,14 @@ AIProjectDispatcherSubmitter::AIProjectDispatcherSubmitter(std::map<std::string,
                                                            std::weak_ptr<QueryContext> query_context,
                                                            std::shared_ptr<AIQueryMemoryAccount> memory_account,
                                                            const AIServices& services, AIRuntimeConfig config)
-        : _routes(std::move(routes)),
-          _workgroup_key(workgroup_key),
+        : _workgroup_key(workgroup_key),
           _query_id(query_id),
           _query_context(std::move(query_context)),
           _memory_account(std::move(memory_account)),
           _memory(_memory_account->memory_context()),
           _clock(services.clock),
           _config(std::move(config)),
-          _dispatcher(services.admission_controller, services.http_client, &_provider, services.completion_executor,
-                      services.clock, services.random, services.metrics,
-                      AITaskDispatcherOptions{.max_retries = _config.max_retries,
-                                              .max_throttle_retries = _config.max_retries_on_throttle}) {}
+          _routes(std::move(routes)) {}
 
 StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::submit(AIProjectTaskRequest request,
                                                                                     AITaskCallback&& callback) {
@@ -644,6 +649,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                                     .prompt = request.prompt,
                                     .options = options,
                                     .capability = route.capability,
+                                    .media = request.media,
                             },
                     .request_deadline_ns = request_deadline_ns,
                     .attempt_timeout_ms = route.attempt_timeout_ms,
@@ -679,7 +685,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
         _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(build_dispatch_request)*>(opaque))(); },
                                       &build_dispatch_request);
 
-        auto dispatcher_handle = _dispatcher.submit(std::move(dispatch_request), std::move(callback));
+        auto dispatcher_handle = route.dispatcher->submit(std::move(dispatch_request), std::move(callback));
         if (!dispatcher_handle.ok()) {
             return dispatcher_handle.status();
         }

@@ -19,11 +19,14 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/uid_util.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "column/serde/encode_level.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "data_workflows/load/tablet_writer/lake_tablets_channel.h"
@@ -38,11 +41,11 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -58,8 +61,9 @@ public:
         _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
 
         _load_channel_mgr =
                 std::make_unique<LoadChannelMgr>(_tablet_manager.get(), RuntimeEnv::GetInstance()->diagnose_daemon(),
@@ -246,7 +250,7 @@ protected:
     int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<lake::FixedLocationProvider> _location_provider;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<lake::TabletManager> _tablet_manager;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     std::shared_ptr<TabletSchema> _tablet_schema;
@@ -265,6 +269,35 @@ LoadChannelOpenContext create_open_context(const PTabletWriterOpenRequest* reque
     open_context.done = nullptr;
     open_context.receive_rpc_time_ns = MonotonicNanos();
     return open_context;
+}
+
+// The sender cannot use an encode level this BE has not agreed to, so open() has to say what it
+// honors. The field is always set, including 0 when the feature is off: it is its *absence* that
+// tells a sender it is talking to a BE predating the negotiation.
+TEST_F(LoadChannelTestForLakeTablet, open_advertises_the_supported_chunk_encode_level) {
+    const bool prev_enabled = config::enable_load_chunk_all_null_encoding;
+    DeferOp restore([&] { config::enable_load_chunk_all_null_encoding = prev_enabled; });
+
+    {
+        config::enable_load_chunk_all_null_encoding = true;
+        PTabletWriterOpenRequest open_request = _open_request;
+        PTabletWriterOpenResult open_response;
+        open_request.set_num_senders(1);
+        _load_channel->open(create_open_context(&open_request, &open_response));
+        ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
+        ASSERT_TRUE(open_response.has_supported_chunk_encode_level());
+        EXPECT_EQ(serde::ENCODE_ALL_NULL, open_response.supported_chunk_encode_level());
+    }
+    {
+        config::enable_load_chunk_all_null_encoding = false;
+        PTabletWriterOpenRequest open_request = _open_request;
+        PTabletWriterOpenResult open_response;
+        open_request.set_num_senders(1);
+        _load_channel->open(create_open_context(&open_request, &open_response));
+        ASSERT_EQ(TStatusCode::OK, open_response.status().status_code());
+        ASSERT_TRUE(open_response.has_supported_chunk_encode_level());
+        EXPECT_EQ(0, open_response.supported_chunk_encode_level());
+    }
 }
 
 TEST_F(LoadChannelTestForLakeTablet, test_simple_write) {

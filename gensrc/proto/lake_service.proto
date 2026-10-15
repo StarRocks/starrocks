@@ -214,6 +214,9 @@ message CompactRequest {
     // Rewrites every complete rowset containing at least one explicitly shared
     // segment. Used once after a range-tablet split to make all child files private.
     optional bool unshare_segments = 14 [default = false];
+    // The FE evaluates the table's forbidden time ranges before dispatch.
+    // Explicit manual compaction may still request base compaction.
+    optional bool allow_base_compaction = 52 [default = true];
 }
 
 message AggregateCompactRequest {

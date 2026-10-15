@@ -93,6 +93,7 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.ModifyColumnCommentLog;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -3173,6 +3174,9 @@ public class SchemaChangeHandler extends AlterHandler {
             fastSchemaEvolution = false;
         }
 
+        // After finalAnalyze, so a statement it already rejects keeps its own message.
+        checkBitmapIndexesForTypeChange(olapTable, newIndexes, indexMetaIdToSchema);
+
         if (schemaChangeData.getNewIndexMetaIdToSchema().isEmpty() && !schemaChangeData.isHasIndexChanged()) {
             // Nothing changed.
             return null;
@@ -3230,6 +3234,40 @@ public class SchemaChangeHandler extends AlterHandler {
             return null;
         } else {
             return createFastSchemaEvolutionJobInSharedDataMode(schemaChangeData);
+        }
+    }
+
+    // A rewrite carries every BITMAP index on a column over to the column's new type, and the BE can only
+    // write a bitmap dictionary for the types CREATE INDEX accepts. Check the statement's final index set
+    // against the final types, so an index added or dropped in the same statement is accounted for. Every
+    // materialized index is checked, not just the base one: an index may cover a column that only a rollup
+    // (synchronous MV) carries. Only columns that are new to a staged schema or whose type changes there are
+    // checked: a keyness change alone keeps the type, and an untouched column keeps whatever index it already has.
+    private static void checkBitmapIndexesForTypeChange(OlapTable table, List<Index> indexes,
+                                                        Map<Long, ? extends List<Column>> indexMetaIdToSchema)
+            throws DdlException {
+        for (Map.Entry<Long, ? extends List<Column>> entry : indexMetaIdToSchema.entrySet()) {
+            Map<ColumnId, Column> oldColumns = MetaUtils.buildIdToColumn(table.getSchemaByIndexMetaId(entry.getKey()));
+            Map<ColumnId, Column> newColumns = MetaUtils.buildIdToColumn(entry.getValue());
+            for (Index index : indexes) {
+                if (index.getIndexType() != IndexType.BITMAP) {
+                    continue;
+                }
+                for (ColumnId columnId : index.getColumns()) {
+                    Column oldColumn = oldColumns.get(columnId);
+                    Column newColumn = newColumns.get(columnId);
+                    if (newColumn == null || (oldColumn != null && newColumn.getType().equals(oldColumn.getType()))) {
+                        continue;
+                    }
+                    String columnName = oldColumn != null ? oldColumn.getName()
+                            : Column.removeNamePrefix(newColumn.getName());
+                    try {
+                        IndexAnalyzer.checkBitmapColumnType(columnName, newColumn.getPrimitiveType());
+                    } catch (SemanticException e) {
+                        throw new DdlException(e.getDetailMsg());
+                    }
+                }
+            }
         }
     }
 
@@ -4179,8 +4217,9 @@ public class SchemaChangeHandler extends AlterHandler {
         // override the two-arg form, so routing every cancel through
         // `cancel(reason, force)` would skip that pre-work and a non-force
         // cancel against a PENDING job could deadlock until task timeout.
-        // Lake jobs have a two-arg override that preserves the same pre-work,
-        // so the force path stays safe.
+        // Lake jobs need no such pre-work at all: their PENDING phase dispatches
+        // the CreateReplicaTasks and polls the latch from later scheduler rounds
+        // instead of waiting on it, so run() never holds the monitor for long.
         boolean force = cancelAlterTableStmt.isForce();
         if (force && !Config.enable_admin_skip_committed_txn) {
             throw new DdlException(
@@ -4487,9 +4526,9 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
-     * Translate a catalog {@link Index} to the thrift payload consumed by
-     * BE's do_process_add_index_only. BE re-resolves column names via the
-     * new tablet schema, so we pass names, not unique ids.
+     * Build the persisted fast-path index definition. Keep column display names
+     * for compatibility with existing journaled jobs; LakeTableAddIndexJob
+     * converts a copy to stable ColumnIds before sending it to BE.
      */
     private static com.starrocks.thrift.TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
         com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
@@ -4819,6 +4858,9 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaChangeJob.setWatershedTxnId(txnId);
             schemaChangeJob.setJobState(AlterJobV2.JobState.FINISHED);
             schemaChangeJob.setFinishedTimeMs(System.currentTimeMillis());
+            // This job is only a history record: SHOW ALTER reads none of the per-job schema maps,
+            // and the history schema already keeps the pre-change schema.
+            schemaChangeJob.pruneMeta();
             this.addAlterJobV2(schemaChangeJob);
 
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
@@ -5091,6 +5133,23 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         job.setComputeResource(computeResource);
         return job;
+    }
+
+    /**
+     * Replays the leader's release of a job's history schema. Idempotent, and skips a job that is gone or has no
+     * history schema; never writes the journal.
+     */
+    public void replayReleaseHistorySchema(ReleaseAlterJobHistorySchemaLog log) {
+        AlterJobV2 job = alterJobsV2.get(log.getJobId());
+        Optional<OlapTableHistorySchema> historySchema = job == null ? Optional.empty() : job.getHistorySchema();
+        if (historySchema.isEmpty()) {
+            LOG.info("skip replaying the release of the history schema of alter job {}, db {}, table {}: "
+                    + "the job or its history schema does not exist", log.getJobId(), log.getDbId(), log.getTableId());
+            return;
+        }
+        historySchema.get().setExpire();
+        LOG.info("replay releasing the history schema of alter job {}, db {}, table {}",
+                log.getJobId(), log.getDbId(), log.getTableId());
     }
 
     /**

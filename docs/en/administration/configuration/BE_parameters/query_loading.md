@@ -70,6 +70,16 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
 - Introduced in: -
 
+### ai_function_max_input_file_bytes
+
+- Default: 10485760
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum raw byte size of each inline FILE passed to `ai_complete` or `ai_embed`, checked before AI-owned payload copying and Base64 encoding. The default is 10 MiB. Increase it only when the selected provider and model accept larger inputs. This limit does not control scan or chunk materialization; query memory tracking still applies to those allocations and to AI payloads. Invalid or oversized inline inputs follow `ai_function_on_error`. A newly opened AI fragment/operator captures this value in its immutable runtime snapshot; an already-open fragment retains its snapshot. Changes require no BE restart.
+- Introduced in: -
+
 ### ai_function_worker_thread_num
 
 - Default: 16
@@ -668,6 +678,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) or VARIANT type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
+- Introduced in: -
+
 ### enable_lock_free_scan_task_queue
 
 - Default: true
@@ -775,6 +794,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
 - Introduced in: -
+
+### spill_max_dir_bytes_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum proportion of disk capacity that a spill directory (`spill_local_storage_dir`) can use when it is on the same disk as a storage path (`storage_root_path`). The default value `0.5` means intermediate result spilling can use up to 50% of that disk's capacity. A spill directory on a separate disk is not subject to this limit. This value is read when the BE starts, so a change takes effect only after a restart.
+- Introduced in: v3.2.0
 
 ### string_prefix_zonemap_prefix_len
 
@@ -1291,6 +1319,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
 - Introduced in: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether this BE takes part in the compact encoding of all-NULL columns on the tablet sink RPC, the hop on which a load routes rows to the BE that holds the target tablet. When enabled, a receiving BE advertises support for the encoding in its tablet writer open response, and a sending BE that sees the advertisement sends a row count in place of the payload of any column whose rows are all NULL, rather than a null flag and an offset for every row. This mainly helps wide tables in which most columns hold no data, and reduces both the bytes sent on this hop and the serialization work on either end. The encoding is used only when both ends of the RPC agree on it, so a mixed-version cluster or a downgrade falls back to the original layout automatically. Set this to `false` on either the sending or the receiving BE to turn the encoding off for loads that pass through that node. This item is not dynamically configurable: a receiving BE uses it both to advertise support and to decide whether to apply the encoding a sender declares, and changing it at runtime would leave those two decisions inconsistent.
+- Introduced in: v4.2.0
 
 ### enable_load_diagnose
 

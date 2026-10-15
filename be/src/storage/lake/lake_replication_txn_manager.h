@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -51,10 +52,15 @@ public:
         std::string filename;
         std::string encryption_meta;
         bool shared = false;
+        std::optional<int64_t> segment_size;
+    };
+    struct ExistingBundleSliceInfo {
+        std::string encryption_meta;
+        std::optional<int64_t> segment_size;
     };
     using ExistingFileMap = std::unordered_map<std::string, ExistingFileInfo>;
-    using ExistingBundleSliceEncryptionMetaMap =
-            std::unordered_map<std::string, std::unordered_map<int64_t, std::string>>;
+    using ExistingBundleSliceInfoMap =
+            std::unordered_map<std::string, std::unordered_map<int64_t, ExistingBundleSliceInfo>>;
 
     explicit LakeReplicationTxnManager(lake::TabletManager* tablet_manager)
             : _tablet_manager(tablet_manager)
@@ -85,17 +91,17 @@ public:
     // Helper function to build existed filename UUIDs map from target tablet metadata
     // For files that replicated from source storage, we keep the `uuid` part of file name, and use it to decide if the file
     // Files already replicated to target storage are indexed by physical UUID. Bundled target
-    // segments additionally keep encryption metadata per logical slice offset.
-    Status build_existed_filename_uuids_map(const TabletMetadataPtr& target_data_version_tablet_meta,
+    // segments additionally keep encryption metadata and size per logical slice offset.
+    Status build_existed_filename_uuids_map(const TabletMetadataPtr& target_tablet_meta,
                                             ExistingFileMap& existed_filename_uuids,
-                                            ExistingBundleSliceEncryptionMetaMap& bundle_slice_encryption_metas);
+                                            ExistingBundleSliceInfoMap& bundle_slice_infos);
 
     // Helper function to create replication txn log with converted metadata
     // generate and replace file names to adapt for target storage
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert_and_build_new_tablet_meta(
             const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta,
-            int64_t src_tablet_id, int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version,
-            const std::string& src_data_dir, std::unordered_map<std::string, size_t>& segment_name_to_size_map,
+            int64_t src_tablet_id, int64_t target_tablet_id, TTransactionId txn_id, const std::string& src_data_dir,
+            std::unordered_map<std::string, size_t>& segment_name_to_size_map,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
             SourceEncryptionMetaMap& source_encryption_metas);
@@ -128,6 +134,10 @@ public:
 
     // Decide whether to use parallel copy for current tablet files.
     static bool should_use_parallel_copy(size_t file_count, const ThreadPool* thread_pool);
+
+    // Execute file copies through the CN-wide dedicated pool using at most max_workers for this tablet.
+    static Status execute_file_copy_tasks(std::vector<ReplicationTask> tasks, ThreadPool* thread_pool,
+                                          size_t max_workers);
 
 private:
     TabletManager* _tablet_manager;

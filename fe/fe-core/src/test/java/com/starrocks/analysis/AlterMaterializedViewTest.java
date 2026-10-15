@@ -26,6 +26,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -53,7 +54,9 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -978,5 +981,37 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertFalse(mv.isActive());
         Assertions.assertTrue(mv.getInactiveReason().contains("incremental refresh broken"),
                 "inactive reason: " + mv.getInactiveReason());
+    }
+
+    /**
+     * ALTER MATERIALIZED VIEW must resolve before it locks.
+     *
+     * <p>Constraint analysis reaches MetadataMgr for every table the constraint names, which is a
+     * connector round trip when that table lives in an external catalog, and the dispatcher holds
+     * the MV's write lock for the whole statement -- so a slow metastore would hold up every reader
+     * of the MV and every transaction publishing into it. Pinned on the property itself (no FE
+     * metadata lock is held while the analysis runs) rather than on where the call sits in the
+     * source, so it keeps holding if the code moves.
+     */
+    @Test
+    public void testAlterMvAnalyzesConstraintsBeforeTakingTheLock() throws Exception {
+        LockProbe probe = LockProbe.onAnyThread();
+        new MockUp<PropertyAnalyzer>() {
+            @Mock
+            public List<UniqueConstraint> analyzeUniqueConstraint(Invocation invocation,
+                                                                  Map<String, String> properties,
+                                                                  Database db, Table table) {
+                probe.record("analyzeUniqueConstraint");
+                return invocation.proceed(properties, db, table);
+            }
+        };
+
+        String alterMvSql = "alter materialized view mv1 set (\"unique_constraints\" = \"v1\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+
+        probe.assertReachedOutsideTheLock("analyzeUniqueConstraint",
+                "constraint analysis resolves tables through MetadataMgr and must not run under the MV's lock");
     }
 }

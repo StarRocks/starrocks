@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <thread>
 
@@ -415,6 +416,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         auto context = std::make_unique<CompactionTaskContext>(
                 request->txn_id(), tablet_id, request->version(), request->force_base_compaction(),
                 request->skip_write_txnlog(), cb, 0, 0, request->unshare_segments());
+        context->allow_base_compaction = request->allow_base_compaction();
         // Snapshot the parallel-compaction request here, on the bthread. The worker that later plans the
         // subtasks reads these instead of `request`, which it must not touch: `request`/`response` are only
         // guaranteed to outlive the worker while some tablet still has an unfinished context, and once the
@@ -504,28 +506,25 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
 }
 
 // Pay special attentions to the following statements order with different new and old val
-void CompactionScheduler::update_compact_threads(int32_t new_val) {
-    if (_task_queues.modifying()) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, reset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+Status CompactionScheduler::update_compact_threads(int32_t new_val) {
+    // _target_size is an int16_t, so anything above its max would wrap around when stored.
+    if (new_val <= 0 || new_val > std::numeric_limits<int16_t>::max()) {
+        return Status::InvalidArgument(fmt::format("compact_threads must be in [1, {}], got {}",
+                                                   std::numeric_limits<int16_t>::max(), new_val));
     }
-
+    if (_task_queues.modifying()) {
+        return Status::ServiceUnavailable(
+                fmt::format("compact_threads is still being resized to {}, retry later", _task_queues.target_size()));
+    }
     if (new_val == _task_queues.task_queue_size()) {
-        return;
-    } else if (new_val <= 0) {
-        LOG(ERROR) << "compact_threads can't be set to " << new_val << ", reset it back to "
-                   << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
+        return Status::OK();
     }
 
     _task_queues.set_target_size(new_val);
+    TEST_SYNC_POINT("CompactionScheduler::update_compact_threads:after_set_target_size");
     if (_task_queues.target_size() != new_val) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, bereset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+        return Status::InternalError(fmt::format("Failed to update compact_threads to {}, current target is {}",
+                                                 new_val, _task_queues.target_size()));
     }
 
     auto old_val = _task_queues.task_queue_size();
@@ -533,12 +532,13 @@ void CompactionScheduler::update_compact_threads(int32_t new_val) {
         // increase queue count
         _task_queues.resize_if_needed(_limiter);
         for (int i = old_val; i < new_val; i++) {
-            CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
+            RETURN_IF_ERROR(_threads->submit_func([this, id = i]() { this->thread_task(id); }));
         }
     } else {
         // In order to prevent exceptions due to concurrent modifications of the task queues,
         // reducing the queue length will be completed asynchronously.
     }
+    return Status::OK();
 }
 
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
@@ -692,7 +692,8 @@ bool CompactionScheduler::try_hand_off_to_parallel(std::unique_ptr<CompactionTas
             return _parallel_mgr->create_parallel_tasks(
                     tablet_id, txn_id, context->version, parallel_config, context->callback,
                     context->force_base_compaction, _threads.get(), acquire_token, release_token, context->is_unshare,
-                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token);
+                    context->stats->in_queue_time_sec, context->stats->queue_wait_ns, return_token,
+                    context->allow_base_compaction);
         } catch (const std::exception& e) {
             LOG(WARNING) << "Exception while planning parallel compaction, compacting serially instead. tablet_id="
                          << tablet_id << ", txn_id=" << txn_id << ": " << e.what();

@@ -20,6 +20,7 @@ endif()
 set(EXPR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     agg/aggregate_factory_core_test.cpp
+    agg/coverage_window_test.cpp
     ai/ai_function_call_expr_test.cpp
     ai/ai_function_result_test.cpp
     ai/ai_provider_options_builder_test.cpp
@@ -40,6 +41,9 @@ set(EXPR_TEST_FILES
     binary_predicate_test.cpp
     bitmap_functions_test.cpp
     geography_functions_test.cpp
+    geo_overlay_test.cpp
+    geo_buffer_function_test.cpp
+    geo_topology_simplify_function_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp

@@ -126,7 +126,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
@@ -287,7 +287,7 @@ TEST_P(LakePartialUpdateTest, test_write) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
@@ -984,7 +984,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
@@ -1331,7 +1331,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // remove pk index, to make it reload again
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // partial update
     for (int i = 0; i < 3; i++) {
@@ -1599,7 +1599,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
     _tablet_mgr->prune_metacache();
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
@@ -1694,7 +1694,7 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
@@ -1802,7 +1802,7 @@ public:
     }
 
     void TearDown() override {
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
@@ -2714,8 +2714,8 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     // partial update, and make it generate two segment files in one rowset
     const int64_t old_size = config::write_buffer_size;
     config::write_buffer_size = 1;
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1);
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1);
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -2748,7 +2748,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
         }
     }
     config::write_buffer_size = old_size;
-    _update_mgr->update_state_mem_tracker()->set_limit(old_limit);
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit);
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 6 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
@@ -2924,7 +2924,7 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
         // check segment size in last metadata
         EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 namespace {
@@ -4017,10 +4017,10 @@ TEST_F(LakeColumnUpsertModeTest, test_error_handling_scenarios) {
     }
 
     // Test with memory pressure to trigger error paths during upsert index operations
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
 
-    DeferOp defer([&]() { _update_mgr->update_state_mem_tracker()->set_limit(old_limit); });
+    DeferOp defer([&]() { _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit); });
 
     // This should still succeed but may trigger some error handling paths
     {
@@ -5201,7 +5201,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
     }
 }
 
-// A column-mode partial update publishes its del files through UpdateManager::_handle_delete_files,
+// A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
 // which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
 // tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
 // sstable no publisher ingests: it never enters sstable_meta(), so only a full vacuum's orphan scan
@@ -6417,10 +6417,17 @@ protected:
         expect_rows(tablet_id, 2, expected);
 
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-        // The inserted rows take rssid slot 0 and the two segments of new rows slots 1 and 2, in one
-        // rowset, or in two when the INSERT bundled its segment.
-        EXPECT_EQ(bundled_insert ? 2 : 1, metadata->rowsets_size());
-        EXPECT_EQ(metadata->rowsets(0).id() + 3, metadata->next_rowset_id());
+        // The inserted rows take slot 0 and the two segments of new rows slots 1 and 2 in one
+        // rowset, including when the INSERT bundled its segment.
+        ASSERT_EQ(1, metadata->rowsets_size());
+        const auto& rowset = metadata->rowsets(0);
+        ASSERT_EQ(3, rowset.segment_metas_size());
+        for (int pos = 0; pos < 3; ++pos) {
+            EXPECT_EQ(rowset.id() + pos, get_rssid(rowset, pos));
+            EXPECT_EQ(bundled_insert, rowset.segment_metas(pos).has_bundle_file_offset());
+            EXPECT_EQ(bundled_insert && pos > 0, rowset.segment_metas(pos).synthetic_bundle_file_offset());
+        }
+        EXPECT_EQ(rowset.id() + 3, metadata->next_rowset_id());
 
         ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, inserted, /*rebuild_pindex=*/false, &expected));
         expect_rows(tablet_id, 3, expected);
@@ -6620,7 +6627,7 @@ TEST_P(LakeMultiStatementPartialUpdateTest, statement_without_rows_between_parti
 }
 
 // A column-mode partial update that inserts keys writes the new rows into segments of their own
-// (UpdateManager::_handle_column_upsert_mode). In a batch they have to take the rssid slots after
+// (PrimaryKeyManager::_handle_column_upsert_mode). In a batch they have to take the rssid slots after
 // those of the statements applied before: added as a rowset of their own they took
 // next_rowset_id(), the earlier statements' rowset then got the next id, and every key an earlier
 // statement wrote named a row of the new ones in the primary index. The rows still read back right
@@ -6630,8 +6637,8 @@ TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_new_keys_after_inse
     ASSERT_NO_FATAL_FAILURE(publish_column_upsert_of_new_keys_after_insert(/*bundled_insert=*/false));
 }
 
-// The same with the INSERT's segment in a bundle file, as a small INSERT writes it: the new rows are
-// standalone files, so they go into a rowset of their own, at the slots they were indexed at.
+// The same with the INSERT's segment in a bundle file, as a small INSERT writes it: its offset is
+// preserved while the new-row segments get synthetic offset 0 at the slots they were indexed at.
 TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_new_keys_after_bundled_insert) {
     ASSERT_NO_FATAL_FAILURE(publish_column_upsert_of_new_keys_after_insert(/*bundled_insert=*/true));
 }
@@ -6697,7 +6704,7 @@ TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_seeded_inserted_and
 
 // The order that already worked: the column-mode partial update first, then an INSERT that bundled
 // its segment. Its new rows now join the batch instead of taking a rowset id ahead of it, and being
-// standalone files they still end up in a rowset apart from the bundled one.
+// standalone files they get synthetic offset 0 next to the bundled segment.
 TEST_P(LakeMultiStatementPartialUpdateTest, bundled_insert_after_column_upsert_of_new_keys) {
     const int64_t tablet_id = _tablet_metadata->id();
     const auto new_keys = key_range(0, 12);
@@ -6717,9 +6724,16 @@ TEST_P(LakeMultiStatementPartialUpdateTest, bundled_insert_after_column_upsert_o
     add_rows(&expected, inserted, kSeedC1, kSeedC2);
     expect_rows(tablet_id, 2, expected);
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
-    ASSERT_EQ(2, metadata->rowsets_size());
-    EXPECT_FALSE(metadata->rowsets(0).segment_metas(0).has_bundle_file_offset());
-    EXPECT_TRUE(metadata->rowsets(1).segment_metas(0).has_bundle_file_offset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(rowset.id(), get_rssid(rowset, 0));
+    EXPECT_EQ(rowset.id() + 1, get_rssid(rowset, 1));
+    EXPECT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
 
     ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, new_keys, /*rebuild_pindex=*/false, &expected));
     expect_rows(tablet_id, 3, expected);

@@ -38,56 +38,6 @@ PARALLEL_TEST(ArrayColumnTest, test_create) {
 }
 
 // NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
-    // normal
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-
-    column->elements_column_raw_ptr()->append_datum("1");
-    column->elements_column_raw_ptr()->append_datum("2");
-    column->offsets_column_raw_ptr()->append(2);
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_EQ(column->size(), 1);
-    auto array = column->get(0).get_array();
-    ASSERT_EQ(array[0].get_slice(), Slice("1"));
-    ASSERT_EQ(array[1].get_slice(), Slice("2"));
-}
-
-// NOLINTNEXTLINE
-PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    elements->append_datum("1");
-    elements->append_datum("2");
-    offsets->append(2);
-    auto column = ArrayColumn::create(std::move(elements), std::move(offsets));
-    ASSERT_FALSE(column->has_large_column());
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    offsets = UInt32Column::create();
-    auto large_elements = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
-    column = ArrayColumn::create(std::move(large_elements), std::move(offsets));
-    for (size_t i = 0; i < 10; i++) {
-        column->elements_column_raw_ptr()->append_datum(Slice(std::to_string(i)));
-        column->offsets_column_raw_ptr()->append(i + 1);
-    }
-    ASSERT_TRUE(column->has_large_column());
-    ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(column->has_large_column());
-    ASSERT_EQ(column->size(), 10);
-    for (size_t i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get(i).get_array()[0].get_slice(), Slice(std::to_string(i)));
-    }
-}
-
-// NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     auto offsets = UInt32Column::create();
     auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());

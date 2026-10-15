@@ -959,9 +959,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 導入時期：v4.2.0
 - 説明：true の場合、ほとんどの外部 FE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は `AuthenticationHandler.authenticate()` を介してユーザーストアと照合されるため、LDAP / security integration による認証も MySQL プロトコルと同様に HTTP 経路で機能します。次のエンドポイントは常に除外されます：
   - 公開プローブ / 可観測性：`/api/bootstrap`、`/api/oauth2`。
-  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - ハンドラ内で IP ホワイトリストまたはトークンで認証する FE 間 / コントロールプレーン経路：`/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+  `/dump`、`/dump_starmgr`、`/service_id` は除外されません：この設定にかかわらず、認証済みの管理者のみがアクセスできます。認証には HTTP Basic 認証、または FE Web コンソールへのログインで取得したセッション Cookie を使用できます。次のいずれかを満たすユーザーが管理者として扱われます：ログイン時に有効なロールを通じて SYSTEM レベルの `NODE` 権限を持つ（例：組み込みロール `cluster_admin` をユーザーのデフォルトロールに設定する。`activate_all_roles_on_login` が `true` の場合は付与されている任意のロールが対象）；`root` ユーザーである、または `root` ロールを持つ；`db_admin` ロールと `user_admin` ロールの両方を持つ。
+
+  `/api/_meta_replay_state` も除外されません：この設定にかかわらず、`root` ユーザー、`root` ロールを持つユーザー、または `db_admin` ロールと `user_admin` ロールの両方を持つユーザーによる HTTP Basic 認証が必要です。`NODE` 権限だけではアクセスできません。
+
+  この設定で制御されるその他の特権エンドポイント（`/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state` は対象外）では追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていないロールを使う場合は `SET DEFAULT ROLE <roles> TO <user>;` を実行するか、グローバル変数 `activate_all_roles_on_login=true` を設定してログイン時に有効化してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
 
 ### `http_web_page_display_hardware`
 
@@ -1197,7 +1201,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：Milliseconds
 - 変更可能：No
-- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。
+- 説明：アイドル状態のクライアント接続がタイムアウトするまでの時間。FE の Thrift サーバーは、この時間アイドル状態が続いたクライアント接続をクローズします。そのため FE は、他の FE へのプール接続のアイドル時間がこの値の 80% に達すると、次の使用前に新しい接続に置き換えます。これにより、接続先がすでにクローズした可能性のある接続でリクエストを送信することを避けます。すべての FE で同じ値を設定することを推奨します。
 - 導入時期：-
 
 ### `thrift_rpc_max_body_size`
@@ -1746,6 +1750,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：未知のログ ID を無視するかどうか。FE がロールバックされた場合、以前のバージョンの FE は一部のログ ID を認識できない可能性があります。値が `TRUE` の場合、FE は未知のログ ID を無視します。値が `FALSE` の場合、FE は終了します。
 - 導入時期：-
 
+### `offheap_deflate_buffer_pool_max_bytes`
+
+- デフォルト：128L * 1024 * 1024 (134217728)
+- タイプ：Long
+- 単位：Bytes
+- 変更可能：Yes
+- 説明：FE が gzip および zlib 圧縮（たとえば、クエリプロファイルを `ProfileManager` に格納する前の圧縮）のために保持するオフヒープバッファの合計サイズの上限。オフヒープバッファ間で圧縮することで、圧縮中に JVM がガベージコレクションをブロックすることを防ぎます。そうしないと、ヒープにまだ回収可能な領域がある場合でも、メモリ割り当てが `OutOfMemoryError` で失敗することがあります。データサイズに関係なく、進行中の圧縮はそれぞれ 256 KB のバッファを 2 つ使用するため、デフォルト値では同時に 256 個の圧縮が可能です。この上限内で利用可能なバッファがない場合、データは従来どおりヒープ上で圧縮されます。実行時にこの値を小さくすると、バッファが返却される時点で反映されます。`0` に設定するとオフヒープ圧縮が無効になります。すべてのデータはヒープ上で小さなチャンク単位で圧縮され、すでに割り当てられたオフヒープバッファは解放されます。
+- 導入時期：-
+
 ### `profile_info_format`
 
 - デフォルト：default
@@ -1818,7 +1831,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
+- 説明：Thrift RPC 呼び出しが行う合計試行回数を制御します。この値は `ThriftRPCRequestExecutor` (および `NodeMgr` や `VariableMgr` などの呼び出し元) によって再試行のループカウントとして使用されます。つまり、値 3 は初期試行を含めて最大 3 回の試行を許可します。`TTransportException` の場合、エグゼキューターは接続を再開してこの回数まで再試行します。原因が `SocketTimeoutException` の場合や再開が失敗した場合は再試行しません。各再試行の前に、エグゼキューターはランダムな時間だけ待機してから接続を再開します。待機時間は最初の再試行で 100～200 ミリ秒、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ミリ秒に達するとそれ以上は増えません。これにより、同時に接続を失った複数の呼び出し元が一斉に再接続することを防ぎます。各試行は `thrift_rpc_timeout_ms` で設定された試行ごとのタイムアウトの対象となります。この値を増やすと、一時的な接続障害に対する回復力は向上しますが、全体の RPC レイテンシーとリソース使用量が増加する可能性があります。
 - 導入時期：v3.2.0
 
 ### `thrift_rpc_strict_mode`

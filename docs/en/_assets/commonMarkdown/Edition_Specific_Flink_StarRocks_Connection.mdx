@@ -1,0 +1,8 @@
+Set the StarRocks connection options to addresses of the FE:
+
+- `jdbc-url`: `jdbc:mysql://<fe_host>:<fe_query_port>`. The query port defaults to `9030`.
+- `load-url`: `<fe_host>:<fe_http_port>`. The HTTP port defaults to `8030`.
+
+For `<fe_host>`, use an address that stays the same when an FE restarts or is replaced, such as a DNS name or a load balancer in front of the FEs, not the IP address of an FE. If the address stops leading to an FE, the Flink job can no longer load data.
+
+The Flink TaskManagers must be able to reach these FE ports, and also the HTTP port (default `8040`) of every BE or CN, because the FE redirects each load request to a BE or CN.

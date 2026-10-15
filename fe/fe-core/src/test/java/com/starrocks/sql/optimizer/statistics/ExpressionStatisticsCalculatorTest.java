@@ -405,6 +405,15 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 10, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
+        // test dsqrt function
+        callOperator = new CallOperator(FunctionSet.DSQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
+        Assertions.assertEquals(columnStatistic.getMaxValue(), 10, 0.001);
+        Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
+        Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertFalse(columnStatistic.isUnknown());
         // test square function
         callOperator = new CallOperator(FunctionSet.SQUARE, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
@@ -544,6 +553,103 @@ public class ExpressionStatisticsCalculatorTest {
         ColumnStatistic columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(uint32Cardinality, columnStatistic.getDistinctValuesCount(), 0.001);
 
+    }
+
+    @Test
+    public void testSqrtFunctionCall() {
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, FloatType.DOUBLE, "id", true);
+        // sqrt and dsqrt are the same backend function, so they must derive identical statistics.
+        List<String> sqrtFunctions = ImmutableList.of(FunctionSet.SQRT, FunctionSet.DSQRT);
+
+        // Non-negative input: sqrt maps [min, max] to [sqrt(min), sqrt(max)], and no row turns into NULL.
+        Statistics positiveStats = sqrtInputStatistics(columnRefOperator, 4, 100, 50, 0);
+        for (String fnName : sqrtFunctions) {
+            ColumnStatistic columnStatistic = calculateSqrt(fnName, columnRefOperator, positiveStats);
+            Assertions.assertFalse(columnStatistic.isUnknown(), fnName);
+            Assertions.assertEquals(2, columnStatistic.getMinValue(), 0.001, fnName);
+            Assertions.assertEquals(10, columnStatistic.getMaxValue(), 0.001, fnName);
+            Assertions.assertEquals(50, columnStatistic.getDistinctValuesCount(), 0.001, fnName);
+            Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001, fnName);
+        }
+
+        // Negative inputs evaluate to NULL, so only the non-negative part of the range reaches the
+        // output: [-16, 25] maps to [0, sqrt(25)]. Assuming a uniform distribution, the negative
+        // share of the range becomes additional nulls and loses its distinct values.
+        double negativeShare = 16.0 / 41.0;
+        Statistics mixedStats = sqrtInputStatistics(columnRefOperator, -16, 25, 20, 0);
+        for (String fnName : sqrtFunctions) {
+            ColumnStatistic columnStatistic = calculateSqrt(fnName, columnRefOperator, mixedStats);
+            Assertions.assertFalse(columnStatistic.isUnknown(), fnName);
+            Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001, fnName);
+            Assertions.assertEquals(5, columnStatistic.getMaxValue(), 0.001, fnName);
+            Assertions.assertEquals(negativeShare, columnStatistic.getNullsFraction(), 0.001, fnName);
+            Assertions.assertEquals(20 * (1 - negativeShare), columnStatistic.getDistinctValuesCount(), 0.001, fnName);
+        }
+
+        // Nulls already present in the input survive the call, so they compound with the nulls
+        // produced by the negative part of the range instead of replacing them.
+        Statistics mixedStatsWithNulls = sqrtInputStatistics(columnRefOperator, -16, 25, 20, 0.2);
+        for (String fnName : sqrtFunctions) {
+            ColumnStatistic columnStatistic = calculateSqrt(fnName, columnRefOperator, mixedStatsWithNulls);
+            Assertions.assertFalse(columnStatistic.isUnknown(), fnName);
+            Assertions.assertEquals(0.2 + 0.8 * negativeShare, columnStatistic.getNullsFraction(), 0.001, fnName);
+        }
+
+        // Every input is negative, so every output row is NULL. Report an all-null estimate
+        // ([0, 0], nulls=1, NDV=0) rather than unknown(), which claims 0% nulls.
+        Statistics negativeStats = sqrtInputStatistics(columnRefOperator, -16, -4, 10, 0);
+        // max < 0 is enough to conclude every row is NULL, even when min is unbounded.
+        Statistics infiniteNegativeStats = sqrtInputStatistics(columnRefOperator,
+                Double.NEGATIVE_INFINITY, -4, 10, 0);
+        for (Statistics inputStatistics : ImmutableList.of(negativeStats, infiniteNegativeStats)) {
+            for (String fnName : sqrtFunctions) {
+                ColumnStatistic columnStatistic = calculateSqrt(fnName, columnRefOperator, inputStatistics);
+                Assertions.assertFalse(columnStatistic.isUnknown(), fnName);
+                Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001, fnName);
+                Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001, fnName);
+                Assertions.assertEquals(1, columnStatistic.getNullsFraction(), 0.001, fnName);
+                Assertions.assertEquals(0, columnStatistic.getDistinctValuesCount(), 0.001, fnName);
+            }
+        }
+
+        // An unbounded endpoint makes the negative share uncomputable, so NDV and the null
+        // fraction stay at the input values. Bounds are still [0, sqrt(max)].
+        Statistics infiniteStats = sqrtInputStatistics(columnRefOperator, Double.NEGATIVE_INFINITY,
+                Double.POSITIVE_INFINITY, 30, 0);
+        Statistics halfInfiniteStats = sqrtInputStatistics(columnRefOperator, Double.NEGATIVE_INFINITY, 25, 30, 0);
+        for (Statistics inputStatistics : ImmutableList.of(infiniteStats, halfInfiniteStats)) {
+            double expectedMaxValue = Math.sqrt(
+                    inputStatistics.getColumnStatistic(columnRefOperator).getMaxValue());
+            for (String fnName : sqrtFunctions) {
+                ColumnStatistic columnStatistic = calculateSqrt(fnName, columnRefOperator, inputStatistics);
+                Assertions.assertFalse(columnStatistic.isUnknown(), fnName);
+                Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001, fnName);
+                Assertions.assertEquals(expectedMaxValue, columnStatistic.getMaxValue(), fnName);
+                Assertions.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001, fnName);
+                Assertions.assertEquals(0, columnStatistic.getNullsFraction(), 0.001, fnName);
+                Assertions.assertFalse(Double.isNaN(columnStatistic.getDistinctValuesCount()),
+                        fnName + " produced a NaN distinct values count");
+            }
+        }
+    }
+
+    private static Statistics sqrtInputStatistics(ColumnRefOperator columnRefOperator, double minValue,
+                                                  double maxValue, double distinctValues, double nullsFraction) {
+        return Statistics.builder()
+                .addColumnStatistic(columnRefOperator,
+                        ColumnStatistic.builder().setMinValue(minValue).setMaxValue(maxValue)
+                                .setDistinctValuesCount(distinctValues).setNullsFraction(nullsFraction)
+                                .setAverageRowSize(8).build())
+                // Keep the row count above the NDV so the derived NDV is never clamped by it.
+                .setOutputRowCount(1000)
+                .build();
+    }
+
+    private static ColumnStatistic calculateSqrt(String fnName, ColumnRefOperator columnRefOperator,
+                                                 Statistics inputStatistics) {
+        CallOperator callOperator =
+                new CallOperator(fnName, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        return ExpressionStatisticCalculator.calculate(callOperator, inputStatistics);
     }
 
     @Test
@@ -3475,6 +3581,56 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertNotNull(stat.getHistogram());
         assertOnlyBooleanMcvs(stat, 1000);
         assertBooleanDistribution(stat, 175L, 825L, 0.0);
+    }
+
+    /**
+     * A column statistic's min/max is a plain double and nothing keeps it inside the DATETIME domain:
+     * an implicit cast drags a BIGINT column into a date context, an expression statistic is derived
+     * from one, and the bound arrives far outside it. {@code (long) bound} then saturates to
+     * Long.MAX_VALUE and Instant.ofEpochSecond() throws DateTimeException, which escapes statistics
+     * derivation and fails the whole query with "Instant exceeds minimum or maximum instant".
+     * Every date function that converts a statistic bound must treat an out-of-domain bound as no
+     * bound at all.
+     */
+    @Test
+    public void testDateStatisticsWithBoundOutsideDatetimeDomain() {
+        final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        // 9.3e18 is above Long.MAX_VALUE, so the (long) cast saturates and the epoch second is
+        // far past the end of the DATETIME domain.
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1024)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0)
+                        .setMaxValue(9.3e18)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(DateType.DATETIME.getTypeSize())
+                        .setDistinctValuesCount(100)
+                        .build())
+                .build();
+
+        final var dateTrunc = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), col));
+        final var truncStats = ExpressionStatisticCalculator.calculate(dateTrunc, statistics);
+        // No usable range, so date_trunc must fall back to the unknown-range estimate.
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, truncStats.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, truncStats.getMaxValue(), 0.001);
+
+        final var year = new CallOperator(FunctionSet.YEAR, IntegerType.INT, Lists.newArrayList(col));
+        final var yearStats = ExpressionStatisticCalculator.calculate(year, statistics);
+        // The default year range, not a year derived from a saturated bound.
+        Assertions.assertEquals(1700, yearStats.getMinValue(), 0.001);
+        Assertions.assertEquals(2100, yearStats.getMaxValue(), 0.001);
+
+        final var toDate = new CallOperator(FunctionSet.TO_DATE, DateType.DATE, Lists.newArrayList(col));
+        Assertions.assertDoesNotThrow(() -> ExpressionStatisticCalculator.calculate(toDate, statistics));
+
+        final var toDays = new CallOperator(FunctionSet.TO_DAYS, IntegerType.INT, Lists.newArrayList(col));
+        Assertions.assertDoesNotThrow(() -> ExpressionStatisticCalculator.calculate(toDays, statistics));
+
+        final var week = new CallOperator(FunctionSet.WEEK, IntegerType.INT,
+                Lists.newArrayList(col, ConstantOperator.createInt(0)));
+        final var weekStats = ExpressionStatisticCalculator.calculate(week, statistics);
+        Assertions.assertEquals(53, weekStats.getDistinctValuesCount(), 0.001);
     }
 
 }

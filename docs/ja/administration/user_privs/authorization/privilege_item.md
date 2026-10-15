@@ -26,6 +26,15 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 <PrivCreateWarehouse />
 
+### AI FUNCTION / AI PROVIDER
+
+| 権限 | 説明 |
+| --- | --- |
+| USAGE | 指定した公開 AI 関数ファミリーまたは Provider を使用します。`ON ALL AI FUNCTIONS` と `ON ALL AI PROVIDERS` は、将来のオブジェクトを含め、それぞれの型の全オブジェクトに使用権限を付与します。関数と Provider の権限は独立しています。 |
+
+SYSTEM 関数は既存の設定経路を維持し、Provider の権限を必要としません。Provider の CREATE、ALTER、DROP、SET DEFAULT、SHOW、DESC には従来どおり SYSTEM OPERATE が必要です。USAGE はこれらの管理操作を許可しません。
+
+
 ### RESOURCE GROUP
 
 | 権限 | 説明                                           |
@@ -100,6 +109,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                             |
 | ---- | -------------------------------- |
 | SELECT | ビューのデータをクエリします。   |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | ビューの定義を変更します。       |
 | DROP   | ビューを削除します。             |
 | ALL    | ビューに対して上記すべての権限を持ちます。 |
@@ -109,6 +119,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                                          |
 | ---- | --------------------------------------------- |
 | SELECT | クエリを高速化するためにマテリアライズドビューをクエリします。 |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | マテリアライズドビューを変更します。         |
 | REFRESH | マテリアライズドビューを更新します。         |
 | DROP   | マテリアライズドビューを削除します。         |

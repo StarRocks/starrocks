@@ -19,6 +19,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.QueryRelation;
@@ -75,6 +76,11 @@ public class PrepareStmtPlanner {
                 return StatementPlanner.plan(stmt, session);
             }
             if (ResolvedAIFunctionDetector.contains(queryStmt)) {
+                return StatementPlanner.plan(stmt, session);
+            }
+            // get_query_profile() is authorized at analysis time against the literal query id; a cached plan would
+            // let a later EXECUTE rebind that parameter without the check (Authorizer#checkGetQueryProfileAccess).
+            if (Authorizer.containsGetQueryProfile(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
 

@@ -37,11 +37,11 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
 #include "types/type_descriptor.h"
 
@@ -72,8 +72,9 @@ public:
 
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -249,7 +250,7 @@ protected:
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
 };
 
 TEST_F(MetaFileTest, test_meta_rw) {
@@ -2395,12 +2396,9 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
-// The op_writes of a batch publish (the statements of one multi-statement transaction) are merged
-// into one rowset, but a rowset's segments must all be bundled or all be standalone files, and a
-// statement bundles its segment only when it wrote the tablet in one flush at the end of the load. A
-// batch with both kinds is split into consecutive rowsets, one per run of op_writes of the same kind,
-// without moving any rssid: each part's id is next_rowset_id() plus its first slot.
-TEST_F(MetaFileTest, test_batch_apply_opwrite_splits_bundled_and_standalone_segments) {
+// A batch can mix physical bundle slices and standalone files. Preserve every physical offset and
+// rssid while assigning the standalone files synthetic offset 0 in the merged rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merges_bundled_and_standalone_segments) {
     const int64_t tablet_id = 30004;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -2437,8 +2435,11 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_splits_bundled_and_standalone_segm
     op_write2.mutable_rowset()->set_data_size(200);
     op_write2.mutable_rowset()->set_overlapped(true);
     set_uid(op_write2.mutable_rowset(), 2);
-    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
-    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s2.dat");
+    for (const auto* name : {"s1.dat", "s2.dat"}) {
+        auto* segment = op_write2.mutable_rowset()->add_segment_metas();
+        segment->set_filename(name);
+        segment->set_size(100);
+    }
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     // Statement 3 only deletes: no segment, slot 3.
@@ -2465,79 +2466,54 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_splits_bundled_and_standalone_segm
     ASSERT_OK(builder.update_num_del_stat({{100, 2}, {102, 3}, {104, 1}}));
     ASSERT_OK(builder.set_final_rowset());
 
-    ASSERT_EQ(3, metadata->rowsets_size());
-    EXPECT_EQ(105, metadata->next_rowset_id()); // unchanged by the split: last slot 4 + 1
-
-    // Statement 1, alone: bundled.
-    const auto& part1 = metadata->rowsets(0);
-    EXPECT_EQ(100, part1.id());
-    EXPECT_EQ(40, part1.version());
-    ASSERT_EQ(1, part1.segment_metas_size());
-    EXPECT_EQ("bundle1.dat", part1.segment_metas(0).filename());
-    EXPECT_EQ(0, part1.segment_metas(0).segment_idx());
-    ASSERT_TRUE(part1.segment_metas(0).has_bundle_file_offset());
-    EXPECT_EQ(0, part1.segment_metas(0).bundle_file_offset());
-    EXPECT_EQ(10, part1.num_rows());
-    EXPECT_EQ(100, part1.data_size());
-    EXPECT_EQ(2, part1.num_dels());
-    EXPECT_FALSE(part1.overlapped());
-    EXPECT_EQ(1, part1.uid().lo());
-    ASSERT_EQ(1, part1.del_files_size());
-    EXPECT_EQ("d1.del", part1.del_files(0).name());
-    EXPECT_EQ(100, part1.del_files(0).origin_rowset_id());
-    EXPECT_EQ(0, part1.del_files(0).op_offset());
-    EXPECT_EQ(1, part1.del_files(0).num_rows());
-
-    // Statements 2 and 3: standalone, from slot 1, so its rssids are still 101 and 102.
-    const auto& part2 = metadata->rowsets(1);
-    EXPECT_EQ(101, part2.id());
-    ASSERT_EQ(2, part2.segment_metas_size());
-    EXPECT_EQ("s1.dat", part2.segment_metas(0).filename());
-    EXPECT_EQ("s2.dat", part2.segment_metas(1).filename());
-    EXPECT_EQ(101, get_rssid(part2, 0));
-    EXPECT_EQ(102, get_rssid(part2, 1));
-    EXPECT_FALSE(part2.segment_metas(0).has_bundle_file_offset());
-    EXPECT_FALSE(part2.segment_metas(1).has_bundle_file_offset());
-    EXPECT_EQ(20, part2.num_rows());
-    EXPECT_EQ(200, part2.data_size());
-    EXPECT_EQ(3, part2.num_dels());
-    EXPECT_TRUE(part2.overlapped());
-    EXPECT_EQ(2, part2.uid().lo());
-    // Statement 3's delete follows statement 2's segments and precedes statement 4's: slot 3, past
-    // this rowset's last segment, so it is clamped to that segment like a trailing pure delete.
-    ASSERT_EQ(1, part2.del_files_size());
-    EXPECT_EQ("d3.del", part2.del_files(0).name());
-    EXPECT_EQ(101, part2.del_files(0).origin_rowset_id());
-    EXPECT_EQ(1, part2.del_files(0).op_offset());
-    EXPECT_EQ(2, part2.del_files(0).num_rows());
-
-    // Statement 4: bundled, from slot 4.
-    const auto& part3 = metadata->rowsets(2);
-    EXPECT_EQ(104, part3.id());
-    ASSERT_EQ(1, part3.segment_metas_size());
-    EXPECT_EQ("bundle2.dat", part3.segment_metas(0).filename());
-    EXPECT_EQ(104, get_rssid(part3, 0));
-    EXPECT_EQ(4096, part3.segment_metas(0).bundle_file_offset());
-    EXPECT_EQ(5, part3.num_rows());
-    EXPECT_EQ(1, part3.num_dels());
-    EXPECT_EQ(4, part3.uid().lo());
-    EXPECT_EQ(0, part3.del_files_size());
-
-    for (uint32_t id : {100, 101, 104}) {
-        ASSERT_EQ(1, metadata->rowset_to_schema().count(id)) << id;
-        EXPECT_EQ(7, metadata->rowset_to_schema().at(id));
+    ASSERT_EQ(1, metadata->rowsets_size());
+    EXPECT_EQ(105, metadata->next_rowset_id()); // last rssid slot 4 + 1
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(100, rowset.id());
+    EXPECT_EQ(40, rowset.version());
+    ASSERT_EQ(4, rowset.segment_metas_size());
+    EXPECT_EQ("bundle1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ("s1.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ("s2.dat", rowset.segment_metas(2).filename());
+    EXPECT_EQ("bundle2.dat", rowset.segment_metas(3).filename());
+    const std::vector<uint32_t> rssids{100, 101, 102, 104};
+    for (int pos = 0; pos < rowset.segment_metas_size(); ++pos) {
+        EXPECT_EQ(rssids[pos], get_rssid(rowset, pos));
+        const auto& segment = rowset.segment_metas(pos);
+        ASSERT_TRUE(segment.has_bundle_file_offset());
+        EXPECT_EQ(pos == 3 ? 4096 : 0, segment.bundle_file_offset());
+        EXPECT_EQ(pos == 1 || pos == 2, segment.synthetic_bundle_file_offset());
     }
+    EXPECT_EQ(35, rowset.num_rows());
+    EXPECT_EQ(350, rowset.data_size());
+    EXPECT_EQ(6, rowset.num_dels());
+    EXPECT_TRUE(rowset.overlapped());
+    EXPECT_EQ(1, rowset.uid().lo());
+    ASSERT_EQ(2, rowset.del_files_size());
+    EXPECT_EQ("d1.del", rowset.del_files(0).name());
+    EXPECT_EQ(100, rowset.del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, rowset.del_files(0).op_offset());
+    EXPECT_EQ(1, rowset.del_files(0).num_rows());
+    // Statement 3's delete follows statement 2's segments and precedes statement 4's slot 4.
+    EXPECT_EQ("d3.del", rowset.del_files(1).name());
+    EXPECT_EQ(100, rowset.del_files(1).origin_rowset_id());
+    EXPECT_EQ(3, rowset.del_files(1).op_offset());
+    EXPECT_EQ(2, rowset.del_files(1).num_rows());
+    ASSERT_EQ(1, metadata->rowset_to_schema().count(100));
+    EXPECT_EQ(7, metadata->rowset_to_schema().at(100));
+    EXPECT_EQ(0, metadata->rowset_to_schema().count(101));
+    EXPECT_EQ(0, metadata->rowset_to_schema().count(104));
 
-    // Each rowset is all bundled or all standalone, so the metadata can be saved.
     ASSERT_OK(builder.finalize(next_id()));
     ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 40));
-    ASSERT_EQ(3, persisted->rowsets_size());
-    EXPECT_EQ(4096, persisted->rowsets(2).segment_metas(0).bundle_file_offset());
+    ASSERT_EQ(1, persisted->rowsets_size());
+    EXPECT_EQ(4096, persisted->rowsets(0).segment_metas(3).bundle_file_offset());
+    EXPECT_TRUE(persisted->rowsets(0).segment_metas(1).synthetic_bundle_file_offset());
 }
 
-// An op_write without segments before any segment -- a statement that only deleted, first in the
-// transaction -- goes with the first rowset, which therefore starts at slot 0.
-TEST_F(MetaFileTest, test_batch_apply_opwrite_split_keeps_leading_delete_in_first_rowset) {
+// A leading pure delete takes an rssid slot without adding a segment; normalization must not move
+// its delete offset or the following statements' segment ids.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_merge_keeps_leading_delete_before_segments) {
     const int64_t tablet_id = 30005;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -2553,7 +2529,9 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_split_keeps_leading_delete_in_firs
 
     TxnLogPB_OpWrite op_write2;
     op_write2.mutable_rowset()->set_num_rows(3);
-    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    auto* standalone = op_write2.mutable_rowset()->add_segment_metas();
+    standalone->set_filename("s1.dat");
+    standalone->set_size(100);
     builder.batch_apply_opwrite(op_write2, {}, {});
 
     TxnLogPB_OpWrite op_write3;
@@ -2561,24 +2539,26 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_split_keeps_leading_delete_in_firs
     {
         auto* segment = op_write3.mutable_rowset()->add_segment_metas();
         segment->set_filename("bundle.dat");
+        segment->set_size(100);
         segment->set_bundle_file_offset(128);
     }
     builder.batch_apply_opwrite(op_write3, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
-    ASSERT_EQ(2, metadata->rowsets_size());
-    const auto& first = metadata->rowsets(0);
-    EXPECT_EQ(200, first.id());
-    ASSERT_EQ(1, first.segment_metas_size());
-    EXPECT_EQ(201, get_rssid(first, 0));
-    EXPECT_EQ(3, first.num_rows());
-    ASSERT_EQ(1, first.del_files_size());
-    EXPECT_EQ(0, first.del_files(0).op_offset()); // before statement 2's segment, as applied
-    const auto& second = metadata->rowsets(1);
-    EXPECT_EQ(202, second.id());
-    EXPECT_EQ(202, get_rssid(second, 0));
-    EXPECT_EQ(128, second.segment_metas(0).bundle_file_offset());
-    EXPECT_EQ(4, second.num_rows());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(200, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(201, get_rssid(rowset, 0));
+    EXPECT_EQ(202, get_rssid(rowset, 1));
+    EXPECT_EQ(7, rowset.num_rows());
+    ASSERT_EQ(1, rowset.del_files_size());
+    EXPECT_EQ(200, rowset.del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, rowset.del_files(0).op_offset()); // before statement 2's segment, as applied
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    EXPECT_EQ(128, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
     EXPECT_EQ(203, metadata->next_rowset_id());
 }
 
@@ -2610,8 +2590,8 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_all_bundled_stays_one_rowset) {
 }
 
 // A row-mode partial update's rewrite is a standalone file, but the other statements' segments of the
-// batch may still live in bundle files: only the rewritten segment loses its offset, and the batch is
-// split so that no rowset mixes the two kinds.
+// batch may still live in bundle files. Preserve their physical offsets and assign the rewritten
+// file synthetic offset 0 in the merged rowset.
 TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_statements_bundled) {
     const int64_t tablet_id = 30008;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
@@ -2646,27 +2626,28 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_statements_bun
     builder.batch_apply_opwrite(plain, {}, {});
 
     ASSERT_OK(builder.set_final_rowset());
-    ASSERT_EQ(2, metadata->rowsets_size());
-    const auto& rewritten = metadata->rowsets(0);
-    EXPECT_EQ(500, rewritten.id());
-    ASSERT_EQ(1, rewritten.segment_metas_size());
-    EXPECT_EQ("rewrite.dat", rewritten.segment_metas(0).filename());
-    EXPECT_FALSE(rewritten.segment_metas(0).has_bundle_file_offset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(500, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ("rewrite.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(500, get_rssid(rowset, 0));
+    ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
     // The rewritten data is private to this tablet, so it no longer shares the op_write's uid.
-    EXPECT_FALSE(rewritten.uid().hi() == 1 && rewritten.uid().lo() == 1);
-    const auto& bundled = metadata->rowsets(1);
-    EXPECT_EQ(501, bundled.id());
-    ASSERT_EQ(1, bundled.segment_metas_size());
-    EXPECT_EQ("bundle.dat", bundled.segment_metas(0).filename());
-    ASSERT_TRUE(bundled.segment_metas(0).has_bundle_file_offset());
-    EXPECT_EQ(4096, bundled.segment_metas(0).bundle_file_offset());
-    EXPECT_EQ(2, bundled.uid().lo());
+    EXPECT_FALSE(rowset.uid().hi() == 1 && rowset.uid().lo() == 1);
+    EXPECT_EQ("bundle.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ(501, get_rssid(rowset, 1));
+    ASSERT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(4096, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
     EXPECT_EQ(502, metadata->next_rowset_id());
 }
 
-// One op_write never holds both kinds (a load bundles only the single segment it writes in one
-// flush), so the split refuses one rather than cut it in two.
-TEST_F(MetaFileTest, test_batch_apply_opwrite_split_rejects_mixed_op_write) {
+// An op_write can itself fold several writers' files. Normalize its standalone segment without
+// changing the physical bundle slice or either segment's rssid.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_normalizes_mixed_op_write) {
     const int64_t tablet_id = 30007;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
     auto metadata = std::make_shared<TabletMetadata>();
@@ -2676,16 +2657,28 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_split_rejects_mixed_op_write) {
 
     MetaFileBuilder builder(*tablet, metadata);
     TxnLogPB_OpWrite op_write;
-    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    auto* standalone = op_write.mutable_rowset()->add_segment_metas();
+    standalone->set_filename("s1.dat");
+    standalone->set_size(100);
     {
         auto* segment = op_write.mutable_rowset()->add_segment_metas();
         segment->set_filename("bundle.dat");
-        segment->set_bundle_file_offset(0);
+        segment->set_size(100);
+        segment->set_bundle_file_offset(128);
     }
     builder.batch_apply_opwrite(op_write, {}, {});
-    auto st = builder.set_final_rowset();
-    EXPECT_TRUE(st.is_internal_error()) << st;
-    EXPECT_EQ(0, metadata->rowsets_size());
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(400, get_rssid(rowset, 0));
+    EXPECT_EQ(401, get_rssid(rowset, 1));
+    ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rowset.segment_metas(0).synthetic_bundle_file_offset());
+    EXPECT_EQ(128, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(402, metadata->next_rowset_id());
 }
 
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {

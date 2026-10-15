@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.reshard.presplit.LoadKind;
 import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -43,6 +45,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.proto.PQueryStatistics;
@@ -57,6 +60,7 @@ import com.starrocks.sql.ExplainAnalyzer;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
@@ -514,6 +518,57 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testAnalyzeProfileRechecksAccessWhenProfileAppearsAfterAnalysis() throws Exception {
+        // The analyzer allows an id whose profile is absent, and a running query publishes its profile every
+        // runtime_profile_report_interval -- so one can appear between the analyzer's lookup and the executor's.
+        // The executor therefore checks the element it actually serves. This mock is that race: absent on the
+        // first lookup (analysis), present on the second (execution).
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, "raced-query-id");
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.USER, "someone_else");
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, "select 1");
+        profile.addChild(summary);
+        ProfileManager.ProfileElement published = ProfileManager.getInstance().createElement(summary, profile);
+
+        new MockUp<ProfileManager>() {
+            private int lookups = 0;
+
+            @Mock
+            public ProfileManager.ProfileElement getProfileElement(String queryId) {
+                return lookups++ == 0 ? null : published;
+            }
+        };
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException("Access denied; OPERATE on SYSTEM required");
+            }
+        };
+
+        Config.authorization_enable_query_profile_access_check = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "ANALYZE PROFILE FROM 'raced-query-id'", SqlModeHelper.MODE_DEFAULT);
+
+            new StmtExecutor(ctx, stmt).execute();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            Config.authorization_enable_query_profile_access_check = false;
+        }
+    }
+
+    @Test
     public void testExecuteAnalyzeProfileStmtBranchSetsErrorWhenProfileMissing() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
@@ -636,6 +691,162 @@ public class StmtExecutorTest {
             Assertions.assertEquals(2, executionIds.size());
             Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
                     "the retry must run under a new query id");
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A range-colocate bucket assignment that went stale between planning and scheduling (a tablet split or merge
+     * published in between) fails the attempt before anything is deployed. The statement must be planned again --
+     * the new plan sees the current tablets, or a shuffle if the group is being realigned -- and retried.
+     */
+    @Test
+    public void testStaleRangeColocateAssignmentReplansAndRetries(@Mocked DefaultCoordinator coordinator)
+            throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                    if (attempts.incrementAndGet() == 1) {
+                        throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket "
+                                + "assignment in physical partition 2");
+                    }
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the failed attempt should have been retried");
+            Assertions.assertEquals(2, PLAN_COUNT.get(), "the retry must rebuild the exec plan");
+            Assertions.assertNotEquals(executionIds.get(0), executionIds.get(1),
+                    "the retry must run under a new query id");
+            Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    /**
+     * A range-colocate group that is stable but still unaligned re-plans into the same failure on every
+     * attempt. Bounded by {@code max_query_retry_time}, the statement must still fail -- with the original
+     * error, not a retry-exhaustion error -- rather than retry forever.
+     */
+    @Test
+    public void testPersistentlyStaleRangeColocateAssignmentFailsWithTheOriginalError(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 2;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            ctx.getSessionVariable().setEnableConstantExecuteInFE(false);
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StmtExecutor>() {
+                @Mock
+                public boolean isForwardToLeader() {
+                    return false;
+                }
+            };
+            new MockUp<WarehouseMetricMgr>() {
+                @Mock
+                public static void increaseUnfinishedQueries(Long warehouseId, Long delta) {
+                }
+            };
+            PLAN_COUNT.set(0);
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    PLAN_COUNT.incrementAndGet();
+                    return buildMinimalExecPlan(1);
+                }
+            };
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                               List<ScanNode> scanNodes, TDescriptorTable descTable,
+                                                               ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            AtomicInteger attempts = new AtomicInteger();
+            List<TUniqueId> executionIds = Lists.newArrayList();
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext context) {
+                    executionIds.add(context.getExecutionId());
+                    attempts.incrementAndGet();
+                    throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket "
+                            + "assignment in physical partition 2");
+                }
+
+                @Mock
+                public RowBatch getNext() {
+                    return new RowBatch();
+                }
+            };
+
+            executor.execute();
+
+            Assertions.assertEquals(2, attempts.get(), "the statement is attempted max_query_retry_time times");
+            Assertions.assertEquals(2, PLAN_COUNT.get(),
+                    "every retry is re-planned, and there is no retry after the last attempt");
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("stale bucket assignment"),
+                    ctx.getState().getErrorMessage());
         } finally {
             Config.max_query_retry_time = oldRetryTime;
         }

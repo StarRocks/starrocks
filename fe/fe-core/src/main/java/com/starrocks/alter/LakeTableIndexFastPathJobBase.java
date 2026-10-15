@@ -654,6 +654,18 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: copyForPersist and replay share them with the journal entry. The task
+     * batch is read only while the job runs or is cancelled, so it goes back to null as on a new job.
+     */
+    @Override
+    public void pruneMeta() {
+        partitionToTablets = new HashMap<>();
+        tabletToIndexMetaId = new HashMap<>();
+        batchTask = null;
+    }
+
+    /**
      * The lake ADD/DROP INDEX fast path is safe against concurrent partition creation:
      * runPendingJob snapshots the owned partition/tablet set for task dispatch, and the
      * FINISHED_REWRITING transition derives {@link #commitVersionMap} from those partition IDs.

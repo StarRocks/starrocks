@@ -291,6 +291,60 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
+## `lake_pk_index_cache_delvec_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件所附带的 Delete Vector 占用的内存。只有随 Delete Vector 一起导入的 SST 文件（例如 Compaction 的产出）才带有 Delete Vector。这部分内存不计入主键索引缓存，因此也不包含在 `information_schema.be_tablets` 的 `INDEX_MEM` 中。
+
+## `lake_pk_index_cache_filter_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件的 Bloom Filter 占用的内存。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
+
+## `lake_pk_index_cache_hit_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引已在主键索引缓存中、无需加载的次数。结合 `lake_pk_index_load_total`，缓存命中率为 `hit / (hit + load)`。
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 上已缓存主键索引的 tablet 中，主键索引 SST 文件的索引块（index block）占用的内存。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- 单位：字节
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 上已缓存的主键索引中，MemTable（包括正在写入的和正在 Flush 的）占用的内存。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
+
+## `lake_pk_index_load_duration_us`
+
+- 单位：us
+- 类型：累积
+- 描述：仅存算分离模式。`lake_pk_index_load_total` 所统计的主键索引加载累计耗时。除以 `lake_pk_index_load_total` 即为单个 tablet 加载主键索引的平均耗时。
+
+## `lake_pk_index_load_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
+
+## `lake_tablet_location_handoff_entries`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：仅存算分离模式。本 BE 为自己不持有的 tablet 保留的存储位置条数。这些位置由 tablet 的持有节点在导入时交来，用于写 combined txn log（参见 BE 配置项 `lake_enable_tablet_location_handoff`）。条目保存在一个 16 MiB 的 LRU 缓存中，最后一次刷新后 5 分钟内有效，缓存需要空间时被淘汰。因此该值反映的是缓存占用，而不是位置交接当前是否在用。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。本 BE 解析自己不持有的 tablet 的存储位置时，直接使用持有节点交来的位置、没有向 StarMgr 查询的次数。每增加 1，就少发一次 StarMgr GetShard RPC。该指标在负责向开启了 `file_bundling` 的表导入数据的协调节点上增长。结合 `staros_shard_info_fallback_total`，交接的命中率为 `hits / (hits + fallback)`。
+
 ## `lake_vacuum_del_file_batch_size_minute`
 
 - 单位：文件数（每批次）
@@ -551,6 +605,11 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
+
+## `pipe_drivers`
+
+- 单位：计数
+- 描述：BE 准入控制当前预留的逻辑 driver 配额。包含 fragment 实例化 driver 和 operator 期间持有的配额，以及实例化后尚未释放的配额。该值遵循逻辑 DOP 计数规则（包括 colocate 执行组），并非已实例化的 driver 对象数或运行线程数。配额释放时（包括准备失败或 fragment 完成时），该值随之减少。
 
 ## `pipe_poller_block_queue_len`
 

@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.ast.expression.VarBinaryLiteral;
 import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -425,6 +426,10 @@ public interface AstVisitor<R, C> {
     }
 
     default R visitDropGroupProviderStatement(DropGroupProviderStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
 

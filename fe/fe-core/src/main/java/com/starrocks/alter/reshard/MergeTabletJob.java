@@ -324,8 +324,17 @@ public class MergeTabletJob extends TabletReshardJob {
                     // partition-shared object, so tell the BE where to look, exactly as a normal load does.
                     boolean preferSharedInitialMetadata =
                             Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
-                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
+                    // Checked inside the future so a rejected result fails this publish attempt: it is
+                    // then retried with backoff and reported like any failed publish, and nothing of it
+                    // is installed.
+                    List<ExpectedMerge> expectedMerges = collectExpectedMerges(physicalPartition,
+                            reshardingPhysicalPartition);
+                    Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> {
+                        Map<Long, TabletRange> tabletRanges = publishVersion(tablets, commitVersion,
+                                useAggregatePublish, computeResource, preferSharedInitialMetadata);
+                        checkMergeTabletRanges(expectedMerges, tabletRanges);
+                        return tabletRanges;
+                    });
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -535,7 +544,7 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     protected void registerReshardingTabletsOnRestart() {
-        if (jobState == JobState.PENDING || jobState.isFinalState()) {
+        if (!jobState.redirectsPublish()) {
             return;
         }
 
@@ -654,6 +663,70 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
+    /**
+     * What FE knows about one merge when its publish is submitted: the merged tablet's id, the ids of the
+     * tablets it merges in key order, and the FE ranges of the first and the last of them.
+     */
+    record ExpectedMerge(long newTabletId, List<Long> oldTabletIds, TabletRange firstOldRange,
+                         TabletRange lastOldRange) {
+    }
+
+    /**
+     * Rejects a merge publish result that disagrees with FE. The merged tablet's range must run from the first
+     * old tablet's lower bound to the last old tablet's upper bound on FE. Anything else means the compute node's
+     * tablet metadata does not match FE, and installing it would corrupt FE's ranges, so the result is rejected
+     * instead.
+     */
+    static void checkMergeTabletRanges(List<ExpectedMerge> expectedMerges, Map<Long, TabletRange> tabletRanges) {
+        for (ExpectedMerge expected : expectedMerges) {
+            TabletRange merged = tabletRanges.get(expected.newTabletId());
+            if (merged == null) {
+                throw new TabletReshardException(String.format(
+                        "Merge result rejected: the compute node returned no range for tablet %d merged from tablets "
+                                + "%s. The result is not installed.",
+                        expected.newTabletId(), expected.oldTabletIds()));
+            }
+            if (!TabletReshardUtils.sameLowerBound(merged.getRange(), expected.firstOldRange().getRange())
+                    || !TabletReshardUtils.sameUpperBound(merged.getRange(), expected.lastOldRange().getRange())) {
+                throw new TabletReshardException(String.format(
+                        "Merge result rejected: tablets %s were merged into tablet %d with range %s on the compute "
+                                + "node, but on FE they run from %s to %s. The compute node's tablet metadata does not "
+                                + "match FE; the result is not installed.",
+                        expected.oldTabletIds(), expected.newTabletId(), merged, expected.firstOldRange(),
+                        expected.lastOldRange()));
+            }
+        }
+    }
+
+    // The old tablets' ranges are read from the old index because that is FE's own record of them, and it stays
+    // installed until the job finishes. Only merging tablets are checked, and a merge whose first or last old
+    // tablet has no FE range has nothing to compare against.
+    private static List<ExpectedMerge> collectExpectedMerges(PhysicalPartition physicalPartition,
+                                                             ReshardingPhysicalPartition reshardingPhysicalPartition) {
+        List<ExpectedMerge> expectedMerges = new ArrayList<>();
+        for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition.getReshardingIndexes().values()) {
+            MaterializedIndex oldIndex = physicalPartition.getIndex(reshardingIndex.getMaterializedIndexId());
+            if (oldIndex == null) {
+                continue;
+            }
+            for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
+                if (mergingTablet == null) {
+                    continue;
+                }
+                List<Long> oldTabletIds = mergingTablet.getOldTabletIds();
+                Tablet first = oldIndex.getTablet(oldTabletIds.get(0));
+                Tablet last = oldIndex.getTablet(oldTabletIds.get(oldTabletIds.size() - 1));
+                if (first == null || last == null || first.getRange() == null || last.getRange() == null) {
+                    continue;
+                }
+                expectedMerges.add(new ExpectedMerge(mergingTablet.getNewTabletId(), List.copyOf(oldTabletIds),
+                        first.getRange(), last.getRange()));
+            }
+        }
+        return expectedMerges;
+    }
+
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
             boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
@@ -769,7 +842,13 @@ public class MergeTabletJob extends TabletReshardJob {
             // a job that may never be queued (admission-time table-dropped race). The errorMessage
             // assignment is paired with setJobState here so it only fires when it is actually
             // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
-            if (!canAbort()) {
+            //
+            // Leader-only, because setJobState journals: replay reaches this method too, on a
+            // follower, on the leader's activation catch-up (which runs before feType becomes
+            // LEADER), and on the checkpoint worker (a separate GlobalStateMgr whose EditLog has no
+            // journal queue). Writing from any of those either throws at the closed WAL gate or
+            // NPEs, and replay() swallows it, leaving the record half-applied and silent.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !canAbort()) {
                 errorMessage = "Table not found";
                 setJobState(JobState.ABORTING);
             }

@@ -44,9 +44,10 @@
 #include "gutil/strings/join.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
+#include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
-#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -241,11 +242,10 @@ protected:
         }
     }
 
-    // The rowsets `version` published into `tablet_id` hold `segments[i]` segments each, the ones of
-    // `bundled_rowsets` in the bundle files at the offsets their statements wrote them at, the others
-    // as standalone files.
-    void expect_rowsets(int64_t tablet_id, int64_t version, const std::vector<int>& segments,
-                        const std::vector<bool>& bundled_rowsets, const std::map<std::string, int64_t>& offsets) {
+    // Physical bundle slices keep the offsets their statements wrote; standalone files get the
+    // synthetic offset 0 so the merged rowset remains readable through the legacy offsets array.
+    void expect_rowset(int64_t tablet_id, int64_t version, int segments,
+                       const std::map<std::string, int64_t>& offsets) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         std::vector<const RowsetMetadataPB*> published;
         for (const auto& rowset : metadata->rowsets()) {
@@ -253,18 +253,17 @@ protected:
                 published.push_back(&rowset);
             }
         }
-        ASSERT_EQ(segments.size(), published.size());
-        for (size_t i = 0; i < published.size(); i++) {
-            ASSERT_EQ(segments[i], published[i]->segment_metas_size()) << "rowset " << i;
-            for (const auto& segment : published[i]->segment_metas()) {
-                if (!bundled_rowsets[i]) {
-                    EXPECT_FALSE(segment.has_bundle_file_offset()) << segment.filename();
-                    continue;
-                }
-                auto it = offsets.find(segment.filename());
-                ASSERT_NE(offsets.end(), it) << segment.filename();
-                ASSERT_TRUE(segment.has_bundle_file_offset()) << "lost the bundle offset of " << segment.filename();
+        ASSERT_EQ(1, published.size());
+        ASSERT_EQ(segments, published[0]->segment_metas_size());
+        for (const auto& segment : published[0]->segment_metas()) {
+            ASSERT_TRUE(segment.has_bundle_file_offset()) << segment.filename();
+            auto it = offsets.find(segment.filename());
+            if (it != offsets.end()) {
                 EXPECT_EQ(it->second, segment.bundle_file_offset()) << segment.filename();
+                EXPECT_FALSE(segment.synthetic_bundle_file_offset()) << segment.filename();
+            } else {
+                EXPECT_EQ(0, segment.bundle_file_offset()) << segment.filename();
+                EXPECT_TRUE(segment.synthetic_bundle_file_offset()) << segment.filename();
             }
         }
     }
@@ -321,10 +320,10 @@ protected:
 };
 
 // BEGIN; INSERT a few rows; INSERT enough rows to flush twice; INSERT a few rows; COMMIT. The first
-// and last statements bundle their segment, the middle one does not, so the publish splits the
-// merged rowset into three consecutive rowsets. The later statements overwrite some keys of the
-// earlier ones, so the delete vectors of the first two rowsets are only right if every rssid is
-// still what the primary index was given during the publish.
+// and last statements bundle their segment, the middle one does not. Publish keeps their physical
+// offsets and gives the standalone segments synthetic offset 0 in one rowset. The later statements
+// overwrite earlier keys, so their delete vectors are only right if every rssid stays what the
+// primary index was given during the publish.
 TEST_F(LakeMergedBundledSegmentsTest, small_large_small_statements) {
     const int64_t txn_id = next_id();
     const auto stmt1 = statement_load_id(1);
@@ -348,12 +347,13 @@ TEST_F(LakeMergedBundledSegmentsTest, small_large_small_statements) {
         ASSIGN_OR_ABORT(auto base, _tablet_mgr->get_tablet_metadata(tablet_id, 1));
         const uint32_t rowset_id = base->next_rowset_id();
         ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2, stmt3}).status());
-        ASSERT_NO_FATAL_FAILURE(expect_rowsets(tablet_id, 2, {1, 2, 1}, {true, false, true}, offsets));
+        ASSERT_NO_FATAL_FAILURE(expect_rowset(tablet_id, 2, 4, offsets));
         // Statement 1 takes rssid slot 0, statement 2 slots 1 and 2, statement 3 slot 3.
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
         EXPECT_EQ(rowset_id, metadata->rowsets(0).id());
-        EXPECT_EQ(rowset_id + 1, metadata->rowsets(1).id());
-        EXPECT_EQ(rowset_id + 3, metadata->rowsets(2).id());
+        for (int pos = 0; pos < 4; ++pos) {
+            EXPECT_EQ(rowset_id + pos, get_rssid(metadata->rowsets(0), pos));
+        }
         EXPECT_EQ(rowset_id + 4, metadata->next_rowset_id());
 
         Rows expected;
@@ -403,7 +403,7 @@ TEST_F(LakeMergedBundledSegmentsTest, partial_update_next_to_a_bundled_statement
         }
 
         ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
-        ASSERT_NO_FATAL_FAILURE(expect_rowsets(tablet_id, 3, {1, 1}, {false, true}, offsets));
+        ASSERT_NO_FATAL_FAILURE(expect_rowset(tablet_id, 3, 2, offsets));
 
         Rows expected;
         for (int key : tablet_keys(t, updated)) {

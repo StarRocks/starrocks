@@ -97,10 +97,10 @@ private:
 
 bool same_runtime_config(const AIRuntimeConfig& lhs, const AIRuntimeConfig& rhs) {
     return lhs.request_timeout_ms == rhs.request_timeout_ms && lhs.connect_timeout_ms == rhs.connect_timeout_ms &&
-           lhs.max_response_bytes == rhs.max_response_bytes && lhs.worker_thread_num == rhs.worker_thread_num &&
-           lhs.sub_chunk_size == rhs.sub_chunk_size && lhs.max_retries == rhs.max_retries &&
-           lhs.max_retries_on_throttle == rhs.max_retries_on_throttle && lhs.on_error == rhs.on_error &&
-           lhs.rate_limit_qps_chat == rhs.rate_limit_qps_chat &&
+           lhs.max_response_bytes == rhs.max_response_bytes && lhs.max_input_file_bytes == rhs.max_input_file_bytes &&
+           lhs.worker_thread_num == rhs.worker_thread_num && lhs.sub_chunk_size == rhs.sub_chunk_size &&
+           lhs.max_retries == rhs.max_retries && lhs.max_retries_on_throttle == rhs.max_retries_on_throttle &&
+           lhs.on_error == rhs.on_error && lhs.rate_limit_qps_chat == rhs.rate_limit_qps_chat &&
            lhs.rate_limit_qps_embedding == rhs.rate_limit_qps_embedding && lhs.max_inflight == rhs.max_inflight;
 }
 
@@ -126,6 +126,7 @@ TEST(AIRuntimeConfigTest, DefaultsAndTimeoutBoundariesAreValid) {
     EXPECT_EQ(600000, config.request_timeout_ms);
     EXPECT_EQ(10000, config.connect_timeout_ms);
     EXPECT_EQ(8388608, config.max_response_bytes);
+    EXPECT_EQ(10485760, config.max_input_file_bytes);
     EXPECT_EQ(16, config.worker_thread_num);
     EXPECT_EQ(64, config.sub_chunk_size);
     EXPECT_EQ(3, config.max_retries);
@@ -138,6 +139,7 @@ TEST(AIRuntimeConfigTest, DefaultsAndTimeoutBoundariesAreValid) {
     config.request_timeout_ms = 0;
     config.connect_timeout_ms = 0;
     config.max_response_bytes = 1;
+    config.max_input_file_bytes = 1;
     config.worker_thread_num = 1;
     config.sub_chunk_size = 1;
     config.max_retries = 0;
@@ -158,6 +160,12 @@ TEST(AIRuntimeConfigTest, RejectsEveryInvalidFieldWithoutEchoingValues) {
     invalid_configs.emplace_back(config);
     config = {};
     config.max_response_bytes = 0;
+    invalid_configs.emplace_back(config);
+    config = {};
+    config.max_input_file_bytes = 0;
+    invalid_configs.emplace_back(config);
+    config = {};
+    config.max_input_file_bytes = -1;
     invalid_configs.emplace_back(config);
     config = {};
     config.worker_thread_num = 0;
@@ -210,6 +218,7 @@ TEST(AIRuntimeConfigSourceTest, PreparedSnapshotIsInvisibleUntilNoFailPublish) {
     AIRuntimeConfig candidate = original;
     candidate.worker_thread_num = original.worker_thread_num + 1;
     candidate.max_inflight = original.max_inflight + 1;
+    candidate.max_input_file_bytes = original.max_input_file_bytes + 1;
 
     auto prepared = source->prepare(candidate);
 
@@ -283,6 +292,7 @@ TEST(AIRuntimeConfigSourceTest, ConcurrentReadersObserveOnlyCompletePublishedSna
     old_config.request_timeout_ms = 101;
     old_config.connect_timeout_ms = 102;
     old_config.max_response_bytes = 103;
+    old_config.max_input_file_bytes = 110;
     old_config.worker_thread_num = 104;
     old_config.sub_chunk_size = 105;
     old_config.max_retries = 106;
@@ -295,6 +305,7 @@ TEST(AIRuntimeConfigSourceTest, ConcurrentReadersObserveOnlyCompletePublishedSna
     new_config.request_timeout_ms = 201;
     new_config.connect_timeout_ms = 202;
     new_config.max_response_bytes = 203;
+    new_config.max_input_file_bytes = 210;
     new_config.worker_thread_num = 204;
     new_config.sub_chunk_size = 205;
     new_config.max_retries = 206;

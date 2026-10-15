@@ -40,7 +40,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -130,7 +130,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     // and each chunk is queried against the index in parallel via thread pool.
     std::vector<std::vector<uint64_t>> rss_rowids_per_segment;
     std::vector<Filter> owned_per_segment;
-    RETURN_IF_ERROR(params.tablet->update_mgr()->batch_get_rss_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->batch_get_rss_rowids_from_pkindex(
             params.tablet->id(), _base_version, pk_iters, &rss_rowids_per_segment, false /*need_lock*/,
             &owned_per_segment));
 
@@ -233,10 +233,8 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     uint32_t rowset_id = params.container.rssid_to_rowid().at(rssid);
     // 2. load segment meta.
     // A segment written by an earlier statement of the transaction this batch publish applies is in
-    // MetaFileBuilder's pending rowset, registered under next_rowset_id(): its final rowset id and
-    // index are set only in set_final_rowset(), which may split that rowset. The metadata cache keeps
-    // the segment id a Segment was first loaded with, and a reader computes rssids from it, so do not
-    // cache one loaded under the provisional id.
+    // MetaFileBuilder's pending rowset, registered under next_rowset_id(). Avoid populating the shared
+    // segment cache while that rowset is still being built and has not reached the tablet metadata.
     const bool fill_meta_cache = rowset_id < params.metadata->next_rowset_id();
     ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
                                            fileinfo, rssid - rowset_id /* segment id inside rowset */,
@@ -330,7 +328,7 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // strictly greater than the new one are dropped before applying the update, so the
 // corresponding source rows keep their previous values. Equal values let the new row
 // win, matching the existing upsert/row-mode condition-update semantics (see
-// UpdateManager::_process_single_chunk_update_with_condition).
+// PrimaryKeyManager::_process_single_chunk_update_with_condition).
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                                    const Schema& partial_schema,
                                                                    StreamChunkContainer container,

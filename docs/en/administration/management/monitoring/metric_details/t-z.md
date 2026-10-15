@@ -86,6 +86,19 @@ description: "Alphabetical t - z"
 - Unit: Bytes
 - Description: Memory used by tablet metadata.
 
+## `tablet_pre_split_data_tier_file_selection`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `mode` — `subset` (the sample scanned a subset of the files, sized by `tablet_pre_split_data_tier_scan_byte_limit`), `under_limit` (the input was within the limit, so every file was scanned), `disabled` (the limit is `0`, so every file was scanned), `all_selected` (the input exceeded the limit, but taking whole files, at least one per partition and at least `tablet_pre_split_data_tier_min_scan_files` in all, still selected every file), `partition_from_file_data` (the input exceeded the limit, but a partition column is read from the file data rather than from the path, or path and literal partition columns are mixed, so every file was scanned: a subset could miss whole partitions), `path_not_expressible` (`INSERT INTO ... SELECT FROM FILES()` only: a selected file's path contains a character FILES cannot take as an exact path — `,`, `*`, `?`, `[`, `{`, `\`, a `:` in the path after the host, or leading or trailing whitespace — so the sample scanned every file through the statement's own `path`).
+- Description: Total data-tier samples of Broker Load and `INSERT INTO ... SELECT FROM FILES()` loads, by how the scanned files were chosen.
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- Unit: -
+- Type: Histogram
+- Description: Share of the input bytes that each data-tier sample of a Broker Load or `INSERT INTO ... SELECT FROM FILES()` load scanned, as a percentage rounded down to an integer, so `100` means every file was scanned.
+
 ## `tablet_reshard_merge_candidate_blocked`
 
 - Unit: Count
@@ -105,6 +118,12 @@ description: "Alphabetical t - z"
 
 - Unit: Count
 - Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+
+## `thrift_client_retries_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of retries that FE Thrift RPC calls made after their connection broke. Before each retry, the FE waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms), then reopens the connection and resends the request. Calls that time out are not retried and are not counted. The number of retries per call is bounded by `thrift_rpc_retry_times`. A rising value means the FE keeps losing its Thrift connections to other nodes, for example because the Thrift worker pool of the Leader FE is saturated and closing new connections; read it together with `thrift_server_rejected_connections_total` on that node.
 
 ## `thrift_connections_total`
 

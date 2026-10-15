@@ -53,6 +53,9 @@ public:
     Status MultiGet(const ReadOptions&, const Slice* keys, ForwardIt begin, ForwardIt end,
                     std::vector<std::string>* values);
 
+    // Resident bytes of the index block and of the filter block; memory_usage() is their sum.
+    size_t index_block_memory_usage() const;
+    size_t filter_memory_usage() const;
     size_t memory_usage() const;
 
     // Sample keys from the table for parallel compaction task splitting.
