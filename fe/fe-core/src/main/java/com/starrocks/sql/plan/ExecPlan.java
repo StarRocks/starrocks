@@ -100,6 +100,13 @@ public class ExecPlan {
     private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
     private Map<String, String> aiProviderConfigIds;
 
+    // A column-subset INSERT into a primary key table that this plan runs as a plain insert (missing
+    // columns filled with defaults, no partial update) because no transaction had ever committed to
+    // its target partitions when it was planned. The commit re-checks that assumption; see
+    // InsertTxnCommitAttachment. Lives on the plan, not the statement: the planner may re-analyze and
+    // re-plan the same InsertStmt, and the flag must describe this plan only.
+    private boolean plainInsertOnEmptyPartitions = false;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -127,6 +134,14 @@ public class ExecPlan {
         this.outputColumns = new ArrayList<>();
         this.fragments.addAll(fragments);
         this.isShortCircuit = false;
+    }
+
+    public void setPlainInsertOnEmptyPartitions(boolean plainInsertOnEmptyPartitions) {
+        this.plainInsertOnEmptyPartitions = plainInsertOnEmptyPartitions;
+    }
+
+    public boolean isPlainInsertOnEmptyPartitions() {
+        return plainInsertOnEmptyPartitions;
     }
 
     public ConnectContext getConnectContext() {

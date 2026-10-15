@@ -3892,6 +3892,9 @@ public class StmtExecutor {
                         attachment.setShadowRewriteWatershedTxnId(insertStmt.getShadowRewriteWatershedTxnId());
                         attachment.setShadowRewriteAlterVersion(insertStmt.getShadowRewriteAlterVersion());
                     }
+                    if (execPlan != null && execPlan.isPlainInsertOnEmptyPartitions()) {
+                        attachment.setRequireEmptyPartitions(true);
+                    }
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows);
                 }
