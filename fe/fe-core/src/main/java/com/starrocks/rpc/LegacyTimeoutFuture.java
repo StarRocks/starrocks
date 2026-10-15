@@ -31,7 +31,7 @@ import java.util.concurrent.TimeoutException;
  * <ul>
  *   <li>a timeout of zero or less meant "wait until the response arrives";</li>
  *   <li>running out of time threw {@link ExecutionException} wrapping the {@link TimeoutException},
- *       never a bare {@link TimeoutException};</li>
+ *       never a bare {@link TimeoutException}, with a message containing "time out";</li>
  *   <li>{@code cancel} did nothing and returned false.</li>
  * </ul>
  * {@code com.starrocks:jprotobuf-rpc-core} returns a {@code CompletableFuture} for those methods
@@ -104,7 +104,9 @@ public class LegacyTimeoutFuture<T> implements Future<T> {
         try {
             return delegate.get(timeout, unit);
         } catch (TimeoutException e) {
-            throw new ExecutionException("brpc call timed out after " + timeout + " " + unit, e);
+            // Keep the old library's message word for word: ResultReceiver tells a query timeout from an RPC
+            // failure by whether the message contains "time out", and black-lists the backend otherwise.
+            throw new ExecutionException("Ocurrs time out with specfied time " + timeout + " " + unit, e);
         }
     }
 

@@ -69,6 +69,8 @@ public class LegacyTimeoutFutureTest {
         ExecutionException e = Assertions.assertThrows(ExecutionException.class,
                 () -> future.get(10, TimeUnit.MILLISECONDS));
         Assertions.assertInstanceOf(TimeoutException.class, e.getCause());
+        // ResultReceiver reports a query timeout, rather than black-listing the backend, only on this marker.
+        Assertions.assertTrue(e.getMessage().contains("time out"), e.getMessage());
     }
 
     @Test
