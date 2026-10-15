@@ -125,6 +125,7 @@ public:
 
 private:
     struct ReadState;
+    StatusOr<std::unique_ptr<RandomAccessFile>> _open_file() const;
     StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf) const;
     StatusOr<std::shared_ptr<ReadState>> _get_read_state() const;
 

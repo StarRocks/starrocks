@@ -77,6 +77,23 @@ struct PersistentIndexSstable::ReadState {
     std::unique_ptr<sstable::Table> table;
 };
 
+StatusOr<std::unique_ptr<RandomAccessFile>> PersistentIndexSstable::_open_file() const {
+    RandomAccessFileOptions opts;
+    if (!_sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    auto rf = fs::new_random_access_file(opts, _filename);
+    if (!rf.ok()) {
+        // File-open failures return before Table::Open can report a read error. Count them here,
+        // including failures while reopening after a corrupted-cache retry, and preserve the cause.
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "Failed to open PersistentIndex SST file: " << _sstable_pb.filename()
+                     << ", error: " << rf.status();
+    }
+    return rf;
+}
+
 StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSstable::_open_read_state(
         std::unique_ptr<RandomAccessFile> rf) const {
     auto state = std::make_shared<ReadState>();
@@ -96,12 +113,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         auto drop_status = drop_corrupted_sstable_cache(_filename);
         if (drop_status.ok()) {
             state->table.reset();
-            RandomAccessFileOptions opts;
-            if (!_sstable_pb.encryption_meta().empty()) {
-                ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
-                opts.encryption_info = std::move(info);
-            }
-            ASSIGN_OR_RETURN(state->rf, fs::new_random_access_file(opts, _filename));
+            ASSIGN_OR_RETURN(state->rf, _open_file());
             open_st = sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table,
                                            _block_cache_id);
             TEST_SYNC_POINT_CALLBACK("PersistentIndexSstable::init:table_open_retry_error", &open_st);
@@ -125,12 +137,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     }
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_sst_reopen_us");
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_count", 1);
-    RandomAccessFileOptions opts;
-    if (!_sstable_pb.encryption_meta().empty()) {
-        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(_sstable_pb.encryption_meta()));
-        opts.encryption_info = std::move(info);
-    }
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, _filename));
+    ASSIGN_OR_RETURN(auto rf, _open_file());
     ASSIGN_OR_RETURN(auto state, _open_read_state(std::move(rf)));
     TRACE_COUNTER_INCREMENT("pindex_sst_reopen_bytes", state->table->memory_usage());
     _read_state = std::move(state);

@@ -840,6 +840,40 @@ TEST_F(PersistentIndexSstableTest, test_failed_reopen_is_retryable) {
     EXPECT_EQ(bytes, sst->memory_usage());
 }
 
+TEST_F(PersistentIndexSstableTest, test_file_open_failure_during_reopen_is_counted) {
+    const std::string path = lake::join_path(kTestDir, "missing_on_reopen.sst");
+    uint64_t filesize = 0;
+    build_test_sst(path, &filesize);
+    PersistentIndexSstablePB pb;
+    pb.set_filename("missing_on_reopen.sst");
+    pb.set_filesize(filesize);
+    ASSIGN_OR_ABORT(auto sst, PersistentIndexSstable::new_sstable(pb, path, nullptr));
+    const auto bytes = sst->evict_read_state();
+    ASSERT_GT(bytes, 0);
+
+    // Exercise failure before Table::Open, rather than injecting an error after it has opened.
+    const auto backup = path + ".backup";
+    ASSERT_OK(FileSystem::Default()->rename_file(path, backup));
+    CancelableDefer restore([&] { (void)FileSystem::Default()->rename_file(backup, path); });
+    const auto errors_before = StorageMetrics::instance()->pk_index_sst_read_error_total.value();
+    Slice key("key_0003");
+    IndexValue value(NullIndexValue);
+    KeyIndexSet found;
+    const auto status = sst->multi_get(&key, {0}, -1, &value, &found);
+    EXPECT_TRUE(status.is_not_found()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find(path));
+    EXPECT_EQ(errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+    EXPECT_EQ(0, sst->memory_usage());
+
+    ASSERT_OK(FileSystem::Default()->rename_file(backup, path));
+    restore.cancel();
+    ASSERT_OK(sst->multi_get(&key, {0}, -1, &value, &found));
+    EXPECT_EQ(KeyIndexSet{0}, found);
+    EXPECT_EQ(IndexValue(3), value);
+    EXPECT_EQ(bytes, sst->memory_usage());
+    EXPECT_EQ(errors_before + 1, StorageMetrics::instance()->pk_index_sst_read_error_total.value());
+}
+
 TEST_F(PersistentIndexSstableTest, test_concurrent_reopen_and_eviction) {
     const std::string path = lake::join_path(kTestDir, "concurrent_read_state.sst");
     uint64_t filesize = 0;
