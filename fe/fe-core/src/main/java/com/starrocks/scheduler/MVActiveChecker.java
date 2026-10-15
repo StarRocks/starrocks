@@ -27,6 +27,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -38,6 +39,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -68,12 +70,24 @@ public class MVActiveChecker extends LeaderDaemon {
 
     // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
     // mv's data behind which is not expected.
+<<<<<<< HEAD
     private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING
     );
+=======
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.<String>builder()
+            .add(MV_BACKUP_INACTIVE_REASON)
+            .add(MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED)
+            .add(MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES)
+            .addAll(Arrays.stream(RefreshFailureKind.values())
+                    .filter(RefreshFailureKind::isBreaking)
+                    .map(RefreshFailureKind::inactiveReasonPrefix)
+                    .iterator())
+            .build();
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 
     @Override
     protected void runAfterLeaseValid() {

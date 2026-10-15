@@ -16,7 +16,12 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IvmBrokenException;
 import com.starrocks.sql.analyzer.mv.IvmSchemaCompat;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.CharType;
@@ -29,12 +34,16 @@ import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Covers {@link IvmSchemaCompat#isColumnCompatible} for cases the SR SQL test framework
@@ -244,4 +253,67 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
                     "AUTO-mode non-IVM MV (plain PCT schema) must not be re-derived / false-inactivated");
         });
     }
+<<<<<<< HEAD
+=======
+
+    @ParameterizedTest
+    @EnumSource(value = MaterializedView.RefreshMode.class, names = {"INCREMENTAL", "AUTO"})
+    public void testCheckerInactivatesWithWhyTheDefinitionIsNoLongerRewritable(MaterializedView.RefreshMode mode)
+            throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_checker_not_rewritable "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_checker_not_rewritable");
+            mv.setCurrentRefreshMode(mode);
+            // Stands in for a definition a newer analyzer no longer accepts for IVM.
+            mv.setViewDefineSql(
+                    "SELECT id, row_number() OVER (ORDER BY id) AS rn FROM `iceberg0`.`unpartitioned_db`.`t0`");
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("does not support window functions"),
+                    mv.getInactiveReason());
+        });
+    }
+
+    @Test
+    public void testCheckerInactivatesOnASchemaMismatch() throws Exception {
+        starRocksAssert.withMaterializedView(pctViewOverIceberg("mv_checker_typed_mismatch"), () -> {
+            MaterializedView mv = getMv("test", "mv_checker_typed_mismatch");
+            failSchemaComparisonWith(new IvmBrokenException(RefreshFailureKind.SCHEMA_MISMATCH,
+                    MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v"))));
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertFalse(mv.isActive());
+        });
+    }
+
+    @Test
+    public void testCheckerRetriesAFailureThatOnlyReadsLikeASchemaMismatch() throws Exception {
+        starRocksAssert.withMaterializedView(pctViewOverIceberg("mv_checker_text_mismatch"), () -> {
+            MaterializedView mv = getMv("test", "mv_checker_text_mismatch");
+            SemanticException failure = new SemanticException(
+                    MaterializedViewExceptions.inactiveReasonForColumnChanged(Set.of("v")));
+            failSchemaComparisonWith(failure);
+            Assertions.assertSame(failure, Assertions.assertThrows(SemanticException.class,
+                    () -> MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv)));
+            Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        });
+    }
+
+    private static String pctViewOverIceberg(String mvName) {
+        return "CREATE MATERIALIZED VIEW " + mvName + " REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"pct\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+    }
+
+    private static void failSchemaComparisonWith(SemanticException failure) {
+        new MockUp<IvmSchemaCompat>() {
+            @Mock
+            public void compare(List<Field> derivedFields, MaterializedView mv) {
+                throw failure;
+            }
+        };
+    }
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 }

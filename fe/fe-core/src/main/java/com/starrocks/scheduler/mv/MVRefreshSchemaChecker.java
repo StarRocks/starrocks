@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -114,6 +115,9 @@ public final class MVRefreshSchemaChecker {
     }
 
     private static boolean isLikelyDriftException(SemanticException e) {
+        if (MaterializedViewExceptions.kindOf(e).filter(RefreshFailureKind.SCHEMA_MISMATCH::equals).isPresent()) {
+            return true;
+        }
         String msg = e.getMessage();
         if (msg == null) {
             return false;
@@ -122,8 +126,6 @@ public final class MVRefreshSchemaChecker {
         // "No matching function with signature" covers FunctionAnalyzer rejections after a
         // base column type changes (e.g. bitand(int,int) → bitand(bigint,int) no longer resolves).
         return msg.contains("cannot be resolved")
-                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER)
-                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_CHANGED_MARKER)
                 || msg.contains("No matching function with signature")
                 // IVM re-derive incompatibility (row-id strategy flip / no longer IVM-rewritable) is a
                 // drop-and-recreate condition -- inactivate with the reason, don't retry forever.

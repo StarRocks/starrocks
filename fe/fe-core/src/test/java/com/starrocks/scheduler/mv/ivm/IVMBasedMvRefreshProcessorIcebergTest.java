@@ -27,13 +27,23 @@ import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.common.tvr.TvrDeltaStats;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.common.tvr.TvrVersionRange;
+<<<<<<< HEAD
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+=======
+import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
+import com.starrocks.lake.ivm.BaselineBookmarkMissingException;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVTaskRunProcessor;
@@ -63,6 +73,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Objects;
+import java.util.Optional;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -1766,6 +1781,25 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "expected 'no tvr delta traits' in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
+    }
+
+    @Test
+    public void testIncrementalRefreshSurfacesLineageInconsistency() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(TvrTableDelta.of(0L, 2L), TvrDeltaStats.EMPTY)));
+
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("tvr delta lineage inconsistent"),
+                "expected 'tvr delta lineage inconsistent' in chain, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
     }
 
     @Test
@@ -1774,8 +1808,42 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
         advanceTableVersionTo(1);
+<<<<<<< HEAD
         mockListTableDeltaTraitsThrowsConnector(
                 "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+=======
+
+        // Iceberg: the recorded baseline snapshot is no longer an ancestor of the head.
+        assertBaselineUnreachable(mv, new StarRocksConnectorException(
+                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1"));
+    }
+
+    /**
+     * On Lake the baseline goes unreachable a second way: its bookmark's lease ran out and the
+     * cleanup sweep reclaimed it. Needs a view of its own -- the first failure of this class
+     * inactivates the view, so a second attempt never reaches the planner.
+     */
+    @Test
+    public void testIncrementalRefreshSurfacesBaselineBookmarkReclaimed() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+
+        assertBaselineUnreachable(mv, new BaselineBookmarkMissingException(
+                MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER + ": db=1, table=2, id=3"));
+    }
+
+    /**
+     * A connector reason that leaves the recorded baseline unreachable must reach the caller as a
+     * broken incremental chain -- typed so that a pure INCREMENTAL view is inactivated instead of
+     * failing the same way every round -- with the original reason still readable, and must inactivate
+     * the view under its own reason rather than blaming a base change that never happened.
+     */
+    private void assertBaselineUnreachable(MaterializedView mv, StarRocksConnectorException connectorFailure) {
+        String connectorMessage = connectorFailure.getMessage();
+        mockListTableDeltaTraitsThrowsConnector(connectorFailure);
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
         String chain = collectMessages(thrown);
@@ -1785,6 +1853,15 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "expected drop-and-recreate guidance in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("is not a parent ancestor"),
                 "expected original connector reason preserved in chain, got: " + chain);
+<<<<<<< HEAD
+=======
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.BASELINE_UNREACHABLE),
+                MaterializedViewExceptions.kindOf(thrown));
+        Assertions.assertFalse(mv.isActive(), "expected the view to be inactivated");
+        Assertions.assertTrue(
+                mv.getInactiveReason().startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_BASELINE_UNREACHABLE),
+                "expected the baseline-unreachable inactive reason, got: " + mv.getInactiveReason());
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
     private static String collectMessages(Throwable t) {
@@ -1816,6 +1893,14 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                 "expected 'non-append-only' in chain, got: " + chain);
         Assertions.assertTrue(chain.contains("Drop and recreate"),
                 "expected drop-and-recreate guidance in chain, got: " + chain);
+<<<<<<< HEAD
+=======
+        String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
+        Assertions.assertTrue(chain.contains("REFRESH MATERIALIZED VIEW `" + dbName + "`.`" + mv.getName() + "` FORCE"),
+                "expected the hint to name the view with its database, got: " + chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.INCREMENTAL_BROKEN),
+                MaterializedViewExceptions.kindOf(thrown));
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
     @Test

@@ -20,6 +20,10 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.CdcErrorUtils;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -32,6 +36,12 @@ import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.common.ChangeNotTrackableException;
+import org.apache.commons.lang3.exception.ExceptionUtils;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 
 import java.util.Map;
 
@@ -137,7 +147,99 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
     public Constants.TaskRunState execProcessExecPlan(TaskRunContext taskRunContext,
                                                       ProcessExecPlan processExecPlan,
                                                       MVRefreshExecutor executor) throws Exception {
+<<<<<<< HEAD
         return getCurrentProcessor().execProcessExecPlan(taskRunContext, processExecPlan, executor);
+=======
+        try {
+            return getCurrentProcessor().execProcessExecPlan(taskRunContext, processExecPlan, executor);
+        } catch (Exception e) {
+            Optional<MaterializedView.RefreshModeReason> reason =
+                    fallbackReasonOnExecutionFailure(runRefreshMode, mv.getCurrentRefreshMode(), e);
+            if (reason.isEmpty()) {
+                throw e;
+            }
+            logger.warn("Incremental refresh for mv {} was rejected by the backend ({}), falling back to pct " +
+                    "for this run", mv.getName(), reason.get(), e);
+            recordRefreshModeReason(reason.get(),
+                    reason.get() == MaterializedView.RefreshModeReason.CHANGE_CAPTURE_DISABLED
+                            ? soleCaptureCandidate(snapshotBaseTables.values()) : null);
+            try {
+                ProcessExecPlan pctPlan = switchToPCTRefresh(taskRunContext);
+                if (pctPlan.state() == Constants.TaskRunState.SKIPPED) {
+                    return Constants.TaskRunState.SKIPPED;
+                }
+                return pctProcessor.execProcessExecPlan(taskRunContext, pctPlan, executor);
+            } catch (Exception pctFailure) {
+                // Carry the rejection that sent this run to pct, or the reported failure looks like a plain
+                // pct error and the incremental attempt that preceded it is only visible in the log.
+                pctFailure.addSuppressed(e);
+                throw pctFailure;
+            }
+        }
+    }
+
+    /**
+     * Some rejections only surface once the backend reads the changes, past the plan-time fallback: a row
+     * delete on a duplicate-key or aggregate base table, a base version no longer reachable, a version
+     * whose changes were never captured. Only an AUTO view may recover from them here -- an INCREMENTAL one
+     * also reaches this processor when a base table needs its TVR baseline rebuilt, and switching that run
+     * to pct would silently give it the approximate semantics it declined.
+     */
+    @VisibleForTesting
+    static Optional<MaterializedView.RefreshModeReason> fallbackReasonOnExecutionFailure(
+            MaterializedView.RefreshMode runRefreshMode,
+            MaterializedView.RefreshMode settledMode,
+            Throwable e) {
+        Optional<CdcErrorUtils.Parsed> rejection = ExceptionUtils.getThrowableList(e).stream()
+                .filter(ChangeNotTrackableException.class::isInstance)
+                .map(t -> ((ChangeNotTrackableException) t).getRejection())
+                .findFirst();
+        if (!runRefreshMode.isIncremental() || settledMode != MaterializedView.RefreshMode.AUTO
+                || rejection.isEmpty()) {
+            return Optional.empty();
+        }
+        // One error code covers four conditions. Two of them an operator caused and can act on; the
+        // rest -- a base version the ancestor chain cannot reach, a capture that recorded a failure --
+        // mean an invariant broke, and naming them would send the operator after a setting to change.
+        if (CdcErrorUtils.isRowDeleteRejection(rejection.get())) {
+            return Optional.of(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE);
+        }
+        if (CdcErrorUtils.isCaptureDisabledRejection(rejection.get())) {
+            return Optional.of(MaterializedView.RefreshModeReason.CHANGE_CAPTURE_DISABLED);
+        }
+        return Optional.of(MaterializedView.RefreshModeReason.UNKNOWN);
+    }
+
+    /**
+     * The base table to blame for a capture-disabled rejection, or null when more than one could be. The
+     * backend's check only fires for a primary-key table whose changes this run had to read, so one such
+     * base table is the only place it can have come from. The capture property is deliberately not
+     * consulted: this rejection means the window spanned versions published while capture was off, which
+     * the operator may well have turned back on before the refresh ran. Typed with instanceof rather than
+     * cast because a snapshot of another shape should cost the label, not the refresh it is labelling.
+     */
+    @VisibleForTesting
+    static String soleCaptureCandidate(Collection<BaseTableSnapshotInfo> snapshots) {
+        String candidate = null;
+        for (BaseTableSnapshotInfo snapshotInfo : snapshots) {
+            if (!(snapshotInfo.getBaseTable() instanceof OlapTable)
+                    || ((OlapTable) snapshotInfo.getBaseTable()).getKeysType() != KeysType.PRIMARY_KEYS) {
+                continue;
+            }
+            if (!(snapshotInfo instanceof TvrTableSnapshotInfo)) {
+                continue;
+            }
+            TvrVersionRange delta = ((TvrTableSnapshotInfo) snapshotInfo).getTvrSnapshot();
+            if (delta == null || delta.isEmpty()) {
+                continue;
+            }
+            if (candidate != null) {
+                return null;
+            }
+            candidate = snapshotInfo.getBaseTableInfo().getReadableString();
+        }
+        return candidate;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
     @Override

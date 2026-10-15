@@ -14,9 +14,18 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.ParseUtil;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+import java.util.Optional;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import java.util.Set;
 
 /**
@@ -77,6 +86,7 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_INCREMENTAL_BREAKING + mvName;
     }
 
+<<<<<<< HEAD
     /**
      * Which reason to inactivate with, for a failure {@link #isIncrementalBreakingFailure} accepted.
      * A base-table column change and a column ALTER on the MV itself raise the same two schema
@@ -119,6 +129,39 @@ public class MaterializedViewExceptions {
             }
         }
         return false;
+=======
+    public static boolean isRecoveredByForceRefresh(String inactiveReason) {
+        return inactiveReason != null && Arrays.stream(RefreshFailureKind.values())
+                .anyMatch(kind -> kind.isRecoveredByForce() && inactiveReason.startsWith(kind.inactiveReasonPrefix()));
+    }
+
+    public static String recoverByRebuildHint(String dbName, String mvName) {
+        return String.format("Drop and recreate the materialized view, or run REFRESH MATERIALIZED VIEW %s.%s FORCE, "
+                + "to recover.", ParseUtil.backquote(dbName), ParseUtil.backquote(mvName));
+    }
+
+    // Wording of the breakages the frontend detects; the failure's kind, not this text, decides what happens next.
+    public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
+
+    // The bookmark an incremental MV recorded as its baseline no longer exists. Only the baseline endpoint
+    // is typed as missing: the other endpoint is the bookmark the current round just took, and losing that
+    // one is transient -- the next round takes a new one.
+    public static final String BASELINE_BOOKMARK_MISSING_MARKER = "from-snapshot bookmark not found";
+
+    // How a view reports that the baseline it refreshes from cannot be reached any more -- an expired
+    // Iceberg snapshot or a reclaimed Lake bookmark.
+    public static final String SNAPSHOT_ANCESTRY_BROKEN_MARKER = "snapshot ancestry broken";
+
+    public static final String MV_SCHEMA_COLUMN_CHANGED_MARKER = "base table schema changed for columns: ";
+    public static final String MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER = "column schema not compatible: ";
+
+    /** The kind of the first classified failure along the cause chain; suppressed failures were handled already. */
+    public static Optional<RefreshFailureKind> kindOf(Throwable e) {
+        return ExceptionUtils.getThrowableList(e).stream()
+                .filter(ClassifiedRefreshFailure.class::isInstance)
+                .map(t -> ((ClassifiedRefreshFailure) t).kind())
+                .findFirst();
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
     public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {

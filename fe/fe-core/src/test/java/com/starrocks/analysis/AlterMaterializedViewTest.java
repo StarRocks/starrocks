@@ -31,6 +31,7 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
@@ -46,6 +47,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mv.IvmBrokenException;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableClause;
@@ -1011,7 +1013,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         new MockUp<MVTaskRunProcessor>() {
             @Mock
             public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
-                throw new RuntimeException("INCREMENTAL materialized views "
+                throw new IvmBrokenException(RefreshFailureKind.INCREMENTAL_BROKEN, "INCREMENTAL materialized views "
                         + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
             }
         };

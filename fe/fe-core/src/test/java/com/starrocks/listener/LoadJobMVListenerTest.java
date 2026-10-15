@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.PartitionRangeDesc;
@@ -78,6 +79,31 @@ public class LoadJobMVListenerTest extends MVTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testSkipsAutoTriggerWhenMvSchemaNoLongerMatches() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE lt_base_t4 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lt_mv4\n" +
+                "REFRESH ON_CHANGE\n" +
+                "AS select sum(k1), k2, k3 from lt_base_t4 group by k2, k3;");
+        MaterializedView mv = getMv("lt_mv4");
+        // Not the constant: going through the kind keeps the kind -> reason -> blocked-set chain covered.
+        mv.setInactiveAndReason(RefreshFailureKind.SCHEMA_MISMATCH.inactiveReason(mv.getName()));
+
+        AtomicInteger callCount = mockRefreshCallCount();
+        LoadJobMVListener.INSTANCE.onTableDataChange(getDb(), getBaseTable("lt_base_t4"));
+
+        Assertions.assertEquals(0, callCount.get(),
+                "auto-trigger must not resubmit a refresh for an MV whose stored schema no longer matches");
+    }
+
+    @Test
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     public void testStillTriggersForTransientlyInactiveMv() throws Exception {
         starRocksAssert.withTable("CREATE TABLE lt_base_t2 (\n" +
                 "   k1 int,\n" +

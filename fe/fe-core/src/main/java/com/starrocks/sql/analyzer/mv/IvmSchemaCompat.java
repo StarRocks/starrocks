@@ -17,9 +17,9 @@ package com.starrocks.sql.analyzer.mv;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 
@@ -38,8 +38,9 @@ public final class IvmSchemaCompat {
     public static void compare(List<Field> derivedFields, MaterializedView mv) {
         List<Column> orderedAll = mv.getOrderedOutputColumns(true);
         if (derivedFields.size() != orderedAll.size()) {
-            throw new SemanticException(MaterializedViewExceptions.inactiveReasonForColumnChanged(
-                    Collections.singleton("column count " + orderedAll.size() + " vs " + derivedFields.size())));
+            throw new IvmBrokenException(RefreshFailureKind.SCHEMA_MISMATCH,
+                    MaterializedViewExceptions.inactiveReasonForColumnChanged(Collections.singleton(
+                            "column count " + orderedAll.size() + " vs " + derivedFields.size())));
         }
         for (int i = 0; i < orderedAll.size(); i++) {
             Column existed = orderedAll.get(i);
@@ -51,8 +52,9 @@ public final class IvmSchemaCompat {
             if (!isColumnCompatible(existed, derivedNormalized)
                     || (existed.isHidden() && !existed.getName().equalsIgnoreCase(derivedField.getName()))) {
                 Column derived = new Column(existed.getName(), derivedNormalized, derivedField.isNullable());
-                throw new SemanticException(MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
-                        existed.toString(), derived.toString()));
+                throw new IvmBrokenException(RefreshFailureKind.SCHEMA_MISMATCH,
+                        MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                                existed.toString(), derived.toString()));
             }
         }
     }

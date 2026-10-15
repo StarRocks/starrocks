@@ -16,8 +16,8 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.sql.analyzer.Field;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import org.junit.jupiter.api.Assertions;
@@ -57,7 +57,9 @@ public class IvmSchemaCompatTest {
     public void testArityMismatchThrows() {
         MaterializedView mv = mvWithColumns(storedSchema());
         List<Field> derived = Arrays.asList(field("k", IntegerType.INT), field("cnt", IntegerType.BIGINT));
-        Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
+        IvmBrokenException e = Assertions.assertThrows(IvmBrokenException.class,
+                () -> IvmSchemaCompat.compare(derived, mv));
+        Assertions.assertEquals(RefreshFailureKind.SCHEMA_MISMATCH, e.kind());
     }
 
     @Test
@@ -80,7 +82,9 @@ public class IvmSchemaCompatTest {
                 field("k", IntegerType.INT),
                 field("cnt", IntegerType.BIGINT),
                 field("__AGG_STATE_count__", IntegerType.INT));
-        Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
+        IvmBrokenException e = Assertions.assertThrows(IvmBrokenException.class,
+                () -> IvmSchemaCompat.compare(derived, mv));
+        Assertions.assertEquals(RefreshFailureKind.SCHEMA_MISMATCH, e.kind());
     }
 
     @Test
@@ -92,6 +96,8 @@ public class IvmSchemaCompatTest {
                 field("k", IntegerType.INT),
                 field("cnt", IntegerType.BIGINT),
                 field("__AGG_STATE_sum__", IntegerType.BIGINT));
-        Assertions.assertThrows(SemanticException.class, () -> IvmSchemaCompat.compare(derived, mv));
+        IvmBrokenException e = Assertions.assertThrows(IvmBrokenException.class,
+                () -> IvmSchemaCompat.compare(derived, mv));
+        Assertions.assertEquals(RefreshFailureKind.SCHEMA_MISMATCH, e.kind());
     }
 }

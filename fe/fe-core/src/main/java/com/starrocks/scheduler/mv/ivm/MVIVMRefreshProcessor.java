@@ -24,8 +24,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.CdcErrorUtils;
 import com.starrocks.common.Config;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.RefreshFailureKind;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
@@ -37,6 +39,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.lake.ivm.BaselineBookmarkMissingException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -62,14 +65,26 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+import com.starrocks.sql.analyzer.mv.IvmBrokenException;
 import com.starrocks.sql.analyzer.mv.IvmRefreshDefinition;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.TableRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.CompoundPredicate;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IsNullPredicate;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.ChangeNotTrackableException;
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TCdcErrorCode;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.Collection;
 import java.util.List;
@@ -233,7 +248,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
                 String owner = mvContext.getStatus().getStartTaskRunId();
                 mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
-                executor.executePlan(execPlan, insertStmt);
+                try {
+                    executor.executePlan(execPlan, insertStmt);
+                } catch (Exception e) {
+                    throw translateBackendFailure(e);
+                }
             }
 
             try (Timer ignored = Tracers.watchScope("MVRefreshUpdateMeta")) {
@@ -245,6 +264,21 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             ctx.getSessionVariable().setEnableIVMRefresh(prevIvmEnabled);
             ctx.getSessionVariable().setTvrTargetMvid(prevTvrTargetMvId);
         }
+    }
+
+    /**
+     * The one place a backend CDC rejection is read as text: everything past here goes by its type. Anything else is
+     * returned as is, so the retry loop still recognizes a lock timeout.
+     */
+    @VisibleForTesting
+    public static Exception translateBackendFailure(Exception e) {
+        for (Throwable t : ExceptionUtils.getThrowableList(e)) {
+            Optional<CdcErrorUtils.Parsed> parsed = CdcErrorUtils.find(t.getMessage());
+            if (parsed.isPresent() && parsed.get().getCode() == TCdcErrorCode.CHANGE_NOT_TRACKABLE) {
+                return new ChangeNotTrackableException(e.getMessage(), parsed.get(), e);
+            }
+        }
+        return e;
     }
 
     @Override
@@ -290,9 +324,18 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             maxTvrDelta.fromSnapshot(), maxTvrDelta.toSnapshot());
         } catch (StarRocksConnectorException e) {
             if (isAncestryBrokenError(e)) {
+<<<<<<< HEAD
                 throw new SemanticException(formatNonAppendOnlyBreakingError(
                         String.format("snapshot ancestry broken for base table %s.%s (%s)",
                                 baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage())),
+=======
+                recordRefreshModeReason(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE,
+                        baseTableInfo.getReadableString());
+                throw breakingError(RefreshFailureKind.BASELINE_UNREACHABLE,
+                        String.format("%s for base table %s.%s (%s)",
+                                MaterializedViewExceptions.SNAPSHOT_ANCESTRY_BROKEN_MARKER,
+                                baseTableInfo.getDbName(), baseTableInfo.getTableName(), e.getMessage()),
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
                         e);
             }
             throw e;
@@ -300,9 +343,16 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (CollectionUtils.isEmpty(tableDeltaTraits)) {
             logger.warn("No tvr delta traits found for base table: {}, db: {}", baseTableInfo.getTableName(),
                     baseTableInfo.getDbName());
+<<<<<<< HEAD
             throw new SemanticException(formatNonAppendOnlyBreakingError(
+=======
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.UNKNOWN,
+                    baseTableInfo.getReadableString());
+            throw breakingError(RefreshFailureKind.INCREMENTAL_BROKEN,
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
                     String.format("no tvr delta traits found for base table %s.%s",
-                            baseTableInfo.getDbName(), baseTableInfo.getTableName())));
+                            baseTableInfo.getDbName(), baseTableInfo.getTableName()),
+                    null);
         }
         // check whether the last delta trait is equal to the max delta
         TvrTableDeltaTrait lastTvrDeltaTrait = tableDeltaTraits.get(tableDeltaTraits.size() - 1);
@@ -310,18 +360,32 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         if (!lastTvrDeltaSnapshot.equals(maxTvrDelta.toSnapshot())) {
             logger.warn("The last tvr delta snapshot: {} is not equal to the max tvr delta snapshot: {}",
                     lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot());
+<<<<<<< HEAD
             throw new SemanticException(formatNonAppendOnlyBreakingError(
+=======
+            recordRefreshModeReason(MaterializedView.RefreshModeReason.UNKNOWN,
+                    baseTableInfo.getReadableString());
+            throw breakingError(RefreshFailureKind.INCREMENTAL_BROKEN,
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
                     String.format("tvr delta lineage inconsistent for base table %s.%s "
                                     + "(last delta snapshot %s != max delta snapshot %s)",
                             baseTableInfo.getDbName(), baseTableInfo.getTableName(),
-                            lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot())));
+                            lastTvrDeltaSnapshot, maxTvrDelta.toSnapshot()),
+                    null);
         }
         for (TvrTableDeltaTrait deltaTrait : tableDeltaTraits) {
             if (!deltaTrait.isAppendOnly()) {
                 if (refreshMode.isIncremental()) {
+<<<<<<< HEAD
                     throw new SemanticException(formatNonAppendOnlyBreakingError(
+=======
+                    recordRefreshModeReason(MaterializedView.RefreshModeReason.NON_APPEND_ONLY_CHANGE,
+                            baseTableInfo.getReadableString());
+                    throw breakingError(RefreshFailureKind.INCREMENTAL_BROKEN,
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
                             String.format("non-append-only change on base table %s.%s (delta: %s)",
-                                    baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait)));
+                                    baseTableInfo.getDbName(), baseTableInfo.getTableName(), deltaTrait),
+                            null);
                 } else {
                     logger.info("TvrTableDeltaTrait is not append-only for base table: {}, db: {}, delta:{}, " +
                                     "use the max tvr delta instead", baseTableInfo.getTableName(),
@@ -338,18 +402,39 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
     }
 
+<<<<<<< HEAD
     private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
         String message = e.getMessage();
         return message != null && message.contains("is not a parent ancestor");
+=======
+    /**
+     * Whether the connector reports that the recorded baseline can no longer be reached: an Iceberg
+     * snapshot that is no longer an ancestor of the head, or a Lake bookmark that has been reclaimed.
+     * Either way the range has no usable left endpoint, so the run declares the incremental chain
+     * broken instead of failing the same way every round. The Iceberg wording comes from the connector
+     * and can only be matched as text; the Lake one has its own type.
+     */
+    private static boolean isAncestryBrokenError(StarRocksConnectorException e) {
+        String message = e.getMessage();
+        return e instanceof BaselineBookmarkMissingException
+                || (message != null && message.contains("is not a parent ancestor"));
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
-    private String formatNonAppendOnlyBreakingError(String reasonFragment) {
-        return String.format(
+    private IvmBrokenException breakingError(RefreshFailureKind kind, String reasonFragment, Exception cause) {
+        String message = String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "
                         + "INCREMENTAL materialized views %s "
+<<<<<<< HEAD
                         + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). "
                         + "Drop and recreate the materialized view to recover.",
                 mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+=======
+                        + "(DELETE / OVERWRITE / DROP PARTITION / snapshot expiration / table replacement). %s",
+                mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER,
+                MaterializedViewExceptions.recoverByRebuildHint(db.getFullName(), mv.getName()));
+        return cause == null ? new IvmBrokenException(kind, message) : new IvmBrokenException(kind, message, cause);
+>>>>>>> 103084cf4fc... [Refactor][RB-390] Classify MV refresh failures by type instead of message text (#65255)
     }
 
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,

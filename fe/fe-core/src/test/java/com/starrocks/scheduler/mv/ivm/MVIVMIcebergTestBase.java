@@ -108,12 +108,16 @@ public class MVIVMIcebergTestBase extends MVIVMTestBase {
 
     /** Simulate the connector layer's snapshot-ancestry error (e.g. expire_snapshots, branch reset). */
     public void mockListTableDeltaTraitsThrowsConnector(String message) {
+        mockListTableDeltaTraitsThrowsConnector(new StarRocksConnectorException(message));
+    }
+
+    public void mockListTableDeltaTraitsThrowsConnector(StarRocksConnectorException failure) {
         new MockUp<MockIcebergMetadata>() {
             @Mock
             public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
                                                                  TvrTableSnapshot fromSnapshotExclusive,
                                                                  TvrTableSnapshot toSnapshotInclusive) {
-                throw new StarRocksConnectorException(message);
+                throw failure;
             }
         };
     }
