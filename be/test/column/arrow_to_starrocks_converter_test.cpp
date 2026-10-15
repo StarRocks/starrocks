@@ -32,6 +32,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/datetime_value.h"
@@ -321,6 +322,25 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     ASSERT_EQ(TYPE_INT, raw_type_desc.children[0].type);
     ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.children[1].type);
     ASSERT_EQ(2, conv_func.children.size());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
+    auto arrow_type = arrow::struct_({arrow::field("unused", arrow::utf8()), arrow::field("score", arrow::int32())});
+    auto array = arrow::ArrayFromJSON(arrow_type, R"([{"unused":"abc","score":7},null,{"score":null}])");
+    TypeDescriptor type(TYPE_STRUCT);
+    type.field_names = {"score"};
+    type.children.emplace_back(TYPE_INT);
+    TypeDescriptor raw_type;
+    ConvertFuncTree plan;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type, true, &raw_type, &plan, need_cast, true));
+    ASSERT_FALSE(need_cast);
+    auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+    Filter filter(3, 1);
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+    ASSERT_EQ("{score:7}", column->debug_item(0));
+    ASSERT_TRUE(column->is_null(1));
+    ASSERT_EQ("{score:NULL}", column->debug_item(2));
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
@@ -1933,6 +1953,62 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_map) {
     };
     for (int i = 1; i < 10; i++) {
         convert_arrow_map_to_map_column(map_column.get(), i, map_value, counter, map_type);
+    }
+}
+
+// Pruning must preserve offsets and NULLs even when converting slices into the same column.
+PARALLEL_TEST(ArrowConverterTest, test_convert_pruned_map) {
+    auto keys = std::make_shared<arrow::StringBuilder>();
+    auto values = std::make_shared<arrow::Int32Builder>();
+    arrow::MapBuilder builder(arrow::default_memory_pool(), keys, values);
+    ASSERT_TRUE(builder.Append().ok());
+    ASSERT_TRUE(keys->Append("a").ok());
+    ASSERT_TRUE(values->Append(10).ok());
+    ASSERT_TRUE(keys->Append("b").ok());
+    ASSERT_TRUE(values->AppendNull().ok());
+    ASSERT_TRUE(builder.Append().ok()); // Empty map.
+    ASSERT_TRUE(builder.AppendNull().ok());
+    ASSERT_TRUE(builder.Append().ok());
+    ASSERT_TRUE(keys->Append("c").ok());
+    ASSERT_TRUE(values->Append(30).ok());
+    auto array = builder.Finish().ValueOrDie();
+
+    for (int pruned_child : {0, 1}) {
+        TypeDescriptor type(TYPE_MAP);
+        type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+        type.children[pruned_child] = TypeDescriptor(TYPE_UNKNOWN);
+        TypeDescriptor raw_type;
+        ConvertFuncTree plan;
+        bool need_cast = false;
+        ASSERT_STATUS_OK(
+                build_arrow_column_convert_plan(array->type().get(), &type, true, &raw_type, &plan, need_cast, true));
+        ASSERT_FALSE(need_cast);
+        auto column = create_arrow_column_convert_dest(type, raw_type, need_cast, true);
+        Filter filter(4, 1);
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 3, array.get(), column.get(), 0, 0, &filter, nullptr));
+        ASSERT_STATUS_OK(convert_arrow_array_to_column(&plan, 1, array.get(), column.get(), 3, 3, &filter, nullptr));
+        auto* nullable = down_cast<NullableColumn*>(column.get());
+        auto* map = down_cast<const MapColumn*>(nullable->data_column().get());
+        ASSERT_EQ(4, column->size());
+        ASSERT_EQ(1, nullable->null_count());
+        ASSERT_TRUE(column->is_null(2));
+        ASSERT_EQ(3, map->keys_column()->size());
+        ASSERT_EQ(3, map->values_column()->size());
+        const auto& offsets = map->offsets().get_data();
+        ASSERT_EQ(5, offsets.size());
+        for (int i = 0; i < 5; ++i) {
+            ASSERT_EQ((std::vector<uint32_t>{0, 2, 2, 2, 3})[i], offsets[i]);
+        }
+        auto pruned = pruned_child == 0 ? map->keys_column() : map->values_column();
+        for (int i = 0; i < 3; ++i) ASSERT_TRUE(pruned->is_null(i));
+        if (pruned_child == 0) {
+            ASSERT_EQ("10", map->values_column()->debug_item(0));
+            ASSERT_TRUE(map->values_column()->is_null(1));
+            ASSERT_EQ("30", map->values_column()->debug_item(2));
+        } else {
+            ASSERT_EQ("'a'", map->keys_column()->debug_item(0));
+            ASSERT_EQ("'c'", map->keys_column()->debug_item(2));
+        }
     }
 }
 
