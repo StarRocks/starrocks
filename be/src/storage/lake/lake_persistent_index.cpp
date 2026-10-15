@@ -2042,7 +2042,11 @@ Status LakePersistentIndex::_coalesce_pressure_filesets(size_t workspace, const 
             ++count;
             // Shared projections and delvec-bearing files stay on the ordinary compaction
             // path. This recovery only concatenates native, unshared flush fragments.
-            if (sst.sstable_pb().shared() || sst.sstable_pb().has_delvec()) eligible = false;
+            const auto& pb = sst.sstable_pb();
+            if (pb.shared() || pb.has_delvec() || pb.has_shared_rssid() || pb.has_shared_version() ||
+                pb.rssid_offset() != 0) {
+                eligible = false;
+            }
             if (eligible && probe_status.ok()) {
                 auto minimum = sst.probe_minimum_read_memory();
                 if (!minimum.ok())

@@ -1614,6 +1614,58 @@ TEST_F(LakePersistentIndexTest, pressure_coalesce_no_gain_group_refunds_before_n
     EXPECT_LE(tracker->peak_consumption(), tracker->limit());
 }
 
+TEST_F(LakePersistentIndexTest, pressure_coalesce_retains_unshared_pb_projections) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    for (int group = 0; group < 2; ++group) {
+        const auto fileset_id = UniqueId::gen_uid().to_proto();
+        for (int i = 0; i < 8; ++i) {
+            const auto key = fmt::format("projected_{}_{:04d}", group, i);
+            const auto rssid = group == 0 ? 5 : 11;
+            auto* pb = append_all_key_sstable(metadata.get(), {{key, 1, IndexValue((uint64_t{1} << 32) | i)}},
+                                              (static_cast<uint64_t>(rssid) << 32) | 7);
+            ASSERT_NE(nullptr, pb);
+            pb->mutable_fileset_id()->CopyFrom(fileset_id);
+            pb->set_shared(false); // Physical sharing does not determine read-time projection.
+            pb->set_generation_version(1);
+            if (group == 0) {
+                pb->set_shared_rssid(5);
+                pb->set_shared_version(7);
+            } else {
+                pb->set_rssid_offset(10);
+            }
+        }
+    }
+    auto* tracker = _primary_key_mgr->mem_tracker();
+    const auto old_limit = tracker->limit();
+    tracker->set_limit(8 * 1024 * 1024);
+    DeferOp restore([&] { tracker->set_limit(old_limit); });
+    auto* entry = _primary_key_mgr->index_cache().get_or_create(metadata->id());
+    auto guard = entry->value().fetch_guard();
+    DeferOp release([&] {
+        guard.reset();
+        _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto charge = tracker->consumption();
+    const auto inventory = sst_inventory(metadata->id());
+    ASSERT_OK(index._coalesce_pressure_filesets(
+            1024 * 1024, [&] { _primary_key_mgr->update_index_cache_size(entry); }, [] { return false; }));
+    EXPECT_EQ(charge, tracker->consumption());
+    EXPECT_EQ(inventory, sst_inventory(metadata->id()));
+    PersistentIndexSstableMetaPB unchanged;
+    for (const auto& fileset : index._sstable_filesets) fileset->get_all_sstable_pbs(&unchanged);
+    EXPECT_EQ(metadata->sstable_meta().SerializeAsString(), unchanged.SerializeAsString());
+    std::array<Slice, 2> keys{Slice("projected_0_0007"), Slice("projected_1_0007")};
+    std::array<IndexValue, 2> values;
+    ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+    EXPECT_EQ(IndexValue((uint64_t{5} << 32) | 7), values[0]);
+    EXPECT_EQ(IndexValue((uint64_t{11} << 32) | 7), values[1]);
+    EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+}
+
 TEST_F(LakePersistentIndexTest, pressure_coalesce_preserves_crc_cause_on_compressed_data_budget_decline) {
     ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
     ConfigResetGuard<bool> tde(&config::enable_transparent_data_encryption, false);

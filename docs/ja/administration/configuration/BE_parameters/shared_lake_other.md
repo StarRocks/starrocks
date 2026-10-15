@@ -52,7 +52,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 - 導入バージョン: -
 
-上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
+上限に近い作業領域を決定する前に、tablet のロック所有者は回収可能な読み取り状態オブジェクトの計上を返却します。キー範囲が重ならない末尾 SST の断片を順次連結し、マージ用メモリを予約して、出力の切り替え時に完了した builder を破棄できます。元の大きな SST は保持します。物理的な `shared` フラグが false でも、読み取り時の version または rssid 投影があるファイルは通常のパスで扱われます。この経路の末尾の検索では任意のデータブロックキャッシュを補充しません。Trace カウンター `pindex_pressure_coalesce_total_us`、`pindex_pressure_coalesce_input_files`、`pindex_pressure_compact_output_files`、`pindex_pressure_coalesce_metadata_freed_bytes` がこの回収作業を記録します。ファイルとキーの間でキャンセルを確認しますが、同期 IO にはファイルシステムのタイムアウトが適用されます。
 
 このマージ用作業領域を予約する前に、保留中の MemTable を引き渡して再計上します。データブロックの読み取りも事前予約した作業領域内に収めます。大きすぎるデータブロックでは、この任意の連結をスキップして元の fileset を保持します。`pindex_pressure_coalesce_memory_fallback_count` がその判断を、`pindex_pressure_coalesce_data_block_read_bytes` がデータブロック IO を記録します。
 
