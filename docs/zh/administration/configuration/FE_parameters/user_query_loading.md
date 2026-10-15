@@ -1586,7 +1586,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的端口。默认值 `0` 表示 FE 使用 BE 的真实 `be_http_port`（原有行为）。设置为 `1`–`65535` 范围内的有效 TCP 端口，可将客户端重定向到负责 TLS 终止并转发到 BE/CN HTTP 端口的 sidecar/代理端口。任何超出范围的值（负数或大于 `65535`）都被视为无效，此时 FE 回退到 BE 的真实 `be_http_port`。通常与 `stream_load_redirect_scheme = https` 配合使用。
+- 描述: FE 返回给 Stream Load 客户端的 HTTP 307 重定向 `Location` 中使用的端口。默认值 `0` 表示 FE 使用 BE 的真实 `be_http_port`（原有行为）。设置为 `1`–`65535` 范围内的有效 TCP 端口，可将客户端重定向到负责 TLS 终止并转发到 BE/CN HTTP 端口的 sidecar/代理端口。任何超出范围的值（负数或大于 `65535`）都被视为无效；此时 FE 会同时将 scheme 和端口回退为 `http` + BE 的真实 `be_http_port`（二者一起降级，因此绝不会向明文的 BE 端口发送 HTTPS）。通常与 `stream_load_redirect_scheme = https` 配合使用。
 - 引入版本: -
 
 ### `transaction_clean_interval_second`

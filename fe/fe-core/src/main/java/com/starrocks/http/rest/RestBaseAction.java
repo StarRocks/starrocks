@@ -315,22 +315,46 @@ public class RestBaseAction extends BaseAction {
     }
 
     /**
-     * Resolve the effective Stream Load redirect port given the backend's real HTTP port.
-     * Returns the configured {@code stream_load_redirect_port} when it is a valid TCP port
-     * (1..65535); otherwise (0 = unset, or an out-of-range value) returns {@code backendHttpPort}.
-     * Centralizing this here ensures the port is validated BEFORE it is baked into the redirect
-     * address, so callers never lose the real backend port.
+     * Immutable (scheme, port) pair for a Stream Load redirect.
      */
-    public static int effectiveRedirectPort(int backendHttpPort) {
+    public static final class RedirectTarget {
+        public final String scheme;
+        public final int port;
+
+        public RedirectTarget(String scheme, int port) {
+            this.scheme = scheme;
+            this.port = port;
+        }
+    }
+
+    /**
+     * Resolve the effective Stream Load redirect scheme and port from the configured
+     * {@code stream_load_redirect_scheme}/{@code stream_load_redirect_port} and the backend's real
+     * HTTP port. Rules (all backward-compatible; defaults reproduce {@code http} + backend port):
+     * <ul>
+     *   <li>Scheme: {@code https} if configured as such (case-insensitive), else {@code http}.</li>
+     *   <li>Port: the configured port if it is a valid TCP port (1..65535); {@code 0} means "unset"
+     *       and uses {@code backendHttpPort} (keeping the configured scheme, so https-on-backend-port
+     *       is allowed when a TLS listener is on the backend port itself).</li>
+     *   <li>If the configured port is INVALID (negative or &gt; 65535), fall back the scheme AND port
+     *       together to {@code http} + {@code backendHttpPort} — never emit {@code https} against the
+     *       backend's plaintext HTTP port, which would make every Stream Load fail.</li>
+     * </ul>
+     * Resolving here (before the address/URL is built) ensures callers never lose the real backend port.
+     */
+    public static RedirectTarget resolveRedirectTarget(int backendHttpPort) {
+        String scheme = "https".equalsIgnoreCase(Config.stream_load_redirect_scheme) ? "https" : "http";
         int configured = Config.stream_load_redirect_port;
+        if (configured == 0) {
+            return new RedirectTarget(scheme, backendHttpPort);
+        }
         if (configured > 0 && configured <= 65535) {
-            return configured;
+            return new RedirectTarget(scheme, configured);
         }
-        if (configured != 0) {
-            LOG.warn("Invalid stream_load_redirect_port '{}' (valid range 1..65535, or 0 to use the "
-                    + "backend http port); falling back to backend port '{}'", configured, backendHttpPort);
-        }
-        return backendHttpPort;
+        // Invalid port: degrade scheme + port together so the load still works over the backend port.
+        LOG.warn("Invalid stream_load_redirect_port '{}' (valid range 1..65535, or 0 to use the backend "
+                + "http port); falling back to http + backend port '{}'", configured, backendHttpPort);
+        return new RedirectTarget("http", backendHttpPort);
     }
 
     /**

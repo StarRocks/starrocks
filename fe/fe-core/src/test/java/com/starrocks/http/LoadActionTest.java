@@ -142,9 +142,11 @@ public class LoadActionTest extends StarRocksHttpTestCase {
 
     @Test
     public void testRedirectInvalidPortFallsBackToBackendPort() throws Exception {
-        // Out-of-range ports (> 65535 or negative) must fall back to the backend's real port (8040).
-        assertBatchWriteRedirect("https", 70000, "https", 8040);
-        assertBatchWriteRedirect("https", -5, "https", 8040);
+        // An out-of-range port (> 65535 or negative) is invalid: the FE degrades scheme AND port
+        // together to http + the backend's real port (8040), so it never emits https against the
+        // backend's plaintext HTTP port (which would make the load fail).
+        assertBatchWriteRedirect("https", 70000, "http", 8040);
+        assertBatchWriteRedirect("https", -5, "http", 8040);
     }
 
     /**

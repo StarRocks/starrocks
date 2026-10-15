@@ -39,7 +39,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
@@ -271,17 +270,17 @@ public class TransactionLoadAction extends RestBaseAction {
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
 
-        // Apply the configured Stream Load redirect port/scheme to whichever address path produced
+        // Apply the configured Stream Load redirect scheme/port to whichever address path produced
         // redirectAddress (handler-provided for multi-table/channel transactions, or the node-built
         // address above). The handler/node address carries the backend's real HTTP port; swap in the
-        // configured proxy port when set so HTTPS redirects reach the TLS endpoint.
-        int redirectPort = effectiveRedirectPort(redirectAddress.getPort());
-        redirectAddress = new TNetworkAddress(redirectAddress.getHostname(), redirectPort);
+        // configured proxy scheme/port when set so HTTPS redirects reach the TLS endpoint.
+        RedirectTarget target = resolveRedirectTarget(redirectAddress.getPort());
+        redirectAddress = new TNetworkAddress(redirectAddress.getHostname(), target.port);
 
         LOG.info("Redirect transaction action to destination={}, scheme: {}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddress, Config.stream_load_redirect_scheme, txnOperationParams.getDbName(),
+                redirectAddress, target.scheme, txnOperationParams.getDbName(),
                 txnOperationParams.getTableName(), txnOperation, label);
-        redirectTo(request, response, redirectAddress, Config.stream_load_redirect_scheme, redirectPort);
+        redirectTo(request, response, redirectAddress, target.scheme, target.port);
     }
 
     private TransactionOperationHandler getTxnOperationHandler(TransactionOperationParams params) throws

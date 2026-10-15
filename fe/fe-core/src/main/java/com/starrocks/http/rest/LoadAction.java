@@ -40,7 +40,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
@@ -279,12 +278,12 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend or compute node alive.");
         }
 
-        int redirectPort = effectiveRedirectPort(node.getHttpPort());
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
+        RedirectTarget target = resolveRedirectTarget(node.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), target.port);
 
         LOG.info("redirect load action to destination={}, scheme: {}, db: {}, tbl: {}, label: {}, warehouse: {}",
-                redirectAddr.toString(), Config.stream_load_redirect_scheme, dbName, tableName, label, warehouseName);
-        redirectTo(request, response, redirectAddr, Config.stream_load_redirect_scheme, redirectPort);
+                redirectAddr.toString(), target.scheme, dbName, tableName, label, warehouseName);
+        redirectTo(request, response, redirectAddr, target.scheme, target.port);
     }
 
     private void processBatchWriteStreamLoad(
@@ -306,11 +305,11 @@ public class LoadAction extends RestBaseAction {
         List<ComputeNode> nodes = result.getValue();
         int index = ThreadLocalRandom.current().nextInt(nodes.size());
         ComputeNode node = nodes.get(index);
-        int redirectPort = effectiveRedirectPort(node.getHttpPort());
-        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), redirectPort);
+        RedirectTarget target = resolveRedirectTarget(node.getHttpPort());
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), target.port);
         LOG.info("redirect batch write to destination={}, scheme: {}, db: {}, tbl: {}",
-                redirectAddr, Config.stream_load_redirect_scheme, dbName, tableName);
-        redirectTo(request, response, redirectAddr, Config.stream_load_redirect_scheme, redirectPort);
+                redirectAddr, target.scheme, dbName, tableName);
+        redirectTo(request, response, redirectAddr, target.scheme, target.port);
     }
 
     public static class BatchWriteResponseResult extends RestBaseResult {
