@@ -1529,7 +1529,7 @@ public class DatabaseTransactionMgr {
     // first one through takes the initial version, every later one sees a larger value and must be
     // re-planned, which the retry does as a partial update.
     private void checkPartitionsStillEmptyForPlainInsert(TransactionState transactionState, Database db)
-            throws TransactionCommitFailedException {
+            throws TransactionException {
         if (!transactionState.requiresEmptyPartitions()) {
             return;
         }
@@ -1545,7 +1545,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 if (partition.getNextVersion() != PhysicalPartition.PARTITION_INIT_VERSION + 1) {
-                    throw new TransactionCommitFailedException(String.format(
+                    throw new PlainInsertOnEmptyPartitionsConflictException(String.format(
                             "partition %d of table %s received other writes while this INSERT was planned as a "
                                     + "plain insert on an empty partition, retry the statement",
                             partition.getId(), olapTable.getName()));
