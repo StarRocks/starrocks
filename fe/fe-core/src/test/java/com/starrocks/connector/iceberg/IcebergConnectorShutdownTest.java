@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class IcebergConnectorShutdownTest {
     @BeforeAll
@@ -52,5 +53,27 @@ public class IcebergConnectorShutdownTest {
         connector.shutdown();
 
         Assertions.assertTrue(background.isShutdown());
+    }
+
+    @Test
+    public void testShutdownClosesNativeCatalogThroughMetadataCache() {
+        AtomicInteger closes = new AtomicInteger();
+        new MockUp<IcebergRESTCatalog>() {
+            @Mock
+            public void $init(String name, Configuration conf, Map<String, String> properties) {
+            }
+
+            @Mock
+            public void shutdown() {
+                closes.incrementAndGet();
+            }
+        };
+        for (String cacheEnabled : new String[] {"true", "false"}) {
+            IcebergConnector connector = new IcebergConnector(new ConnectorContext("shutdown_test_" + cacheEnabled,
+                    "iceberg", Map.of("iceberg.catalog.type", "rest", "enable_iceberg_metadata_cache", cacheEnabled)));
+            connector.getNativeCatalog();
+            connector.shutdown();
+        }
+        Assertions.assertEquals(2, closes.get());
     }
 }
