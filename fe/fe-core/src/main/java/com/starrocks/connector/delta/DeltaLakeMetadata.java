@@ -267,6 +267,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             return;
         }
 
+        ConnectContext.ScopeGuard contextGuard = connectContext != null ? connectContext.bindScope() : null;
+        Tracers prevTracers = Tracers.get();
+        Tracers.set(tracers);
         try {
             try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "DELTA_LAKE.processSplit." + key)) {
                 collectDeltaLakePlanFiles(key, table, operator, connectContext, fieldNames, tracers);
@@ -279,6 +282,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             // Drop the entry once the future is resolved (success or failure) so it doesn't linger
             // for the rest of the query; getPreparedScanTasks falls back to splitTasks/resync below.
             scanTaskFutures.remove(key, newFuture);
+            Tracers.set(prevTracers);
+            if (contextGuard != null) {
+                contextGuard.close();
+            }
         }
     }
 
