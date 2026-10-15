@@ -53,7 +53,7 @@ static inline TARGET_ARM_CRYPTO uint8x16_t clmul_01(uint8x16_t a, uint8x16_t b) 
 }
 
 TARGET_ARM_CRYPTO uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len) {
-    assert(len >= 64 && (len % 16 == 0) && "crc32c_pmull_simd requires len >= 64 and 16-byte alignment");
+    assert(len >= 64 && (len % 16 == 0) && "crc32c_pmull_simd requires len >= 64 and 16-byte length multiple");
     uint8x16_t x0, x1, x2, x3, x4, x5, x6, x7, x8, y5, y6, y7, y8;
 
     x1 = vld1q_u8(reinterpret_cast<const uint8_t*>(buf + 0x00));
