@@ -574,6 +574,18 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：管道引擎中 PipelineDriverPoller 的阻塞队列当前长度。
 
+## `pipe_poller_max_driver_check`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 每轮轮询中耗时最长的单个 Driver 检查所用的时间。该值偏大，说明某个阻塞 Driver 的检查拖慢了整轮轮询。
+
+## `pipe_poller_pass`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 检查一遍所有阻塞 Driver 所用的时间。每个执行器集合只有一个 Poller 线程，一轮耗时过长会推迟所有等待该线程检查的 Driver。最近窗口内的最大值见 `pipe_poller_pass_max_latency`。
+
 ## `pipe_prepare_pool_queue_len`
 
 - 单位：计数

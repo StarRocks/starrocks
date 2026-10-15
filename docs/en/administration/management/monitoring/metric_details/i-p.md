@@ -574,6 +574,18 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Unit: Count
 - Description: Current length of the block queue of PipelineDriverPoller in the pipeline engine.
 
+## `pipe_poller_max_driver_check`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by the slowest single driver check in one pass of PipelineDriverPoller. A large value means that checking one blocked driver held up the whole pass.
+
+## `pipe_poller_pass`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by one pass of PipelineDriverPoller over its blocked drivers. Each executor set has a single poller thread, so a long pass delays every driver that waits on it. The maximum in the recent window is exposed as `pipe_poller_pass_max_latency`.
+
 ## `pipe_prepare_pool_queue_len`
 
 - Unit: Count
