@@ -48,10 +48,10 @@ Status h3_unavailable() {
     return Status::NotSupported("H3 capability is unavailable in this BE build");
 }
 } // namespace
-Status GeoFunctions::h3_prepare(FunctionContext*, FunctionContext::FunctionStateScope) {
+Status GeoFunctions::h3_polygon_to_cells_prepare(FunctionContext*, FunctionContext::FunctionStateScope) {
     return Status::OK();
 }
-Status GeoFunctions::h3_close(FunctionContext*, FunctionContext::FunctionStateScope) {
+Status GeoFunctions::h3_polygon_to_cells_close(FunctionContext*, FunctionContext::FunctionStateScope) {
     return Status::OK();
 }
 StatusOr<ColumnPtr> GeoFunctions::h3_from_geo(FunctionContext*, const Columns&) {
@@ -246,13 +246,13 @@ struct H3ArrayBuilder {
 
 } // namespace
 
-Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+Status GeoFunctions::h3_polygon_to_cells_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || context == nullptr || context->get_num_args() == 0 ||
         !context->is_constant_column(0)) {
         return Status::OK();
     }
     const auto* type = context->get_arg_type(0);
-    if (type == nullptr || type->type != TYPE_GEOGRAPHY || context->get_return_type().type != TYPE_ARRAY) {
+    if (type == nullptr || type->type != TYPE_GEOGRAPHY) {
         return Status::OK();
     }
     auto state = std::make_unique<H3PreparedGeo>();
@@ -263,8 +263,7 @@ Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::Funct
         if (!input.ok()) {
             state->parse_status = input.status();
         } else {
-            const bool polygon = context->get_return_type().type == TYPE_ARRAY;
-            auto parsed = h3_parse_geo(input.value(), 0, polygon);
+            auto parsed = h3_parse_geo(input.value(), 0, true);
             if (parsed.ok()) {
                 state->geometry.emplace(std::move(parsed.value()));
             } else {
@@ -276,7 +275,7 @@ Status GeoFunctions::h3_prepare(FunctionContext* context, FunctionContext::Funct
     return Status::OK();
 }
 
-Status GeoFunctions::h3_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+Status GeoFunctions::h3_polygon_to_cells_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         delete reinterpret_cast<H3PreparedGeo*>(context->get_function_state(scope));
         context->set_function_state(scope, nullptr);
