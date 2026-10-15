@@ -327,7 +327,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：瞬时值
 - 描述：仅存算分离模式。本 BE 上已缓存的主键索引中，MemTable（包括正在写入的和正在 Flush 的）占用的内存。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` 与本指标之和，即主键索引缓存计入的内存；`information_schema.be_tablets` 的 `INDEX_MEM` 按 tablet 给出的就是这部分内存。
 
-启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。SST 读状态在块分配前直接向 update tracker 预留字节，cache tracker 扣除这部分已预留字节以避免重复计数。临时读状态和打开时的工作内存不属于常驻缓存。
+启用 `lake_pk_index_partial_eviction` 后，缓存记账和各 tablet 的 `INDEX_MEM` 还包含 `lake_pk_index_cache_delvec_bytes` 与 `lake_pk_index_cache_overhead_bytes`。SST 读状态在块分配前直接向 update tracker 预留字节，cache tracker 扣除这部分已预留字节以避免重复计数。临时读状态和打开时的工作内存不属于常驻缓存。 索引 cache tracker 还会临时包含 MemTable 修改的预留字节；常驻 cache 分项指标和 `INDEX_MEM` 不包含未使用的预留。
 
 ## `lake_pk_index_cache_overhead_bytes`
 

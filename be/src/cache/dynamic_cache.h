@@ -66,6 +66,7 @@ public:
         Key _key;
         size_t _size = 0;
         size_t _tracker_size = 0;
+        size_t _reserved_size = 0;
         int64_t _expire_ms = std::numeric_limits<int64_t>::max();
         std::atomic<uint32_t> _ref;
         T _value;
@@ -89,6 +90,7 @@ public:
                 // just log an error to avoid UT failure for now.
                 LOG(ERROR) << "cached entry ref=" << iobj->_ref << " key:" << iobj->_key;
             }
+            _tracker_release(iobj->_reserved_size);
             delete iobj;
             itr++;
         }
@@ -208,7 +210,7 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_tracker_size);
+            _tracker_release(entry->_tracker_size + entry->_reserved_size);
             delete entry;
             return true;
         }
@@ -234,7 +236,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_tracker_size);
+            _tracker_release(entry->_tracker_size + entry->_reserved_size);
             delete entry;
         }
         return true;
@@ -258,7 +260,7 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_tracker_size);
+            _tracker_release(entry->_tracker_size + entry->_reserved_size);
             delete entry;
         }
         return true;
@@ -276,14 +278,18 @@ public:
     // tracker_size can exclude bytes directly reserved on another tracker (e.g. SST read state),
     // while new_size continues to represent all resident bytes for eviction and monitoring.
     bool update_object_size(Entry* entry, size_t new_size, bool evict = true,
-                            std::optional<size_t> tracker_size = std::nullopt) {
+                            std::optional<size_t> tracker_size = std::nullopt, bool use_reservation = false) {
         std::vector<Entry*> entry_list;
         bool ret;
         {
             std::lock_guard<Lock> lg(_lock);
             _size += new_size - entry->_size;
             const size_t new_tracker_size = tracker_size.value_or(new_size);
-            _tracker_consume(static_cast<int64_t>(new_tracker_size) - static_cast<int64_t>(entry->_tracker_size));
+            const int64_t growth = static_cast<int64_t>(new_tracker_size) - static_cast<int64_t>(entry->_tracker_size);
+            const size_t prepaid =
+                    use_reservation && growth > 0 ? std::min(entry->_reserved_size, static_cast<size_t>(growth)) : 0;
+            entry->_reserved_size -= prepaid;
+            _tracker_consume(growth - static_cast<int64_t>(prepaid));
             entry->_size = new_size;
             entry->_tracker_size = new_tracker_size;
             ret = evict ? _evict(_capacity, &entry_list) : _size <= _capacity;
@@ -292,6 +298,28 @@ public:
             delete e;
         }
         return ret;
+    }
+
+    // Reserve before allocating mutable object state. The caller keeps its entry pin and object
+    // lock until it commits the actual size with use_reservation=true, then releases unused bytes.
+    // Reservation bytes already belong to this cache's additive tracker, so taking them over does
+    // not charge ancestors twice or expose a release/consume gap to concurrent reservations.
+    bool try_reserve_object_growth(Entry* entry, size_t bytes) {
+        std::lock_guard<Lock> lg(_lock);
+        if (_mem_tracker == nullptr || _tracker_exclude_root ||
+            bytes > static_cast<size_t>(std::numeric_limits<int64_t>::max()) - entry->_reserved_size) {
+            return false;
+        }
+        if (_mem_tracker->try_consume(bytes) != nullptr) return false;
+        entry->_reserved_size += bytes;
+        return true;
+    }
+
+    void release_object_growth_reservation(Entry* entry, size_t keep = 0) {
+        std::lock_guard<Lock> lg(_lock);
+        const size_t retained = std::min(keep, entry->_reserved_size);
+        _tracker_release(entry->_reserved_size - retained);
+        entry->_reserved_size = retained;
     }
 
     // clear all unused *and* expired objects
@@ -308,7 +336,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    _tracker_release(entry->_tracker_size);
+                    _tracker_release(entry->_tracker_size + entry->_reserved_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -334,7 +362,7 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    _tracker_release(entry->_tracker_size);
+                    _tracker_release(entry->_tracker_size + entry->_reserved_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -430,7 +458,7 @@ private:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            _tracker_release(entry->_tracker_size);
+            _tracker_release(entry->_tracker_size + entry->_reserved_size);
             delete entry;
         }
     }
@@ -446,7 +474,7 @@ private:
                 itr = _list.erase(itr);
                 _object_size--;
                 _size -= entry->_size;
-                _tracker_release(entry->_tracker_size);
+                _tracker_release(entry->_tracker_size + entry->_reserved_size);
                 entry_list->push_back(entry);
             } else {
                 itr++;

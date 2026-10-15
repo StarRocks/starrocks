@@ -206,7 +206,7 @@ public:
 
     // Charge |index_entry| at its index's current memory_usage() and refresh the lake_pk_index_cache_* gauges.
     // Caller holds the index lock.
-    void update_index_cache_size(IndexEntry* index_entry);
+    void update_index_cache_size(IndexEntry* index_entry, bool finish_growth = false, size_t keep_workspace = 0);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -266,6 +266,8 @@ private:
     void _relieve_update_pressure();
     void _maybe_refresh_index_cache_eviction_policy();
     void _reclaim_active_index_read_state(IndexEntry* entry, size_t bytes);
+    void _bind_index_growth_reservation(IndexEntry* entry);
+    Status _reserve_index_growth(IndexEntry* entry, size_t bytes);
     // Index lock -> accounting lock -> cache lock. Mode transition uses snapshots under the
     // accounting lock and never waits for a tablet lock or performs SST IO.
     std::mutex _index_accounting_mutex;

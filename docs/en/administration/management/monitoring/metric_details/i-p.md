@@ -327,7 +327,7 @@ With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `IND
 - Type: Instantaneous
 - Description: Shared-data only. Memory used by the MemTables, both active and being flushed, of the Primary Key indexes cached on this BE. `lake_pk_index_cache_index_block_bytes`, `lake_pk_index_cache_filter_bytes`, and this metric add up to the memory charged to the Primary Key index cache, which `INDEX_MEM` in `information_schema.be_tablets` reports per tablet.
 
-With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory.
+With `lake_pk_index_partial_eviction=true`, the cache charge and per-tablet `INDEX_MEM` additionally include `lake_pk_index_cache_delvec_bytes` and `lake_pk_index_cache_overhead_bytes`. SST read states reserve bytes directly on the update tracker before block allocation; the cache tracker excludes those already reserved bytes to avoid double charging. Transient SST state and open scratch are not resident cache memory. The index cache tracker also temporarily includes prepaid MemTable mutation bytes. Resident cache gauges and `INDEX_MEM` exclude unused reservations.
 
 ## `lake_pk_index_cache_overhead_bytes`
 

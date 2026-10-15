@@ -2020,6 +2020,58 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_serializes_publish_growt
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_streams_a_tablet_larger_than_update_budget) {
+    const bool old_partial = config::lake_pk_index_partial_eviction;
+    const bool old_strict = config::enable_pk_strict_memcheck;
+    const int64_t old_limit = _mem_tracker->limit();
+    config::lake_pk_index_partial_eviction = true;
+    config::enable_pk_strict_memcheck = true;
+    _mem_tracker->set_limit(6 * 1024 * 1024);
+    DeferOp restore([&] {
+        config::lake_pk_index_partial_eviction = old_partial;
+        config::enable_pk_strict_memcheck = old_strict;
+        _mem_tracker->set_limit(old_limit);
+    });
+    constexpr int kRows = 200000;
+    // The btree value bytes alone exceed this unchanged budget; the index must flush in batches.
+    static_assert(kRows * (sizeof(std::string) + 2 * sizeof(uint64_t)) > 6 * 1024 * 1024);
+    auto metadata = new_cloud_native_pk_tablet();
+    auto txn = next_id();
+    auto [chunk, indexes] = gen_data_and_index(kRows, 0, true, true);
+    ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(metadata->id())
+                                         .set_txn_id(txn)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_profile(&_dummy_runtime_profile)
+                                         .build());
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+    ASSERT_OK(writer->finish_with_txnlog());
+    writer->close();
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    auto published =
+            std::async(std::launch::async, [&] { return publish_single_version(metadata->id(), 2, txn).status(); });
+    EXPECT_EQ(std::future_status::ready, published.wait_until(deadline));
+    ASSERT_OK(published.get());
+    EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
+    ASSIGN_OR_ABORT(auto committed, _tablet_mgr->get_tablet_metadata(metadata->id(), 2));
+    EXPECT_GT(committed->sstable_meta().sstables_size(), 0);
+    ASSIGN_OR_ABORT(auto actual, read(metadata->id(), 2));
+    ASSERT_EQ(kRows, actual->num_rows());
+    const auto& keys = down_cast<const Int32Column*>(actual->get_column_by_index(0).get())->get_data();
+    const auto& values = down_cast<const Int32Column*>(actual->get_column_by_index(1).get())->get_data();
+    int64_t key_sum = 0;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        EXPECT_EQ(keys[i] * 3, values[i]);
+        key_sum += keys[i];
+    }
+    EXPECT_EQ(int64_t{kRows} * (kRows - 1) / 2, key_sum);
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;

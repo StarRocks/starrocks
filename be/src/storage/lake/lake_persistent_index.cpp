@@ -15,7 +15,9 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <limits>
 #include <numeric>
 #include <unordered_map>
 
@@ -218,7 +220,10 @@ bool LakePersistentIndex::is_memtable_full() const {
     const bool mem_tracker_exceed =
             _tablet_mgr->primary_key_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
-    return mem_size_exceed || mem_tracker_exceed;
+    const auto limit = _tablet_mgr ? _tablet_mgr->primary_key_mgr()->mem_tracker()->limit() : -1;
+    const bool bounded_full = _reserve_growth && config::lake_pk_index_partial_eviction && limit > 0 &&
+                              memtable_mem_size >= std::max<int64_t>(1, limit / 4);
+    return mem_size_exceed || mem_tracker_exceed || bounded_full;
 }
 
 bool LakePersistentIndex::too_many_rebuild_files() const {
@@ -511,13 +516,65 @@ Status LakePersistentIndex::parallel_get(ParallelTaskRunner* runner, size_t n, c
     return Status::OK();
 }
 
+bool LakePersistentIndex::_uses_growth_reservation() const {
+    return _reserve_growth && config::lake_pk_index_partial_eviction && !_growth_mutation_active;
+}
+
+Status LakePersistentIndex::_mutate_in_reserved_batches(size_t n, const Slice* keys,
+                                                        const std::function<Status(size_t, size_t)>& mutate) {
+    _growth_mutation_active = true;
+    DeferOp restore([&] { _growth_mutation_active = false; });
+    const auto limit = _tablet_mgr->primary_key_mgr()->mem_tracker()->limit();
+    // A btree value contains a string and version/rowid pair. Budget 256 bytes per inserted
+    // key for sparsely occupied nodes and lookup sets, twice its key bytes, and 64KiB for
+    // splits along the tree height. Keep both row count and bytes bounded; long keys must
+    // not turn a small row batch into an unbounded reservation.
+    const size_t batch_budget = limit > 0 ? std::max<int64_t>(65536, limit / 8) : 1024 * 1024;
+    for (size_t offset = 0; offset < n;) {
+        size_t count = 0;
+        size_t bytes = 65536;
+        while (offset + count < n && count < static_cast<size_t>(std::max(1, config::vector_chunk_size))) {
+            const size_t length = keys[offset + count].size;
+            if (bytes > std::numeric_limits<size_t>::max() - 256 ||
+                length > (std::numeric_limits<size_t>::max() - bytes - 256) / 2) {
+                return Status::MemoryLimitExceeded("PK MemTable mutation size overflows");
+            }
+            const size_t next = bytes + 256 + length * 2;
+            if (count > 0 && next > batch_budget) break;
+            bytes = next;
+            ++count;
+        }
+        RETURN_IF_ERROR(_reserve_growth(bytes));
+        {
+            // The cache takes over only the actual growth, then refunds the unused reservation.
+            // This also accounts a partially applied operation on every error exit.
+            DeferOp finish([&] { _finish_growth(0); });
+            RETURN_IF_ERROR(mutate(offset, count));
+        }
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_batches", 1);
+        offset += count;
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                    IOStat* stat, ParallelUpsertContext* ctx) {
+    if (_uses_growth_reservation()) {
+        // A reservation may flush this owner's MemTables. Finish every prior reverse lookup
+        // before that can change the filesets or retire a slot referenced by a worker.
+        if (ctx && ctx->defers_lookup()) RETURN_IF_ERROR(ctx->runner()->join());
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return upsert(count, keys + offset, values + offset, old_values + offset, stat, ctx);
+        });
+    }
     // The active-memtable write stays on the caller thread: the memtable is not safe for concurrent
     // writes, and this is also what fixes the order of an upsert against the deletes around it.
     std::shared_ptr<std::set<KeyIndex>> not_founds = std::make_shared<std::set<KeyIndex>>();
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, not_founds.get(), &num_found, _publish_version));
+    // Commit the tree before remote IO. Retain only lookup-set workspace: otherwise this
+    // batch could wait for headroom held by its own unused insertion reservation.
+    if (_growth_mutation_active) _finish_growth(65536 + 128 * n);
 
     // Resolving what those keys previously mapped to is the expensive remote-IO half, and it is
     // read-only, so it is the part that can be deferred.
@@ -544,12 +601,22 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
         ctx->add_replaced(old_values, n);
         return Status::OK();
     });
+    if (_growth_mutation_active) {
+        RETURN_IF_ERROR(ctx->runner()->join());
+        RETURN_IF_ERROR(flush_memtable());
+    }
     return Status::OK();
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_us");
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return insert(count, keys + offset, values + offset, version);
+        });
+    }
     RETURN_IF_ERROR(_memtable->insert(n, keys, values, version));
+    if (_growth_mutation_active) _finish_growth(0);
     RETURN_IF_ERROR(flush_memtable());
     // TODO: check whether keys exist in immutable_memtable and ssts
     return Status::OK();
@@ -559,7 +626,14 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 Status LakePersistentIndex::replay_erase(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
                                          uint32_t del_rssid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_persistent_index_insert_delete_us");
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            std::vector<bool> batch_filter(filter.begin() + offset, filter.begin() + offset + count);
+            return replay_erase(count, keys + offset, batch_filter, version, del_rssid);
+        });
+    }
     RETURN_IF_ERROR(_memtable->erase_with_filter(n, keys, filter, version, del_rssid));
+    if (_growth_mutation_active) _finish_growth(0);
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
 }
@@ -596,7 +670,13 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // memtable (not safe for concurrent writes) and preserves the in-transaction upsert/delete order.
     // `not_founds` collects the keys the active memtable could not resolve; their previous rss_rowid
     // still has to be read back from the inactive memtables and sstables to build the delete vector.
+    if (_uses_growth_reservation()) {
+        return _mutate_in_reserved_batches(n, keys, [&](size_t offset, size_t count) {
+            return erase(count, keys + offset, old_values + offset, del_rssid);
+        });
+    }
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _publish_version, del_rssid));
+    if (_growth_mutation_active) _finish_growth(65536 + 128 * n);
 
     // The reverse lookup above is the expensive remote-IO part of a delete publish. For a large delete
     // it dominates, so parallelise it across disjoint key-index subsets when worthwhile, mirroring
@@ -734,6 +814,7 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
             failed->emplace_back(values[i].get_value() & 0xFFFFFFFF);
         }
     }
+    if (_uses_growth_reservation()) return _replace_selected(keys, values, replace_idxes);
     RETURN_IF_ERROR(_memtable->replace(keys, values, replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
     return Status::OK();
@@ -742,8 +823,31 @@ Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const Index
 Status LakePersistentIndex::replace(size_t n, const Slice* keys, const IndexValue* values,
                                     const std::vector<uint32_t>& replace_indexes) {
     std::vector<size_t> tmp_replace_idxes(replace_indexes.begin(), replace_indexes.end());
+    if (_uses_growth_reservation()) return _replace_selected(keys, values, tmp_replace_idxes);
     RETURN_IF_ERROR(_memtable->replace(keys, values, tmp_replace_idxes, _publish_version));
     RETURN_IF_ERROR(flush_memtable());
+    return Status::OK();
+}
+
+Status LakePersistentIndex::_replace_selected(const Slice* keys, const IndexValue* values,
+                                              const std::vector<size_t>& indexes) {
+    std::array<Slice, 256> batch_keys;
+    std::array<IndexValue, 256> batch_values;
+    for (size_t begin = 0; begin < indexes.size(); begin += batch_keys.size()) {
+        const size_t count = std::min(batch_keys.size(), indexes.size() - begin);
+        for (size_t i = 0; i < count; ++i) {
+            batch_keys[i] = keys[indexes[begin + i]];
+            batch_values[i] = values[indexes[begin + i]];
+        }
+        RETURN_IF_ERROR(_mutate_in_reserved_batches(count, batch_keys.data(), [&](size_t offset, size_t size) {
+            std::vector<size_t> positions(size);
+            std::iota(positions.begin(), positions.end(), 0);
+            RETURN_IF_ERROR(_memtable->replace(batch_keys.data() + offset, batch_values.data() + offset, positions,
+                                               _publish_version));
+            _finish_growth(0);
+            return flush_memtable();
+        }));
+    }
     return Status::OK();
 }
 
@@ -2319,6 +2423,12 @@ Status LakePersistentIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rss
         }
         if (token != nullptr) {
             TRACE_COUNTER_INCREMENT("parallel_upsert_cnt", 1);
+        }
+        if (_reserve_growth && config::lake_pk_index_partial_eviction && context.defers_lookup()) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
+            RETURN_IF_ERROR(runner.join());
+            slots.clear();
+            RETURN_IF_ERROR(flush_memtable());
         }
     }
 

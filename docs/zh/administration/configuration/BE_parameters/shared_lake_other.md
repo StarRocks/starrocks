@@ -44,7 +44,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；必需索引块超过整个 update 预算仍是明确的错误边界。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。 必需的 SST 打开内存不足时，tablet 锁持有者也可在等待前释放自身没有 reader pin 的 SST 读状态；正在读取的状态继续保留。
+- 描述：启用存算分离主键索引的实验性部分淘汰策略。内存紧张时，按衰减访问频率分配份额，释放 SST 的索引块和过滤器读状态，优先保留 MemTable 和元数据。过期条目及超过预算的索引骨架仍可整项淘汰。为执行工作区保留四分之一的 update 预算，并从缓存预算中扣除其他 update 内存占用。SST 工作集过大时使用有界临时读取。Publish 按 FIFO 准入，启用后只允许一个活跃 Publish，启用时会等待已在执行的 Publish 退出。在分配 SST 索引/过滤器块前，按压缩输入、解压输出和读状态对象向实际 update tracker 预留内存。可选过滤器无法容纳时跳过；必需索引块超过整个 update 预算仍是明确的错误边界。保留现有内存检查。设为 `false` 恢复整项 LRU 淘汰。 必需的 SST 打开内存不足时，tablet 锁持有者也可在等待前释放自身没有 reader pin 的 SST 读状态；正在读取的状态继续保留。 MemTable 修改在分配前预留有字节上限的批次，记账时接管实际增长，在 SST IO 前归还多余预留，仅保留反查工作区。延迟查找完成后才释放槽位或刷新 MemTable。压力下可分批刷新待处理的 MemTable（包括活跃 tablet 自身的 MemTable），避免等待本次 publish 持有且能够释放的内存。
 - 引入版本：-
 
 ### lake_pk_index_publish_wait_timeout_ms
@@ -53,7 +53,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。
+- 描述：启用 `lake_pk_index_partial_eviction` 时，等待 Publish 准入或 SST 读状态内存许可的最长时间。Publish 准入等待发生在获取 tablet 和 shard 锁之前。释放许可会唤醒等待者，进程退出会取消等待。超时返回错误，与 update 内存超限错误分开记录。内部 Publish trace 记录准入时间、等待、超时、取消、SST 临时读取字节数、部分淘汰和骨架淘汰兜底。 同时限制 MemTable 增长预留的等待；trace 计数器记录预留、批次、刷新和超时。
 - 引入版本：-
 
 ### cloud_native_pk_index_rebuild_files_threshold

@@ -327,7 +327,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - タイプ: 瞬時値
 - 説明: 共有データモード専用。この BE でキャッシュされている主キーインデックスの MemTable（書き込み中のものとフラッシュ中のものの両方）が使用するメモリ。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
 
-`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。SST 読み取り状態はブロック割り当て前に update tracker で直接予約し、cache tracker は予約済みバイトを除いて二重計上を防ぎます。一時読み取り状態とオープン作業領域は常駐キャッシュには含まれません。
+`lake_pk_index_partial_eviction=true` の場合、キャッシュ計上量と tablet ごとの `INDEX_MEM` には `lake_pk_index_cache_delvec_bytes` と `lake_pk_index_cache_overhead_bytes` も含まれます。SST 読み取り状態はブロック割り当て前に update tracker で直接予約し、cache tracker は予約済みバイトを除いて二重計上を防ぎます。一時読み取り状態とオープン作業領域は常駐キャッシュには含まれません。 インデックスキャッシュの tracker には MemTable 変更用の予約も一時的に含まれます。常駐キャッシュの指標と `INDEX_MEM` は未使用の予約を含みません。
 
 ## `lake_pk_index_cache_overhead_bytes`
 

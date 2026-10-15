@@ -257,6 +257,10 @@ public:
     // rather than reading a concurrently changing tree; refresh only immutable SST read state.
     size_t refresh_sstable_cache_memory_metrics();
     void set_read_state_reclaimer(std::function<void(size_t)> reclaimer);
+    void set_growth_reservation_callbacks(std::function<Status(size_t)> reserve, std::function<void(size_t)> finish) {
+        _reserve_growth = std::move(reserve);
+        _finish_growth = std::move(finish);
+    }
 
     // Lock-free snapshots for eviction: no index lock is acquired while inspecting active tablets.
     size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
@@ -406,6 +410,10 @@ private:
             Cache* cache, const TabletMetadataPtr& metadata, const std::function<void(size_t)>& reclaim_self);
 
     bool is_memtable_full() const;
+    bool _uses_growth_reservation() const;
+    Status _mutate_in_reserved_batches(size_t n, const Slice* keys,
+                                       const std::function<Status(size_t, size_t)>& mutate);
+    Status _replace_selected(const Slice* keys, const IndexValue* values, const std::vector<size_t>& indexes);
 
     bool too_many_rebuild_files() const;
 
@@ -470,6 +478,9 @@ private:
     LakePersistentIndexMemoryStats _reported_memory_stats;
     size_t _reported_sst_object_bytes = 0;
     std::function<void(size_t)> _reclaim_read_state;
+    std::function<Status(size_t)> _reserve_growth;
+    std::function<void(size_t)> _finish_growth;
+    bool _growth_mutation_active = false;
     bool _partial_read_state = false;
     std::atomic<size_t> _cached_metadata_bytes{0};
     std::atomic<size_t> _cached_sst_bytes{0};

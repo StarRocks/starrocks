@@ -14,6 +14,8 @@
 
 #include "storage/lake/primary_key_manager.h"
 
+#include <chrono>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -214,6 +216,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
     }
     index.set_read_state_reclaimer(
             [this, index_entry](size_t bytes) { _reclaim_active_index_read_state(index_entry, bytes); });
+    _bind_index_growth_reservation(index_entry);
     TEST_SYNC_POINT("PrimaryKeyManager::prepare_primary_index:before_load");
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     update_index_cache_size(index_entry);
@@ -294,7 +297,7 @@ void PrimaryKeyManager::refresh_index_cache_eviction_policy() {
     _evict_index_cache(_index_cache.capacity());
 }
 
-void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
+void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry, bool finish_growth, size_t keep_workspace) {
     _maybe_refresh_index_cache_eviction_policy();
     TEST_SYNC_POINT("PrimaryKeyManager::update_index_cache_size:before_accounting_lock");
     bool partial;
@@ -305,9 +308,79 @@ void PrimaryKeyManager::update_index_cache_size(IndexEntry* index_entry) {
         size_t charge = index.refresh_cache_memory_metrics();
         if (partial) charge += index.cached_metadata_bytes();
         const size_t direct = std::min(charge, index.directly_accounted_sst_bytes());
-        _index_cache.update_object_size(index_entry, charge, !partial, charge - direct);
+        _index_cache.update_object_size(index_entry, charge, !partial, charge - direct, finish_growth);
+        if (finish_growth) _index_cache.release_object_growth_reservation(index_entry, keep_workspace);
     }
     if (partial) _evict_index_cache(_index_cache_target());
+}
+
+void PrimaryKeyManager::_bind_index_growth_reservation(IndexEntry* entry) {
+    entry->value().set_growth_reservation_callbacks(
+            [this, entry](size_t bytes) { return _reserve_index_growth(entry, bytes); },
+            [this, entry](size_t keep_workspace) {
+                update_index_cache_size(entry, true, keep_workspace);
+                _sst_memory_context->memory_cv.notify_all();
+            });
+}
+
+Status PrimaryKeyManager::_reserve_index_growth(IndexEntry* entry, size_t bytes) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_growth_reservation_us");
+    const auto deadline = std::chrono::steady_clock::now() +
+                          std::chrono::milliseconds(std::max(0, config::lake_pk_index_publish_wait_timeout_ms));
+    const auto limit = _primary_key_mem_tracker->limit();
+    if (limit >= 0 && bytes > static_cast<size_t>(limit)) {
+        TRACE_COUNTER_INCREMENT("pindex_memtable_growth_rejected", 1);
+        return Status::MemoryLimitExceeded(
+                fmt::format("PK MemTable mutation needs {} bytes; update limit={}", bytes, limit));
+    }
+    auto reserve = [&] {
+        std::lock_guard<std::mutex> lock(_index_accounting_mutex);
+        return _index_cache.try_reserve_object_growth(entry, bytes);
+    };
+    bool flushed = false;
+    bool waited = false;
+    for (;;) {
+        if (process_exit_in_progress()) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_cancelled", 1);
+            return Status::Cancelled("PK MemTable growth reservation cancelled");
+        }
+        if (reserve()) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
+            return Status::OK();
+        }
+        const size_t available = std::max<int64_t>(0, limit - _primary_key_mem_tracker->consumption());
+        const size_t shortage = bytes - std::min(bytes, available);
+        const size_t cached = _index_cache.size();
+        _evict_index_cache(cached - std::min(cached, shortage));
+        _reclaim_active_index_read_state(entry, bytes);
+        if (reserve()) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_reserved_bytes", bytes);
+            return Status::OK();
+        }
+        if (!flushed) {
+            // The mutating owner has joined deferred lookups before entering this reservation.
+            // Flush its own pending MemTables when no idle cache can make the next batch fit.
+            // No accounting/cache lock is held during flush or SST IO.
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_flush_count", 1);
+            TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_growth_flush_us");
+            RETURN_IF_ERROR(entry->value().sync_flush_all_memtables(
+                    config::pk_index_memtable_max_wait_flush_timeout_ms * 1000));
+            update_index_cache_size(entry);
+            flushed = true;
+            continue;
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_timeout", 1);
+            return Status::TimedOut("PK MemTable growth reservation exceeded its bounded wait");
+        }
+        if (!waited) {
+            TRACE_COUNTER_INCREMENT("pindex_memtable_growth_wait_count", 1);
+            waited = true;
+        }
+        std::unique_lock<std::mutex> lock(_sst_memory_context->memory_mutex);
+        _sst_memory_context->memory_cv.wait_until(
+                lock, std::min(deadline, std::chrono::steady_clock::now() + std::chrono::milliseconds(100)));
+    }
 }
 
 void PrimaryKeyManager::_reclaim_active_index_read_state(IndexEntry* entry, size_t bytes) {
@@ -1778,6 +1851,7 @@ Status PrimaryKeyManager::_handle_index_op(int64_t tablet_id, int64_t base_versi
         index.set_read_state_reclaimer(
                 [this, index_entry](size_t bytes) { _reclaim_active_index_read_state(index_entry, bytes); });
     }
+    if (need_lock) _bind_index_growth_reservation(index_entry);
     op(index);
     // The lazy SST fallback can reopen read state, including when an operation fails partway.
     update_index_cache_size(index_entry);

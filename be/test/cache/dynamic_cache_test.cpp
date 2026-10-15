@@ -65,6 +65,68 @@ TEST(DynamicCacheTest, separately_reserved_bytes_are_not_charged_twice_or_releas
     EXPECT_EQ(0, tracker.consumption());
 }
 
+TEST(DynamicCacheTest, growth_is_reserved_before_allocation_and_committed_without_a_second_charge) {
+    MemTracker root(100, "update");
+    MemTracker tracker(-1, "index", &root);
+    DynamicCache<int, int> cache(100);
+    cache.set_mem_tracker(&tracker);
+    auto* entry = cache.get_or_create(1);
+    ASSERT_TRUE(cache.update_object_size(entry, 8));
+    ASSERT_TRUE(cache.try_reserve_object_growth(entry, 64));
+    EXPECT_EQ(72, root.consumption());
+    EXPECT_EQ(8, cache.size());
+    EXPECT_FALSE(cache.try_reserve_object_growth(entry, 29));
+    EXPECT_EQ(72, root.consumption());
+
+    // The owner allocates 48 of the 64 reserved bytes. Committing must not transiently
+    // charge 48 twice or release the entire reservation before the actual charge takes over.
+    ASSERT_TRUE(cache.update_object_size(entry, 56, false, 56, true));
+    EXPECT_EQ(72, root.consumption());
+    EXPECT_EQ(72, root.peak_consumption());
+    cache.release_object_growth_reservation(entry);
+    EXPECT_EQ(56, root.consumption());
+    cache.release(entry);
+    cache.clear();
+    EXPECT_EQ(0, tracker.consumption());
+    EXPECT_EQ(0, root.consumption());
+}
+
+TEST(DynamicCacheTest, unused_growth_is_refunded_before_reopening_read_state) {
+    MemTracker root(100, "update");
+    MemTracker tracker(-1, "index", &root);
+    MemTracker sst(-1, "sst", &root);
+    DynamicCache<int, int> cache(100);
+    cache.set_mem_tracker(&tracker);
+    auto* entry = cache.get_or_create(1);
+    ASSERT_TRUE(cache.update_object_size(entry, 8));
+    ASSERT_TRUE(cache.try_reserve_object_growth(entry, 72));
+    ASSERT_TRUE(cache.update_object_size(entry, 32, false, 32, true));
+    EXPECT_NE(nullptr, sst.try_consume(40));
+    cache.release_object_growth_reservation(entry, 16);
+    EXPECT_EQ(48, root.consumption());
+    ASSERT_EQ(nullptr, sst.try_consume(40));
+    EXPECT_EQ(88, root.consumption());
+    cache.release_object_growth_reservation(entry);
+    EXPECT_EQ(72, root.consumption());
+    sst.release(40);
+    cache.release(entry);
+    cache.clear();
+    EXPECT_EQ(0, root.consumption());
+    EXPECT_LE(root.peak_consumption(), root.limit());
+}
+
+TEST(DynamicCacheTest, failed_mutation_removes_unspent_growth_reservation) {
+    MemTracker root(100);
+    DynamicCache<int, int> cache(100);
+    cache.set_mem_tracker(&root);
+    auto* entry = cache.get_or_create(1);
+    ASSERT_TRUE(cache.update_object_size(entry, 8));
+    ASSERT_TRUE(cache.try_reserve_object_growth(entry, 64));
+    ASSERT_TRUE(cache.remove(entry));
+    EXPECT_EQ(0, root.consumption());
+    EXPECT_EQ(0, cache.size());
+}
+
 TEST(DynamicCacheTest, cache) {
     DynamicCache<int32_t, int64_t> cache(10);
     for (int i = 0; i < 20; i++) {
