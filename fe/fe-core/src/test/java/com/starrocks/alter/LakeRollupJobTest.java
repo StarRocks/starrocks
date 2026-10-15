@@ -476,4 +476,189 @@ public class LakeRollupJobTest {
             rollupHandler.clearJobs();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLeaderPrunesFinishedJob() throws Exception {
+        completeTasksAndPublishOnSend();
+        createBaseTable("base_table_prune_finished");
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        LakeRollupJob job = createJob(
+                "create materialized view mv_prune_finished as select k2, k1 from base_table_prune_finished order by k2;");
+        Assertions.assertFalse(job.physicalPartitionIdToRollupIndex.isEmpty());
+
+        runToFinished(job);
+
+        assertPruned(job);
+        List<LakeRollupJob> entries = readJournaledEntries(job.getJobId());
+        for (LakeRollupJob entry : entries) {
+            Assertions.assertFalse(entry.physicalPartitionIdToRollupIndex.isEmpty());
+        }
+        LakeRollupJob finishedEntry = entries.get(entries.size() - 1);
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, finishedEntry.getJobState());
+        List<List<Comparable>> rowBefore = new ArrayList<>();
+        finishedEntry.getInfo(rowBefore);
+        finishedEntry.pruneMeta();
+        assertPruned(finishedEntry);
+        List<List<Comparable>> rowAfter = new ArrayList<>();
+        finishedEntry.getInfo(rowAfter);
+        Assertions.assertEquals(rowBefore, rowAfter);
+    }
+
+    @Test
+    public void testLeaderPrunesCancelledJob() throws Exception {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+            }
+        };
+        OlapTable baseTable = createBaseTable("base_table_prune_cancelled");
+        LakeRollupJob job = createJob(
+                "create materialized view mv_prune_cancelled as select k2, k1 from base_table_prune_cancelled order by k2;");
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertTrue(job.rollupBatchTask.getTaskNum() > 0);
+
+        Assertions.assertTrue(job.cancel("cancel"));
+
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertPruned(job);
+        Assertions.assertFalse(baseTable.hasMaterializedIndex("mv_prune_cancelled"));
+    }
+
+    @Test
+    public void testFollowerReplayPrunesFinishedJob() throws Exception {
+        completeTasksAndPublishOnSend();
+        OlapTable baseTable = createBaseTable("base_table_prune_follower");
+        // The follower starts from the catalog as it was before the rollup.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+
+        LakeRollupJob job = createJob(
+                "create materialized view mv_prune_follower as select k2, k1 from base_table_prune_follower order by k2;");
+        runToFinished(job);
+        List<LakeRollupJob> entries = readJournaledEntries(job.getJobId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        SRMetaBlockReader blockReader = new SRMetaBlockReaderV2(initialImage.getJsonReader());
+        followerMetastore.load(blockReader);
+        blockReader.close();
+        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        try {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+            for (LakeRollupJob entry : entries) {
+                followerHandler.replayAlterJobV2(entry);
+            }
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+
+        // The handler keeps the first replayed entry and copies the data of each later one into it.
+        LakeRollupJob retained = entries.get(0);
+        Assertions.assertSame(retained, followerHandler.getAlterJobsV2().get(job.getJobId()));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+        assertPruned(retained);
+        for (LakeRollupJob entry : entries.subList(1, entries.size())) {
+            Assertions.assertFalse(entry.physicalPartitionIdToRollupIndex.isEmpty());
+        }
+        OlapTable followerTable = (OlapTable) followerMetastore.getTable(DB, baseTable.getName());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+        long rollupIndexMetaId = followerTable.getIndexMetaIdByName("mv_prune_follower");
+        for (PhysicalPartition physicalPartition : followerTable.getAllPhysicalPartitions()) {
+            MaterializedIndex rollupIndex = physicalPartition.getLatestIndex(rollupIndexMetaId);
+            Assertions.assertNotNull(rollupIndex);
+            Assertions.assertEquals(MaterializedIndex.IndexState.NORMAL, rollupIndex.getState());
+        }
+    }
+
+    @Test
+    public void testFailedAddRollupRemovesTabletsOfBuiltClauses() throws Exception {
+        OlapTable baseTable = createBaseTable("base_table_add_rollup_fails");
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        long tabletCountBefore = invertedIndex.getTabletCount();
+
+        // r1 is built (its shadow tablets are registered in the inverted index) before r2 fails.
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE base_table_add_rollup_fails ADD ROLLUP r1(k2, k1), r2(k2, no_such_col)"));
+        Assertions.assertTrue(e.getMessage().contains("no_such_col"), e.getMessage());
+
+        Assertions.assertEquals(tabletCountBefore, invertedIndex.getTabletCount());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, baseTable.getState());
+    }
+
+    private static OlapTable createBaseTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + "\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    k3 int\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES(\n" +
+                "    \"file_bundling\" = \"true\"\n" +
+                ");");
+        return (OlapTable) db.getTable(tableName);
+    }
+
+    /**
+     * Marks every rollup task finished as soon as it is sent, and lets the publish succeed without reaching a node.
+     */
+    private static void completeTasksAndPublishOnSend() {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource,
+                    Map<Long, Double> compactionScores,
+                    Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                    java.util.List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+            }
+        };
+    }
+
+    private static void runToFinished(AlterJobV2 job) throws Exception {
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!job.isDone()) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(100);
+        }
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState(), job.errMsg);
+    }
+
+    /**
+     * Reads the journal entries of the job, from the one that submitted it to the one of its final state.
+     */
+    private static List<LakeRollupJob> readJournaledEntries(long jobId) throws Exception {
+        List<LakeRollupJob> entries = new ArrayList<>();
+        AlterJobV2 entry;
+        do {
+            entry = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+            Assertions.assertEquals(jobId, entry.getJobId());
+            entries.add((LakeRollupJob) entry);
+        } while (!entry.isDone());
+        Assertions.assertEquals(AlterJobV2.JobState.PENDING, entries.get(0).getJobState());
+        return entries;
+    }
+
+    private static void assertPruned(LakeRollupJob job) {
+        Assertions.assertTrue(job.physicalPartitionIdToRollupIndex.isEmpty());
+        Assertions.assertTrue(job.physicalPartitionIdToBaseRollupTabletIdMap.isEmpty());
+        Assertions.assertEquals(0, job.rollupBatchTask.getTaskNum());
+    }
+>>>>>>> 328adcd ([BugFix] Remove the tablets of a lake rollup from the inverted index when ADD ROLLUP fails (#80717))
 }

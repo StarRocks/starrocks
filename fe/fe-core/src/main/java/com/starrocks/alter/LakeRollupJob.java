@@ -819,4 +819,9 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
         this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
     }
+
+    @Override
+    public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
+        return physicalPartitionIdToRollupIndex;
+    }
 }
