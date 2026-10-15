@@ -5129,7 +5129,7 @@ protected:
         TabletReader reader(_tablet, Version(0, 8), schema);
         auto iter = create_tablet_iterator(reader, schema);
         ASSERT_NE(nullptr, iter);
-        auto chunk = ChunkHelper::new_chunk(schema, 100);
+        auto chunk = ChunkFactory::new_chunk(schema, 100);
         std::vector<int64_t> actual_keys;
         while (true) {
             auto st = iter->get_next(chunk.get());
