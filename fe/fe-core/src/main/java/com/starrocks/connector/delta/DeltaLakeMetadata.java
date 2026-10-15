@@ -174,6 +174,9 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             return TvrTableSnapshot.empty();
         }
         SnapshotImpl snapshot = (SnapshotImpl) ((DeltaLakeTable) table).getDeltaSnapshot();
+        if (snapshot == null) {
+            return TvrTableSnapshot.empty();
+        }
         return TvrTableSnapshot.of(snapshot.getVersion());
     }
 

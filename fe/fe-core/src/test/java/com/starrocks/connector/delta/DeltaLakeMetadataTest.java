@@ -263,6 +263,14 @@ public class DeltaLakeMetadataTest {
     }
 
     @Test
+    public void testGetTableVersionRangeLeavesSnapshotlessTableUnpinned() {
+        TvrVersionRange versionRange = deltaLakeMetadata.getTableVersionRange("db1", newTable(), Optional.empty(),
+                Optional.empty());
+
+        Assertions.assertTrue(versionRange.end().isEmpty());
+    }
+
+    @Test
     public void testPrepareMetadataCollectsFilesForOrdinaryScanWithResolvedVersion(@Mocked SnapshotImpl snapshot,
                                                                                    @Mocked ScanBuilderImpl scanBuilder,
                                                                                    @Mocked ScanImpl scan) {
