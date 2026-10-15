@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR regexp_replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 

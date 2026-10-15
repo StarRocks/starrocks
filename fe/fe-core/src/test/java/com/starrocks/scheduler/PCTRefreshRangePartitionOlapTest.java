@@ -216,6 +216,60 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
     }
 
     @Test
+    public void testMVForcePartialRefreshWithRetentionCondition() throws Exception {
+        String partitionTable = "CREATE TABLE range_t2 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_t2", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_t2", "p2", "2024-01-05", "2024-01-06");
+        String[] sqls = {
+                "INSERT INTO range_t2 partition(p1) VALUES (\"2024-01-04\",1);",
+                "INSERT INTO range_t2 partition(p2) VALUES (\"2024-01-05\",1);"
+        };
+        for (String sql : sqls) {
+            executeInsertSql(sql);
+        }
+
+        // the retention window is wide enough to keep both partitions alive, so force refresh
+        // must not treat them as expired.
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv2 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"-1\", " +
+                "\"partition_retention_condition\"=\"date_trunc('day', dt1) >= " +
+                "current_date() - interval 10 year\")\n" +
+                "AS SELECT dt1,sum(int1) from range_t2 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv2");
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        Map<String, String> props = taskRun.getProperties();
+        props.put(TaskRun.PARTITION_START, "2024-01-04");
+        props.put(TaskRun.PARTITION_END, "2024-01-05");
+
+        // materialize the target partition first, so it becomes an existing mv partition
+        ExecPlan execPlan = getMVRefreshExecPlan(taskRun);
+        Assertions.assertNotNull(execPlan);
+        refreshMV("test", mv);
+
+        // without force there is nothing to refresh anymore
+        execPlan = getMVRefreshExecPlan(taskRun);
+        Assertions.assertNull(execPlan);
+
+        // with force the existing partition must still be refreshed: the retention filter runs
+        // against already existing partitions here, so it must not mock their partition ids.
+        execPlan = getMVRefreshExecPlan(taskRun, true);
+        Assertions.assertNotNull(execPlan);
+        String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        PlanTestBase.assertContains(plan, "     TABLE: range_t2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/2");
+
+        starRocksAssert.dropMaterializedView("test_mv2");
+        starRocksAssert.dropTable("range_t2");
+    }
+
+    @Test
     public void testMVBatchRefreshSeedsFreshnessBaseline() throws Exception {
         String partitionTable = "CREATE TABLE range_t1 (dt1 date, int1 int)\n" +
                 "PARTITION BY date_trunc('day', dt1)";

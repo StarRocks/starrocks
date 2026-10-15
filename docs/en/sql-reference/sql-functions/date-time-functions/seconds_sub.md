@@ -10,7 +10,7 @@ Subtracts a time interval from a date value. The time interval is in seconds.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 ```
 

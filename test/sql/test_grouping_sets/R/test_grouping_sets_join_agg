@@ -1,0 +1,48 @@
+-- name: test_grouping_sets_join_agg
+DROP TABLE IF EXISTS t_gs_join_l_${uuid0};
+-- result:
+-- !result
+DROP TABLE IF EXISTS t_gs_join_r_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_gs_join_l_${uuid0} (k1 INT NOT NULL, k2 INT NOT NULL, v1 BIGINT)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE t_gs_join_r_${uuid0} (k1 INT NOT NULL, k2 INT NOT NULL, v2 BIGINT)
+DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 3 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t_gs_join_l_${uuid0} VALUES (1, 10, 100), (1, 20, 200), (2, 10, 300), (2, 30, 400);
+-- result:
+-- !result
+INSERT INTO t_gs_join_r_${uuid0} VALUES (1, 10, 1000), (2, 10, 2000), (2, 30, 3000);
+-- result:
+-- !result
+SET broadcast_row_limit = 1;
+-- result:
+-- !result
+SELECT a.k1, a.gk, a.s1, b.s2
+FROM (SELECT k1, coalesce(k2, -1) AS gk, sum(v1) AS s1 FROM t_gs_join_l_${uuid0}
+      GROUP BY GROUPING SETS((k1, k2), (k1))) a
+LEFT JOIN (SELECT k1, coalesce(k2, -1) AS gk, sum(v2) AS s2 FROM t_gs_join_r_${uuid0}
+      GROUP BY GROUPING SETS((k1, k2), (k1))) b
+ON a.k1 = b.k1 AND a.gk = b.gk
+ORDER BY 1, 2, 3;
+-- result:
+1	-1	300	1000
+1	10	100	1000
+1	20	200	None
+2	-1	700	5000
+2	10	300	2000
+2	30	400	3000
+-- !result
+SET broadcast_row_limit = 15000000;
+-- result:
+-- !result
+DROP TABLE t_gs_join_l_${uuid0};
+-- result:
+-- !result
+DROP TABLE t_gs_join_r_${uuid0};
+-- result:
+-- !result

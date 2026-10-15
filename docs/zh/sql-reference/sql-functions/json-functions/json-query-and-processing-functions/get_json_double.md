@@ -22,7 +22,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DOUBLE get_json_double(VARCHAR json_str, VARCHAR json_path)
 ```
 

@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # ADMIN SHOW CONFIG
 
-ADMIN SHOW CONFIG displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../../administration/management/FE_configuration.md).
+ADMIN SHOW CONFIG displays the configuration of the current cluster (Currently, only FE configuration items can be displayed). For detailed description of these configuration items, see [Configuration](../../../../administration/configuration/FE_parameters/FE_parameters.md).
 
 If you want to set or modify a configuration item, use [ADMIN SET CONFIG](ADMIN_SET_CONFIG.md).
 
@@ -32,6 +32,8 @@ Description of the return parameters:
 5. MasterOnly: Whether it only applies to leader FE
 6. Comment:    Configuration item description 
 ```
+
+For configuration items that hold credentials, such as passwords, secret keys, and tokens, `Value` does not show the actual value. If the item is set, `Value` is `******`. If the item is not set, `Value` is empty. Masking affects only the output. The FE still uses the actual value.
 
 ## Examples
 

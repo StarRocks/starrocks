@@ -12,7 +12,7 @@ This function is supported from v2.3.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT WEEK(DATETIME|DATE date, INT mode)
 ```
 

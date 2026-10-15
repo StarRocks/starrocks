@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Circle(center_lng, center_lat, radius)
 ```
 

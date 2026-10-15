@@ -12,7 +12,7 @@ This function is supported from v3.1 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 distinct_map_keys(any_map)
 ```
 

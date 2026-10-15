@@ -39,7 +39,9 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public class SysObjectDependencies {
@@ -78,6 +80,7 @@ public class SysObjectDependencies {
 
         // list dependencies of mv
         Locker locker = new Locker();
+        List<ExternalRef> externalRefs = new ArrayList<>();
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
@@ -111,14 +114,12 @@ public class SysObjectDependencies {
                         item.setRef_object_id(refObj.getTableId());
                         item.setRef_database(refObj.getDbName());
                         item.setRef_catalog(refObj.getCatalogName());
-                        Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
-                        item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
-                        // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
-                        // BaseTableInfo, so we use the source-of-truth information
-                        if (refTable.isEmpty()) {
-                            item.setRef_object_name(refObj.getTableName());
+                        // An external base table is resolved through its connector, which the database lock
+                        // does not protect; fill those in once the lock is released.
+                        if (refObj.isInternalCatalog()) {
+                            fillRefObject(item, refObj, mv.getName());
                         } else {
-                            item.setRef_object_name(refTable.get().getName());
+                            externalRefs.add(new ExternalRef(item, refObj, mv.getName()));
                         }
 
                         response.addToItems(item);
@@ -127,9 +128,26 @@ public class SysObjectDependencies {
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.READ);
             }
+            externalRefs.forEach(ref -> fillRefObject(ref.item(), ref.refObj(), ref.mvName()));
+            externalRefs.clear();
         }
 
         return response;
+    }
+
+    private record ExternalRef(TObjectDependencyItem item, BaseTableInfo refObj, String mvName) {
+    }
+
+    private static void fillRefObject(TObjectDependencyItem item, BaseTableInfo refObj, String mvName) {
+        Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
+        item.setRef_object_type(getRefObjectType(refTable, mvName));
+        // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
+        // BaseTableInfo, so we use the source-of-truth information
+        if (refTable.isEmpty()) {
+            item.setRef_object_name(refObj.getTableName());
+        } else {
+            item.setRef_object_name(refTable.get().getName());
+        }
     }
 
     /**

@@ -11,7 +11,7 @@ keywords: ['shu zu']
 
 ## 语法
 
-```Haskell
+```plaintext
 array_contains(any_array, any_element)
 ```
 

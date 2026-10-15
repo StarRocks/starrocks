@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 regexp_split(str, pattern[, max_split])
 ```
 

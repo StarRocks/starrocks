@@ -10,7 +10,7 @@ Checks whether the array contains a certain element. If yes, it returns 1; other
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_contains(any_array, any_element)
 ```
 

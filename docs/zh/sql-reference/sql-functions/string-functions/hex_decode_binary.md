@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 VARBINARY hex_decode_binary(VARCHAR str);
 ```
 

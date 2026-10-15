@@ -8,7 +8,7 @@ Base64 でエンコードされた文字列をデコードします。この関�
 
 ## 構文
 
-```Haskell
+```plaintext
 from_base64(str);
 ```
 

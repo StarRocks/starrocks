@@ -1,8 +1,11 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 ---
 
 # 从 MySQL 实时同步
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支撑实时分析和处理海量数据的需求。
 
@@ -179,6 +182,12 @@ StarRocks 支持多种方式将 MySQL 的数据实时同步至 StarRocks，支�
    +---------------+-------+
    1 row in set (0.00 sec)
    ```
+
+### 连接 StarRocks
+
+SMT 配置文件通过 `flink.starrocks.jdbc-url` 和 `flink.starrocks.load-url` 设置这些地址。
+
+<FlinkStarRocksConnection />
 
 ## 同步库表结构
 
@@ -541,4 +550,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
    END;
    ```
 
-更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
+更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/data_migration/loading/synchronize_mysql_into_sr.md)。

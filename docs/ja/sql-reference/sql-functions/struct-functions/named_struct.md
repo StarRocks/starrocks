@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 STRUCT named_struct({STRING name1, ANY val1} [, ...] )
 ```
 

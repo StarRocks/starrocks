@@ -10,7 +10,7 @@ This function returns the position where str first appeared in substr (start cou
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT instr(VARCHAR str, VARCHAR substr)
 ```
 

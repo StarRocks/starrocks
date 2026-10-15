@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 ST_Distance_Sphere(x_lng, x_lat, y_lng, y_lat)
 ```
 

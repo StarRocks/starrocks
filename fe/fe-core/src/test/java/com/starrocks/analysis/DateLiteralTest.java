@@ -22,7 +22,40 @@ import com.starrocks.common.AnalysisException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+
 public class DateLiteralTest {
+
+    @Test
+    public void testSerializationWithMicroseconds() throws Exception {
+        String[] values = {
+                "2026-09-09 13:50:32.313000",
+                "2026-09-09 14:30:06.957000",
+                "2026-09-09 13:50:32.000001",
+                "2026-09-09 13:50:32.000064",
+                "2026-09-09 13:50:32",
+                "0000-01-01 00:00:00",
+                "9999-12-31 23:59:59.999999"
+        };
+        for (String value : values) {
+            DateLiteral original = new DateLiteral(value, Type.DATETIME);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            original.write(new DataOutputStream(bytes));
+            DateLiteral restored = DateLiteral.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+            Assertions.assertEquals(original.getType(), restored.getType(), value);
+            Assertions.assertEquals(original.toLocalDateTime(), restored.toLocalDateTime(), value);
+        }
+
+        DateLiteral date = new DateLiteral("2026-09-09", Type.DATE);
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        date.write(new DataOutputStream(bytes));
+        DateLiteral restored = DateLiteral.read(new DataInputStream(new ByteArrayInputStream(bytes.toByteArray())));
+        Assertions.assertEquals(Type.DATE, restored.getType());
+        Assertions.assertEquals(date.toLocalDateTime(), restored.toLocalDateTime());
+    }
 
     @Test
     public void TwoDigitYear() {

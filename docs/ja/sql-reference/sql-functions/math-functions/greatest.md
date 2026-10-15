@@ -20,7 +20,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 GREATEST(expr1,...);
 ```
 

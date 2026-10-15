@@ -3,4 +3,5 @@ label: 'Storage volume'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: storage_volume

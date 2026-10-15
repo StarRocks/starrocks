@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 array_cum_sum(array(bigint))
 array_cum_sum(array(double))
 ```

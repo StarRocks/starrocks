@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 INT UNIX_TIMESTAMP()
 INT UNIX_TIMESTAMP(DATETIME date)
 INT UNIX_TIMESTAMP(DATETIME date, STRING fmt)

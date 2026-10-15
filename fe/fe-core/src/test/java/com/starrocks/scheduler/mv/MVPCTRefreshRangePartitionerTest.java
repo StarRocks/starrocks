@@ -14,14 +14,18 @@
 
 package com.starrocks.scheduler.mv;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.sql.common.PCell;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -71,6 +75,59 @@ public class MVPCTRefreshRangePartitionerTest {
         MVAdaptiveRefreshException exception = Assertions.assertThrows(MVAdaptiveRefreshException.class,
                 () -> partitioner.getAdaptivePartitionRefreshNumber(iter));
         Assertions.assertTrue(exception.getMessage().contains("Missing too many partition stats"));
+    }
+
+    @Test
+    public void testIsAdaptiveRefreshSupported() {
+        // internal tables and materialized views in both shared-nothing and shared-data mode
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.OLAP));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.CLOUD_NATIVE));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(
+                Table.TableType.MATERIALIZED_VIEW));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(
+                Table.TableType.CLOUD_NATIVE_MATERIALIZED_VIEW));
+        // external tables with partition statistics
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.HIVE));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.ICEBERG));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.HUDI));
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.DELTALAKE));
+        // external tables without partition statistics
+        Assertions.assertFalse(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.JDBC));
+        Assertions.assertFalse(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(Table.TableType.PAIMON));
+    }
+
+    @Test
+    public void testGetAdaptivePartitionRefreshNumberWithCloudNativeTable() throws Exception {
+        MvTaskRunContext mvContext = mock(MvTaskRunContext.class);
+        MaterializedView mv = mock(MaterializedView.class);
+        when(mv.getTableProperty()).thenReturn(mock(TableProperty.class));
+        when(mv.getPartitionInfo()).thenReturn(mock(PartitionInfo.class));
+
+        // shared-data base table: each partition has 60M rows, so only one partition fits
+        // into mv_max_rows_per_refresh (100M by default) per task run.
+        LakeTable refTable = mock(LakeTable.class);
+        when(refTable.getType()).thenReturn(Table.TableType.CLOUD_NATIVE);
+        when(refTable.isNativeTableOrMaterializedView()).thenReturn(true);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = Maps.newHashMap();
+        List<String> mvPartitions = Lists.newArrayList();
+        for (int i = 1; i <= 3; i++) {
+            String name = "p" + i;
+            Partition partition = mock(Partition.class);
+            when(partition.getRowCount()).thenReturn(60_000_000L);
+            when(partition.getDataSize()).thenReturn(1024L);
+            when(refTable.getPartition(name)).thenReturn(partition);
+
+            Map<Table, Set<String>> refs = new HashMap<>();
+            refs.put(refTable, Set.of(name));
+            mvToBaseNameRefs.put("mv_" + name, refs);
+            mvPartitions.add("mv_" + name);
+        }
+        when(mvContext.getMvRefBaseTableIntersectedPartitions()).thenReturn(mvToBaseNameRefs);
+        when(mvContext.getExternalRefBaseTableMVPartitionMap()).thenReturn(new HashMap<>());
+
+        Assertions.assertTrue(PartitionBasedMvRefreshProcessor.isAdaptiveRefreshSupported(refTable.getType()));
+        MVPCTRefreshRangePartitioner partitioner = new MVPCTRefreshRangePartitioner(mvContext, null, null, mv);
+        Assertions.assertEquals(1, partitioner.getAdaptivePartitionRefreshNumber(mvPartitions.iterator()));
     }
 
     @Test

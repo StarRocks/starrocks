@@ -13,7 +13,7 @@ JSON ドキュメントが特定の値またはサブドキュメントを含ん
 
 ## Syntax
 
-```Haskell
+```plaintext
 json_contains(json_target, json_candidate)
 ```
 

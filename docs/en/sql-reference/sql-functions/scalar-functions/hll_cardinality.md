@@ -10,7 +10,7 @@ Calculates the cardinality of a single HLL type value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 HLL_CARDINALITY(hll)
 ```
 

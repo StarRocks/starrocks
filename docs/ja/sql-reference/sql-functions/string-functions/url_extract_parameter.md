@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```haskell
+```plaintext
 VARCHAR url_extract_parameter(VARCHAR str, VARCHAR name)
 ```
 

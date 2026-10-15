@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 NULL_OR_EMPTY(str)
 BOOLEAN NULL_OR_EMPTY (any_array)
 ```

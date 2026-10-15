@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_in_range(BITMAP src, BIGINT start_range, BIGINT end_range)
 ```
 

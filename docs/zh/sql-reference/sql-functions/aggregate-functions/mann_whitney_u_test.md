@@ -11,7 +11,7 @@ displayed_sidebar: "docs"
 
 ## 语法
 
-```Haskell
+```plaintext
 MANN_WHITNEY_U_TEST (sample_data, sample_treatment[, alternative[, continuity_correction]])
 ```
 

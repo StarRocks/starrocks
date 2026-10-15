@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 

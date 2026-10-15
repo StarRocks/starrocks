@@ -26,12 +26,14 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/starrocks_metrics.h"
 #include "util/uid_util.h"
 
@@ -192,6 +194,97 @@ TEST_F(MetaFileTest, test_delvec_rw) {
 
     iter2 = version_to_file_map.find(new_version);
     EXPECT_TRUE(iter2 != version_to_file_map.end());
+}
+
+// A delvec page whose bytes fail the recorded crc32c is most plausibly a corrupted
+// block in the local data cache, so get_del_vec drops that cache and reads once
+// more. Simulate exactly that: corrupt the delvec file, then have the cache-drop
+// hook restore the original bytes -- standing in for the retry reading through to
+// an intact remote object -- and the read must then succeed. Without the hook the
+// drop reports NotSupported on this build, the retry is skipped, and the original
+// Corruption surfaces.
+TEST_F(MetaFileTest, test_get_del_vec_crc32c_retries_after_dropping_cache) {
+    const int64_t tablet_id = 10012;
+    const uint32_t segment_id = 5678;
+    const int64_t version = 11;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(version);
+    metadata->set_next_rowset_id(110);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    DelVector dv;
+    dv.set_empty();
+    std::shared_ptr<DelVector> ndv;
+    std::vector<uint32_t> dels = {1, 3, 5, 7, 90000};
+    dv.add_dels_as_new_version(dels, version, &ndv);
+    const std::string expected_delvec = ndv->save();
+    builder.append_delvec(ndv, segment_id);
+    ASSERT_OK(builder.finalize(next_id()));
+
+    ASSIGN_OR_ABORT(auto metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    auto page_iter = metadata2->delvec_meta().delvecs().find(segment_id);
+    ASSERT_TRUE(page_iter != metadata2->delvec_meta().delvecs().end());
+    const auto& delvec_page = page_iter->second;
+    ASSERT_TRUE(delvec_page.has_crc32c());
+    auto file_iter = metadata2->delvec_meta().version_to_file().find(delvec_page.version());
+    ASSERT_TRUE(file_iter != metadata2->delvec_meta().version_to_file().end());
+    const std::string delvec_path = _tablet_manager->delvec_location(tablet_id, file_iter->second.name());
+
+    // Keep the good bytes, then corrupt one byte inside the page (length-preserving).
+    std::string good_bytes;
+    {
+        ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(delvec_path));
+        ASSIGN_OR_ABORT(good_bytes, rf->read_all());
+        ASSERT_GT(good_bytes.size(), delvec_page.offset());
+        auto corrupted = good_bytes;
+        corrupted[delvec_page.offset()] = static_cast<char>(corrupted[delvec_page.offset()] ^ 0xff);
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        ASSERT_OK(wf->append(Slice(corrupted)));
+        ASSERT_OK(wf->close());
+    }
+    // Make sure the reads below hit the file, not a delvec primed into the metacache.
+    _tablet_manager->metacache()->prune();
+
+    bool old_strict = config::enable_strict_delvec_crc_check;
+    config::enable_strict_delvec_crc_check = true;
+    LakeIOOptions lake_io_opts;
+
+    // Without the hook: the drop is NotSupported here, so the original Corruption
+    // must surface.
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, segment_id, false, lake_io_opts, &read_delvec);
+        ASSERT_TRUE(st.is_corruption()) << st;
+    }
+
+    // With the hook: force the drop to report success and restore the file at the
+    // same moment -- that is what dropping a corrupt cached block achieves in
+    // production -- and the retry must succeed.
+    int drop_calls = 0;
+    const std::string sync_point = "lake::drop_corrupted_delvec_file_cache";
+    SyncPoint::GetInstance()->SetCallBack(sync_point, [&](void* arg) {
+        ++drop_calls;
+        WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(wopts, delvec_path));
+        CHECK_OK(wf->append(Slice(good_bytes)));
+        CHECK_OK(wf->close());
+        *(Status*)arg = Status::OK();
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    {
+        DelVector read_delvec;
+        auto st = get_del_vec(_tablet_manager.get(), *metadata2, segment_id, false, lake_io_opts, &read_delvec);
+        ASSERT_OK(st);
+        EXPECT_EQ(expected_delvec, read_delvec.save());
+    }
+    EXPECT_EQ(1, drop_calls);
+    SyncPoint::GetInstance()->ClearCallBack(sync_point);
+    SyncPoint::GetInstance()->DisableProcessing();
+    config::enable_strict_delvec_crc_check = old_strict;
 }
 
 TEST_F(MetaFileTest, test_delvec_read_loop) {
@@ -530,6 +623,56 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         EXPECT_TRUE(metadata->compaction_inputs(0).del_files_size() == 0);
         EXPECT_TRUE(metadata->compaction_inputs(1).del_files_size() == 0);
     }
+}
+
+TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
+    // Regression for the metadata-reclaim change: when compaction archives its input
+    // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
+    // dropped from the archived copy. compaction_inputs is consumed only by vacuum/file
+    // cleanup, never by readers, so the predicate is pure metadata bloat once moved.
+    const int64_t tablet_id = 10007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(112);
+
+    // Two live rowsets, each carrying a delete_predicate.
+    auto* r0 = metadata->add_rowsets();
+    r0->set_id(110);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segments("aaa.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = metadata->add_rowsets();
+    r1->set_id(111);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segments("bbb.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    // Pre-condition: both live rowsets currently carry the predicate.
+    ASSERT_TRUE(metadata->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(metadata->rowsets(1).has_delete_predicate());
+
+    // Compact 110 + 111 -> archived into compaction_inputs.
+    metadata->set_version(11);
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(110);
+    op_compaction.add_input_rowsets(111);
+    RowsetMetadataPB output_rowset;
+    output_rowset.add_segments("ccc.dat");
+    op_compaction.mutable_output_rowset()->CopyFrom(output_rowset);
+    op_compaction.set_compact_version(11);
+    builder.apply_opcompaction(op_compaction, 111, 0);
+
+    // The archived compaction_inputs must NOT retain the delete_predicate.
+    ASSERT_EQ(2, metadata->compaction_inputs_size());
+    EXPECT_FALSE(metadata->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(metadata->compaction_inputs(1).has_delete_predicate());
 }
 
 TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
@@ -990,5 +1133,42 @@ TEST_F(MetaFileTest, test_cleanup_preexisting_orphan_delvecs_on_compaction) {
     }
 
     config::lake_enable_orphan_delvec_cleanup_on_compaction = false;
+}
+
+// A compaction that records input sstables but no output must NOT orphan those inputs.
+// LakePersistentIndex::apply_opcompaction() skips its whole apply when there is no output sstable, so the
+// inputs stay in `_sstables` and are written straight back into `sstable_meta` by commit(). Orphaning them
+// here would leave the tablet metadata referencing files that lake vacuum is free to delete, and the next
+// PK index load would then fail on a missing .sst.
+TEST_F(MetaFileTest, test_remove_compacted_sst_keeps_inputs_without_output) {
+    const int64_t tablet_id = 10021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(12);
+
+    TxnLogPB_OpCompaction op_compaction;
+    for (int i = 0; i < 3; i++) {
+        auto* input_sstable = op_compaction.add_input_sstables();
+        input_sstable->set_filename(std::string("input_") + std::to_string(i) + ".sst");
+        input_sstable->set_filesize(1024);
+    }
+
+    // No output sstable: the index apply is skipped, so the inputs must be kept alive.
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        builder.remove_compacted_sst(op_compaction);
+        EXPECT_EQ(0, metadata->orphan_files_size());
+    }
+
+    // With an output sstable the inputs are genuinely superseded and are orphaned as before.
+    {
+        op_compaction.mutable_output_sstable()->set_filename("output.sst");
+        MetaFileBuilder builder(*tablet, metadata);
+        builder.remove_compacted_sst(op_compaction);
+        ASSERT_EQ(3, metadata->orphan_files_size());
+        EXPECT_EQ("input_0.sst", metadata->orphan_files(0).name());
+        EXPECT_EQ(1024, metadata->orphan_files(0).size());
+    }
 }
 } // namespace starrocks::lake

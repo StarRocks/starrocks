@@ -10,7 +10,7 @@ Concatenates the elements of an array into a string.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_join(array, sep[, null_replace_str])
 ```
 

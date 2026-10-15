@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME weeks_add(DATETIME expr1, INT expr2);
 ```
 

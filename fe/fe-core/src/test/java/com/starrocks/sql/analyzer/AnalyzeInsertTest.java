@@ -34,6 +34,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -270,6 +271,129 @@ public class AnalyzeInsertTest {
     }
 
     @Test
+    public void testInsertIntoNonExistentIcebergPartitionColumn(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                // Non-partitioned table: no partition columns at all.
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList();
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(new Column("c1", Type.INT));
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Column("c1", Type.INT);
+                minTimes = 0;
+            }
+        };
+
+        // A static partition clause naming a non-partition column must be rejected, not silently
+        // ignored, even when a target column list is present (issue #11350).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(nonexist_part_col='x') (c1) values (1)",
+                "Only 0 partition columns can be included in the partition clause");
+    }
+
+    @Test
+    public void testInsertIntoIcebergStaticPartitionWithColumnList(@Mocked IcebergTable icebergTable) {
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        Column c1 = new Column("c1", Type.INT, true);
+        Column p1 = new Column("p1", Type.INT, true);
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+                icebergTable.supportInsert();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.isIcebergTable();
+                result = true;
+                minTimes = 0;
+
+                icebergTable.getPartitionColumnNames();
+                result = Lists.newArrayList("p1");
+                minTimes = 0;
+
+                icebergTable.getBaseSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getFullSchema();
+                result = ImmutableList.of(c1, p1);
+                minTimes = 0;
+
+                icebergTable.getColumn(anyString);
+                result = new Delegate<Column>() {
+                    Column getColumn(String name) {
+                        return "p1".equalsIgnoreCase(name) ? p1 : c1;
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        // The target-list invariant still applies to a static partition insert: a column list that
+        // omits the partition column is rejected (partition columns must appear in the list).
+        analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111) (c1) values (1)",
+                "Must include partition column p1");
+
+        // A column list that includes the partition column stays accepted (the partition value is
+        // taken from the PARTITION clause; only the non-partition column is supplied by VALUES).
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111) (c1, p1) values (1)");
+    }
+
+    @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
         new MockUp<MetadataMgr>() {
             @Mock
@@ -420,7 +544,44 @@ public class AnalyzeInsertTest {
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
-                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
+                "select 1 as a, 2 as a",
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [a]");
+    }
+
+    @Test
+    public void testTableFunctionTableDuplicateColumnNames() {
+        String join = "select l.*, r.* from (select 1 as id, 'x' as name) l join (select 1 as id, 'y' as name) r " +
+                "on l.id = r.id";
+
+        // csv writes columns by position, duplicate names only repeat in the header
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"csv.include_header\" = \"true\", \"single\" = \"true\") select * from (" + join + ") t");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\") " +
+                "select 1 as abc, 2 as ABC");
+
+        // parquet and orc store names in the file schema
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\") " + join,
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"orc\") " + join,
+                "expect column names to be distinct (case-insensitive) for orc format, but got duplicate(s): [id, name]");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"CSV\") " + join);
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"Parquet\") " + join,
+                "expect column names to be distinct (case-insensitive) for Parquet format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"avro\") " + join,
+                "expect column names to be distinct (case-insensitive) for avro format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\") " +
+                "select 1 as abc, 2 as ABC",
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [ABC]");
+
+        // partition_by only rejects a name it cannot resolve to exactly one column
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"partition_by\" = \"ID\") " + join,
+                "partition column(s) [ID] are ambiguous, more than one output column has the same name");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"partition_by\" = \"k\") select l.*, r.*, 3 as k from (select 1 as id) l join (select 1 as id) r " +
+                "on l.id = r.id");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\", " +
+                "\"partition_by\" = \"K1\") select 1 as k1, 2 as k2");
     }
 
     @Test

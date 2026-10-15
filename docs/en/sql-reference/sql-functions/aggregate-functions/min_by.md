@@ -14,7 +14,7 @@ This function is supported from v2.5.
 
 ## Syntax
 
-```Haskell
+```plaintext
 min_by(x,y)
 ```
 

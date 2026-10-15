@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_join(array, sep[, null_replace_str])
 ```
 

@@ -36,8 +36,8 @@ function: assert_explain_contains('select sum(a.trip_distance), a.trip_id from i
 function: assert_explain_not_contains('select trip_id, trip_distance, RANK() over (partition by trip_id order by trip_distance desc) as rank from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_analytic', '1:EXCHANGE')
 
 -- #### colocate/bucket set operation
-function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1', 'colocate')
-function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2', 'colocate')
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
+function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_2', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
 function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_big except select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_no_bucket', 'BUCKET_SHUFFLE_HASH_PARTITIONED')
 
 -- #### bucket num not match

@@ -70,10 +70,23 @@ Status ShortKeyIndexBuilder::finalize(uint32_t num_segment_rows, std::vector<Sli
 Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& footer) {
     _footer = footer;
 
-    // check if body size match footer's information
-    if (body.size != (_footer.key_bytes() + _footer.offset_bytes())) {
-        return Status::Corruption(strings::Substitute("Index size not match, need=$0, real=$1",
-                                                      _footer.key_bytes() + _footer.offset_bytes(), body.size));
+    // num_items, key_bytes and offset_bytes come straight from a persisted page footer, so an
+    // adversarial or corrupt page can hand us values whose sum overflows uint32_t. Do the geometry
+    // arithmetic in 64-bit and validate it before it can wrap, rather than after.
+    const uint64_t total_bytes =
+            static_cast<uint64_t>(_footer.key_bytes()) + static_cast<uint64_t>(_footer.offset_bytes());
+    if (total_bytes != body.size) {
+        return Status::Corruption(
+                strings::Substitute("Index size not match, need=$0, real=$1", total_bytes, body.size));
+    }
+    // Each offset is encoded as a varint of at least one byte, so num_items varints can never fit in
+    // offset_bytes when num_items > offset_bytes. Reject that shape up front, before it can make
+    // num_items + 1 wrap and shrink _offsets below what the loop below writes into.
+    if (_footer.num_items() > _footer.offset_bytes()) {
+        return Status::Corruption(
+                strings::Substitute("Short key index num_items exceeds offset_bytes capacity, num_items=$0, "
+                                    "offset_bytes=$1",
+                                    _footer.num_items(), _footer.offset_bytes()));
     }
 
     // set index buffer
@@ -81,16 +94,24 @@ Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& fo
 
     // parse offset information
     Slice offset_slice(body.data + _footer.key_bytes(), _footer.offset_bytes());
-    // +1 for record total length
-    _offsets.resize(_footer.num_items() + 1);
+    // +1 for record total length. num_items <= offset_bytes <= UINT32_MAX here, so this cannot wrap.
+    _offsets.resize(static_cast<size_t>(_footer.num_items()) + 1);
+    uint32_t prev_offset = 0;
     for (uint32_t i = 0; i < _footer.num_items(); ++i) {
         uint32_t offset = 0;
         if (!get_varint32(&offset_slice, &offset)) {
             return Status::Corruption("Fail to get varint from index offset buffer");
         }
-        DCHECK(offset <= _footer.key_bytes())
-                << "Offset is larger than total bytes, offset=" << offset << ", key_bytes=" << _footer.key_bytes();
+        // Validate at RUNTIME, not just under DCHECK. A page that passes its CRC but carries a
+        // decreasing or out-of-range offset would otherwise make key(i) read out of bounds in a
+        // release build, where the DCHECK this replaces compiles away entirely.
+        if (offset < prev_offset || offset > _footer.key_bytes()) {
+            return Status::Corruption(strings::Substitute(
+                    "Short key index offset out of order or out of range, offset=$0, prev=$1, key_bytes=$2", offset,
+                    prev_offset, _footer.key_bytes()));
+        }
         _offsets[i] = offset;
+        prev_offset = offset;
     }
     _offsets[_footer.num_items()] = _footer.key_bytes();
 

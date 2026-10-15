@@ -483,6 +483,31 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return tabletRowCount;
     }
 
+    /**
+     * NOTE the version argument of {@link #getRowCount(long)} does NOT validate the row count:
+     * a replica's version is advanced by journal replay while its rowCount is only advanced by
+     * this FE's own TabletStatMgr RPC, so checkVersionCatchUp() can pass while the count next to
+     * it is arbitrarily old. This method is the honest one -- it answers only with a count that a
+     * stat collection proved was computed from exactly this version -- and it is the one an exact
+     * COUNT(*) must consult.
+     * <p>
+     * Any replica that can prove the version will do: replicas are copies of the same data at the
+     * same version, so their counts agree. Replicas that cannot prove it are skipped rather than
+     * disqualifying the whole tablet -- BEs rebuild their stat snapshots on independent schedules,
+     * so requiring every replica to have landed on the same version would leave the fold disabled
+     * almost permanently on a multi-replica cluster.
+     */
+    @Override
+    public long getRowCountAtVersion(long version) {
+        long rowCount = -1L;
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+            for (Replica replica : replicas) {
+                rowCount = Math.max(rowCount, replica.getRowCountAtVersion(version));
+            }
+        }
+        return rowCount;
+    }
+
     @Override
     public long getFuzzyRowCount() {
         long tabletRowCount = 0L;

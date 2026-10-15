@@ -85,7 +85,7 @@ public class ProfileManagerTest {
         RuntimeProfile profile2 = buildRuntimeProfile("124", "Load");
         manager.pushProfile(null, profile2);
 
-        assertEquals(2, manager.getAllQueries().size());
+        assertEquals(2, manager.getAllQueries(element -> true).size());
 
         manager.clearProfiles();
     }
@@ -103,7 +103,7 @@ public class ProfileManagerTest {
         RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
         manager.pushProfile(null, profile2);
 
-        assertEquals(1, manager.getAllQueries().size());
+        assertEquals(1, manager.getAllQueries(element -> true).size());
 
         manager.clearProfiles();
     }

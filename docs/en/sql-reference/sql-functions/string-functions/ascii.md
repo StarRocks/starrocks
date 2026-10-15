@@ -10,7 +10,7 @@ This function returns the ascii value of the leftmost character of a given strin
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT ascii(VARCHAR str)
 ```
 

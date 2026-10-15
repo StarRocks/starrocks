@@ -13,7 +13,7 @@ Apache DataSketches に基づいており、近似重複除去カウントに高
 
 ## 構文
 
-```Haskell
+```plaintext
 bigint ds_hll_estimate(sketch)
 ```
 

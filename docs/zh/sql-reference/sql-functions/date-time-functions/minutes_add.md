@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME minutes_add(DATETIME|DATE date, INT minutes);
 ```
 

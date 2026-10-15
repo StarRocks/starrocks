@@ -10,7 +10,7 @@ Subtracts specified months from the date.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME months_sub(DATETIME expr1, INT expr2);
 ```
 

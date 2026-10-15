@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 ```
 

@@ -10,7 +10,7 @@ Returns the result of `x` raised to the power of `y`.
 
 ## Syntax
 
-```Haskell
+```plaintext
 POW(x,y);POWER(x,y);
 ```
 

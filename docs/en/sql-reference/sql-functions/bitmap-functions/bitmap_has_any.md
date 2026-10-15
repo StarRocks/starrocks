@@ -10,7 +10,7 @@ Calculates whether there are intersecting elements between two Bitmap columns, a
 
 ## Syntax
 
-```Haskell
+```plaintext
 B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)
 ```
 

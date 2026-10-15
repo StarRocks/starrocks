@@ -10,7 +10,7 @@ Adds a specified number of days to a given date or date time.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 

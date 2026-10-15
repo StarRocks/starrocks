@@ -971,7 +971,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void subtractDouble() {
         assertEquals(0.0,
-                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test
@@ -1067,7 +1067,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void divideDouble() {
         assertEquals(1.0,
-                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test

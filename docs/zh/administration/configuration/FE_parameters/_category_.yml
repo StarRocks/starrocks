@@ -1,0 +1,7 @@
+position: 10
+label: 'FE Configuration'
+collapsible: true
+collapsed: true
+link:
+  id: FE_parameters
+  type: doc

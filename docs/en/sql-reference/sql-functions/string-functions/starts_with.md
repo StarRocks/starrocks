@@ -10,7 +10,7 @@ This function returns 1 when a string starts with a specified prefix. Otherwise,
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN starts_with(VARCHAR str, VARCHAR prefix)
 ```
 

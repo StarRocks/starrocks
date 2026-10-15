@@ -8,7 +8,7 @@ DOUBLE 値を PERCENTILE 値として構築します。
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_HASH(x);
 ```
 

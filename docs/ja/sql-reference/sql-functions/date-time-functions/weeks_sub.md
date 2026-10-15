@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME weeks_sub(DATETIME expr1, INT expr2);
 ```
 

@@ -10,7 +10,7 @@ Computes the arc sine of the argument.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DOUBLE asin(DOUBLE arg)
 ```
 

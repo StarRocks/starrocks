@@ -124,7 +124,7 @@ public class IcebergMetadataColumnValue implements ColumnValue {
 
     @Override
     public BigDecimal getDecimal() {
-        return null;
+        return (BigDecimal) fieldData;
     }
 
     @Override

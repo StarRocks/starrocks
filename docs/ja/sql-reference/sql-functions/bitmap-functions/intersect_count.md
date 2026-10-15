@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT INTERSECT_COUNT(bitmap_column, column_to_filter, filter_values)
 ```
 

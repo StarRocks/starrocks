@@ -10,7 +10,7 @@ Reverses a string or array. Returns a string or array with the characters in the
 
 ## Syntax
 
-```Haskell
+```plaintext
 reverse(param)
 ```
 

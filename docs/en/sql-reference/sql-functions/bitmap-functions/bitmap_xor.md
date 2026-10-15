@@ -10,7 +10,7 @@ Calculates the set consisting elements unique to `lhs` and `rhs`. It is logicall
 
 ## Syntax
 
-```Haskell
+```plaintext
 bitmap_xor(BITMAP lhs, BITMAP rhs)
 ```
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plain
 bit_shift_right(value, shift)
 ```
 

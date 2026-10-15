@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 MAP map_apply(lambda_func, any_map)
 ```
 

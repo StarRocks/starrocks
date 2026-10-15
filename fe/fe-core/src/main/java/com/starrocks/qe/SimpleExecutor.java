@@ -16,7 +16,9 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AuditLog;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.SqlCredentialRedactor;
@@ -92,6 +94,12 @@ public class SimpleExecutor {
             AuditLog.getInternalAudit().info("{} execute SQL | Query_id {} | {} {}",
                     name, DebugUtil.printId(context.getQueryId()), type.name(), SqlCredentialRedactor.redact(sql));
             executor.execute();
+            if (context.getState().isError()) {
+                // StmtExecutor.execute() does not rethrow the failure of the statement, it only records
+                // the error in the ConnectContext state. Surface it here, otherwise the caller takes a
+                // failed statement for a successful one and may discard the data it wanted to persist.
+                throw new StarRocksException(context.getState().getErrorMessage());
+            }
         } catch (Exception e) {
             LOG.error(name + " execute SQL {} failed: {}", SqlCredentialRedactor.redact(sql), e.getMessage(), e);
             throw new SemanticException(String.format(name + " execute sql failed: %s", e.getMessage()), e);
@@ -114,6 +122,87 @@ public class SimpleExecutor {
                 prev.setThreadLocalInfo();
             }
         }
+    }
+
+    /**
+     * Same as {@link #executeDQL(String)} but bounds the internal query with an explicit
+     * {@code query_timeout} (seconds) instead of the default {@code statistic_collect_query_timeout}.
+     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views})
+     * so they never outlive the outer user query.
+     */
+    public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+        ConnectContext prev = ConnectContext.get();
+        try {
+            ConnectContext context = createConnectContext();
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    /**
+     * Same as {@link #executeDQL(String, int)} but runs the internal query with the identity of
+     * {@code caller} instead of ROOT, so the caller's table/column privileges and the row filter /
+     * column masking policies of an external access controller (e.g. Ranger) apply to it. Must be
+     * used by internal queries that read user data on behalf of a user (e.g. {@code lookup_string}),
+     * otherwise any user could read tables it has no privilege on.
+     */
+    public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
+        Preconditions.checkNotNull(caller, "caller context is required");
+        ConnectContext prev = ConnectContext.get();
+        try {
+            ConnectContext context = createConnectContext();
+            inheritIdentity(context, caller);
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    /**
+     * Replace the ROOT identity set by {@link #createConnectContext()} with the caller's.
+     * Copies identity only: user, roles, groups, DN and remote IP. The remote IP matters
+     * because USER()/SESSION_USER() are folded from qualifiedUser plus remoteIP, and Ranger
+     * row-filter / masking expressions are analyzed in this context, so dropping it would make
+     * such policies see 'user'@% rather than the caller's actual host. The caller's
+     * {@code bypassAuthorizerCheck} is deliberately NOT copied: it is a transient control-flow
+     * flag that makes {@link StatementPlanner} skip {@code Authorizer.check}, so inheriting it
+     * would let a lookup triggered inside an existing bypass scope skip the SELECT / Ranger
+     * checks this method exists to enforce. The internal context keeps its default (false).
+     */
+    private static void inheritIdentity(ConnectContext context, ConnectContext caller) {
+        context.setQualifiedUser(caller.getQualifiedUser());
+        context.setCurrentUserIdentity(caller.getCurrentUserIdentity());
+        context.setCurrentRoleIds(caller.getCurrentRoleIds());
+        context.setGroups(caller.getGroups());
+        context.setDistinguishedName(caller.getDistinguishedName());
+        context.setRemoteIP(caller.getRemoteIP());
+    }
+
+    /**
+     * Remaining time budget (in seconds) derived from the outer (triggering) user query's
+     * {@code query_timeout}: {@code query_timeout - elapsed}. Serving-path internal queries should be
+     * bounded by this so a single one cannot outlive the outer query. When there is no outer user query
+     * (background jobs), falls back to {@code statistic_collect_query_timeout} to keep the old behavior.
+     * The returned value may be {@code <= 0}, meaning the outer query has already exhausted its budget.
+     */
+    public static int outerRemainingQueryTimeoutS() {
+        ConnectContext outer = ConnectContext.get();
+        if (outer == null || outer.getStartTime() <= 0) {
+            return (int) Config.statistic_collect_query_timeout;
+        }
+        long elapsedSeconds = (System.currentTimeMillis() - outer.getStartTime()) / 1000;
+        return (int) (outer.getSessionVariable().getQueryTimeoutS() - elapsedSeconds);
     }
 
     public List<TResultBatch> executeDQL(String sql, ConnectContext context) {

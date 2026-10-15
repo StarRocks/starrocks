@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 array_sum(array(type))
 array_sum(lambda_function, arr1,arr2...) = array_sum(array_map(lambda_function, arr1,arr2...))
 ```

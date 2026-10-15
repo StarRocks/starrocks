@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR sha2(VARCHAR expr, INT hash_length)
 ```
 

@@ -81,11 +81,11 @@ You can use SHOW USAGE RESOURCE GROUPS to view the resource usage information fo
 
 ### Manage query concurrency
 
-When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions &lt; v3.1.4 and &ge; v3.1.4.
+When the number of running queries (`num_running_queries`) exceeds the global or resource group's `concurrency_limit`, incoming queries are placed in the queue. The way to obtain `num_running_queries` differs between versions `<` v3.1.4 and `>=` v3.1.4.
 
-- In versions &lt; v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
+- In versions `<` v3.1.4, `num_running_queries` is reported by BEs at the interval specified in `report_resource_usage_interval_ms`. Therefore, there might be some delay in the identification of changes in `num_running_queries`. For example, if the `num_running_queries` reported by BEs at the moment does not exceed the global or resource group's `concurrency_limit`, but incoming queries arrive and exceed the `concurrency_limit` before the next report, these incoming queries will be executed without waiting in the queue.
 
-- In versions &ge; v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
+- In versions `>=` v3.1.4, all running queries are collectively managed by the Leader FE. Each Follower FE notifies the Leader FE when initiating or finishing a query, allowing the StarRocks to handle scenarios where there is a sudden increase in queries exceeding the `concurrency_limit`.
 
 ## Configure query queues
 
@@ -148,7 +148,7 @@ You can check the FE audit log file **fe.audit.log**. The field `PendingTimeMs` 
 
 ### Monitoring metrics
 
-You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/Monitor_and_Alert.md) feature. The following FE metrics are derived from the statistical data of each FE node.
+You can obtain metrics of query queues in StarRocks using the [Monitor and Alert](../monitoring/monitoring.md) feature. The following FE metrics are derived from the statistical data of each FE node.
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

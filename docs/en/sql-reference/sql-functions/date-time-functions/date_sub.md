@@ -10,7 +10,7 @@ Subtracts the specified time interval from a date.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 ```
 

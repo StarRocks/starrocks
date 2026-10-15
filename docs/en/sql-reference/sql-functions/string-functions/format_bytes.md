@@ -12,7 +12,7 @@ This function is supported from v3.4.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR format_bytes(BIGINT bytes)
 ```
 

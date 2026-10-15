@@ -8,7 +8,7 @@ VARCHAR 型のランダムな UUID を返します。この関数を2回呼び�
 
 ## Syntax
 
-```Haskell
+```plaintext
 uuid();
 ```
 

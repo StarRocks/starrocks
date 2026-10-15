@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP BITMAP_OR(BITMAP lhs, BITMAP rhs)
 ```
 

@@ -10,7 +10,7 @@ import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.m
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR regexp_extract(VARCHAR str, VARCHAR pattern, int pos)
 ```
 

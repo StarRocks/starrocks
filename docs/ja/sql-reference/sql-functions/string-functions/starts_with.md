@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN starts_with(VARCHAR str, VARCHAR prefix)
 ```
 

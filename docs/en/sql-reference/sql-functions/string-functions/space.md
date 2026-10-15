@@ -10,7 +10,7 @@ Returns a string of the specified number of spaces.
 
 ## Syntax
 
-```Haskell
+```plaintext
 space(x);
 ```
 

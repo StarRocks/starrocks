@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 ```
 

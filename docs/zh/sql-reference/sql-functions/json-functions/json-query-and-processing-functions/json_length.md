@@ -24,7 +24,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 json_length(json_doc[, path])
 ```
 

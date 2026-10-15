@@ -16,7 +16,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ```
 

@@ -17,12 +17,14 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -38,6 +40,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -47,6 +50,25 @@ public class FoldConstantsRuleTest {
     private static final ConstantOperator OB_TRUE = ConstantOperator.createBoolean(true);
     private static final ConstantOperator OB_FALSE = ConstantOperator.createBoolean(false);
     private static final ConstantOperator OB_NULL = ConstantOperator.createNull(Type.BOOLEAN);
+
+    @Test
+    public void arrayElementAdaptationPreservesFullCharValues() {
+        ArrayOperator input = new ArrayOperator(new ArrayType(Type.VARCHAR), false,
+                Lists.newArrayList(ConstantOperator.createVarchar("hello world")));
+        for (boolean implicit : new boolean[] {false, true}) {
+            ScalarOperator result = rule.apply(
+                    new CastOperator(new ArrayType(ScalarType.createCharType(5)), input, implicit), null);
+            assertEquals("hello world", ((ConstantOperator) result.getChild(0)).getVarchar());
+        }
+    }
+
+    @Test
+    public void arrayFunctionResultAdaptationPreservesFullCharValue() {
+        ArrayOperator input = new ArrayOperator(new ArrayType(ScalarType.createCharType(5)), false,
+                Lists.newArrayList(ConstantOperator.createChar("hello world", ScalarType.createCharType(5))));
+        ScalarOperator result = rule.apply(new CallOperator("array_min", ScalarType.createCharType(5), List.of(input)), null);
+        assertEquals("hello world", ((ConstantOperator) result).getVarchar());
+    }
 
     @Test
     public void applyCall() {
@@ -158,6 +180,20 @@ public class FoldConstantsRuleTest {
         // cast(96.1 as int)-> 96
         CastOperator cast8 = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
         assertEquals(ConstantOperator.createInt(96), rule.apply(cast8, null));
+    }
+
+    @Test
+    public void explicitCharCastTruncatesButAssignmentCastPreservesValue() {
+        ConstantOperator value = ConstantOperator.createBigint(1775580223839L);
+        ScalarType target = ScalarType.createCharType(10);
+        assertEquals("1775580223", ((ConstantOperator) rule.apply(new CastOperator(target, value), null)).getVarchar());
+        assertEquals("1775580223839",
+                ((ConstantOperator) rule.apply(new CastOperator(target, value, true), null)).getVarchar());
+        assertEquals(ConstantOperator.createNull(target),
+                rule.apply(new CastOperator(target, ConstantOperator.createNull(Type.VARCHAR)), null));
+        CastOperator numeric = new CastOperator(Type.BIGINT,
+                rule.apply(new CastOperator(target, value), null));
+        assertEquals(ConstantOperator.createBigint(1775580223L), rule.apply(numeric, null));
     }
 
     @Test

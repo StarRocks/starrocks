@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstring>
+#include <vector>
 
 #include "column/column.h"
 #include "column/column_helper.h"
@@ -23,6 +24,7 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "types/int256.h"
 #include "util/bit_stream_utils.h"
 #include "util/bit_util.h"
@@ -198,8 +200,13 @@ public:
 
         size_t max_size = 0;
         size_t read_count = count - null_cnt;
-        uint32_t lengths[read_count + 1];
-        char* datas[read_count + 1];
+        // Reusable members rather than VLAs: a data page may hold ~1M values and
+        // StoredColumnReaderImpl::_read() hands the whole page over in one call, so stack
+        // arrays sized by read_count overflow the thread stack.
+        _temp_lengths.resize(read_count + 1);
+        _temp_datas.resize(read_count + 1);
+        uint32_t* lengths = _temp_lengths.data();
+        char** datas = _temp_datas.data();
         size_t i = 0;
         size_t cursor = _offset;
         //
@@ -239,13 +246,14 @@ public:
 
         // fill bytes data
         max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
-        if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
-            binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        } else {
-            binary_column->append_bytes(datas, lengths, read_count);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        }
+        TRY_CATCH_BAD_ALLOC({
+            if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
+                binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
+            } else {
+                binary_column->append_bytes(datas, lengths, read_count);
+            }
+        });
+        DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 
         return Status::OK();
     }
@@ -292,11 +300,13 @@ public:
             bool ret = false;
             // when last slices offset + max_size > _data.size, there is overflow on reading
             max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
-            if (slices[count - 1].data - _data.data + max_size <= _data.size) {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
-            } else {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
-            }
+            TRY_CATCH_BAD_ALLOC({
+                if (slices[count - 1].data - _data.data + max_size <= _data.size) {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
+                } else {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
+                }
+            });
 
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("PlainDecoder append strings to column failed");
@@ -344,6 +354,8 @@ public:
 private:
     Slice _data;
     size_t _offset = 0;
+    std::vector<uint32_t> _temp_lengths;
+    std::vector<char*> _temp_datas;
 };
 
 // plain encoding for boolean type is stored as `Bit Packed`, `LSB` first format

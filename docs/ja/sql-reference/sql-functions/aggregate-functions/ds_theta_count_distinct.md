@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "DataSketches Theta スケッチを使用して近似重複除去カウントを返します。COUNT DISTINCT より高速で、高カーディナリティ列のメモリ使用量が少なくなります。"
+---
+
 # ds_theta_count_distinct
 
 `COUNT(DISTINCT col)` の結果に似た集計関数の近似値を返します。`ds_theta_count_distinct` は `COUNT(DISTINCT col)` よりも高速で、高いカーディナリティの列に対してメモリ使用量が少なくなります。
@@ -8,7 +13,7 @@
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT ds_theta_count_distinct(expr)
 ```
 

@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
@@ -937,6 +938,14 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
+            // Condition 1.2: an aggregate-state column stores a serialized aggregate state, not the
+            // values its type describes. The BE reads it through the agg state descriptor rather than
+            // through the column type, so it would decode dictionary codes as if they were still the
+            // original values.
+            if (isAggStateColumn(scan, column)) {
+                continue;
+            }
+
             // If it's not an extended column, we have to check the cardinality of the column.
             // TODO(murphy) support collect cardinality of extended column
             if (!checkExtendedColumn(scan, column)) {
@@ -955,7 +964,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             // Condition 3: the varchar column has collected global dict
-            Column columnObj = table.getColumn(column.getName());
+            // Extended json subfield columns are per-query artifacts and are not part of the table schema,
+            // so resolve them through the scan's own map first -- the same source checkExtendedColumn() uses.
+            Column columnObj = scan.getColRefToColumnMetaMap().get(column);
+            if (columnObj == null) {
+                columnObj = table.getColumn(column.getName());
+            }
+            if (columnObj == null) {
+                continue;
+            }
             if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;
@@ -977,6 +994,11 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    private boolean isAggStateColumn(PhysicalOlapScanOperator scan, ColumnRefOperator column) {
+        Column columnMeta = scan.getColRefToColumnMetaMap().get(column);
+        return columnMeta != null && columnMeta.getAggregationType() == AggregateType.AGG_STATE_UNION;
     }
 
     private boolean banArrayColumnWithPredicate(PhysicalScanOperator scan, ColumnRefOperator column) {
@@ -1305,7 +1327,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
-            if (collectors.stream().anyMatch(s -> s.getType().isArrayType())) {
+            // the result becomes a new dictionary, so it must be a scalar string; the collectors are
+            // BOOLEAN sentinels for constant operands and cannot report the operator's own type
+            if (scalarOperator.getType().isArrayType()
+                    || collectors.stream().anyMatch(s -> s.getType().isArrayType())) {
                 return forbidden(collectors, scalarOperator);
             }
             return mergeWithArray(collectors, scalarOperator);

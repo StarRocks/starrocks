@@ -1,0 +1,99 @@
+-- name: test_query_cache_asof_join_condition
+-- The ASOF temporal condition is split out of the ON clause by PlanFragmentBuilder and is carried
+-- by neither eqJoinConjuncts nor otherJoinConjuncts, so it has to be normalized on its own or two
+-- ASOF joins differing only in it share a query cache key.
+--
+-- Three things must line up, and getting any one wrong hides the bug rather than removing it:
+--   1. the ASOF join must sit in a join's BUILD SIDE. On the leftmost path isTransformJoin()
+--      rejects it outright (JoinOperator.isLeftTransform() does not list the ASOF operators), but
+--      isTransformJoin() is only consulted for joins ON the leftmost path -- a join nested in a
+--      right subtree is filtered only by isCacheable(), which admits any HashJoinNode;
+--   2. the temporal column needs EXACT TIES, so that `>=` and `>` select different rows;
+--   3. the query must select a column from the matched (right) side. Under ASOF LEFT JOIN every
+--      probe row survives, so selecting only left-side columns gives identical results either way.
+CREATE TABLE af1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE av1 (c1 int NOT NULL, ts bigint NOT NULL)
+ENGINE=OLAP DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE av2 (c1 int NOT NULL, ts bigint NOT NULL, v1 bigint NOT NULL)
+ENGINE=OLAP DUPLICATE KEY(c1, ts) DISTRIBUTED BY HASH(c1) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+-- af1.ts is 50 everywhere, so a build-side key of 10 matches every row and 999 matches none.
+INSERT INTO af1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+INSERT INTO av1 VALUES (1,100),(2,100),(3,100),(4,100),(5,100),(6,100),(7,100),(8,100);
+
+-- Exact tie at ts = 100 (v1 = 10) plus an earlier row at ts = 50 (v1 = 999):
+--   a.ts >= c.ts  takes the tie     -> 10
+--   a.ts >  c.ts  excludes the tie  -> 999
+INSERT INTO av2 VALUES
+ (1,100,10),(2,100,10),(3,100,10),(4,100,10),(5,100,10),(6,100,10),(7,100,10),(8,100,10),
+ (1,50,999),(2,50,999),(3,50,999),(4,50,999),(5,50,999),(6,50,999),(7,50,999),(8,50,999);
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- The two operators really do pick different rows.
+select group_concat(distinct cast(k as string)) from
+ (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts >= c.ts) t;
+select group_concat(distinct cast(k as string)) from
+ (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts > c.ts) t;
+
+-- Ground truth.
+set enable_query_cache = false;
+select ifnull(sum(s),0) from (select af1.c1, sum(af1.v1) s from af1
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts >= c.ts) b
+  on af1.ts > b.k group by af1.c1) x;
+select ifnull(sum(s),0) from (select af1.c1, sum(af1.v1) s from af1
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts > c.ts) b
+  on af1.ts > b.k group by af1.c1) x;
+
+-- Cache on, `>=` first: it populates the per-tablet entries, then `>` must NOT inherit them.
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select af1.c1, sum(af1.v1) s from af1
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts >= c.ts) b
+  on af1.ts > b.k group by af1.c1) x;
+select ifnull(sum(s),0) from (select af1.c1, sum(af1.v1) s from af1
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts > c.ts) b
+  on af1.ts > b.k group by af1.c1) x;
+
+-- The other direction, on a table whose entries are cold, so the failure cannot hide behind
+-- whichever order happened to run first.
+CREATE TABLE af2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO af2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select af2.c1, sum(af2.v1) s from af2
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts > c.ts) b
+  on af2.ts > b.k group by af2.c1) x;
+select ifnull(sum(s),0) from (select af2.c1, sum(af2.v1) s from af2
+  join (select c.v1 as k from av1 a asof left join av2 c on a.c1 = c.c1 and a.ts >= c.ts) b
+  on af2.ts > b.k group by af2.c1) x;

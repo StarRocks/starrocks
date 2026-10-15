@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ```
 

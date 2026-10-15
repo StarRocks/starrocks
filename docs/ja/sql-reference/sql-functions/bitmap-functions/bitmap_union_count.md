@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT bitmap_union_count(BITMAP value)
 ```
 

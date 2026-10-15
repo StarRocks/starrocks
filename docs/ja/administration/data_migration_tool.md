@@ -115,7 +115,7 @@ SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
 
 #### FE パラメータ
 
-以下の FE パラメータは動的設定項目です。変更方法については、[Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) を参照してください。
+以下の FE パラメータは動的設定項目です。変更方法については、[Configure FE Dynamic Parameters](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) を参照してください。
 
 | **パラメータ**                         | **デフォルト** | **単位** | **説明**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -126,7 +126,7 @@ SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
 
 #### BE パラメータ
 
-以下の BE パラメータは動的設定項目です。変更方法については、[Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) を参照してください。
+以下の BE パラメータは動的設定項目です。変更方法については、[Configure BE Dynamic Parameters](./configuration/BE_parameters/BE_parameters.md) を参照してください。
 
 | **パラメータ**       | **デフォルト** | **単位** | **説明**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |

@@ -10,7 +10,7 @@ Returns the first non-NULL expression among the input parameters. Returns NULL i
 
 ## Syntax
 
-```Haskell
+```plaintext
 coalesce(expr1,...);
 ```
 

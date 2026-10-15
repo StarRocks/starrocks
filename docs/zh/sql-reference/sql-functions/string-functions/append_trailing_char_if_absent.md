@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 append_trailing_char_if_absent(str, trailing_char)
 ```
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.paimon;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.FunctionName;
@@ -64,7 +63,9 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -77,15 +78,19 @@ import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.partition.Partition;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.schema.Schema;
+import org.apache.paimon.schema.SchemaManager;
+import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.stats.Statistics;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.table.FormatTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
@@ -110,6 +115,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.SerializationUtils;
+import org.apache.paimon.utils.SnapshotManager;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -121,6 +127,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -130,6 +137,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PaimonMetadataTest {
     @Mocked
@@ -349,19 +357,343 @@ public class PaimonMetadataTest {
                 Lists.newArrayList("dt=2024-01-01", "dt=__DEFAULT_PARTITION__"));
     }
 
+    private static CachingPaimonCatalog newCachingCatalog(Catalog wrapped) {
+        Options options = new Options();
+        // default max-num is 0, i.e. no partition cache at all
+        options.set(CatalogOptions.CACHE_PARTITION_MAX_NUM, 1000L);
+        return new CachingPaimonCatalog("paimon_catalog", wrapped, options);
+    }
+
     @Test
-    public void testRefreshPaimonMetadata() throws Catalog.DatabaseNotExistException {
+    public void testBackgroundRefreshChangedTable(@Mocked FileStoreTable paimonTable,
+                                                  @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
         new Expectations() {
             {
-                paimonNativeCatalog.listDatabases();
-                result = ImmutableList.of("db");
-                paimonNativeCatalog.listTables((String) any);
-                result = ImmutableList.of("tbl");
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 5L;
             }
         };
-        ConnectorTableMetadataProcessor connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
-        connectorTableMetadataProcessor.registerPaimonCatalog("paimon_catalog", paimonNativeCatalog);
-        connectorTableMetadataProcessor.refreshPaimonCatalog();
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        ConnectorTableMetadataProcessor processor = new ConnectorTableMetadataProcessor();
+        processor.registerPaimonCatalog("paimon_catalog", cachingCatalog);
+        processor.refreshPaimonCachingCatalog();
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+        // dropped and reloaded by the refresh
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshSkipsUnchangedSnapshot(@Mocked FileStoreTable paimonTable,
+                                                            @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 5L;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        cachingCatalog.getLastRefreshedRevision().put(id, CachingPaimonCatalog.revision(5L, -1L));
+        cachingCatalog.refreshCatalog();
+        // the cached entry survived the round
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshOnSchemaOnlyChange(@Mocked FileStoreTable paimonTable,
+                                                        @Mocked SnapshotManager snapshotManager,
+                                                        @Mocked SchemaManager schemaManager,
+                                                        @Mocked TableSchema tableSchema) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 5L;
+                paimonTable.schemaManager();
+                result = schemaManager;
+                schemaManager.latest();
+                result = java.util.Optional.of(tableSchema);
+                tableSchema.id();
+                result = 2L;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        cachingCatalog.getLastRefreshedRevision().put(id, CachingPaimonCatalog.revision(5L, 1L));
+        // schema id moved, snapshot did not: still a change
+        cachingCatalog.refreshCatalog();
+        assertEquals(CachingPaimonCatalog.revision(5L, 2L), cachingCatalog.getLastRefreshedRevision().get(id));
+        // dropped and reloaded by the refresh
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshSkipsNonDataTable(@Mocked FormatTable formatTable) throws Exception {
+        Identifier id = new Identifier("db", "format_tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = formatTable;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        cachingCatalog.refreshCatalog();
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+        // the cached entry survived the round
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshEvictsIdleTable() {
+        Identifier id = new Identifier("db", "tbl");
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        long idleWindowSec = Config.background_refresh_metadata_time_secs_since_last_access_secs;
+        cachingCatalog.getTableLatestAccessTime().put(id, System.currentTimeMillis() - (idleWindowSec + 10) * 1000);
+        cachingCatalog.getLastRefreshedRevision().put(id, CachingPaimonCatalog.revision(5L, 1L));
+        cachingCatalog.refreshCatalog();
+        assertTrue(cachingCatalog.getTableLatestAccessTime().isEmpty());
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+    }
+
+    @Test
+    public void testBackgroundRefreshEvictsTableOnFailure(@Mocked FileStoreTable paimonTable,
+                                                          @Mocked SnapshotManager snapshotManager,
+                                                          @Mocked SchemaManager schemaManager,
+                                                          @Mocked TableSchema tableSchema) throws Exception {
+        Identifier id = new Identifier("db", "object_tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 5L;
+                paimonTable.schemaManager();
+                result = schemaManager;
+                schemaManager.latest();
+                result = java.util.Optional.of(tableSchema);
+                tableSchema.id();
+                result = 0L;
+                // refreshPartitions delegates down to listPartitions
+                paimonNativeCatalog.listPartitions(id);
+                result = new ClassCastException(
+                        "class org.apache.paimon.table.object.ObjectTableImpl cannot be cast to " +
+                                "class org.apache.paimon.table.FileStoreTable");
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        // must not throw: the table is evicted instead
+        cachingCatalog.refreshCatalog();
+        assertTrue(cachingCatalog.getTableLatestAccessTime().isEmpty());
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+    }
+
+    @Test
+    public void testManualRefreshTableReachesPartitionCache(@Mocked FileStoreTable paimonNativeTable) throws Exception {
+        List<DataField> fields = new ArrayList<>();
+        fields.add(new DataField(1, "col2", new IntType(false)));
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonNativeTable;
+                paimonNativeTable.rowType().getFields();
+                result = fields;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        PaimonMetadata newMetadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), cachingCatalog,
+                new ConnectorProperties(ConnectorType.PAIMON));
+        com.starrocks.catalog.Table table = newMetadata.getTable(connectContext, "db1", "tbl1");
+        newMetadata.refreshTable("db1", table, new ArrayList<>(), false);
+        // REFRESH EXTERNAL TABLE must reach the partition cache
+        new Verifications() {
+            {
+                paimonNativeCatalog.listPartitions(new Identifier("db1", "tbl1"));
+                minTimes = 1;
+            }
+        };
+    }
+
+    @Test
+    public void testInvalidateTableKeepsAccessTime() {
+        Identifier id = new Identifier("db", "tbl");
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTableLatestAccessTime().put(id, System.currentTimeMillis());
+        cachingCatalog.getLastRefreshedRevision().put(id, CachingPaimonCatalog.revision(5L, 1L));
+        cachingCatalog.invalidateTable(id);
+        // ledgers cleared, but the table stays in the refresh set
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+        assertEquals(1, cachingCatalog.getTableLatestAccessTime().size());
+        assertEquals(0, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshOnSnapshotRollback(@Mocked FileStoreTable paimonTable,
+                                                        @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 3L;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        cachingCatalog.getLastRefreshedRevision().put(id, CachingPaimonCatalog.revision(5L, -1L));
+        // rollbackTo moves the snapshot backwards: still a change
+        cachingCatalog.refreshCatalog();
+        assertEquals(CachingPaimonCatalog.revision(3L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+        // dropped and reloaded by the refresh
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testAccessTimeSkipsSystemAndBranchTables(@Mocked FileStoreTable paimonTable) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonTable;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        // a branch reference pins a fixed version
+        cachingCatalog.getTable(new Identifier("db", "tbl$branch_dev"));
+        assertTrue(cachingCatalog.getTableLatestAccessTime().isEmpty());
+        // a system table resolves through its base table, so the base table is what gets recorded
+        cachingCatalog.getTable(new Identifier("db", "tbl$snapshots"));
+        Assertions.assertThat(cachingCatalog.getTableLatestAccessTime().keySet())
+                .containsExactly(new Identifier("db", "tbl"));
+    }
+
+    @Test
+    public void testNegativeIdleWindowNeverEvicts(@Mocked FileStoreTable paimonTable,
+                                                  @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = 5L;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTableLatestAccessTime().put(id, 0L);
+        long saved = Config.background_refresh_metadata_time_secs_since_last_access_secs;
+        Config.background_refresh_metadata_time_secs_since_last_access_secs = -1;
+        try {
+            cachingCatalog.refreshCatalog();
+        } finally {
+            Config.background_refresh_metadata_time_secs_since_last_access_secs = saved;
+        }
+        assertEquals(1, cachingCatalog.getTableLatestAccessTime().size());
+        assertEquals(CachingPaimonCatalog.revision(5L, -1L), cachingCatalog.getLastRefreshedRevision().get(id));
+    }
+
+    @Test
+    public void testBackgroundRefreshSkipsEmptyTable(@Mocked FileStoreTable paimonTable,
+                                                     @Mocked SnapshotManager snapshotManager) throws Exception {
+        Identifier id = new Identifier("db", "tbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(id);
+                result = paimonTable;
+                paimonTable.snapshotManager();
+                result = snapshotManager;
+                snapshotManager.latestSnapshotId();
+                result = null;
+            }
+        };
+        CachingPaimonCatalog cachingCatalog = newCachingCatalog(paimonNativeCatalog);
+        cachingCatalog.getTable(id);
+        cachingCatalog.refreshCatalog();
+        assertTrue(cachingCatalog.getLastRefreshedRevision().isEmpty());
+        // the cached entry survived the round
+        assertEquals(1, cachingCatalog.estimatedCacheSizes().tableCacheSize());
+    }
+
+    @Test
+    public void testBackgroundRefreshLifecycleWithRealCatalog() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("tmp_");
+        Options catalogOptions = new Options();
+        catalogOptions.setString(CatalogOptions.WAREHOUSE.key(), tmpDir.toString());
+        // mirror PaimonConnector: without it the partition cache is disabled (default max-num is 0)
+        catalogOptions.setString("cache.partition.max-num", "1000");
+        CatalogContext context = CatalogContext.create(catalogOptions);
+        // same chain PaimonConnector builds
+        Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context, CatalogFactory.class.getClassLoader());
+        CachingPaimonCatalog realCatalog = new CachingPaimonCatalog("paimon_catalog", unwrapped, catalogOptions);
+
+        realCatalog.createDatabase("test_db", true);
+        Schema.Builder schemaBuilder = Schema.newBuilder();
+        schemaBuilder.partitionKeys("dt");
+        schemaBuilder.column("dt", DataTypes.STRING());
+        schemaBuilder.column("user", DataTypes.STRING());
+        Options options = new Options();
+        options.set(CoreOptions.BUCKET, 2);
+        options.set(CoreOptions.BUCKET_KEY, "user");
+        schemaBuilder.options(options.toMap());
+        Identifier id = Identifier.create("test_db", "test_tbl");
+        realCatalog.createTable(id, schemaBuilder.build(), true);
+        org.apache.paimon.table.Table table = realCatalog.getTable(id);
+
+        // snapshot 1: partition dt=1
+        BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder();
+        try (BatchTableWrite write = writeBuilder.newWrite()) {
+            write.write(GenericRow.of(BinaryString.fromString("1"), BinaryString.fromString("u1")));
+            try (BatchTableCommit commit = writeBuilder.newCommit()) {
+                commit.commit(write.prepareCommit());
+            }
+        }
+
+        CachingPaimonCatalog cachingCatalog = realCatalog;
+        cachingCatalog.getTable(id);
+        cachingCatalog.refreshCatalog();
+        assertEquals(CachingPaimonCatalog.revision(1L, 0L), cachingCatalog.getLastRefreshedRevision().get(id));
+        assertEquals(1, cachingCatalog.listPartitions(id).size());
+
+        // snapshot 2: new partition dt=2
+        writeBuilder = table.newBatchWriteBuilder();
+        try (BatchTableWrite write = writeBuilder.newWrite()) {
+            write.write(GenericRow.of(BinaryString.fromString("2"), BinaryString.fromString("u1")));
+            try (BatchTableCommit commit = writeBuilder.newCommit()) {
+                commit.commit(write.prepareCommit());
+            }
+        }
+        // our cache still serves the old list, the lake already has two
+        assertEquals(1, cachingCatalog.listPartitions(id).size());
+        assertEquals(2, unwrapped.listPartitions(id).size());
+        cachingCatalog.refreshCatalog();
+        assertEquals(CachingPaimonCatalog.revision(2L, 0L), cachingCatalog.getLastRefreshedRevision().get(id));
+        assertEquals(2, cachingCatalog.listPartitions(id).size());
+
+        // no write: the ledger stays put
+        cachingCatalog.refreshCatalog();
+        assertEquals(CachingPaimonCatalog.revision(2L, 0L), cachingCatalog.getLastRefreshedRevision().get(id));
     }
 
     @Test
@@ -786,5 +1118,75 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+    }
+
+    @Test
+    public void testListPartitionNamesIsolationAcrossTables(@Mocked FileStoreTable mockPaimonTable1,
+                                                            @Mocked FileStoreTable mockPaimonTable2)
+            throws Catalog.TableNotExistException {
+
+        Options options = new Options();
+        options.set(CatalogOptions.CACHE_ENABLED, true);
+        Catalog cachingCatalog = CachingCatalog.tryToCreate(paimonNativeCatalog, options);
+        PaimonMetadata newMetadata = new PaimonMetadata("test_catalog", new HdfsEnvironment(), cachingCatalog,
+                new ConnectorProperties(ConnectorType.PAIMON));
+
+        Identifier tblIdentifier1 = new Identifier("db1", "tbl1");
+        List<String> partitionKeys1 = Lists.newArrayList("year", "month");
+        Identifier tblIdentifier2 = new Identifier("db2", "tbl2");
+        List<String> partitionKeys2 = Lists.newArrayList("year", "month");
+
+        RowType tblRowType1 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+        RowType tblRowType2 = RowType.of(new DataType[] {new IntType(true), new IntType(true)}, new String[] {"year", "month"});
+
+        Map<String, String> spec1 = new LinkedHashMap<>();
+        spec1.put("year", "2020");
+        spec1.put("month", "1");
+        org.apache.paimon.partition.Partition db1PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec1, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec2 = new LinkedHashMap<>();
+        spec2.put("year", "2020");
+        spec2.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition1 =
+                new org.apache.paimon.partition.Partition(spec2, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        Map<String, String> spec3 = new LinkedHashMap<>();
+        spec3.put("year", "2022");
+        spec3.put("month", "1");
+        org.apache.paimon.partition.Partition db2PaimonPartition2 =
+                new org.apache.paimon.partition.Partition(spec3, 100L, 2048L, 2L, System.currentTimeMillis(), false);
+
+        new Expectations() {
+            {
+                // Table 1
+                paimonNativeCatalog.getTable(tblIdentifier1);
+                result = mockPaimonTable1;
+                paimonNativeCatalog.listPartitions(tblIdentifier1);
+                result = Lists.newArrayList(db1PaimonPartition1);
+                mockPaimonTable1.partitionKeys();
+                result = partitionKeys1;
+                mockPaimonTable1.rowType();
+                result = tblRowType1;
+
+                // Table 2
+                paimonNativeCatalog.getTable(tblIdentifier2);
+                result = mockPaimonTable2;
+                paimonNativeCatalog.listPartitions(tblIdentifier2);
+                result = Lists.newArrayList(db2PaimonPartition1, db2PaimonPartition2);
+                mockPaimonTable2.partitionKeys();
+                result = partitionKeys2;
+                mockPaimonTable2.rowType();
+                result = tblRowType2;
+
+            }
+        };
+
+        List<String> result1 = newMetadata.listPartitionNames("db1", "tbl1", null);
+        List<String> result2 = newMetadata.listPartitionNames("db2", "tbl2", null);
+
+        // Before fix, if the key does not contain "db" and "table", it will return 2. After fix, it will return 3.
+        assertEquals(3, result1.size() + result2.size());
+
     }
 }

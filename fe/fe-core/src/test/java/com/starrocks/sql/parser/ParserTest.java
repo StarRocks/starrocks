@@ -295,12 +295,10 @@ class ParserTest {
         } catch (Throwable err) {
             Assertions.fail(err.getMessage());
         }
-        try {
-            sessionVariable.setLargeDecimalUnderlyingType("foobar");
-            Assertions.fail();
-        } catch (Throwable error) {
-
-        }
+        IllegalArgumentException error = Assertions.assertThrows(IllegalArgumentException.class,
+                () -> sessionVariable.setLargeDecimalUnderlyingType("foobar"));
+        Assertions.assertTrue(error.getMessage()
+                .contains("Legal values of large_decimal_underlying_type are panic|decimal|double"));
     }
 
     @Test

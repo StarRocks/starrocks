@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 MAP map_apply(lambda_func, any_map)
 ```
 

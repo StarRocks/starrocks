@@ -44,6 +44,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -76,6 +77,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
@@ -902,14 +904,22 @@ public class AnalyzerUtils {
     }
 
     /**
-     * CopySafe:
-     * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
-     * 2. External tables with immutable memory-structure
+     * CopySafe, i.e. the statement does not need the whole planning phase to run under the meta lock. A table
+     * qualifies when either:
+     * 1. the lock cannot protect it anyway, so it has no say -- see {@link Table#isMetaLockTarget}; or
+     * 2. planning can work off a private snapshot of it: OlapTable and MaterializedView are shadow copied by
+     * copyOnlyForQuery, unless one carries more related MVs than skip_whole_phase_lock_mv_limit and the
+     * statement gives that limit a reason to apply -- see {@link CopyUnsafeTablesCollector}.
+     * <p>
+     * A lock target with no snapshot to plan against is copy-unsafe and does hold the lock for the whole phase.
+     * No table kind is one any more -- MYSQL, ELASTICSEARCH, resource JDBC, ExternalOlapTable and the
+     * resource-mapping tables all answer isMetaLockTarget() false -- but a kind nobody has classified yet would
+     * be, which keeps the rule fail-closed.
      */
     public static boolean areTablesCopySafe(StatementBase statementBase) {
-        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
-        new CopyUnsafeTablesCollector(nonOlapTables).visit(statementBase);
-        return nonOlapTables.isEmpty();
+        CopyUnsafeTablesCollector collector = new CopyUnsafeTablesCollector();
+        collector.visit(statementBase);
+        return collector.isCopySafe();
     }
 
     public static boolean hasTemporaryTables(StatementBase statementBase) {
@@ -928,7 +938,14 @@ public class AnalyzerUtils {
     }
 
     public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
-        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+        new AnalyzerUtils.OlapTableCollector(olapTables, true).visit(statementBase);
+    }
+
+    /** The olap tables {@link #copyOlapTable} would copy, left in place. */
+    public static Set<OlapTable> collectOlapTablesToCopy(StatementBase statementBase) {
+        Set<OlapTable> olapTables = new HashSet<>();
+        new AnalyzerUtils.OlapTableCollector(olapTables, false).visit(statementBase);
+        return olapTables;
     }
 
     public static void collectSourceTables(StatementBase statementBase, List<Table> sourceTables) {
@@ -1038,38 +1055,163 @@ public class AnalyzerUtils {
         }
     }
 
+    /**
+     * Decides whether the planner may work off private snapshots of this statement's tables, or has to hold the
+     * meta lock for the whole planning phase.
+     *
+     * <p>The verdict is only taken once the whole statement has been walked, because one table's verdict depends
+     * on what else the statement touches -- see the MV-limit note in {@link #visitTable}. That is also why this
+     * collector does not stop at the first copy-unsafe table it finds.
+     */
     private static class CopyUnsafeTablesCollector extends TableCollector {
+        /**
+         * Native tables carrying more related MVs than {@code skip_whole_phase_lock_mv_limit}. Held aside rather
+         * than counted as copy-unsafe straight away: whether that limit gets to decide depends on the rest of
+         * the statement.
+         */
+        private final Map<TableName, Table> overTheMvLimit = Maps.newHashMap();
 
-        private static final ImmutableSet<Table.TableType> IMMUTABLE_EXTERNAL_TABLES =
-                ImmutableSet.of(Table.TableType.HIVE, Table.TableType.ICEBERG);
+        /**
+         * The write target of an INSERT / UPDATE / DELETE / MERGE INTO, when it is a table planning could work
+         * off a snapshot of. Held aside for the same reason {@link #overTheMvLimit} is -- see
+         * {@link #isCopySafe()} for what lets it through.
+         */
+        private final Map<TableName, Table> snapshotableWriteTarget = Maps.newHashMap();
 
-        public CopyUnsafeTablesCollector(Map<TableName, Table> tables) {
-            super(tables);
+        /** Whether the statement reads a table through a connector, i.e. one whose metadata is remote. */
+        private boolean readsThroughAConnector;
+
+        /**
+         * Copy-safe when nothing in the statement forces the lock to be held for the whole planning phase.
+         *
+         * <p><b>Why a connector table lets a table over the MV limit through.</b> That limit is a cost
+         * heuristic, not a correctness gate: correctness on the lock-free path comes from copying each
+         * candidate MV ({@code MvRewritePreprocessor.copyOnlyMaterializedView}) and from OptimisticVersion
+         * revalidating every table at the end. What the limit weighs is snapshot cost against lock-held time,
+         * and it was calibrated for a statement whose planning is local, where both sides are CPU.
+         *
+         * <p>Add a table in an external catalog and the right-hand side stops being CPU. Planning will ask that
+         * catalog for partitions, statistics and file lists, and every one of those is a round trip to a system
+         * the FE does not control -- so the lock's hold time becomes that system's latency while it protects
+         * nothing on that side, since an external table is never in the lock set to begin with. Meanwhile the
+         * left-hand side has not grown: the number of MVs actually copied is capped by
+         * {@code cbo_materialized_view_rewrite_related_mvs_limit} (16 by default), not by how many the table
+         * carries. A bounded local copy is the better trade against an unbounded remote wait, so the limit does
+         * not get to decide here.
+         *
+         * <p><b>Why a write target is held to the same rule.</b> Same trade, same answer: a DML whose query
+         * reads through a connector runs the whole optimization -- external statistics, partition lists, file
+         * lists -- and used to do all of it under the lock, because the target landed in the copy-unsafe set
+         * unconditionally (see {@link #judgeWriteTarget}). The target itself is snapshot-able exactly like any
+         * other native table, so what is gated here is not its safety but whether the trade is worth making.
+         * Requiring a connector read keeps every purely local INSERT / UPDATE / DELETE on the path it has
+         * always taken.
+         */
+        public boolean isCopySafe() {
+            return tables.isEmpty()
+                    && (readsThroughAConnector || (overTheMvLimit.isEmpty() && snapshotableWriteTarget.isEmpty()));
+        }
+
+        /**
+         * A DML's write target does not reach {@link #visitTable}: {@link TableCollector} puts it straight
+         * into {@code tables}. That was added for the privilege collector (#18808) -- collecting every table a
+         * statement names -- long before this subclass reused the same map as a verdict, so for as long as
+         * that has been so, no INSERT / UPDATE / DELETE / MERGE INTO has been copy-safe and every one of them
+         * planned with the lock held. Put the target through the same verdict the other tables get instead.
+         *
+         * @param target    the analyzed target table, or null when the statement has not been analyzed yet
+         * @param targetName the name to file it under, only used for the copy-unsafe maps
+         */
+        private void judgeWriteTarget(Table target, TableName targetName) {
+            if (target == null) {
+                // Not analyzed yet, so there is nothing to judge: stay on the locked path.
+                tables.put(targetName, target);
+            } else if (!target.isMetaLockTarget()) {
+                // Writing into an external catalog -- INSERT INTO hive, MERGE INTO iceberg. The lock never
+                // covered it, so it has no say -- same abstention visitTable applies to a table read through
+                // a connector.
+                readsThroughAConnector = true;
+            } else if (target.isNativeTableOrMaterializedView()) {
+                snapshotableWriteTarget.put(targetName, target);
+            } else {
+                // A lock target with no snapshot to plan against, i.e. a kind nobody has classified yet (see
+                // areTablesCopySafe). The lock has to stay for the whole phase.
+                tables.put(targetName, target);
+            }
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            judgeWriteTarget(node.getTargetTable(), node.getTableName());
+            // Deliberately not super.visitInsertStatement: that is the blanket put this override replaces.
+            // AstTraverser only walks the query statement from here, so do exactly that.
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            judgeWriteTarget(node.getTable(), node.getTableName());
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            judgeWriteTarget(node.getTable(), node.getTableName());
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
         }
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!tables.isEmpty()) {
-                return null;
-            }
-
             Table table = node.getTable();
             // system table is immutable
             if (table instanceof SystemTable) {
                 return null;
             }
+            // A table the meta lock cannot protect has no say in how long that lock is held. Tables in an
+            // external catalog are that set, and so are the internal-database tables whose data lives elsewhere
+            // (resource-mapping HIVE/ICEBERG/HUDI, FILE, MYSQL, JDBC, ELASTICSEARCH, ExternalOlapTable; see
+            // Table.isMetaLockTarget) -- PlannerMetaLocker.resolveTable never puts them in the lock set -- so
+            // they abstain. Letting them vote only made the planner hold the *lockable* tables' locks across
+            // connector RPCs while giving the voter itself zero protection: an external table's
+            // planning-phase stability comes from the query-scoped ConnectorMetadata
+            // (MetadataMgr.QueryMetadatas), never from the meta lock.
+            //
+            // Abstaining is not the same as being silent: the metadata behind such a table is remote, which
+            // is exactly what makes holding the lock across this statement's planning expensive, so the
+            // abstention is recorded for isCopySafe() to weigh the MV limit against.
+            if (!table.isMetaLockTarget()) {
+                readsThroughAConnector = true;
+                return null;
+            }
+            // A lock target that planning can see through a private snapshot does not need the real thing
+            // held: OlapTable and MV are shadow copied by copyOnlyForQuery, and OptimisticVersion revalidates
+            // them on the lock-free path. The MV-count limit is the existing guard on that copy being cheap.
             int relatedMVCount = node.getTable().getRelatedMaterializedViews().size();
             boolean useNonLockOptimization = Config.skip_whole_phase_lock_mv_limit < 0 ||
                     relatedMVCount <= Config.skip_whole_phase_lock_mv_limit;
-            if ((table.isNativeTableOrMaterializedView() && useNonLockOptimization)) {
-                // OlapTable can be copied via copyOnlyForQuery
-                return null;
-            } else if (IMMUTABLE_EXTERNAL_TABLES.contains(table.getType())) {
-                // Immutable table
+            if (table.isNativeTableOrMaterializedView()) {
+                if (useNonLockOptimization) {
+                    return null;
+                }
+                // Over the limit, so planning this table under the lock is the cheaper of the two on its own.
+                // Whether it stays cheaper depends on what else the statement reads -- decided in isCopySafe().
+                overTheMvLimit.put(node.getName(), node.getTable());
                 return null;
             } else {
                 tables.put(node.getName(), node.getTable());
             }
+
+            // Lockable, and no snapshot to plan against: the lock has to stay for the whole phase.
+            tables.put(node.getName(), node.getTable());
             return null;
         }
     }
@@ -1077,10 +1219,13 @@ public class AnalyzerUtils {
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
         private Map<TableIndexId, OlapTable> idMap;
+        // false to only collect the originals, leaving the statement on them
+        private final boolean copy;
 
-        public OlapTableCollector(Set<OlapTable> tables) {
+        public OlapTableCollector(Set<OlapTable> tables, boolean copy) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
+            this.copy = copy;
         }
 
         /**
@@ -1124,6 +1269,37 @@ public class AnalyzerUtils {
             return null;
         }
 
+        /**
+         * The UPDATE / DELETE target has to be replaced for the same reason the INSERT target is: the planner
+         * reads it for the output schema and the sink ({@code UpdatePlanner} / {@code DeletePlanner} both
+         * start from {@code stmt.getTable()}), and on the lock-free path that read happens with the lock
+         * released. The target also appears as a relation inside the synthesized query, so the copy handed
+         * back here is the one {@link #visitTable} already made -- {@code copyTable} keys its map on
+         * (table id, base index id), which is what keeps the scan and the sink on the same object.
+         *
+         * <p>MERGE INTO needs no such override: its target is always an Iceberg table, which
+         * {@code copyTable} does not copy.
+         */
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            super.visitUpdateStatement(node, context);
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            super.visitDeleteStatement(node, context);
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
+            }
+            return null;
+        }
+
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table copied = copyTable(node.getTable());
@@ -1134,10 +1310,17 @@ public class AnalyzerUtils {
         }
 
         private Table copyTable(Table originalTable) {
-            if (!(originalTable instanceof OlapTable)) {
+            // An external OLAP target is already a private copy, synced from its cluster before the lock was
+            // taken (StatementPlanner.beginTransaction); a shadow copy would turn it into a plain OlapTable and
+            // lose everything that sync brought in.
+            if (!(originalTable instanceof OlapTable) || originalTable.isOlapExternalTable()) {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
+            if (!copy) {
+                olapTables.add(table);
+                return null;
+            }
             TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
@@ -1492,6 +1675,15 @@ public class AnalyzerUtils {
         }
     }
 
+    /** Resolves an automatic partition granularity into its time unit. */
+    private static TimeUnit toAutoPartitionTimeUnit(String granularity, String errorMessage) throws AnalysisException {
+        TimeUnit timeUnit = TimeUnit.fromName(granularity);
+        if (timeUnit == null || !PartitionTimeUtils.AUTO_PARTITION_TIME_UNITS.contains(timeUnit)) {
+            throw new AnalysisException(errorMessage);
+        }
+        return timeUnit;
+    }
+
     public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
@@ -1701,35 +1893,12 @@ public class AnalyzerUtils {
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionItem, beginDateTimeFormat);
                 // The start date here is passed by BE through function calculation,
                 // so it must be the start date of a certain partition.
-                switch (granularity.toLowerCase()) {
-                    case "minute":
-                        beginTime = beginTime.withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MINUTE_FORMATTER_UNIX);
-                        endTime = beginTime.plusMinutes(interval);
-                        break;
-                    case "hour":
-                        beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
-                        endTime = beginTime.plusHours(interval);
-                        break;
-                    case "day":
-                        beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
-                        endTime = beginTime.plusDays(interval);
-                        break;
-                    case "month":
-                        beginTime = beginTime.withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
-                        endTime = beginTime.plusMonths(interval);
-                        break;
-                    case "year":
-                        beginTime = beginTime.withDayOfYear(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = DEFAULT_PARTITION_NAME_PREFIX + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
-                        endTime = beginTime.plusYears(interval);
-                        break;
-                    default:
-                        throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
-                }
+                TimeUnit timeUnit = toAutoPartitionTimeUnit(granularity,
+                        "unsupported automatic partition granularity:" + granularity);
+                beginTime = PartitionTimeUtils.truncateToUnitStart(beginTime, timeUnit);
+                partitionName = DEFAULT_PARTITION_NAME_PREFIX
+                        + beginTime.format(PartitionTimeUtils.getPartitionNameFormatter(timeUnit));
+                endTime = PartitionTimeUtils.plus(beginTime, timeUnit, interval);
                 PartitionKeyDesc partitionKeyDesc =
                         createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
 
@@ -1760,18 +1929,16 @@ public class AnalyzerUtils {
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
                                                            LocalDateTime endTime) throws AnalysisException {
         boolean isMaxValue;
-        DateTimeFormatter outputDateFormat;
         if (partitionType.isDate()) {
-            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
             isMaxValue =
                     endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else if (partitionType.isDatetime()) {
-            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
             isMaxValue = endTime.isAfter(
                     TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
         } else {
             throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
         }
+        DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionType);
         String lowerBound = beginTime.format(outputDateFormat);
 
         PartitionValue upperPartitionValue;

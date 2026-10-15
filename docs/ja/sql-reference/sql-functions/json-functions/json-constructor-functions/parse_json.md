@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 parse_json(string_expr)
 ```
 

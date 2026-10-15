@@ -10,7 +10,7 @@ import Tip from '../../../_assets/commonMarkdown/quickstart-shared-nothing-tip.m
 
 ## 構文
 
-```Haskell
+```plaintext
 INT regexp_count(VARCHAR str, VARCHAR pattern)
 ```
 

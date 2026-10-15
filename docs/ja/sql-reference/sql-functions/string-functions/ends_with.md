@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN ENDS_WITH (VARCHAR str, VARCHAR suffix)
 ```
 

@@ -71,7 +71,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### FE 参数
 
-以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](../administration/management/FE_configuration.md#配置-fe-动态参数)。
+以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](./configuration/FE_parameters/FE_parameters.md#配置-fe-动态参数)。
 
 | **参数名**                            | **默认值** | **单位** | **描述**                                                     |
 | ------------------------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -82,7 +82,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### BE 参数
 
-以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/management/BE_configuration.md)。
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](./configuration/BE_parameters/BE_parameters.md)。
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |

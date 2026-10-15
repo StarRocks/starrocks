@@ -10,7 +10,7 @@ Aggregation function, used to calculate the bitmap intersection after grouping. 
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_INTERSECT(BITMAP value)
 ```
 

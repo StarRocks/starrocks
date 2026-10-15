@@ -8,7 +8,7 @@ BITMAP を BIGINT 配列に変換します。
 
 ## Syntax
 
-```Haskell
+```plaintext
  ARRAY<BIGINT> BITMAP_TO_ARRAY (bitmap)
 ```
 

@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ### Syntax
 
-```Haskell
+```plaintext
 INT SECOND(DATETIME date)
 ```
 

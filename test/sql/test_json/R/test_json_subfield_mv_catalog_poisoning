@@ -1,0 +1,87 @@
+-- name: test_json_subfield_mv_catalog_poisoning
+create table base (k int, j json) duplicate key(k)
+  distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into base values
+  (1, parse_json('{"a":1}')),
+  (2, parse_json('{"a":"str"}')),
+  (3, parse_json('{"a":3}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+-- result:
+1
+-- !result
+create materialized view mv1 distributed by hash(k) buckets 1 refresh manual
+  properties("replication_num"="1") as select k, cast(j->'$.a' as bigint) as a from base;
+-- result:
+-- !result
+refresh materialized view mv1 with sync mode;
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+-- result:
+1
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result
+select count(*) as str_cnt from base where get_json_string(j, '$.a') = 'str';
+-- result:
+1
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result
+set cbo_json_v2_rewrite = false;
+-- result:
+-- !result
+select k, get_json_string(j, '$.a') as as_str from base order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+create materialized view mv2 distributed by hash(k) buckets 1 refresh manual
+  properties("replication_num"="1") as select k, get_json_string(j, '$.a') as a from base;
+-- result:
+-- !result
+refresh materialized view mv2 with sync mode;
+select k, a from mv2 order by k;
+-- result:
+1	1
+2	str
+3	3
+-- !result

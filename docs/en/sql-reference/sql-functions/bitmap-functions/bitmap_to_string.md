@@ -10,7 +10,7 @@ Converts an input bitmap into a string that is separated by commas (,). This str
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR BITMAP_TO_STRING(BITMAP input)
 ```
 

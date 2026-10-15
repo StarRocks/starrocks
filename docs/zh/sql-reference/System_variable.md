@@ -412,6 +412,55 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1024
 * 引入版本：v2.5
 
+### count_distinct_implementation
+
+* 描述：控制 `COUNT(DISTINCT expr)` 仅包含一个参数时所使用的函数实现。有效值（不区分大小写）：
+  * `default`：保留 `COUNT(DISTINCT expr)` 的默认实现。优化器会根据查询形式、统计信息和成本选择合适的聚合执行计划。
+  * `multi_count_distinct`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `multi_distinct_count`，以进行精确计数。对于低基数和中等基数列的计数，该实现可以减少一次 Shuffle 和去重阶段，从而提升查询速度。但是，该实现会将 distinct 值保存在 HashSet 中，因此对于高基数列进行去重时，可能导致过高的内存消耗，甚至引发 OOM。在通过具有代表性的负载进行验证之前，请勿全局设置此值。
+  * `ndv`：将 `COUNT(DISTINCT expr)` 的实现方式更改为 `ndv(expr)`。该函数使用 HyperLogLog，以较低的内存开销返回近似结果。
+* 默认值：`default`
+* 引入版本：v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` 的使用说明]
+`multi_distinct_count()` 返回精确结果。
+
+对于大多数查询，建议使用 `COUNT(DISTINCT expr)`。将 `count_distinct_implementation` 设置为 `default`，以允许优化器选择合适的聚合执行计划。
+
+对低基数和中等基数的列进行去重时，可以测试并使用 `multi_distinct_count()`。该函数使用两阶段聚合，可以减少一次 Shuffle 和去重阶段，从而提升性能。但是，在对高基数列进行去重时，其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
+
+如果希望针对单个 `COUNT(DISTINCT expr)` 测试此实现，而不是更改整个 Session 的设置，可以在查询 Hint 中设置 `count_distinct_implementation`：
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+通过 Hint 设置此值时，仅对包含单个参数的 `COUNT(DISTINCT)` 生效。对于 `COUNT(DISTINCT expr1, expr2)` 等多列去重表达式，该设置不会产生影响。
+:::
+
+### custom_query_id (session)
+
+* **描述**: 用于将某些外部标识绑定到当前查询。在执行查询前可以使用 `SET SESSION custom_query_id = 'my-query-id';` 进行设置。查询结束后该值会被重置。该值可以传递给 `KILL QUERY 'my-query-id'`。在审计日志中可以作为 `customQueryId` 字段找到该值。
+* **默认值**: ""
+* **类型**: String
+* **引入版本**: v3.4.0
+
+### datacache_sharing_work_period
+
+- 描述：Cache Sharing 功能的生效时长。每次群集扩展操作后，如果启用了缓存共享功能，只有在这段时间内的请求才会尝试访问其他节点的缓存数据。
+- 默认值：600
+- 单位：秒
+- 引入版本：v3.5.1
+
+### default_authentication_plugin
+
+* **范围**: Session
+* **描述**: 会话范围的变量，指定本会话的默认 MySQL 认证插件名称。它以 SessionVariable.defaultAuthenticationPlugin 的形式存储，并由 StarRocks 的 MySQL 协议兼容层在服务器需要通告或使用默认认证插件时使用（例如在握手期间或未指定插件时）。接受服务器支持的标准 MySQL 认证插件标识（例如 `mysql_native_password`、`caching_sha2_password`）。此变量仅影响会话行为；持久化的用户账号认证配置由其他机制单独管理。参见相关会话变量 `authentication_policy`。
+* **默认值**: `mysql_native_password`
+* **类型**: String
+* **引入版本**: -
+
 ### default_rowset_type (global)
 
 全局变量，仅支持全局生效。用于设置计算节点存储引擎默认的存储格式。当前支持的存储格式包括：alpha/beta。
@@ -569,7 +618,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### plan_mode
 
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
+* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg.md#附录元数据周期性后台刷新方案)。有效值：
   * `auto`：系统自动选择方案。
   * `local`：使用本地缓存方案。
   * `distributed`：使用分布式方案。
@@ -597,7 +646,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_insert_strict
 
-* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/load_concept/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
+* 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
 * 默认值：true
 
 ### enable_per_bucket_optimize
@@ -710,7 +759,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### enable_scan_datacache
 
-* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
+* 描述：是否开启 Data Cache 特性。该特性开启之后，StarRocks 通过将外部存储系统中的热数据缓存成多个 block，加速数据查询和分析。更多信息，参见 [Data Cache](../data_source/data_cache/data_cache.md)。该特性从 2.5 版本开始支持。在 3.2 之前各版本中，对应变量为 `enable_scan_block_cache`。
 * 默认值：true
 * 引入版本：v2.5
 
@@ -1010,13 +1059,13 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### max_pushdown_conditions_per_column
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_pushdown_conditions_per_column` 的说明。
+* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md)中 `max_pushdown_conditions_per_column` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 * 类型：Int
 
 ### max_scan_key_num
 
-* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/management/BE_configuration.md)中 `max_scan_key_num` 的说明。
+* 描述：该变量的具体含义请参阅 [BE 配置项](../administration/configuration/BE_parameters/BE_parameters.md)中 `max_scan_key_num` 的说明。
 * 默认值：`-1`，表示使用 `be.conf` 中的配置值。如果设置大于 0，则忽略 `be.conf` 中的配置值。
 
 ### nested_mv_rewrite_max_level

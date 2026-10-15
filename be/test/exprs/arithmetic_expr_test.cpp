@@ -705,4 +705,39 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
     }
 }
 
+// An expression that fails at evaluation time, like dict_mapping() on a NULL key.
+class FailingExpr final : public Expr {
+public:
+    explicit FailingExpr(const TExprNode& node) : Expr(node) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new FailingExpr(*this)); }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        return Status::InternalError("child evaluation failed");
+    }
+
+    bool is_constant() const override { return false; }
+};
+
+TEST_F(VectorizedArithmeticExprTest, bitShiftPropagatesChildError) {
+    expr_node.opcode = TExprOpcode::BIT_SHIFT_LEFT;
+    expr_node.child_type = TPrimitiveType::BIGINT;
+    expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+
+    std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
+    ASSERT_TRUE(expr != nullptr);
+
+    MockVectorizedExpr<TYPE_BIGINT> lhs(expr_node, 10, 1);
+    FailingExpr rhs(expr_node);
+
+    expr->_children.push_back(&lhs);
+    expr->_children.push_back(&rhs);
+
+    // The child error must come back as a Status. Unwrapping it instead throws out of a pipeline
+    // worker thread, where nothing catches it, and aborts the whole BE process.
+    auto result = expr->evaluate_checked(nullptr, nullptr);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_internal_error());
+}
+
 } // namespace starrocks

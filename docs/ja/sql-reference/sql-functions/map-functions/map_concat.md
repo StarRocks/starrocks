@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 ANY_MAP map_concat(any_map0, any_map1...)
 ```
 

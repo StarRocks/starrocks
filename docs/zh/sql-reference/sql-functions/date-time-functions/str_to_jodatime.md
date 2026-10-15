@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ```
 

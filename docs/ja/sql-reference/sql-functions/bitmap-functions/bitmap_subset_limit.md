@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BITMAP bitmap_subset_limit(BITMAP src, BIGINT start_range, BIGINT limit)
 ```
 

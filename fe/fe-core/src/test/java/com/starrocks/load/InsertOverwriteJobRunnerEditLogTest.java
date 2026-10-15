@@ -32,6 +32,8 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
@@ -51,6 +53,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -215,6 +218,91 @@ public class InsertOverwriteJobRunnerEditLogTest {
         // marking precedes the failing statistics collection, so it must have happened
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                 .tabletForceDelete(sourceTabletId, BACKEND_ID));
+    }
+
+    @Test
+    public void testGcWritesNoFailedJournalWhenTableDroppedDuringLockWait() throws Exception {
+        InsertOverwriteJob job = new InsertOverwriteJob(2010L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
+        job.setTmpPartitionIds(Lists.newArrayList(tempPartitionId));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+
+        // hold the table WRITE lock so that gc() passes its pre-lock existence check and
+        // parks on the lock, then drop the table while it waits — exactly the interleaving
+        // of a concurrent DROP TABLE winning the race against gc()
+        Locker blocker = new Locker();
+        Assertions.assertTrue(blocker.lockTableAndCheckDbExist(db, tableId, LockType.WRITE));
+        AtomicReference<Throwable> gcFailure = new AtomicReference<>();
+        Thread gcThread = new Thread(() -> {
+            try {
+                runner.testGc(false);
+            } catch (Throwable t) {
+                gcFailure.set(t);
+            }
+        });
+        try {
+            gcThread.start();
+            long deadlineMs = System.currentTimeMillis() + 30_000;
+            while (gcThread.isAlive() && gcThread.getState() != Thread.State.WAITING
+                    && gcThread.getState() != Thread.State.TIMED_WAITING) {
+                Assertions.assertTrue(System.currentTimeMillis() < deadlineMs,
+                        "gc() never parked on the table WRITE lock");
+                Thread.sleep(10);
+            }
+            db.dropTable(TABLE_NAME);
+        } finally {
+            blocker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+        }
+        gcThread.join(60_000);
+        Assertions.assertFalse(gcThread.isAlive());
+        Assertions.assertNull(gcFailure.get());
+
+        // the cleanup must not have run through the reference resolved before the lock:
+        // the dropped table's tablets must not be marked for force delete
+        Assertions.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                .tabletForceDelete(tempTabletId, BACKEND_ID));
+
+        // and no FAILED entry may be journaled for the dropped table: ordered after the
+        // DROP TABLE entry, it would kill every FE that replays it
+        Exception e = Assertions.assertThrows(Exception.class, () -> UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE));
+        Assertions.assertTrue(e.getMessage().contains("queue is empty"), e.getMessage());
+    }
+
+    @Test
+    public void testReplayFailedStateChangeToleratesDroppedTable() {
+        // the journal stream can legally contain "DROP TABLE t" followed by an
+        // OVERWRITE_FAILED state change for t (see the test above). Replay must treat
+        // the missing table as "nothing left to clean up" instead of failing, which
+        // would make every replaying FE exit.
+        InsertOverwriteJob job = new InsertOverwriteJob(2011L, db.getId(), table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(2011L,
+                InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_FAILED,
+                Lists.newArrayList(sourcePartitionId), null, Lists.newArrayList(tempPartitionId), -1L);
+
+        db.dropTable(TABLE_NAME);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        Assertions.assertDoesNotThrow(() -> runner.replayStateChange(info));
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, job.getJobState());
+    }
+
+    @Test
+    public void testReplayFailedStateChangeToleratesDroppedDb() {
+        long droppedDbId = GlobalStateMgr.getCurrentState().getNextId();
+        InsertOverwriteJob job = new InsertOverwriteJob(2012L, droppedDbId, table.getId(),
+                Lists.newArrayList(sourcePartitionId), false);
+        job.setJobState(InsertOverwriteJobState.OVERWRITE_RUNNING);
+        InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(2012L,
+                InsertOverwriteJobState.OVERWRITE_RUNNING, InsertOverwriteJobState.OVERWRITE_FAILED,
+                Lists.newArrayList(sourcePartitionId), null, Lists.newArrayList(tempPartitionId), -1L);
+
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
+        Assertions.assertDoesNotThrow(() -> runner.replayStateChange(info));
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, job.getJobState());
     }
 
     @Test

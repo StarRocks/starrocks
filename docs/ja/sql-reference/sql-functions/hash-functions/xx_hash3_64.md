@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 BIGINT XX_HASH3_64(VARCHAR input, ...)
 ```
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 array_filter(array, array<bool>)
 array_filter(lambda_function, arr1,arr2...)
 ```

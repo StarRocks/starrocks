@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 APPROX_COUNT_DISTINCT(expr)
 ```
 

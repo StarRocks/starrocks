@@ -12,7 +12,7 @@ This function is supported from v3.3 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 INT YEARWEEK(DATETIME|DATE date[, INT mode])
 ```
 

@@ -10,7 +10,7 @@ Calculates the average value of all data in an ARRAY and return this result.
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_avg(array(type))
 ```
 

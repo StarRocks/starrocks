@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR rpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 

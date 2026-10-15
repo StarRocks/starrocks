@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME hours_add(DATETIME|DATE date, INT hours);
 ```
 

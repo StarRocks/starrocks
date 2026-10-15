@@ -26,6 +26,7 @@ displayed_sidebar: docs
 
     ```sql
     SHOW ALTER TABLE ROLLUP [FROM <db_name>]
+    [WHERE <where_condition> ] [ORDER BY <col_name> [ASC | DESC]] [LIMIT <num>]
     ```
 
 ## 参数说明
@@ -34,10 +35,12 @@ displayed_sidebar: docs
   - 如果指定了 `COLUMN`，该语句用于查询修改列的操作。
   - 如果指定了 `OPTIMIZE`，该语句用于查询优化表结构操作（修改分桶方式和分桶数量）。
   - 如果指定了 `ROLLUP`，该语句用于查询创建或删除 rollup index 的操作。
-- 当指定了 `COLUMN` 或者 `OPTIMIZE` 查询修改列或者优化表结构操作时，支持使用如下子句：
-  - `WHERE <where_condition>`：根据操作的 `TableName`、`CreateTime`、`FinishTime` 和 `State` 过滤出满足条件的操作。
-  - `ORDER BY <col_name> [ASC | DESC]`：根据操作的 `TableName`、`CreateTime`、`FinishTime` 和 `State` 对返回结果中的操作进行排序。
+- 支持使用如下子句：
+  - `WHERE <where_condition>`：根据操作的 `TableName`、`CreateTime`、完成时间和 `State` 过滤出满足条件的操作。
+  - `ORDER BY <col_name> [ASC | DESC]`：根据操作的 `TableName`、`CreateTime`、完成时间和 `State` 对返回结果中的操作进行排序。
   - `LIMIT <num>`：返回指定个数的操作。
+
+  完成时间这一列，`COLUMN` 和 `OPTIMIZE` 返回的列名是 `FinishTime`，`ROLLUP` 返回的是 `FinishedTime`；`ROLLUP` 两种写法都接受。
 - `db_name`：可选。如果不指定，则默认使用当前数据库。
 
 ## 示例
@@ -58,11 +61,12 @@ displayed_sidebar: docs
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ````
 
-3. 查询指定表中最近一次修改列操作或者优化表结构操作的执行情况。
+3. 查询指定表中最近一次修改列操作、优化表结构操作或者创建 rollup index 操作的执行情况。
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
+    SHOW ALTER TABLE ROLLUP WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     ```
 
 ## 相关参考

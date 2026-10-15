@@ -17,7 +17,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 COUNT_IF(condition)
 ```
 

@@ -13,7 +13,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
 
 :::
 
@@ -65,6 +65,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Total number of scanned rows.
+
+## `query_spill_trigger_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spillable operator instances that triggered at least one spill, broken down by storage backend (`local`, `remote`). Incremented once per operator instance at the first flush callback.
+
+## `query_spill_bytes_write_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes written by spillable operators to spill storage, broken down by storage backend (`local`, `remote`).
+
+## `query_spill_bytes_read_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes read back from spill storage during restore, broken down by storage backend.
+
+## `query_spill_blocks_write_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks allocated for writing, broken down by storage backend. Useful for estimating IO count scale on the write path.
+
+## `query_spill_blocks_read_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks opened for reading, broken down by storage backend. Useful for estimating IO count scale on the read path.
+
+## `query_spill_write_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in write-side spill IO (block append and flush), broken down by storage backend. Useful for tracking write-side spill performance.
+
+## `query_spill_read_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
 
 ## `readable_blocks_total (Deprecated)`
 
@@ -218,6 +260,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of small file caches.
 
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
+
 ## `snmp`
 
 - Unit: -
@@ -283,6 +331,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
+
+## `starrocks_be_lake_tablet_metadata_get_not_found_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Shared-data only. Total number of remote storage read attempts for lake tablet metadata that return `NotFound`. A tablet's metadata lives either in its own metadata object or inside a bundled metadata file, never in both, and reads of either location are counted, including the bundle reads issued by vacuum. Each failed fallback read is counted separately. Cache misses and successful reads do not increment this metric. Reads of a source cluster's metadata during replication and of snapshot metadata during restore are not counted.
 
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
@@ -409,6 +463,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Instantaneous
 - Description: Indicates the end time of the last query or loading under the specific warehouse. For a shared-nothing cluster, this item only monitors the default warehouse.
 
+## `starrocks_fe_max_journal_replay_lag`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The largest number of metadata journals that any alive Follower or Observer FE still has to replay to catch up with the Leader. Reported only by the Leader FE (`is_leader="true"`), which is the only node that knows both its own journal write position and, through heartbeats, every other node's replayed journal ID. FE nodes that are not alive are excluded, because the journal ID they last reported is frozen at their final successful heartbeat; use the `Alive` column of `SHOW FRONTENDS` to detect those instead. It returns `0` when every other node has caught up, when no other FE node is alive, and on a single-FE cluster. A high or continuously growing value means metadata replay on at least one node is falling behind, which causes that node to serve stale metadata and, once `meta_delay_toleration_second` is exceeded, to forward its queries to the Leader.
+
 ## `starrocks_fe_memory_usage`
 
 - Unit: Bytes or Count
@@ -435,7 +495,7 @@ Each metric includes the following outputs:
 - **`<metric_name>_count`**: The total number of transactions recorded for this phase, for example, `starrocks_fe_txn_total_latency_ms_count`.
 
 All transaction metrics share the following labels:
-- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../FE_configuration.md#txn_latency_metric_report_groups).
+- `type`: Categorizes transactions by their load job source type (for example, `all`, `stream_load`, `routine_load`). This allows for monitoring both overall transaction performance and the performance of specific load types. The reported groups can be configured via the FE parameter [`txn_latency_metric_report_groups`](../../../configuration/FE_parameters/FE_parameters.md#txn_latency_metric_report_groups).
 - `is_leader`: Indicates whether the reporting FE node is the Leader. Only the Leader FE (`is_leader="true"`) reports actual metric values. Followers will have `is_leader="false"` and report no data.
 
 ## `starrocks_fe_query_resource_group`
@@ -696,7 +756,7 @@ All transaction metrics share the following labels:
 ## `threadpool_task_exception_total`
 
 - Unit: Count
-- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
 
 ## `thrift_connections_total`
 

@@ -10,7 +10,7 @@ Returns `true` if a string ends with a specified suffix. Otherwise, it returns `
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOLEAN ENDS_WITH (VARCHAR str, VARCHAR suffix)
 ```
 

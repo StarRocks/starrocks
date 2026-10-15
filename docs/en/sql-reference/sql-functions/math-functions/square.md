@@ -10,7 +10,7 @@ Calculates the square of a value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 square(arg)
 ```
 

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "使用 DataSketches HyperLogLog 返回近似去重计数。与 APPROX_COUNT_DISTINCT 类似，但精度更高。"
+---
+
 # ds_hll_count_distinct
 
 返回聚合函数的近似值，结果类似于 COUNT(DISTINCT col)。相似函数为 APPROX_COUNT_DISTINCT(expr)。
@@ -8,7 +13,7 @@
 
 ## 语法
 
-```Haskell
+```plaintext
 ds_hll_count_distinct(expr, [log_k], [tgt_type])
 ```
 - `log_k`：必须为整数。范围：[4, 21]。默认值：17。

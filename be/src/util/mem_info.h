@@ -55,6 +55,23 @@ public:
         return _s_physical_mem;
     }
 
+    // This process's resident set size in bytes, or -1 when it cannot be read.
+    //
+    // Unlike physical_mem(), this is read on every call rather than cached by init(), because it
+    // is the number that moves: it counts pages the allocator has freed but not yet returned to
+    // the kernel, which a memory tracker counting requested bytes does not see, so the two drift
+    // apart by however much the allocator is holding on to.
+    //
+    // It is this process's residency and nothing more. A cgroup's memory.max is enforced against
+    // the cgroup's aggregate charge, which also covers page cache and kernel memory and spans
+    // every process in the cgroup, and the OOM killer's score adds swap entries and page tables
+    // on top of RSS. Do not read this as the usage either of them enforces.
+    //
+    // Reads /proc/self/statm, which the kernel serves from counters it already maintains -- no
+    // VMA walk, unlike /proc/self/smaps -- so it is cheap enough to poll. Returns -1 on any
+    // platform without that file, macOS included.
+    static int64_t process_resident_bytes();
+
     static std::string debug_string();
 
 private:

@@ -11,7 +11,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 inet_aton(VARCHAR ipv4)
 ```
 

@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 TRANSLATE(source, from_string, to_string)
 ```
 

@@ -10,7 +10,7 @@ StarRocks のバージョンを照会するには、[current_version](current_ve
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR version();
 ```
 
@@ -36,4 +36,4 @@ mysql> select version();
 
 ## References
 
-[current_version](../utility-functions/current_version.md)
+[current_version](./current_version.md)

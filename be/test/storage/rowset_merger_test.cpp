@@ -32,6 +32,7 @@
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -47,6 +48,7 @@ public:
     }
 
     Status add_chunk(const Chunk& chunk, const std::vector<uint64_t>& rssid_rowids) override {
+        added_chunk_num_rows.emplace_back(chunk.num_rows());
         all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         return Status::OK();
     }
@@ -98,6 +100,7 @@ public:
 
     MutableColumnPtr all_pks;
     vector<uint32_t> all_rssids;
+    std::vector<size_t> added_chunk_num_rows;
 
     vector<MutableColumnPtr> non_key_columns;
 };
@@ -225,6 +228,40 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
         return -1;
     }
     return read_until_eof(iter);
+}
+
+TEST_F(RowsetMergerTest, chunk_size_estimation_loads_unloaded_rowset) {
+    const auto old_compaction_memory_limit_per_worker = config::compaction_memory_limit_per_worker;
+    const auto old_vector_chunk_size = config::vector_chunk_size;
+    DeferOp restore_config([&]() {
+        config::compaction_memory_limit_per_worker = old_compaction_memory_limit_per_worker;
+        config::vector_chunk_size = old_vector_chunk_size;
+    });
+    config::compaction_memory_limit_per_worker = 1;
+    config::vector_chunk_size = 4096;
+
+    create_tablet(GetCurrentTimeMicros(), GetCurrentTimeMicros() & 0x7fffffff);
+    std::vector<int64_t> pks = {1, 2, 3, 4, 5, 6, 7, 8};
+    auto rowset = create_rowset(_tablet, pks);
+    ASSERT_OK(_tablet->rowset_commit(2, rowset));
+    std::vector<RowsetSharedPtr> applied_rowsets;
+    ASSERT_OK(_tablet->updates()->get_applied_rowsets(2, &applied_rowsets));
+
+    RowsetSharedPtr unloaded_rowset;
+    ASSERT_OK(RowsetFactory::create_rowset(_tablet->tablet_schema(), rowset->rowset_path(), rowset->rowset_meta(),
+                                           &unloaded_rowset));
+    ASSERT_TRUE(unloaded_rowset->segments().empty());
+
+    TestRowsetWriter writer;
+    Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
+    ASSERT_OK(PrimaryKeyEncoder::create_column(schema, &writer.all_pks));
+    MergeConfig cfg;
+    ASSERT_OK(compaction_merge_rowsets(*_tablet, 2, {unloaded_rowset}, &writer, cfg));
+    ASSERT_EQ(pks.size(), writer.all_pks->size());
+    ASSERT_FALSE(writer.added_chunk_num_rows.empty());
+    for (size_t num_rows : writer.added_chunk_num_rows) {
+        EXPECT_EQ(1, num_rows);
+    }
 }
 
 TEST_F(RowsetMergerTest, horizontal_merge) {

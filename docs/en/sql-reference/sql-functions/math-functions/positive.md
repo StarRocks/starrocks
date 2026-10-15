@@ -10,7 +10,7 @@ Returns `x` as a value.
 
 ## Syntax
 
-```Haskell
+```plaintext
 POSITIVE(x);
 ```
 

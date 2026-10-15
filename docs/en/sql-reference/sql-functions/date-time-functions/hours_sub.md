@@ -10,7 +10,7 @@ Reduces the specified date and time by a specified number of hours.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME hours_sub(DATETIME|DATE date, INT hours);
 ```
 

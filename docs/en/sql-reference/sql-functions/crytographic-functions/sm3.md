@@ -12,7 +12,7 @@ Digest algorithms have a broad range of use cases in digital signature, message 
 
 ## Syntax
 
-```Haskell
+```plaintext
 SM3(str);
 ```
 

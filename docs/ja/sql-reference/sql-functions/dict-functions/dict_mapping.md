@@ -40,6 +40,12 @@ key_column_expr ::= <column_name> | <expr>
 
 ただし、指定されたキーにマップされた値が見つからない場合、`<null_if_not_exist>` パラメータが `true` に設定されている場合は `NULL` が返されます。パラメータが `false`（デフォルト）に設定されている場合、エラー `query failed if record not exist in dict table` が返されます。
 
+## 使用上の注意
+
+デフォルトでは、システムはオプティマイザによる `COUNT(DISTINCT)` の実装方法の選択を許可します。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、クエリヒントで `count_distinct_implementation` を `multi_count_distinct` に設定し、正確なカウントを行う `multi_distinct_count` 実装を検証できます。ただし、カーディナリティが高い列の重複排除には `multi_distinct_count` 実装を使用しないでください。HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、OOM が発生する可能性があります。
+
 ## Example
 
 **Example 1: 辞書テーブルからキーにマップされた値を直接クエリします。**

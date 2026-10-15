@@ -204,6 +204,10 @@ public class CTEContext {
     }
 
     public boolean isForceCTE(int cteId) {
+        if (consumeNums.getOrDefault(cteId, 0) <= 0) {
+            return false;
+        }
+
         // 1. rewrite to CTE rule, force CTE
         if (this.forceCTEList.contains(cteId)) {
             return true;

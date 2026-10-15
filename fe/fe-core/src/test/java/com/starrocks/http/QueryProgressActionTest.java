@@ -15,11 +15,16 @@
 package com.starrocks.http;
 
 import com.google.gson.JsonObject;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ExplainAnalyzer;
+import com.starrocks.sql.analyzer.Authorizer;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;
@@ -149,5 +154,40 @@ public class QueryProgressActionTest extends StarRocksHttpTestCase {
         summaryProfile = null;
         String respStr5 = sendHttp(existQueryId);
         Assertions.assertTrue(respStr5.contains("Failed to get query progress"));
+    }
+
+    @Test
+    public void testAccessCheckAppliesWhenEnabled() throws IOException {
+        // The progress view is ANALYZE PROFILE's output, so once the access check is on the endpoint needs a
+        // caller identity and applies the owner-or-OPERATE rule; profile 123 records no user, so root needs
+        // OPERATE like anyone else.
+        Config.authorization_enable_query_profile_access_check = true;
+        try {
+            Request anonymous = new Request.Builder()
+                    .get()
+                    .url(BASE_URL + "/api/query/progress?query_id=123")
+                    .build();
+            Response response = networkClient.newCall(anonymous).execute();
+            Assertions.assertEquals(401, response.code(), response.body().string());
+
+            new MockUp<Authorizer>() {
+                @Mock
+                public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                        throws AccessDeniedException {
+                    throw new AccessDeniedException("Access denied; OPERATE on SYSTEM required");
+                }
+            };
+            Request asRoot = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + "/api/query/progress?query_id=123")
+                    .build();
+            response = networkClient.newCall(asRoot).execute();
+            String body = response.body().string();
+            Assertions.assertEquals(401, response.code(), body);
+            Assertions.assertTrue(body.contains("Access denied"), body);
+        } finally {
+            Config.authorization_enable_query_profile_access_check = false;
+        }
     }
 }

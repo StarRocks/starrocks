@@ -106,7 +106,8 @@ public abstract class BaseAction implements IAction {
         try {
             execute(request, response);
         } catch (Exception e) {
-            LOG.warn("fail to process url: {}, exception: {}", request.getRequest().uri(), DebugUtil.getStackTrace(e));
+            LOG.warn("fail to process url: {}, exception: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    DebugUtil.getStackTrace(e));
             if (e instanceof AccessDeniedException) {
                 response.updateHeader(HttpHeaderNames.WWW_AUTHENTICATE.toString(), "Basic realm=\"\"");
                 writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
@@ -330,7 +331,7 @@ public abstract class BaseAction implements IAction {
         ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
         try {
             if (!parseAuthInfo(request, authInfo)) {
-                LOG.info("parse auth info failed, url {}", request.getRequest().uri());
+                LOG.info("parse auth info failed, url {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()));
                 throw new AccessDeniedException("Need auth information.");
             }
             LOG.debug("get auth info: {}", authInfo);

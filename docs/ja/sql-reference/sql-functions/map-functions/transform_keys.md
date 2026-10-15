@@ -10,13 +10,13 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 MAP transform_keys(lambda_func, any_map)
 ```
 
 `lambda_func` は `any_map` の後に置くこともできます:
 
-```Haskell
+```plaintext
 MAP transform_keys(any_map, lambda_func)
 ```
 

@@ -12,7 +12,7 @@ This function deduplicates the input string during the conversion. It must be us
 
 ## Syntax
 
-```Haskell
+```plaintext
 BITMAP BITMAP_FROM_STRING(VARCHAR input)
 ```
 

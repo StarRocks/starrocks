@@ -10,7 +10,7 @@ MAP 値の要素数を返します。MAP はキーと値のペアの無順序コ
 
 ## 構文
 
-```Haskell
+```plaintext
 INT cardinality(any_map)
 ```
 

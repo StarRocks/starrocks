@@ -10,7 +10,7 @@ Constructs a PERCENTILE value, which is used to fill in null values for data loa
 
 ## Syntax
 
-```Haskell
+```plaintext
 PERCENTILE_EMPTY();
 ```
 

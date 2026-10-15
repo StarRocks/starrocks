@@ -4,4 +4,5 @@ key: 'sql-data-type-string' # differentiate from String functions
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: string-type

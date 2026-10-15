@@ -473,6 +473,13 @@ public class InsertOverwriteJobRunner {
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null || !db.isExist()) {
+            if (isReplay) {
+                // the database was dropped by a journal entry replayed before this one, so
+                // there is nothing left to clean up; throwing here would exit the FE
+                LOG.warn("database id:{} does not exist when replaying insert overwrite job:{} to FAILED, skip gc",
+                        dbId, job.getJobId());
+                return;
+            }
             // the dynamic overwrite transaction needs only dbId and txnId to abort;
             // clean it up even when the database is gone, otherwise it lingers until
             // the transaction timeout checker reaps it. Skip on replay: the transaction
@@ -484,6 +491,15 @@ public class InsertOverwriteJobRunner {
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
+            if (isReplay) {
+                // the table was dropped by a journal entry replayed before this one, so
+                // there is nothing left to clean up. Only a FAILED entry written before the
+                // race below was fixed can be ordered after the drop, but replaying it must
+                // not be fatal: throwing here fails the replay and exits the FE.
+                LOG.warn("table:{} does not exist in database:{} when replaying insert overwrite job:{} to FAILED, "
+                        + "skip gc", tableId, db.getFullName(), job.getJobId());
+                return;
+            }
             if (!isReplay) {
                 abortDynamicOverwriteTxnQuietly();
             }
@@ -512,6 +528,15 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         try {
+            // Re-check the table under the WRITE lock, the way doCommit() does: a concurrent
+            // DROP TABLE may have removed it while gc() was waiting for the lock, and the
+            // reference resolved before the lock must not be used then. Failing here also
+            // skips the state change logged below, so that no FAILED entry is ever written
+            // for an already dropped table - such an entry kills every FE that replays it.
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
+                throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
+            }
+
             // Drop temp partitions by partition IDs (for non-dynamic overwrite)
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {

@@ -10,7 +10,7 @@ Returns a slice of an array. This function intercepts `length` elements from `in
 
 ## Syntax
 
-```Haskell
+```plaintext
 array_slice(input, offset, length)
 ```
 

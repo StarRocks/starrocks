@@ -10,11 +10,11 @@ Converts a string into a DATE value according to the specified format. If the co
 
 The format must be consistent with that described in [date_format](./date_format.md).
 
-This function is equivalent to [str_to_date](../date-time-functions/str_to_date.md) but has a different return type.
+This function is equivalent to [str_to_date](./str_to_date.md) but has a different return type.
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATE str2date(VARCHAR str, VARCHAR format);
 ```
 

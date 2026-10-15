@@ -16,13 +16,13 @@ displayed_sidebar: docs
 
 - JSON から SQL への変換
 
-```Haskell
+```plaintext
 cast(json_expr AS sql_data_type)
 ```
 
 - SQL から JSON への変換
 
-```Haskell
+```plaintext
 cast(sql_expr AS JSON)
 ```
 

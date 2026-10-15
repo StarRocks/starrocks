@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME CURRENT_TIMESTAMP()
 DATETIME CURRENT_TIMESTAMP(INT p)
 ```

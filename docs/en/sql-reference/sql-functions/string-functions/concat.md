@@ -10,7 +10,7 @@ This function combines multiple strings. If any of the parameter value is NULL, 
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR concat(VARCHAR,...)
 ```
 

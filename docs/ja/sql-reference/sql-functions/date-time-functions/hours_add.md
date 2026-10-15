@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME hours_add(DATETIME|DATE date, INT hours);
 ```
 

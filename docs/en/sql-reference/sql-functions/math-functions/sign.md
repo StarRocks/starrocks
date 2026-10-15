@@ -10,7 +10,7 @@ Returns the sign of `x`. A negative number, 0, or a positive number as input cor
 
 ## Syntax
 
-```Haskell
+```plaintext
 SIGN(x);
 ```
 

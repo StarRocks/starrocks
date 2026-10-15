@@ -1,0 +1,104 @@
+-- name: test_stale_tablet_stat_count @sequential @slow
+
+-- Regression for https://github.com/StarRocks/starrocks/issues/72271
+--
+-- COUNT(*) without a predicate can be answered inside the FE by
+-- RewriteSimpleAggToMetaScanRule.tryReplaceByMetaData() from row counts that
+-- this FE collected itself. Those counts are not journal-replicated and, before
+-- this fix, carried no version: the only guard was
+-- TabletStatMgr.workTimeIsMustAfter(), which asks whether THIS FE recently
+-- finished a collection cycle -- a wall clock stamp advanced unconditionally at
+-- the end of every cycle, including cycles whose stat RPCs failed or were
+-- answered from a snapshot older than the load. So it vouched for counts that
+-- were never refreshed.
+--
+-- Reproduced here with no network fault at all: the BE's own tablet-stat cache
+-- is left at its default 300s rebuild interval -- which, right after a load, is
+-- exactly what a slow, overloaded or failing collection looks like from the FE's
+-- side -- while the FE keeps collecting on a 1s cycle and keeps advancing its
+-- stamp. The folded COUNT(*) must still agree with a real scan.
+--
+-- NOTE both config changes are restored BEFORE the first assertion they could
+-- outlive: a failed assertion aborts the case, and a cluster-wide setting left
+-- behind would follow every case that runs after this one.
+
+DROP DATABASE IF EXISTS test_stale_tablet_stat;
+CREATE DATABASE test_stale_tablet_stat;
+USE test_stale_tablet_stat;
+
+-- Put both collection loops on a 1s cycle. Note Daemon.run() re-reads the
+-- interval only after the current Thread.sleep() returns, so this does not take
+-- effect until at most one OLD interval (300s by default) has elapsed -- hence
+-- the warm-up handshake below rather than a fixed sleep.
+function: update_be_config("tablet_stat_cache_update_interval_second", "1")
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "1");
+
+CREATE TABLE warmup (
+  id BIGINT NOT NULL
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO warmup VALUES (1);
+
+-- Block until TABLE_ROWS(warmup) turns non-zero. That single fact proves both
+-- loops are now on the fast cycle: the FE has completed a TabletStatMgr round
+-- AND the BE served it a snapshot newer than the load. Only then is the timing
+-- below deterministic.
+--
+-- Split into three waits, and NOT because it reads better: the harness kills any
+-- shell block at 120s (sr_sql_lib.execute_shell), while this can legitimately take
+-- one whole OLD interval -- 300s by default -- before the daemon wakes up and picks
+-- up the 1s one. A single 330s loop is killed every time, which fails the case
+-- before it restores the cluster-wide settings it changed.
+shell: for i in $(seq 1 100); do n=$(${mysql_cmd} -Ne "SELECT TABLE_ROWS FROM information_schema.tables WHERE TABLE_SCHEMA='test_stale_tablet_stat' AND TABLE_NAME='warmup'" 2>/dev/null); [ "$n" = "1" ] && break; sleep 1; done; true
+shell: for i in $(seq 1 100); do n=$(${mysql_cmd} -Ne "SELECT TABLE_ROWS FROM information_schema.tables WHERE TABLE_SCHEMA='test_stale_tablet_stat' AND TABLE_NAME='warmup'" 2>/dev/null); [ "$n" = "1" ] && break; sleep 1; done; true
+shell: for i in $(seq 1 100); do n=$(${mysql_cmd} -Ne "SELECT TABLE_ROWS FROM information_schema.tables WHERE TABLE_SCHEMA='test_stale_tablet_stat' AND TABLE_NAME='warmup'" 2>/dev/null); [ "$n" = "1" ] && break; sleep 1; done; echo $n
+
+-- Healthy state: a collection has now proven this table's row count against the
+-- version the FE considers visible, so the fold is expected to happen -- the plan
+-- collapses to constants over a one-row UNION instead of reading anything. Guards
+-- against "fixing" the staleness by quietly disabling the fast path.
+shell: for i in $(seq 1 40); do ${mysql_cmd} -Ne "explain select count(*) from test_stale_tablet_stat.warmup" 2>/dev/null | grep -qi union && break; sleep 1; done; ${mysql_cmd} -Ne "explain select count(*) from test_stale_tablet_stat.warmup" 2>/dev/null | grep -qi union && echo folded || echo not_folded
+
+SELECT COUNT(*) FROM warmup;
+
+-- Back to the BE default. Its cache was just rebuilt, so it now goes stale for
+-- 300s all by itself -- longer than everything below needs, and nothing stays
+-- pinned for the rest of the run.
+function: update_be_config("tablet_stat_cache_update_interval_second", "300")
+
+CREATE TABLE t (
+  id BIGINT NOT NULL,
+  v  INT    NOT NULL
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t SELECT generate_series, generate_series % 100 FROM TABLE(generate_series(1, 20000));
+
+-- ~15 TabletStatMgr rounds. Every one of them fetches the pre-load BE snapshot
+-- and still advances lastWorkTimestamp, so the old guard ends up wide open while
+-- the row counts behind it were never refreshed.
+shell: sleep 15
+
+-- Restore before asserting: everything below can fail the case, and a residual 1s
+-- stat cycle would follow every case that runs after this one. The FE keeps the
+-- counts it has already collected, so the staleness under test survives this.
+ADMIN SET FRONTEND CONFIG ("tablet_stat_update_interval_second" = "300");
+
+-- First establish that the data itself is intact: a real scan on this very FE.
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+SELECT COUNT(*) FROM t;
+
+-- Same FE, same instant, folded answer. It must agree with the scan above.
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+SELECT COUNT(*) FROM t;
+
+-- Deliberately NOT asserted here: information_schema.TABLES.TABLE_ROWS reads the
+-- cached row count through the same chain (InformationSchemaDataSource
+-- .genNormalTableInfo) and goes stale together with it, but TABLE_ROWS is an
+-- approximation by definition (MySQL reports an estimate there for InnoDB too), so
+-- it is not a correctness bug. COUNT(*) is what must be exact.
+
+DROP DATABASE test_stale_tablet_stat;

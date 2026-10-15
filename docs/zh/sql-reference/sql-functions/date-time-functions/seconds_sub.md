@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 DATETIME seconds_sub(DATETIME|DATE date, INT seconds);
 ```
 

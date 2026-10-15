@@ -23,13 +23,17 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/compaction_scheduler.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
+#include "util/scoped_cleanup.h"
 
 namespace starrocks {
 
@@ -93,7 +97,10 @@ TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
     {
         auto st = action.update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
@@ -164,6 +171,23 @@ TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
     st = action.update_config("lake_metadata_fetch_thread_count", "0");
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_compact_threads_rolls_back_rejected_value) {
+    auto* tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSERT_NE(nullptr, tablet_manager);
+    auto* scheduler = tablet_manager->compaction_scheduler();
+    auto old_config = config::compact_threads;
+    SCOPED_CLEANUP({ config::compact_threads = old_config; });
+
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto target = scheduler->_task_queues.target_size();
+    ASSERT_OK(action.update_config("compact_threads", std::to_string(target)));
+
+    auto st = action.update_config("compact_threads", "0");
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    EXPECT_EQ(target, config::compact_threads);
+    EXPECT_EQ(target, scheduler->_task_queues.target_size());
 }
 
 } // namespace starrocks

@@ -13,7 +13,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 lpad(str, len, pad)
 ```
 

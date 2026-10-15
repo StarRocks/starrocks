@@ -15,6 +15,10 @@
 package com.starrocks.leader;
 
 import com.starrocks.leader.TabletCollector.CollectStat;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TGetTabletsInfoResult;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -31,5 +35,20 @@ public class TabletCollectorTest {
         Assertions.assertEquals(1L, queue.poll().lastCollectTime);
         Assertions.assertEquals(2L, queue.poll().lastCollectTime);
         Assertions.assertEquals(3L, queue.poll().lastCollectTime);
+    }
+
+    @Test
+    public void testUpdateTabletMaxCompactionScore() {
+        Backend backend = new Backend(1L, "127.0.0.1", 9050);
+        backend.setTabletMaxCompactionScore(10L);
+
+        TGetTabletsInfoResult oldBeResult = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        TabletCollector.updateTabletMaxCompactionScore(backend, oldBeResult);
+        Assertions.assertEquals(10L, backend.getTabletMaxCompactionScore());
+
+        TGetTabletsInfoResult newBeResult = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        newBeResult.setTablet_max_compaction_score(42L);
+        TabletCollector.updateTabletMaxCompactionScore(backend, newBeResult);
+        Assertions.assertEquals(42L, backend.getTabletMaxCompactionScore());
     }
 }

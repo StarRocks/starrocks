@@ -14,7 +14,7 @@ This function is supported from v3.3 onwards.
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT crc32(VARCHAR str)
 ```
 

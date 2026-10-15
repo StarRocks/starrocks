@@ -43,11 +43,12 @@ under the License.
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
-        <jackson.version>2.21.4</jackson.version>
-        <!-- jackson-annotations doesn't have 2.21.4 version released -->
+        <jackson.version>2.21.7</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.7 version released -->
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
-        <parquet.version>1.15.2</parquet.version>
+        <parquet.version>1.18.1</parquet.version>
+        <ranger.version>2.9.0</ranger.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <antlr.version>4.9.3</antlr.version>
@@ -62,8 +63,8 @@ under the License.
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.9.1</kafka-clients.version>
         <arrow.version>18.0.0</arrow.version>
-        <grpc.version>1.63.0</grpc.version>
-        <io.netty.version>4.1.136.Final</io.netty.version>
+        <grpc.version>1.76.0</grpc.version>
+        <io.netty.version>4.1.137.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.42.1</aws-v2-sdk.version>
         <avro.version>1.12.0</avro.version>
@@ -73,7 +74,7 @@ under the License.
         <paimon.version>1.3.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.0.5</staros.version>
+        <staros.version>4.0.9</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -83,10 +84,13 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
-        <lz4-java.version>1.10.1</lz4-java.version>
+        <lz4-java.version>1.11.4</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
-        <bouncycastle.version>1.84</bouncycastle.version>
+        <bouncycastle.version>1.86</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
+        <httpclient5.version>5.6.4</httpclient5.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
+        <luben.zstd.jni.version>1.5.7-15</luben.zstd.jni.version>
     </properties>
 
     <profiles>
@@ -269,7 +273,25 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.3</version>
+                <version>${httpclient5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-reactive</artifactId>
+                <version>${httpcore5.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -427,16 +449,12 @@ under the License.
                 <version>2.16.1</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+            <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
             <dependency>
-                <groupId>com.baidu</groupId>
+                <groupId>com.starrocks</groupId>
                 <artifactId>jprotobuf-rpc-core</artifactId>
-                <version>4.2.1</version>
+                <version>1.0.0</version>
                 <exclusions>
-                    <exclusion>
-                        <groupId>com.baidu</groupId>
-                        <artifactId>jprotobuf</artifactId>
-                    </exclusion>
                     <exclusion>
                         <groupId>junit</groupId>
                         <artifactId>junit</artifactId>
@@ -607,6 +625,12 @@ under the License.
                 <groupId>com.github.oshi</groupId>
                 <artifactId>oshi-core</artifactId>
                 <version>6.2.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${luben.zstd.jni.version}</version>
             </dependency>
 
             <dependency>
@@ -1302,7 +1326,7 @@ under the License.
                         <artifactId>lz4-pure-java</artifactId>
                     </exclusion>
                     <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
-                         bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                         bcprov-jdk18on 1.86 on the classpath provides the same packages -->
                     <exclusion>
                         <groupId>org.bouncycastle</groupId>
                         <artifactId>bcprov-jdk15on</artifactId>
@@ -1316,34 +1340,17 @@ under the License.
                 <version>${odps.version}</version>
             </dependency>
 
+            <!-- Import the gRPC BOM instead of pinning artifacts individually. Individual
+                 <dependency> entries only govern the artifacts they name, so io.grpc artifacts
+                 that arrive transitively are left unmanaged: arrow flight-core brings in
+                 io.grpc:grpc-netty at its own version, which then runs against a grpc-core
+                 pinned here. The BOM covers direct and transitive io.grpc artifacts alike. -->
             <dependency>
                 <groupId>io.grpc</groupId>
-                <artifactId>grpc-api</artifactId>
+                <artifactId>grpc-bom</artifactId>
                 <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-netty-shaded</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-protobuf</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-stub</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-core</artifactId>
-                <version>${grpc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <dependency>
@@ -1568,7 +1575,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.ranger</groupId>
                 <artifactId>ranger-plugins-common</artifactId>
-                <version>2.8.0</version>
+                <version>${ranger.version}</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.elasticsearch</groupId>
@@ -1585,6 +1592,12 @@ under the License.
                     <exclusion>
                         <groupId>com.sun.jersey</groupId>
                         <artifactId>jersey-bundle</artifactId>
+                    </exclusion>
+                    <!-- Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows
+                         jakarta.ws.rs-api 2.1.6, the same clash hadoop-common excludes it for -->
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

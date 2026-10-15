@@ -379,6 +379,12 @@ This feature can be used to build a dictionary table for quickly computing disti
     3 rows in set (0.01 sec)
     ```
 
+## Usage Notes
+
+By default, the system will allow the optimizer to choose the `COUNT(DISTINCT)` implementation.
+
+When deduplicating low- and medium-cardinality columns, you can set `count_distinct_implementation` to `multi_count_distinct` for a query via query hint to verify the `multi_distinct_count` implementation for precise counting. However, do not use the `multi_distinct_count` implementation when deduplicating high-cardinality columns, because its HashSet status and final merging can cause excessive memory consumption and even OOM.
+
 ## Limits
 
 - When a table with an `AUTO_INCREMENT` column is created, `'replicated_storage' = 'true'` must be set to ensure that all replicas have the same auto-incremented IDs.

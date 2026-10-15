@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 ```
 

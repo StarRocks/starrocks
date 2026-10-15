@@ -319,7 +319,7 @@ public class IcebergScanNodeTest {
         }};
 
         IcebergRewriteData rewriteData = new IcebergRewriteData();
-        rewriteData.setSource(mockSource);
+        rewriteData.addSource(mockSource);
         rewriteData.setBatchSize(10 * 1024);
         rewriteData.setMaxScanRangeLength(5);
 
@@ -859,6 +859,90 @@ public class IcebergScanNodeTest {
         Assertions.assertTrue(info2.isIs_rewrite());
     }
 
+    private IcebergMetadata.IcebergSinkExtra runFillRewriteFiles(boolean rewriteAll, boolean hasPartitionFilter,
+                                                                 Set<DeleteFile> posDeletes,
+                                                                 Set<DeleteFile> eqDeletes,
+                                                                 Set<DataFile> scannedDataFiles) throws Exception {
+        IcebergRewriteStmt rewriteStmt = Mockito.mock(IcebergRewriteStmt.class);
+        Mockito.when(rewriteStmt.rewriteAll()).thenReturn(rewriteAll);
+        Mockito.when(rewriteStmt.hasPartitionFilter()).thenReturn(hasPartitionFilter);
+
+        IcebergScanNode scanNode = Mockito.mock(IcebergScanNode.class);
+        Mockito.when(scanNode.getPlanNodeName()).thenReturn("IcebergScanNode");
+        Mockito.when(scanNode.getPosAppliedDeleteFiles()).thenReturn(posDeletes);
+        Mockito.when(scanNode.getEqualAppliedDeleteFiles()).thenReturn(eqDeletes);
+        Mockito.when(scanNode.getScannedDataFiles()).thenReturn(scannedDataFiles);
+
+        PlanFragment fragment = Mockito.mock(PlanFragment.class);
+        Mockito.when(fragment.collectScanNodes()).thenReturn(Map.of(new PlanNodeId(0), scanNode));
+        ExecPlan execPlan = Mockito.mock(ExecPlan.class);
+        Mockito.when(execPlan.getFragments()).thenReturn(new ArrayList<>(List.of(fragment)));
+
+        StmtExecutor executor = new StmtExecutor(new ConnectContext(), Mockito.mock(StatementBase.class));
+        return executor.fillRewriteFiles(rewriteStmt, execPlan, new ArrayList<>(),
+                new IcebergMetadata.IcebergSinkExtra());
+    }
+
+    private DeleteFile mockDeleteFile(String referencedDataFile) {
+        DeleteFile deleteFile = Mockito.mock(DeleteFile.class);
+        Mockito.when(deleteFile.referencedDataFile()).thenReturn(referencedDataFile);
+        return deleteFile;
+    }
+
+    private DataFile mockDataFileAt(String location) {
+        DataFile dataFile = Mockito.mock(DataFile.class);
+        Mockito.when(dataFile.location()).thenReturn(location);
+        return dataFile;
+    }
+
+    @Test
+    public void testFillRewriteFilesOnlyRemovesFileScopedPosDeletesOfRewrittenFiles() throws Exception {
+        DataFile rewritten = mockDataFileAt("oss://bucket/db/tbl/data/rewritten.parquet");
+        // Names the data file this rewrite removes -> dangling afterwards, safe to drop.
+        DeleteFile fileScopedOnRewritten = mockDeleteFile("oss://bucket/db/tbl/data/rewritten.parquet");
+        // Names a data file left untouched -> still needed.
+        DeleteFile fileScopedOnUntouched = mockDeleteFile("oss://bucket/db/tbl/data/untouched.parquet");
+        // Partition scoped: may apply to data files this rewrite did not read.
+        DeleteFile partitionScoped = mockDeleteFile(null);
+
+        IcebergMetadata.IcebergSinkExtra extra = runFillRewriteFiles(false, true,
+                Set.of(fileScopedOnRewritten, fileScopedOnUntouched, partitionScoped),
+                Set.of(), Set.of(rewritten));
+
+        Assertions.assertEquals(Set.of(fileScopedOnRewritten), extra.getAppliedDeleteFiles());
+        Assertions.assertEquals(Set.of(rewritten), extra.getScannedDataFiles());
+    }
+
+    @Test
+    public void testFillRewriteFilesRemovesAllPosDeletesOnWholeTableRewrite() throws Exception {
+        DataFile rewritten = mockDataFileAt("oss://bucket/db/tbl/data/rewritten.parquet");
+        DeleteFile fileScoped = mockDeleteFile("oss://bucket/db/tbl/data/rewritten.parquet");
+        // Partition scoped, but a whole-table rewrite leaves no untouched data file it could still apply to.
+        DeleteFile partitionScoped = mockDeleteFile(null);
+
+        IcebergMetadata.IcebergSinkExtra extra = runFillRewriteFiles(true, false,
+                Set.of(fileScoped, partitionScoped), Set.of(), Set.of(rewritten));
+
+        Assertions.assertEquals(Set.of(fileScoped, partitionScoped), extra.getAppliedDeleteFiles());
+    }
+
+    @Test
+    public void testFillRewriteFilesKeepsEqualityDeletesWhenScopedByFilter() throws Exception {
+        DataFile rewritten = mockDataFileAt("oss://bucket/db/tbl/data/rewritten.parquet");
+        DeleteFile eqDelete = mockDeleteFile(null);
+
+        // rewrite_all with a WHERE clause covers only the files that survived pruning, so an equality delete
+        // it applied may still apply to data files left untouched: dropping it would resurrect deleted rows.
+        IcebergMetadata.IcebergSinkExtra scoped = runFillRewriteFiles(true, true,
+                Set.of(), Set.of(eqDelete), Set.of(rewritten));
+        Assertions.assertTrue(scoped.getAppliedDeleteFiles().isEmpty());
+
+        // A whole-table rewrite reads every data file, so its equality deletes are all dangling.
+        IcebergMetadata.IcebergSinkExtra wholeTable = runFillRewriteFiles(true, false,
+                Set.of(), Set.of(eqDelete), Set.of(rewritten));
+        Assertions.assertEquals(Set.of(eqDelete), wholeTable.getAppliedDeleteFiles());
+    }
+
     @Test
     public void testGetSourceFileScanOutputs_mixedScenarios() {
         // --- Mock DeleteFile ---
@@ -1107,13 +1191,14 @@ public class IcebergScanNodeTest {
 
         new MockUp<IcebergRewriteStmt>() {
             @Mock
-            public void $init(InsertStmt base, boolean rewriteAll) {
+            public void $init(InsertStmt base, boolean rewriteAll, boolean hasPartitionFilter) {
                 //do nothing
             }
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", false, 0L, 10L, 1L, context, alter);
+                "insert into t select * from t", "insert into t select * from t", false, false, 0L, 10L, 1L,
+                context, alter);
 
         job.prepare();
         Deencapsulation.setField(job, "execPlan", execPlan);
@@ -1182,7 +1267,7 @@ public class IcebergScanNodeTest {
         };
         new mockit.MockUp<IcebergRewriteStmt>() {
             @mockit.Mock
-            public void $init(InsertStmt base, boolean rewriteAll) { /* no-op */ }
+            public void $init(InsertStmt base, boolean rewriteAll, boolean hasPartitionFilter) { /* no-op */ }
         };
         new mockit.MockUp<IcebergScanNode>() {
             @mockit.Mock
@@ -1208,7 +1293,7 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", false, 0L, 10L, 1L, context, alter);
+                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "parsedStmt", parsedInsert);

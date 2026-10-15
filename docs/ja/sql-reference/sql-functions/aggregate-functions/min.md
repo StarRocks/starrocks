@@ -8,7 +8,7 @@ expr 式の最小値を返します。
 
 ## 構文
 
-```Haskell
+```plaintext
 MIN(expr)
 ```
 

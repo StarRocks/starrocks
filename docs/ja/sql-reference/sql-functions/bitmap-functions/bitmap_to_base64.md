@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR bitmap_to_base64(BITMAP bitmap)
 ```
 

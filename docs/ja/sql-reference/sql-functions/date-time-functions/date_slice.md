@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 ```
 

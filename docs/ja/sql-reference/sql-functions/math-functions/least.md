@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 LEAST(expr1,...);
 ```
 

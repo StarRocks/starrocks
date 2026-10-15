@@ -8,7 +8,7 @@ Returns true if at least one row for `expr` is true. Otherwise, returns false. `
 
 ## Syntax
 
-```Haskell
+```plaintext
 bool_or(expr)
 ```
 

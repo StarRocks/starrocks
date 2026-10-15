@@ -10,7 +10,7 @@ Checks whether the value is not `NULL`, returns `1` if it is not `NULL`, and ret
 
 ## Syntax
 
-```Haskell
+```plaintext
 ISNOTNULL(v)
 ```
 

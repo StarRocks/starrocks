@@ -10,7 +10,7 @@ Returns a random UUID of the VARCHAR type. Two calls to this function can genera
 
 ## Syntax
 
-```Haskell
+```plaintext
 uuid();
 ```
 

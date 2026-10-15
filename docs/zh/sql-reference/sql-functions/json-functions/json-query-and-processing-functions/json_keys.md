@@ -14,7 +14,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 json_keys(json_doc[, path])
 ```
 

@@ -200,7 +200,7 @@ public class LargeInPredicateToJoinRule extends TransformationRule {
 
         ScalarOperator finalLeftColumn = leftExpression;
         if (!leftExpression.getType().matchesType(rightColumn.getType())) {
-            finalLeftColumn = new CastOperator(rightColumn.getType(), leftExpression, false);
+            finalLeftColumn = new CastOperator(rightColumn.getType(), leftExpression, true);
         }
 
         BinaryPredicateOperator joinPredicate = new BinaryPredicateOperator(BinaryType.EQ, finalLeftColumn, rightColumn);
@@ -258,4 +258,3 @@ public class LargeInPredicateToJoinRule extends TransformationRule {
         }
     }
 }
-

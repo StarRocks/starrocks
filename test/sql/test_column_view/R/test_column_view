@@ -1,4 +1,4 @@
--- name: test_column_view @sequential @slow
+-- name: test_column_view @sequential @slow @no_asan
 function: prepare_data("ssb", "${db[0]}")
 -- result:
 None

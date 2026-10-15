@@ -10,7 +10,7 @@ Computes the product of the arguments.
 
 ## Syntax
 
-```Haskell
+```plaintext
 multiply(arg1, arg2)
 ```
 

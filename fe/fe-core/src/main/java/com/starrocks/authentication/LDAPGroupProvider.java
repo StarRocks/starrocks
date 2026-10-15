@@ -123,6 +123,14 @@ public class LDAPGroupProvider extends GroupProvider {
         super(name, properties);
     }
 
+    /**
+     * For Gson. A provider loaded from the image must still run the field initializers above: without this
+     * constructor {@link #userToGroupCache} stays null until the first refresh completes, and every login
+     * in between fails with a NullPointerException.
+     */
+    private LDAPGroupProvider() {
+    }
+
     @Override
     public void init() throws DdlException {
         scheduleTask = SCHEDULER.scheduleAtFixedRate(this::refreshGroups, 0, getLdapCacheRefreshInterval(), TimeUnit.SECONDS);

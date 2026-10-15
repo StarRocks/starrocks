@@ -13,7 +13,7 @@ description: "Alphabetical i - p"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
 
 :::
 
@@ -170,6 +170,11 @@ description: "Alphabetical i - p"
 - 单位：字节
 - 描述：应用程序分配的总字节数。
 
+## `jemalloc_dirty_bytes`
+
+- 单位：字节
+- 描述：未使用的脏页（dirty page）中的总字节数。这些页面尚未通过 madvise 归还给操作系统，可直接复用于新的内存分配而不会触发缺页中断。
+
 ## `jemalloc_mapped_bytes`
 
 - 单位：字节
@@ -184,6 +189,11 @@ description: "Alphabetical i - p"
 
 - 单位：计数
 - 描述：用于元数据的透明巨页数量。
+
+## `jemalloc_muzzy_bytes`
+
+- 单位：字节
+- 描述：未使用的 muzzy 页中的总字节数。muzzy 是脏页与保留页（retained）之间的中间衰减状态，页面已通过 madvise（例如 MADV_FREE）处理，但地址映射仍被保留。
 
 ## `jemalloc_resident_bytes`
 
@@ -449,6 +459,11 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
 
+## `pipe_drivers`
+
+- 单位：计数
+- 描述：BE 准入控制当前预留的逻辑 driver 配额。包含 fragment 实例化 driver 和 operator 期间持有的配额，以及实例化后尚未释放的配额。该值遵循逻辑 DOP 计数规则（包括 colocate 执行组），并非已实例化的 driver 对象数或运行线程数。配额释放时（包括准备失败或 fragment 完成时），该值随之减少。
+
 ## `pipe_poller_block_queue_len`
 
 - 单位：计数
@@ -473,7 +488,7 @@ description: "Alphabetical i - p"
 
 - 类型：计数器
 - 单位：计数
-- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败时增加。
+- 描述：湖主键持久化索引中 SST 文件读取失败的总次数。当 SST 多次获取（读取）操作失败，或 Compaction 读取输入 SST 文件时检测到数据损坏时增加。
 
 ## `pk_index_sst_write_error_total`
 

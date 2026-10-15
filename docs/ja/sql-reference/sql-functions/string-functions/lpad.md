@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## 構文
 
-```Haskell
+```plaintext
 VARCHAR lpad(VARCHAR str, INT len[, VARCHAR pad])
 ```
 

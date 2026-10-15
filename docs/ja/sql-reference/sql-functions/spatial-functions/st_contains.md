@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 ## Syntax
 
-```Haskell
+```plaintext
 BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
 ```
 

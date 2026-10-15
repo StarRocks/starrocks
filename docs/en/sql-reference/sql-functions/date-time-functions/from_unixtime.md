@@ -23,7 +23,7 @@ Other formats are invalid and NULL will be returned.
 
 ## Syntax
 
-```Haskell
+```plaintext
 VARCHAR from_unixtime(BIGINT unix_timestamp[, VARCHAR string_format])
 ```
 

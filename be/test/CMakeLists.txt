@@ -25,7 +25,10 @@ set(EXEC_FILES
         ./column/schema_test.cpp
         ./column/column_cow_test.cpp
         ./common/config_test.cpp
+        ./common/crash_watchdog_test.cpp
+        ./common/logconfig_test.cpp
         ./common/process_exit_test.cpp
+        ./common/prof/heap_prof_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
@@ -55,6 +58,7 @@ set(EXEC_FILES
         ./fs/bundle_file_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/plain_text_builder_test.cpp
+        ./exec/parquet_schema_builder_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
@@ -74,6 +78,7 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
+        ./exec/pipeline/sink/file_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
@@ -100,9 +105,9 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
-        ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
         ./exec/arrow_to_json_converter_test.cpp
@@ -126,7 +131,9 @@ set(EXEC_FILES
         ./exec/avro_cpp_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
+        ./exec/set_hash_set_test.cpp
         ./exec/sorting_test.cpp
+        ./exec/tablet_sink_global_dict_words_test.cpp
         ./exec/tablet_sink_index_channel_test.cpp
         ./exec/tablet_sink_test.cpp
         ./exec/table_function_node_test.cpp
@@ -158,6 +165,7 @@ set(EXEC_FILES
         ./exprs/condition_expr_test.cpp
         ./exprs/encryption_functions_test.cpp
         ./exprs/function_call_expr_test.cpp
+        ./exprs/generate_series_core_test.cpp
         ./exprs/geography_functions_test.cpp
         ./exprs/gin_functions_test.cpp
         ./exprs/hash_functions_test.cpp
@@ -169,6 +177,7 @@ set(EXEC_FILES
         ./exprs/jit_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/flat_json_functions_test.cpp
+        ./exprs/array_sort_lambda_expr_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
@@ -176,6 +185,7 @@ set(EXEC_FILES
         ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
+        ./exprs/multi_unnest_core_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
@@ -198,6 +208,7 @@ set(EXEC_FILES
         ./exprs/time_functions_test.cpp
         ./exprs/es_functions_test.cpp
         ./exprs/utility_functions_test.cpp
+        ./exprs/unnest_core_test.cpp
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
@@ -264,6 +275,7 @@ set(EXEC_FILES
         ./geo/wkt_parse_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/ev_http_server_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -271,6 +283,7 @@ set(EXEC_FILES
         ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/update_config_action_redaction_test.cpp
         ./http/action/update_config_action_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
@@ -281,6 +294,7 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
+        ./io/dir_manager_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
         ./storage/decimal12_test.cpp
@@ -461,6 +475,7 @@ set(EXEC_FILES
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
         ./runtime/memory/counting_allocator_test.cpp
+        ./runtime/memory/jemalloc_conf_updater_test.cpp
         ./runtime/mem_pool_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
@@ -533,6 +548,7 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
+        ./util/mem_info_test.cpp
         ./util/memcmp_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
         ./util/monotime_test.cpp
@@ -552,8 +568,10 @@ set(EXEC_FILES
         ./util/thread_test.cpp
         ./util/threadpool_test.cpp
         ./util/trace_test.cpp
+        ./util/trim_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
+        ./util/utf8_encoding_test.cpp
         ./util/uuid_generator_test.cpp
         ./util/int96_test.cpp
         ./util/internal_service_recoverable_stub_test.cpp
@@ -583,6 +601,7 @@ set(EXEC_FILES
         ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
+        ./service/service_be/backend_service_test.cpp
         ./service/service_be/internal_service_test.cpp
         ./service/staros_worker_test.cpp
         ./storage/metadata_util_test.cpp
@@ -600,6 +619,7 @@ set(EXEC_FILES
         ./storage/sstable/sstable_predicate_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/datacache_metrics_test.cpp
+        ./cache/mem_space_monitor_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp

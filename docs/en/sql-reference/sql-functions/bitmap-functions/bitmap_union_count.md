@@ -10,7 +10,7 @@ Returns the union of a set of bitmap values and returns the cardinality of the u
 
 ## Syntax
 
-```Haskell
+```plaintext
 BIGINT bitmap_union_count(BITMAP value)
 ```
 

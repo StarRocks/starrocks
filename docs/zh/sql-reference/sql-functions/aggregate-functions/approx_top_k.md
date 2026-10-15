@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 APPROX_TOP_K(<expr> [ , <k> [ , <counter_num> ] ] )
 ```
 

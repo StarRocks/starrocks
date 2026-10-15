@@ -18,7 +18,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```Haskell
+```plaintext
 all_match(lambda_function, arr1, arr2...)
 ```
 

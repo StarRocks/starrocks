@@ -1,0 +1,73 @@
+-- name: test_minmax_after_schema_change @native
+
+-- Regression for min()/max() constant folding answering with the min/max of a column that
+-- has since been dropped and re-created.
+--
+-- ColumnMinMaxMgr keys its cache on (table id, column NAME) -- ColumnId is a thin wrapper
+-- around the name -- and validates an entry by comparing the table-level
+-- max(visibleVersionTime) it was loaded at against the current one. A schema change moves
+-- neither: no partition is added, dropped or loaded, so the stamp is untouched and the key
+-- is unchanged. DROP COLUMN v followed by ADD COLUMN v therefore hands a brand new column
+-- the previous column's cached min/max, and nothing ever expires it -- the cache has no
+-- TTL and, before this fix, no DDL path invalidated it.
+--
+-- Same family as test_minmax_after_replace_partition but a different mechanism: there the
+-- partition SET changes while the column stays, here the column is replaced while the
+-- partitions stay. Both are fixed by invalidating from OlapTable's own mutators --
+-- rebuildFullSchema() for this one -- which run on the leader and on replay alike.
+--
+-- @native, because RewriteSimpleAggToMetaScanRule already refuses to fold min/max in
+-- shared-data mode once a table has any schema change at all (schemaVersion > 0): fast
+-- schema evolution can retype a column without rewriting the data, and the metadata cannot
+-- say which kind of change happened, so the rewrite is disabled wholesale there. That guard
+-- makes the assertions below vacuous in shared-data -- the fold is off no matter what the
+-- cache holds -- and the last one, that folding RESUMES after the entry reloads, cannot hold
+-- at all. The stale entry does still reach the two consumers that lack that guard
+-- (RewriteMinMaxByMonotonicFunctionRule, ApplyMinMaxStatisticRule), so the fix itself is not
+-- shared-nothing specific; only this way of observing it is.
+--
+-- NOTE: the expected results in R/ are the CORRECT values, not today's behaviour. Before
+-- the fix the folded MAX(v) returns 200 instead of 7 and the case FAILS. Do not regenerate
+-- R/ with `run.py -r` to make it pass -- that would freeze the bug in.
+
+DROP DATABASE IF EXISTS test_minmax_schema_change;
+CREATE DATABASE test_minmax_schema_change;
+USE test_minmax_schema_change;
+
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+
+INSERT INTO t VALUES (1, 100), (2, 200);
+
+-- inspect_minmax() goes through getStatsSync(), so the cache is warm synchronously.
+SELECT inspect_minmax('test_minmax_schema_change.t', 'v');
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_schema_change.t" | grep -c "EXECUTE IN FE"
+SELECT MAX(v) FROM t;
+
+-- Drop the column the cache entry is keyed on, then bring the same NAME back with a
+-- different value. No partition is touched, so nothing about the version stamp changes.
+ALTER TABLE t DROP COLUMN v;
+shell: for i in $(seq 1 120); do n=$(${mysql_cmd} -Ne "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='test_minmax_schema_change' AND TABLE_NAME='t' AND COLUMN_NAME='v'" 2>/dev/null); [ "$n" = "0" ] && break; sleep 1; done; echo $n
+ALTER TABLE t ADD COLUMN v INT NOT NULL DEFAULT "7";
+shell: for i in $(seq 1 120); do n=$(${mysql_cmd} -Ne "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='test_minmax_schema_change' AND TABLE_NAME='t' AND COLUMN_NAME='v'" 2>/dev/null); [ "$n" = "1" ] && break; sleep 1; done; echo $n
+
+-- Every row now carries the new column's default. The folded answer must say so.
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+SELECT MAX(v) FROM t;
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+SELECT MAX(v) FROM t;
+
+-- ... and the fold must come back once the entry is reloaded, rather than the schema change
+-- disabling it for good.
+SELECT inspect_minmax('test_minmax_schema_change.t', 'v');
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_schema_change.t" | grep -c "EXECUTE IN FE"
+SELECT MAX(v) FROM t;
+SELECT MIN(v) FROM t;
+
+DROP DATABASE test_minmax_schema_change;

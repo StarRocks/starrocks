@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 ## 语法
 
-```haskell
+```plaintext
 VARCHAR url_extract_host(VARCHAR str)
 ```
 

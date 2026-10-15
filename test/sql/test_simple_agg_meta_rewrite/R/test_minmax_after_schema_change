@@ -1,0 +1,87 @@
+-- name: test_minmax_after_schema_change @native
+DROP DATABASE IF EXISTS test_minmax_schema_change;
+-- result:
+-- !result
+CREATE DATABASE test_minmax_schema_change;
+-- result:
+-- !result
+USE test_minmax_schema_change;
+-- result:
+-- !result
+CREATE TABLE t (
+  k INT NOT NULL,
+  v INT NOT NULL
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+INSERT INTO t VALUES (1, 100), (2, 200);
+-- result:
+-- !result
+SELECT inspect_minmax('test_minmax_schema_change.t', 'v');
+-- result:
+ColumnMinMax[minValue=100, maxValue=200]
+-- !result
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_schema_change.t" | grep -c "EXECUTE IN FE"
+-- result:
+0
+1
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+200
+-- !result
+ALTER TABLE t DROP COLUMN v;
+-- result:
+-- !result
+shell: for i in $(seq 1 120); do n=$(${mysql_cmd} -Ne "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='test_minmax_schema_change' AND TABLE_NAME='t' AND COLUMN_NAME='v'" 2>/dev/null); [ "$n" = "0" ] && break; sleep 1; done; echo $n
+-- result:
+0
+0
+-- !result
+ALTER TABLE t ADD COLUMN v INT NOT NULL DEFAULT "7";
+-- result:
+-- !result
+shell: for i in $(seq 1 120); do n=$(${mysql_cmd} -Ne "SELECT COUNT(*) FROM information_schema.columns WHERE TABLE_SCHEMA='test_minmax_schema_change' AND TABLE_NAME='t' AND COLUMN_NAME='v'" 2>/dev/null); [ "$n" = "1" ] && break; sleep 1; done; echo $n
+-- result:
+0
+1
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+7
+-- !result
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+-- result:
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+7
+-- !result
+SELECT inspect_minmax('test_minmax_schema_change.t', 'v');
+-- result:
+ColumnMinMax[minValue=7, maxValue=7]
+-- !result
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_schema_change.t" | grep -c "EXECUTE IN FE"
+-- result:
+0
+1
+-- !result
+SELECT MAX(v) FROM t;
+-- result:
+7
+-- !result
+SELECT MIN(v) FROM t;
+-- result:
+7
+-- !result
+DROP DATABASE test_minmax_schema_change;
+-- result:
+-- !result

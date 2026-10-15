@@ -655,4 +655,120 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
     Expr::close(expr_ctxs, &_runtime_state);
 }
 
+// Reproduces fuzz finding a0903_mut_111: a nested array_map over a CONSTANT nested array literal,
+// where the inner lambda captures the outer lambda argument. Historically this crashed the BE with
+// a SIGSEGV in ArrayMapExpr::evaluate_lambda_expr's get_column_by_slot_id, because the outer
+// lambda's captured_slot_ids leaked the inner lambda's argument slot, which is never present in
+// the input chunk.
+//   array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<INT>>[[1, 2]])
+TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_const_input) {
+    const SlotId kOuterArg = 100000; // a : array<int>
+    const SlotId kInnerArg = 100001; // b : int
+
+    TypeDescriptor type_arr_int = array_type(TYPE_INT);         // array<int>
+    TypeDescriptor type_arr_arr_int = array_type(type_arr_int); // array<array<int>>
+
+    // Outer input: const ARRAY<ARRAY<INT>>[[1, 2]] (one row).
+    auto arr2 = ColumnHelper::create_column(type_arr_arr_int, true);
+    arr2->append_datum(DatumArray{Datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)})});
+    auto const_input = ConstColumn::create(std::move(arr2), 1);
+    auto* outer_input = new_fake_const_expr(std::move(const_input), type_arr_arr_int);
+
+    // Slot ref helpers (same slot id may be referenced from multiple sites).
+    auto make_slot_ref = [&](SlotId slot_id, const TypeDescriptor& type) {
+        TExprNode n;
+        n.node_type = TExprNodeType::SLOT_REF;
+        n.type = type.to_thrift();
+        n.num_children = 0;
+        n.__isset.slot_ref = true;
+        n.slot_ref.slot_id = slot_id;
+        n.slot_ref.tuple_id = 0;
+        n.__set_is_nullable(true);
+        return _objpool.add(new ColumnRef(n));
+    };
+
+    // inner lambda body: array_length(a) + b
+    TExprNode len_node;
+    len_node.node_type = TExprNodeType::FUNCTION_CALL;
+    len_node.type = gen_type_desc(TPrimitiveType::INT);
+    len_node.num_children = 1;
+    len_node.__isset.fn = true;
+    len_node.fn.name.function_name = "array_length";
+    len_node.fn.fid = 150000;
+    len_node.fn.__isset.fid = true;
+    len_node.fn.binary_type = TFunctionBinaryType::BUILTIN;
+    auto* array_length_expr = _objpool.add(new VectorizedFunctionCallExpr(len_node));
+    array_length_expr->add_child(make_slot_ref(kOuterArg, type_arr_int));
+
+    TExprNode add_node;
+    add_node.opcode = TExprOpcode::ADD;
+    add_node.child_type = TPrimitiveType::INT;
+    add_node.node_type = TExprNodeType::BINARY_PRED;
+    add_node.num_children = 2;
+    add_node.__isset.opcode = true;
+    add_node.__isset.child_type = true;
+    add_node.type = gen_type_desc(TPrimitiveType::INT);
+    auto* add_expr = _objpool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
+    add_expr->add_child(array_length_expr);
+    add_expr->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+
+    // inner lambda: b -> array_length(a) + b
+    TExprNode tlambda_inner;
+    tlambda_inner.opcode = TExprOpcode::ADD;
+    tlambda_inner.child_type = TPrimitiveType::INT;
+    tlambda_inner.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    tlambda_inner.num_children = 2;
+    tlambda_inner.__isset.opcode = true;
+    tlambda_inner.__isset.child_type = true;
+    tlambda_inner.type = gen_type_desc(TPrimitiveType::INT);
+    auto* inner_lambda = _objpool.add(new LambdaFunction(tlambda_inner));
+    inner_lambda->add_child(add_expr);
+    inner_lambda->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+
+    // inner array_map: array_map(b -> array_length(a) + b, a)
+    auto* inner_map = _objpool.add(new ArrayMapExpr(type_arr_int));
+    inner_map->clear_children();
+    inner_map->add_child(inner_lambda);
+    inner_map->add_child(make_slot_ref(kOuterArg, type_arr_int));
+
+    // outer lambda: a -> inner_map
+    TExprNode tlambda_outer;
+    tlambda_outer.opcode = TExprOpcode::ADD;
+    tlambda_outer.child_type = TPrimitiveType::INT;
+    tlambda_outer.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    tlambda_outer.num_children = 2;
+    tlambda_outer.__isset.opcode = true;
+    tlambda_outer.__isset.child_type = true;
+    tlambda_outer.type = type_arr_int.to_thrift();
+    auto* outer_lambda = _objpool.add(new LambdaFunction(tlambda_outer));
+    outer_lambda->add_child(inner_map);
+    outer_lambda->add_child(make_slot_ref(kOuterArg, type_arr_int));
+
+    // outer array_map: array_map(a -> ..., [[1,2]])
+    ArrayMapExpr outer_map(type_arr_arr_int);
+    outer_map.clear_children();
+    outer_map.add_child(outer_lambda);
+    outer_map.add_child(outer_input);
+
+    ExprContext exprContext(&outer_map);
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(build_int_column({0}), 999); // dummy single row
+
+    // Must not crash. Expected result: [[array_length([1,2]) + 1, array_length([1,2]) + 2]] = [[3, 4]].
+    ColumnPtr result = outer_map.evaluate(&exprContext, chunk.get());
+    ASSERT_EQ(1, result->size());
+    auto outer_arr = result->get(0).get_array();
+    ASSERT_EQ(1, outer_arr.size());
+    auto inner_arr = outer_arr[0].get_array();
+    ASSERT_EQ(2, inner_arr.size());
+    ASSERT_EQ(3, inner_arr[0].get_int32());
+    ASSERT_EQ(4, inner_arr[1].get_int32());
+
+    Expr::close(expr_ctxs, &_runtime_state);
+}
+
 } // namespace starrocks

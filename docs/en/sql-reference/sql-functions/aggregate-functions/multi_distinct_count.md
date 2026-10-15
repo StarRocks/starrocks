@@ -10,7 +10,7 @@ Returns the total number of rows of the `expr`, equivalent to count(distinct exp
 
 ## Syntax
 
-```Haskell
+```plaintext
 multi_distinct_count(expr)
 ```
 

@@ -8,7 +8,7 @@ CHAR() は、指定された整数値に対応する ASCII テーブルの文字
 
 ## 構文
 
-```Haskell
+```plaintext
 char(n)
 ```
 
