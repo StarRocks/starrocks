@@ -138,6 +138,11 @@ public:
 
     // Last known full read-state size, retained after eviction for cache share calculation.
     size_t read_state_memory_demand() const { return _read_state_memory_demand.load(); }
+    // A resident reopen also reserves the objects that own the table, file and filter policy.
+    size_t read_state_reservation_demand() const {
+        const size_t demand = read_state_memory_demand();
+        return demand == 0 ? 0 : demand + kReadStateObjectMemoryReserve;
+    }
 
     // Resident bytes of the index block and bloom filter; memory_usage() is their sum.
     size_t index_block_memory_usage() const;
@@ -184,6 +189,7 @@ public:
             std::function<void(size_t)> reclaim_self = {});
 
 private:
+    static constexpr size_t kReadStateObjectMemoryReserve = 4096;
     struct ReadState;
     StatusOr<std::unique_ptr<RandomAccessFile>> _open_file() const;
     StatusOr<std::shared_ptr<ReadState>> _open_read_state(std::unique_ptr<RandomAccessFile> rf,

@@ -266,6 +266,8 @@ public:
     size_t cached_sst_bytes() const { return _cached_sst_bytes.load(); }
     size_t cached_legacy_charge() const { return _cached_legacy_charge.load(); }
     size_t sst_memory_demand() const { return _sst_memory_demand.load(); }
+    // Includes read-state object reservations; caller holds the tablet index lock.
+    size_t sst_read_state_reservation_demand() const;
     size_t directly_accounted_sst_bytes() const { return _directly_accounted_sst_bytes.load(); }
     size_t cached_metadata_bytes() const { return _cached_metadata_bytes.load(); }
     // Reserve resident bytes before calling; unselected SSTs use a bounded transient read state.

@@ -1987,6 +1987,17 @@ void LakePersistentIndex::set_read_state_reclaimer(std::function<void(size_t)> r
     }
 }
 
+size_t LakePersistentIndex::sst_read_state_reservation_demand() const {
+    size_t demand = 0;
+    for (const auto& fileset : _sstable_filesets) {
+        if (fileset) {
+            fileset->for_each_sstable(
+                    [&](const PersistentIndexSstable& sst) { demand += sst.read_state_reservation_demand(); });
+        }
+    }
+    return demand;
+}
+
 Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool partial) {
     if (!partial && !_partial_read_state) {
         return Status::OK();
@@ -2004,7 +2015,7 @@ Status LakePersistentIndex::prepare_sstable_read_state(size_t budget, bool parti
     std::vector<const PersistentIndexSstable*> reopen;
     for (const auto* sst : ssts) {
         const size_t demand = sst->read_state_memory_demand();
-        const size_t cost = demand + 4096; // read-state objects are reserved separately from table blocks
+        const size_t cost = sst->read_state_reservation_demand();
         const bool cacheable = !partial || (demand > 0 && cost >= demand && cost <= budget);
         sst->set_read_state_cacheable(cacheable, context);
         if (cacheable) {

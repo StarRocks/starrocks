@@ -242,7 +242,7 @@ StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
                 // Reserve a batch before IO, including when the current size is already at the
                 // pressure line. Otherwise an evicted tablet would stream forever while earlier
                 // tablets kept all their SSTs. Oversized tablets keep a bounded resident subset.
-                const size_t desired = std::min(index.sst_memory_demand(), target / 4);
+                const size_t desired = std::min(index.sst_read_state_reservation_demand(), target / 4);
                 const size_t missing = desired - std::min(desired, index.cached_sst_bytes());
                 _evict_index_cache(target - std::min(target, missing));
                 const size_t size = _index_cache.size();

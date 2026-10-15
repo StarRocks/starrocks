@@ -114,6 +114,7 @@ private:
 class LakePersistentIndexTest : public TestBase {
 public:
     void check_read_state_reclaim_progress(bool same_tablet);
+    void check_read_state_reservation_demand(bool deferred_initial_load);
     PersistentIndexSstablePB make_pressure_sstable(const std::string& filename) {
         phmap::btree_map<std::string, IndexValueWithVer, std::less<>> data;
         for (uint64_t i = 0; i < 20000; ++i) {
@@ -1290,6 +1291,86 @@ TEST_F(LakePersistentIndexTest, test_partial_eviction_mode_change_reaccounts_unt
     _primary_key_mgr->refresh_index_cache_eviction_policy();
     EXPECT_EQ(order_before, _primary_key_mgr->index_cache().get_entry_sizes());
     for (size_t i = 0; i < ids.size(); ++i) EXPECT_EQ(legacy[i], _primary_key_mgr->get_index_memory_size(ids[i]));
+}
+
+void LakePersistentIndexTest::check_read_state_reservation_demand(bool deferred_initial_load) {
+    ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, deferred_initial_load);
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    metadata->mutable_sstable_meta()->add_sstables()->CopyFrom(make_pressure_sstable("one-resident.sst"));
+    Tablet tablet(_tablet_mgr.get(), metadata->id());
+    MetaFileBuilder builder(tablet, metadata);
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> guard;
+    ASSIGN_OR_ABORT(auto* entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    DeferOp release([&] {
+        guard.reset();
+        if (entry) _primary_key_mgr->release_primary_index_cache(entry);
+    });
+    auto& index = entry->value();
+    const auto key_string = fmt::format("{:016x}-{:08d}", uint64_t{3} * uint64_t{0x9e3779b97f4a7c15}, 3);
+    Slice sst_key(key_string);
+    IndexValue sst_value;
+    ASSERT_OK(index.get(1, &sst_key, &sst_value));
+    ASSERT_EQ(IndexValue(3), sst_value);
+    _primary_key_mgr->update_index_cache_size(entry);
+    const size_t resident = index.sst_memory_demand();
+    ASSERT_GT(resident, 0);
+    EXPECT_EQ(deferred_initial_load ? 0 : resident, index.cached_sst_bytes());
+    Slice tail("memtable-tail");
+    IndexValue tail_value(12345);
+    ASSERT_OK(index.insert(1, &tail, &tail_value, 2));
+    const size_t memtable_bytes = index.memory_stats().memtable_bytes;
+    ASSERT_EQ(deferred_initial_load ? 0 : resident, index.evict_sstable_read_state(resident));
+    _primary_key_mgr->update_index_cache_size(entry);
+    const auto loads = StorageMetrics::instance()->lake_pk_index_load_total.value();
+    guard.reset();
+    _primary_key_mgr->release_primary_index_cache(entry);
+    entry = nullptr;
+
+    config::lake_pk_index_partial_eviction = true;
+    std::atomic<int> opens{0};
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    // The manager must budget the same object bytes as prepare_sstable_read_state. With table
+    // bytes alone, a tablet containing just this SST can never select its only known read state.
+    ASSIGN_OR_ABORT(entry, _primary_key_mgr->prepare_primary_index(metadata, &builder, 1, 2, guard));
+    EXPECT_GT(index.sst_read_state_reservation_demand(), resident);
+    EXPECT_EQ(resident, index.cached_sst_bytes());
+    EXPECT_EQ(1, opens.load());
+    std::array<Slice, 2> keys{sst_key, tail};
+    std::array<IndexValue, 2> values;
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_OK(index.get(keys.size(), keys.data(), values.data()));
+        EXPECT_EQ(IndexValue(3), values[0]);
+        EXPECT_EQ(tail_value, values[1]);
+    }
+    EXPECT_EQ(1, opens.load());
+    EXPECT_EQ(memtable_bytes, index.memory_stats().memtable_bytes);
+    EXPECT_EQ(loads, StorageMetrics::instance()->lake_pk_index_load_total.value());
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+
+    const size_t exact_budget = index.sst_read_state_reservation_demand();
+    ASSERT_OK(index.prepare_sstable_read_state(exact_budget - 1, true));
+    EXPECT_EQ(0, index.memory_stats().index_block_bytes);
+    EXPECT_EQ(1, opens.load());
+    ASSERT_OK(index.prepare_sstable_read_state(exact_budget, true));
+    _primary_key_mgr->update_index_cache_size(entry);
+    EXPECT_EQ(resident, index.cached_sst_bytes());
+    EXPECT_EQ(2, opens.load());
+    EXPECT_EQ(index.memory_usage() + index.cached_metadata_bytes(), entry->size());
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_reserves_objects_when_reopening_one_sstable) {
+    check_read_state_reservation_demand(false);
+}
+
+TEST_F(LakePersistentIndexTest, test_partial_eviction_caches_one_previously_deferred_sstable) {
+    check_read_state_reservation_demand(true);
 }
 
 TEST_F(LakePersistentIndexTest, test_partial_eviction_sync_resize_pressure_and_rollback) {

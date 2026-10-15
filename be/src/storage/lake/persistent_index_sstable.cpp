@@ -179,7 +179,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     if (context && config::lake_pk_index_partial_eviction) {
         state->reservation = std::make_shared<SstReadStateMemoryContext::Reservation>(context, reclaim_self);
         // Table/iterator/filter-policy objects and open-time bookkeeping are small but nonzero.
-        RETURN_IF_ERROR(state->reservation->add(4096, true));
+        RETURN_IF_ERROR(state->reservation->add(kReadStateObjectMemoryReserve, true));
     }
     state->rf = std::move(rf);
     sstable::Options options;
@@ -202,7 +202,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
         auto drop_status = drop_corrupted_sstable_cache(_filename);
         if (drop_status.ok()) {
             state->table.reset();
-            if (state->reservation) state->reservation->shrink_to(4096);
+            if (state->reservation) state->reservation->shrink_to(kReadStateObjectMemoryReserve);
             ASSIGN_OR_RETURN(state->rf, _open_file());
             open_st = sstable::Table::Open(options, state->rf.get(), _sstable_pb.filesize(), state->table,
                                            _block_cache_id);
@@ -219,7 +219,7 @@ StatusOr<std::shared_ptr<PersistentIndexSstable::ReadState>> PersistentIndexSsta
     _read_state_memory_demand.store(state->table->memory_usage());
     if (state->reservation) {
         // Open scratch and the metaindex block are gone; retain only resident bytes plus objects.
-        state->reservation->shrink_to(state->table->memory_usage() + 4096);
+        state->reservation->shrink_to(state->table->memory_usage() + kReadStateObjectMemoryReserve);
     }
     return state;
 }
