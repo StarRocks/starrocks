@@ -113,10 +113,17 @@ void OlapTableSinkOperator::_submit_close() const {
     const int64_t submit_time_ns = MonotonicNanos();
     auto close_task = [this, state, submit_time_ns]() {
         COUNTER_UPDATE(_close_queue_timer, MonotonicNanos() - submit_time_ns);
+        // A fragment cancelled while the close waited in the queue must not write its combined txn log:
+        // set_cancelled() left the sink to this task, so pass the cancellation on as it would have.
+        Status close_status = Status::OK();
+        if (state->is_cancelled()) {
+            close_status = Status::Cancelled("Cancelled by pipeline engine, reason: " +
+                                             _fragment_ctx->final_status().to_string());
+        }
         Status st;
         {
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-            st = _sink->close(state, Status::OK());
+            st = _sink->close(state, close_status);
         }
         _close_status = std::move(st);
         // The last access to this operator: once _close_done is set, the driver can finish and destroy it.

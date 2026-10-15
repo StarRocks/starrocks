@@ -54,6 +54,7 @@ public:
             concurrent_close = true;
         }
         close_calls++;
+        last_exec_status = exec_status;
         close_thread = std::this_thread::get_id();
         close_started.set_value();
         if (hold_close) {
@@ -75,6 +76,7 @@ public:
     std::atomic<int> close_calls = 0;
     std::atomic<int> closes_in_flight = 0;
     std::atomic<bool> concurrent_close = false;
+    Status last_exec_status;
     std::thread::id close_thread;
 
 private:
@@ -183,6 +185,16 @@ TEST_F(OlapTableSinkOperatorTest, cancel_while_closing_waits_for_the_close) {
     ASSERT_TRUE(wait_until_close_finished());
     EXPECT_EQ(1, _sink.close_calls);
     EXPECT_FALSE(_sink.concurrent_close);
+}
+
+// A fragment cancelled before its close runs must not write the combined txn log: the close task has to hand the
+// cancellation to the sink instead of closing it successfully.
+TEST_F(OlapTableSinkOperatorTest, close_of_a_cancelled_fragment_passes_the_cancellation) {
+    _fragment_ctx->cancel(Status::Cancelled("cancelled by test"));
+
+    ASSERT_TRUE(wait_until_close_finished());
+    EXPECT_EQ(1, _sink.close_calls);
+    EXPECT_TRUE(_sink.last_exec_status.is_cancelled()) << _sink.last_exec_status;
 }
 
 TEST_F(OlapTableSinkOperatorTest, closes_inline_without_a_close_pool) {
