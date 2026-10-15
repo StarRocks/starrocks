@@ -53,9 +53,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
 
     @BeforeAll
     public static void beforeAll() {
-<<<<<<< HEAD
-        // do nothing
-=======
         DDLTestBase.beforeAll();
         // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
         // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
@@ -65,8 +62,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
-        UtFrameUtils.setUpForPersistTest();
->>>>>>> 54ad6cc ([UT] Fix flaky OptimizeJobV2Test by stopping the background schema change scheduler (#80729))
     }
 
     @BeforeEach
