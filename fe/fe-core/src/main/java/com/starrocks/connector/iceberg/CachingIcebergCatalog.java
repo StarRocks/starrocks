@@ -64,6 +64,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -374,8 +375,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                backgroundExecutor.submit(() -> partitionCache.refresh(key));
-                return null;
+                try {
+                    backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                    return null;
+                } catch (RejectedExecutionException e) {
+                    // The connector was shut down while this query was in flight; load synchronously instead.
+                }
             }
         }
         return IcebergCatalog.super.listPartitionNames(icebergTable, requestContext, executorService);
