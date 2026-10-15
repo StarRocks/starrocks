@@ -2322,7 +2322,10 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
         for (size_t i = 0; i < function.arg_types.size(); ++i) {
             EXPECT_STREQ(function.arg_types[i], descriptor->arg_types[i]);
         }
-        if (function.id >= 120180 && function.id != 120300) {
+        if (function.id >= 120500 && function.id < 120506) {
+            EXPECT_FALSE(static_cast<bool>(descriptor->prepare_function));
+            EXPECT_FALSE(static_cast<bool>(descriptor->close_function));
+        } else if (function.id >= 120180 && function.id != 120300) {
             EXPECT_TRUE(static_cast<bool>(descriptor->prepare_function));
             EXPECT_TRUE(static_cast<bool>(descriptor->close_function));
         }
@@ -2395,7 +2398,6 @@ TEST_F(geographyFunctionsTest, h3FromGeoPreparedPointAcrossResolutions) {
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
             {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
     context->set_constant_columns({point, nullptr});
-    ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     for (int repeat = 0; repeat < 2; ++repeat) {
         auto result = GeoFunctions::h3_from_geo(context.get(), {point, resolutions});
         ASSERT_TRUE(result.ok()) << result.status();
@@ -2413,7 +2415,6 @@ TEST_F(geographyFunctionsTest, h3FromGeoPreparedPointAcrossResolutions) {
     ASSERT_TRUE(constant.ok()) << constant.status();
     EXPECT_TRUE((*constant)->is_constant());
     EXPECT_EQ(3, (*constant)->size());
-    ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 }
 
 TEST_F(geographyFunctionsTest, h3FromGeoRetainsCoordinateAndTypeValidation) {
@@ -2463,9 +2464,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoConstantAndVaryingPointsShareDiagnostics
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
                 {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
         context->set_constant_columns({constant_input, resolution});
-        ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         auto constant = GeoFunctions::h3_from_geo(context.get(), {constant_input, resolution});
-        ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         ASSERT_EQ(std::isnan(coordinate.y), varying.ok());
         ASSERT_EQ(varying.ok(), constant.ok());
         if (varying.ok()) {
@@ -2769,7 +2768,7 @@ TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
             FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)},
                                                  TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
     context->set_constant_columns({polygon, nullptr});
-    ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(GeoFunctions::h3_polygon_to_cells_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     auto at_two = GeoFunctions::h3_polygon_to_cells(context.get(),
                                                     {polygon, ColumnHelper::create_const_column<TYPE_INT>(2, 2)});
@@ -2793,7 +2792,7 @@ TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     first.join();
     second.join();
     EXPECT_TRUE(valid.load());
-    ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(GeoFunctions::h3_polygon_to_cells_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
 
