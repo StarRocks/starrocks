@@ -103,6 +103,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+### lake_vacuum_enable_task_timeout
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: Vacuum タスクがリクエストに含まれるタイムアウト (`VacuumRequest.timeout_ms`) に従い、経過した時点で自身を中止するかどうか。`false` に設定すると、FE 呼び出し側がどれだけ待つかに関係なく、Vacuum タスクは常に完了まで実行されます。
+
 ### loop_count_wait_fragments_finish
 
 - デフォルト: 2

@@ -103,6 +103,14 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_vacuum_enable_task_timeout
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether Vacuum tasks honor the timeout carried in the request (`VacuumRequest.timeout_ms`) and abort themselves once it elapses. Set this item to `false` to let Vacuum tasks always run to completion no matter how long the FE caller waits.
+
 ### loop_count_wait_fragments_finish
 
 - Default: 2

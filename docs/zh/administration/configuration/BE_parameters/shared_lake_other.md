@@ -100,6 +100,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。该参数默认值自 v3.2.4 和 v3.1.10 版本开始从 `5` 变更为 `1000`，并自 v3.3.1 和 v3.2.9 版本开始变更为 `500`。存算分离集群中的主键表在开启 Sized-tiered Compaction 策略后 (即设置 `enable_pk_size_tiered_compaction_strategy` 为 `true`)，无需通过限制每次 Compaction 的 Rowset 个数来降低写放大，因此调大该值。
 - 引入版本：v3.1.8, v3.2.3
 
+### lake_vacuum_enable_task_timeout
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Vacuum 任务是否遵循请求中携带的超时时间（`VacuumRequest.timeout_ms`），并在超时后自行终止。设为 `false` 时，无论 FE 调用方等待多久，Vacuum 任务都会一直运行至完成。
+
 ### loop_count_wait_fragments_finish
 
 - 默认值：2
