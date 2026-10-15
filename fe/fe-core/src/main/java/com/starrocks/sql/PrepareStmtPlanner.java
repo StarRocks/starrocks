@@ -135,9 +135,23 @@ public class PrepareStmtPlanner {
             return null;
         }
 
+<<<<<<< HEAD
         QueryStatement queryStmt = (QueryStatement) stmt;
         if (!isRebindable(executeStmt, queryStmt, execPlan)) {
             // reset, not just skip: the needReAnalyze() call site arrives holding a plan built against the old schema
+=======
+        boolean rebindable = annQuery ? AnnQueryPlanRebinder.isRebindable(executeStmt, queryStmt, execPlan)
+                : isRebindable(executeStmt, queryStmt, execPlan);
+        // reset, not just skip: the needReAnalyze() call site arrives holding a plan built against the old schema
+        if (!rebindable) {
+            prepareStmtContext.reset();
+            return execPlan;
+        }
+        if (!prepareStmtContext.recordPlannedTable(queryStmt, session, plannedTable(execPlan.getPhysicalPlan()),
+                schemaUpdateTime)) {
+            rejectCaching(executeStmt,
+                    "the plan scans the live table, or the table name no longer leads to the table it scans");
+>>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
             prepareStmtContext.reset();
             return execPlan;
         }
