@@ -235,9 +235,9 @@ under the License.
             <artifactId>commons-io</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+        <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
         <dependency>
-            <groupId>com.baidu</groupId>
+            <groupId>com.starrocks</groupId>
             <artifactId>jprotobuf-rpc-core</artifactId>
         </dependency>
 
@@ -1186,6 +1186,23 @@ under the License.
                         <goals>
                             <goal>run</goal>
                         </goals>
+                    </execution>
+                    <!-- Empty the lib dir before copy-dependencies fills it. copy-dependencies never removes a jar
+                         the build no longer depends on, build.sh skips clean unless asked, and start_fe.sh puts every
+                         jar of the lib dir on the classpath, so a stale jar of an upgraded dependency would shadow its
+                         replacement. This runs in prepare-package, before package; maven.clean.skip does not skip it. -->
+                    <execution>
+                        <id>clean-lib-dir</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skip.plugin}</skip>
+                            <target>
+                                <delete dir="${project.build.directory}/lib"/>
+                            </target>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
