@@ -25,8 +25,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.Constants;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -39,8 +42,10 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -54,6 +59,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @BeforeAll
     public static void beforeAll() {
         DDLTestBase.beforeAll();
+        UtFrameUtils.setUpForPersistTest();
         // The cases drive optimize jobs by hand. A running scheduler can pick a job up between process() and
         // spyPreviousTxnFinished() and run its pending step on the original, which shares tmpPartitionIds with
         // the spy, so its failure cancels the job and drops the spy's temp partitions.
@@ -70,6 +76,8 @@ public class OptimizeJobV2Test extends DDLTestBase {
         String stmt = "alter table testTable7 distributed by hash(v1)";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         Config.enable_online_optimize_table = false;
+        // Only the tests that read the journal drain the follower queue, so start every test from an empty one.
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
     }
 
     @AfterEach
@@ -754,5 +762,126 @@ public class OptimizeJobV2Test extends DDLTestBase {
             throw new RuntimeException(e);
         }
         return spy;
+    }
+
+    // ---- expiry of the rewrite tasks registered in TaskManager ------------------------------------
+
+    @Test
+    public void testRewriteTasksOutliveJobDeadline() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_task_expiry");
+        OptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        // Read the names now: a done job drops its rewrite task list.
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(2, taskNames.size());
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.removeExpiredTasks();
+        long deadline = job.createTimeMs + job.getTimeoutMs();
+        Map<String, Long> expireTimes = new HashMap<>();
+        for (String taskName : taskNames) {
+            Task task = taskManager.getTask(taskName);
+            Assertions.assertNotNull(task, taskName);
+            Assertions.assertTrue(task.getExpireTime() >= deadline + Config.task_ttl_second * 1000L,
+                    taskName + " expires at " + task.getExpireTime() + ", less than a task TTL after the job deadline "
+                            + deadline);
+            expireTimes.put(taskName, task.getExpireTime());
+        }
+        assertExpireTimesPersisted(expireTimes);
+    }
+
+    @Test
+    public void testExpiredRewriteTasksAreRemoved() throws Exception {
+        OlapTable table = createPartitionedTable("t_optimize_task_expired");
+        OptimizeJobV2 job = submitOptimize(table);
+        try (MockedStatic<TaskBuilder> ignored = backdateRewriteTasks(job.getTimeoutMs())) {
+            runToRunning(job);
+        }
+        List<String> taskNames = rewriteTaskNames(job);
+        Assertions.assertEquals(2, taskNames.size());
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        for (String taskName : taskNames) {
+            Assertions.assertNotNull(taskManager.getTask(taskName), taskName);
+        }
+
+        taskManager.removeExpiredTasks();
+
+        for (String taskName : taskNames) {
+            Assertions.assertNull(taskManager.getTask(taskName), taskName);
+        }
+    }
+
+    private static List<String> rewriteTaskNames(OptimizeJobV2 job) {
+        return job.getOptimizeTasks().stream().map(Task::getName).collect(Collectors.toList());
+    }
+
+    /**
+     * Makes the rewrite tasks built in the calling thread look as if they were created so long ago that the job
+     * timeout and the task TTL have both elapsed since.
+     */
+    private static MockedStatic<TaskBuilder> backdateRewriteTasks(long timeoutMs) {
+        long ageMs = timeoutMs + Config.task_ttl_second * 1000L + 1000L;
+        return Mockito.mockStatic(TaskBuilder.class, invocation -> {
+            Object result = invocation.callRealMethod();
+            if (result instanceof OptimizeTask) {
+                OptimizeTask task = (OptimizeTask) result;
+                task.setCreateTime(task.getCreateTime() - ageMs);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * A follower gets the expiry of each task from the task creation journal entry, and keeps it across an image
+     * save and load.
+     */
+    private static void assertExpireTimesPersisted(Map<String, Long> expireTimes) throws Exception {
+        TaskManager follower = new TaskManager();
+        for (int i = 0; i < expireTimes.size(); i++) {
+            follower.replayCreateTask(
+                    (Task) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TASK));
+        }
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        follower.saveTasksV2(image.getImageWriter());
+        TaskManager restored = new TaskManager();
+        restored.loadTasksV2(image.getMetaBlockReader());
+
+        for (Map.Entry<String, Long> entry : expireTimes.entrySet()) {
+            for (TaskManager taskManager : List.of(follower, restored)) {
+                Task task = taskManager.getTask(entry.getKey());
+                Assertions.assertNotNull(task, entry.getKey());
+                Assertions.assertEquals(entry.getValue(), task.getExpireTime(), entry.getKey());
+            }
+        }
+    }
+
+    private static OlapTable createPartitionedTable(String tableName) throws Exception {
+        starRocksAssert.withTable("CREATE TABLE " + tableName + " (k1 INT, v1 INT) DUPLICATE KEY(k1) " +
+                "PARTITION BY RANGE(k1) (PARTITION p1 VALUES LESS THAN ('10'), PARTITION p2 VALUES LESS THAN ('20')) " +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        return (OlapTable) starRocksAssert.getTable(GlobalStateMgrTestUtil.testDb1, tableName);
+    }
+
+    /**
+     * Submits OPTIMIZE through a handler whose daemon is never started, so only the test runs the job. The returned
+     * job sees every earlier load as finished.
+     */
+    private static OptimizeJobV2 submitOptimize(OlapTable table) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler.process(stmt.getAlterClauseList(), db, table);
+        Assertions.assertEquals(1, handler.getAlterJobsV2().size());
+        OptimizeJobV2 job = Mockito.spy((OptimizeJobV2) handler.getAlterJobsV2().values().iterator().next());
+        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        return job;
+    }
+
+    private static void runToRunning(OptimizeJobV2 job) throws Exception {
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
     }
 }
