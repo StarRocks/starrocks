@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: docs
-<<<<<<< HEAD
-=======
 description: "Shifts the binary representation of a numeric expression to the right by a specified number of bits, preserving the sign."
->>>>>>> 1e10112920 ([Doc] Fix swapped bit_shift_right and bit_shift_right_logical pages (#77075))
 ---
 
 # bit_shift_right
