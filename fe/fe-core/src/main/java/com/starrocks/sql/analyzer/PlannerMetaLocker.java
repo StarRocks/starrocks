@@ -20,11 +20,7 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
->>>>>>> 631cdc1 ([BugFix][POST-1966] Lock a view's base tables before planning reads them (#80784))
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -46,11 +42,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.StarRocksPlannerException;
->>>>>>> 631cdc1 ([BugFix][POST-1966] Lock a view's base tables before planning reads them (#80784))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

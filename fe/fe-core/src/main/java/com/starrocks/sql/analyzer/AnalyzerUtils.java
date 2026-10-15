@@ -1317,15 +1317,11 @@ public class AnalyzerUtils {
                 return null;
             }
             OlapTable table = (OlapTable) originalTable;
-<<<<<<< HEAD
-            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
-=======
             if (!copy) {
                 olapTables.add(table);
                 return null;
             }
-            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexMetaId());
->>>>>>> 631cdc1 ([BugFix][POST-1966] Lock a view's base tables before planning reads them (#80784))
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
             OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
                 return existed;
