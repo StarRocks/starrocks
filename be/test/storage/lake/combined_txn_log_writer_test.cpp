@@ -16,11 +16,18 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <condition_variable>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <set>
+#include <thread>
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
 #include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks::lake {
@@ -112,6 +119,174 @@ TEST_F(WriteCombinedTxnLogTest, test_complete_combined_txn_log_passes_coverage) 
 
     trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
     fp->setMode(trigger_mode);
+}
+
+namespace {
+
+void set_fail_point(const char* name, bool enable) {
+    PFailPointTriggerMode trigger_mode;
+    trigger_mode.set_mode(enable ? FailPointTriggerModeType::ENABLE : FailPointTriggerModeType::DISABLE);
+    starrocks::failpoint::FailPointRegistry::GetInstance()->get(name)->setMode(trigger_mode);
+}
+
+// Counts the write attempts and holds the ones a test picks until it releases them.
+struct AttemptHook {
+    std::mutex mutex;
+    std::condition_variable cond;
+    int started = 0;
+    int returned = 0;
+    bool released = false;
+    std::function<bool(int attempt)> hold = [](int) { return false; };
+};
+
+} // namespace
+
+// Covers write_combined_txn_logs(), which bounds every partition's write by
+// lake_put_combined_txn_log_attempt_timeout_ms and lake_put_combined_txn_log_max_attempts.
+class BoundedCombinedTxnLogWriteTest : public testing::Test {
+protected:
+    void SetUp() override {
+        _saved_timeout_ms = config::lake_put_combined_txn_log_attempt_timeout_ms;
+        _saved_max_attempts = config::lake_put_combined_txn_log_max_attempts;
+        _saved_parallel = config::enable_put_combinded_txn_log_parallel;
+        SyncPoint::GetInstance()->EnableProcessing();
+        install_hook([](int) { return false; });
+    }
+
+    void TearDown() override {
+        release_held_attempts();
+        SyncPoint::GetInstance()->ClearCallBack("write_combined_txn_logs:attempt");
+        SyncPoint::GetInstance()->DisableProcessing();
+        set_fail_point("put_combined_txn_log_success", false);
+        set_fail_point("put_combined_txn_log_fail", false);
+        config::lake_put_combined_txn_log_attempt_timeout_ms = _saved_timeout_ms;
+        config::lake_put_combined_txn_log_max_attempts = _saved_max_attempts;
+        config::enable_put_combinded_txn_log_parallel = _saved_parallel;
+    }
+
+    // Counts attempts from scratch, holding those for which |hold| returns true.
+    void install_hook(std::function<bool(int attempt)> hold) {
+        _hook = std::make_shared<AttemptHook>();
+        _hook->hold = std::move(hold);
+        SyncPoint::GetInstance()->SetCallBack("write_combined_txn_logs:attempt", [hook = _hook](void*) {
+            std::unique_lock l(hook->mutex);
+            const int attempt = ++hook->started;
+            if (hook->hold(attempt)) {
+                hook->cond.wait(l, [&] { return hook->released; });
+            }
+            ++hook->returned;
+            hook->cond.notify_all();
+        });
+    }
+
+    // An attempt the writer gave up on may still be held. Let it go, and wait until it is past the fail point it
+    // relies on, before a test switches the fail points off.
+    void release_held_attempts() {
+        {
+            std::unique_lock l(_hook->mutex);
+            _hook->released = true;
+            _hook->cond.notify_all();
+            _hook->cond.wait_for(l, std::chrono::seconds(10), [&] { return _hook->returned == _hook->started; });
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    int started_attempts() {
+        std::lock_guard l(_hook->mutex);
+        return _hook->started;
+    }
+
+    std::shared_ptr<AttemptHook> _hook;
+    int64_t _saved_timeout_ms = 0;
+    int32_t _saved_max_attempts = 0;
+    bool _saved_parallel = false;
+};
+
+TEST_F(BoundedCombinedTxnLogWriteTest, retries_a_failed_write) {
+    config::lake_put_combined_txn_log_attempt_timeout_ms = 10000;
+    config::lake_put_combined_txn_log_max_attempts = 3;
+    set_fail_point("put_combined_txn_log_fail", true);
+
+    std::map<int64_t, CombinedTxnLogPB> txn_log_map;
+    txn_log_map.emplace(100, make_logs(100, {1, 2}));
+    auto st = write_combined_txn_logs(txn_log_map, {});
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_NE(st.to_string().find("write combined_txn_log_fail"), std::string::npos) << st;
+    ASSERT_EQ(3, started_attempts());
+}
+
+// A PUT that hangs for seconds must not hold the load for seconds: once an attempt overruns its timeout another one
+// is started next to it, and the first to succeed wins.
+TEST_F(BoundedCombinedTxnLogWriteTest, starts_another_attempt_when_one_hangs) {
+    config::lake_put_combined_txn_log_attempt_timeout_ms = 100;
+    config::lake_put_combined_txn_log_max_attempts = 3;
+    set_fail_point("put_combined_txn_log_success", true);
+    for (bool parallel : {false, true}) {
+        config::enable_put_combinded_txn_log_parallel = parallel;
+        // Only the very first attempt hangs; with two partitions the other one is written at once.
+        install_hook([](int attempt) { return attempt == 1; });
+
+        std::map<int64_t, CombinedTxnLogPB> txn_log_map;
+        txn_log_map.emplace(100, make_logs(100, {1, 2}));
+        if (parallel) {
+            txn_log_map.emplace(200, make_logs(200, {3, 4}));
+        }
+        const auto begin = std::chrono::steady_clock::now();
+        ASSERT_OK(write_combined_txn_logs(txn_log_map, {}));
+        const auto elapsed = std::chrono::steady_clock::now() - begin;
+        ASSERT_LT(elapsed, std::chrono::seconds(5)) << "parallel=" << parallel;
+        ASSERT_EQ(static_cast<int>(txn_log_map.size()) + 1, started_attempts()) << "parallel=" << parallel;
+        release_held_attempts();
+    }
+}
+
+TEST_F(BoundedCombinedTxnLogWriteTest, gives_up_when_no_attempt_finishes) {
+    config::lake_put_combined_txn_log_attempt_timeout_ms = 50;
+    config::lake_put_combined_txn_log_max_attempts = 2;
+    install_hook([](int) { return true; });
+    set_fail_point("put_combined_txn_log_success", true);
+
+    std::map<int64_t, CombinedTxnLogPB> txn_log_map;
+    txn_log_map.emplace(100, make_logs(100, {1, 2}));
+    const auto begin = std::chrono::steady_clock::now();
+    auto st = write_combined_txn_logs(txn_log_map, {});
+    const auto elapsed = std::chrono::steady_clock::now() - begin;
+    ASSERT_TRUE(st.is_time_out()) << st;
+    ASSERT_NE(st.to_string().find("partition 100 txn 1000 not written after 2 attempts of 50 ms"), std::string::npos)
+            << st;
+    ASSERT_GE(elapsed, std::chrono::milliseconds(100));
+    ASSERT_EQ(2, started_attempts());
+}
+
+// An incomplete log is an invariant violation, not a storage error: it must be refused before any attempt, and the
+// rejection must come back as it is.
+TEST_F(BoundedCombinedTxnLogWriteTest, does_not_retry_an_incomplete_log) {
+    config::lake_put_combined_txn_log_attempt_timeout_ms = 100;
+    config::lake_put_combined_txn_log_max_attempts = 3;
+
+    std::map<int64_t, CombinedTxnLogPB> txn_log_map;
+    txn_log_map.emplace(100, make_logs(100, {1, 2}));
+    ExpectedTabletsByPartition expected;
+    expected.emplace(100, std::set<int64_t>{1, 2, 3});
+    auto st = write_combined_txn_logs(txn_log_map, expected);
+    ASSERT_TRUE(st.is_internal_error()) << st;
+    ASSERT_NE(st.to_string().find("refuse to write incomplete combined txn log"), std::string::npos) << st;
+    ASSERT_EQ(0, started_attempts());
+}
+
+// One attempt without a time limit is the former behaviour, written by the former code path.
+TEST_F(BoundedCombinedTxnLogWriteTest, single_unbounded_attempt_keeps_the_former_path) {
+    config::lake_put_combined_txn_log_attempt_timeout_ms = -1;
+    config::lake_put_combined_txn_log_max_attempts = 1;
+    set_fail_point("put_combined_txn_log_success", true);
+
+    std::map<int64_t, CombinedTxnLogPB> txn_log_map;
+    txn_log_map.emplace(100, make_logs(100, {1, 2}));
+    for (bool parallel : {false, true}) {
+        config::enable_put_combinded_txn_log_parallel = parallel;
+        ASSERT_OK(write_combined_txn_logs(txn_log_map, {}));
+    }
+    ASSERT_EQ(0, started_attempts());
 }
 
 } // namespace starrocks::lake

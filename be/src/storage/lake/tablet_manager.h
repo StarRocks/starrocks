@@ -287,6 +287,12 @@ public:
 
     Status put_combined_txn_log(const CombinedTxnLogPB& logs) { return put_combined_txn_log(logs, {}); }
 
+    // The coverage check put_combined_txn_log() runs before it writes anything: InternalError when |logs| lacks a
+    // tablet of |expected_tablet_ids|. A caller that retries failed writes runs it first, so that it never retries
+    // this invariant violation as if it were a storage error.
+    static Status check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
+                                                  const std::set<int64_t>& expected_tablet_ids);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id);

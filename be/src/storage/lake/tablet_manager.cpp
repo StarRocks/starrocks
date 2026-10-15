@@ -1476,8 +1476,8 @@ Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
 }
 
-static Status check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
-                                              const std::set<int64_t>& expected_tablet_ids) {
+Status TabletManager::check_combined_txn_log_coverage(const CombinedTxnLogPB& logs,
+                                                      const std::set<int64_t>& expected_tablet_ids) {
     if (expected_tablet_ids.empty()) {
         return Status::OK();
     }

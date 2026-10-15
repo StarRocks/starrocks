@@ -257,6 +257,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Prepared Physical Split Lake スキャンが有効な場合（セッション変数 `enable_lake_prepared_physical_split_scan` を参照）にのみ適用される `splitted_scan_rows`（Split Morsel ごとにスキャンされる行数）の上限。実際の上限は `min(tablet_internal_parallel_max_splitted_scan_rows, 本パラメータ)` であるため、Split Morsel をより細かく（大きなタブレットを、アイドル状態のドライバーを埋めるより多くのサブレンジ morsel に分割）することしかできず、粗くすることはありません。共有データクラスタでのみ有効です。
 - 導入バージョン: v4.2
 
+### lake_put_combined_txn_log_attempt_timeout_ms
+
+- デフォルト: 2000
+- タイプ: Int64
+- 単位: ミリ秒
+- 変更可能: はい
+- 説明: 共有データクラスタで、ロードがパーティションの結合トランザクションログ（Combined Txn Log）をオブジェクトストレージに書き込む際、1 回の試行を待つ時間。この時間内に完了しない試行はそのまま実行を続け、並行して新しい試行を開始します。最初に成功した試行が採用されます。`lake_put_combined_txn_log_max_attempts` と組み合わせて、オブジェクトストレージへの書き込みが遅いときにロードが待たされる時間の上限を決めます。`0` 以下の場合、各試行を時間制限なしで待ちます。
+- 導入バージョン: -
+
+### lake_put_combined_txn_log_max_attempts
+
+- デフォルト: 3
+- タイプ: Int32
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、パーティションの結合トランザクションログをオブジェクトストレージに書き込む際の最大試行回数。失敗した試行はすぐに再試行され、`lake_put_combined_txn_log_attempt_timeout_ms` を超えた試行には並行して新しい試行が開始されます。すべての試行が失敗するか、どの試行も時間内に完了しない場合、ロードは失敗します。`1` に設定し、`lake_put_combined_txn_log_attempt_timeout_ms` を `-1` に設定すると、時間制限なしで 1 回だけ書き込みます。
+- 導入バージョン: -
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - デフォルト: -1

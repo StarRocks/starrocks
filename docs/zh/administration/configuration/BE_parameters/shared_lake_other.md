@@ -254,6 +254,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：仅在开启 Prepared Physical Split Lake 扫描（参见会话变量 `enable_lake_prepared_physical_split_scan`）时生效的 `splitted_scan_rows`（每个 Split Morsel 扫描的行数）上限。实际上限为 `min(tablet_internal_parallel_max_splitted_scan_rows, 本参数)`，因此只会将 Split Morsel 拆得更细（把大 Tablet 切成更多子范围 Morsel 以填充原本空闲的 Driver），不会更粗。仅在存算分离集群中生效。
 - 引入版本：v4.2
 
+### lake_put_combined_txn_log_attempt_timeout_ms
+
+- 默认值：2000
+- 类型：Int64
+- 单位：毫秒
+- 是否动态：是
+- 描述：存算分离集群下，导入向对象存储写入某个分区的合并事务日志（Combined Txn Log）时，单次尝试的等待时间。超过该时间仍未完成的尝试不会被中断，系统会同时再发起一次尝试，以先成功的一次为准。与 `lake_put_combined_txn_log_max_attempts` 一起，限定对象存储写入变慢时导入最多被拖住多久。小于或等于 `0` 表示每次尝试都不限时。
+- 引入版本：-
+
+### lake_put_combined_txn_log_max_attempts
+
+- 默认值：3
+- 类型：Int32
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，向对象存储写入某个分区的合并事务日志时最多尝试的次数。失败的尝试会立即重试；超过 `lake_put_combined_txn_log_attempt_timeout_ms` 仍未完成时，会同时再发起一次尝试。所有尝试都失败，或没有一次在限定时间内完成时，导入失败。将其设为 `1`、并将 `lake_put_combined_txn_log_attempt_timeout_ms` 设为 `-1`，即只尝试一次且不限时。
+- 引入版本：-
+
 ### lake_put_txn_log_timeout_guard_ms
 
 - 默认值：-1

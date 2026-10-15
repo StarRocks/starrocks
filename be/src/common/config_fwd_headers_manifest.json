@@ -464,6 +464,8 @@
         "enable_load_spill_parallel_merge",
         "enable_parallel_memtable_finalize",
         "enable_put_combinded_txn_log_parallel",
+        "lake_put_combined_txn_log_attempt_timeout_ms",
+        "lake_put_combined_txn_log_max_attempts",
         "lake_enable_tablet_location_handoff",
         "upload_buffer_size",
         "download_buffer_size",

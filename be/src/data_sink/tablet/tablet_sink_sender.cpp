@@ -19,7 +19,6 @@
 
 #include "base/testutil/sync_point.h"
 #include "column/chunk.h"
-#include "common/config_ingest_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/master_info.h"
@@ -641,17 +640,7 @@ Status TabletSinkSender::_write_combined_txn_log() {
     // each tablet inside it and has no per-tablet fallback -- so an object written short of an
     // entry leaves the transaction permanently unpublishable once it commits. Check coverage
     // against what the FE dispatched before anything reaches object storage.
-    const ExpectedTabletsByPartition expected = _expected_tablets_by_partition();
-    if (config::enable_put_combinded_txn_log_parallel) {
-        return write_combined_txn_log_parallel(_txn_log_map, expected);
-    }
-
-    static const std::set<int64_t> kNoExpectation;
-    for (const auto& [partition_id, logs] : _txn_log_map) {
-        auto it = expected.find(partition_id);
-        RETURN_IF_ERROR(write_combined_txn_log(logs, it != expected.end() ? it->second : kNoExpectation));
-    }
-    return Status::OK();
+    return write_combined_txn_logs(_txn_log_map, _expected_tablets_by_partition());
 }
 
 } // namespace starrocks
