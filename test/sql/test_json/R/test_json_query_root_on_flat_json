@@ -18,36 +18,36 @@ SELECT k, get_json_string(j->'$', '$.a') FROM t_json_root_${uuid0} ORDER BY k;
 -- result:
 1	1
 2	str
-3	NULL
-4	NULL
+3	None
+4	None
 -- !result
 SELECT k, get_json_string(cast(j as json)->'$', '$.a') FROM t_json_root_${uuid0} ORDER BY k;
 -- result:
 1	1
 2	str
-3	NULL
-4	NULL
+3	None
+4	None
 -- !result
 SELECT k, get_json_bool(j->'$', '$.b.c') FROM t_json_root_${uuid0} ORDER BY k;
 -- result:
 1	1
-2	NULL
+2	None
 3	0
-4	NULL
+4	None
 -- !result
 SELECT k, json_exists(j->'$', '$.a'), json_length(j->'$', '$.d') FROM t_json_root_${uuid0} ORDER BY k;
 -- result:
 1	1	0
 2	1	0
 3	0	2
-4	NULL	NULL
+4	None	None
 -- !result
 SELECT k, json_query(j->'$.b', '$') FROM t_json_root_${uuid0} ORDER BY k;
 -- result:
 1	{"c": true}
-2	NULL
+2	None
 3	{"c": false}
-4	NULL
+4	None
 -- !result
 SELECT count(*) FROM t_json_root_${uuid0} WHERE get_json_string(j->'$', '$.a') = 'str';
 -- result:
