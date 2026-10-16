@@ -1412,21 +1412,39 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             return;
         }
         LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
-        // inactive mv by reason
-        if (mv.isActive()) {
+        // inactive mv by reason; an already inactive mv is journaled too when its version map has to be cleared
+        if (mv.isActive() || isClearVersionMap) {
             // log edit log
             String status = AlterMaterializedViewStatusClause.INACTIVE;
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                    alterMaterializedViewStatus(mv, status, reason, false);
+            AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+            // Only an active MV has a refresh to kill and a task to pause; an inactive one is journaled just for the
+            // clear below, without the task run lock that preparing the transition takes (and may fail to take).
+            AlterJobMgr.AlterMaterializedViewStatusContext statusContext = mv.isActive()
+                    ? alterJobMgr.prepareAlterMaterializedViewStatus(mv, status, reason, false)
+                    : new AlterJobMgr.AlterMaterializedViewStatusContext(status, reason, null, null);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                     mv.getId(), status, reason);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            // The clear of the version map, which makes the next refresh recompute everything, travels with the
+            // status so that a replay clears it too. The reset epoch is bumped before the journal write and again
+            // once the clear is done, so that it is odd while the reset is in flight: see
+            // MaterializedView#resetVisibleVersionMap.
+            log.setClearVersionMap(isClearVersionMap);
+            if (isClearVersionMap) {
+                mv.markVersionMapReset();
+            }
+            try {
+                alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false);
+                if (isClearVersionMap) {
+                    mv.getRefreshScheme().clearVersionState();
+                }
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+            } finally {
+                if (isClearVersionMap) {
+                    mv.markVersionMapReset();
+                }
+            }
         } else {
             mv.setInactiveAndReason(reason);
-        }
-        // clear version map to make sure the MV will be refreshed
-        if (isClearVersionMap) {
-            mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
         }
     }
 
