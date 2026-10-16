@@ -146,18 +146,18 @@ public class SetStmtAnalyzer {
             }
         }
 
-        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER)) {
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)) {
             String value = resolvedExpression.getStringValue();
             double multiplier;
             try {
                 multiplier = Double.parseDouble(value);
             } catch (NumberFormatException e) {
                 throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
-                        SessionVariable.BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER, value));
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
             }
             if (!Double.isFinite(multiplier) || multiplier < 1.0) {
                 throw new SemanticException(String.format("%s must be a finite number greater than or equal to 1.0, got %s",
-                        SessionVariable.BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER, value));
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
             }
         }
 

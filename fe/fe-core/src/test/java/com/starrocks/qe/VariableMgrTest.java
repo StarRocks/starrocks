@@ -80,7 +80,7 @@ public class VariableMgrTest {
 
     @Test
     public void testBroadcastCostMultiplierSettings() throws Exception {
-        String name = SessionVariable.BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER;
+        String name = SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
         for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
             VariableMgr variableMgr = new VariableMgr();
             SessionVariable session = variableMgr.newSessionVariable();
@@ -90,15 +90,15 @@ public class VariableMgrTest {
                 SystemVariable variable = new SystemVariable(scope, name, new FloatLiteral(value));
                 SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), null);
                 variableMgr.setSystemVariable(session, variable, false);
-                Assertions.assertEquals(value, session.getBroadcastMemoryLimitExceededCostMultiplier());
+                Assertions.assertEquals(value, session.getBroadcastMemExceededPenaltyFactor());
                 Assertions.assertEquals(scope == SetType.GLOBAL ? value : 1000.0,
-                        variableMgr.newSessionVariable().getBroadcastMemoryLimitExceededCostMultiplier());
+                        variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor());
                 Assertions.assertEquals(SessionVariable.DEFAULT_EXEC_MEM_LIMIT, session.getMaxExecMemByte());
             }
 
             variableMgr.applySessionVariable(Map.of(name, "2.5"), session);
-            Assertions.assertEquals(2.5, session.getBroadcastMemoryLimitExceededCostMultiplier());
-            double globalValue = variableMgr.newSessionVariable().getBroadcastMemoryLimitExceededCostMultiplier();
+            Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());
+            double globalValue = variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor();
             for (String value : List.of("0", "-1", "0.999", "NaN", "Infinity", "-Infinity", "1e309", "invalid")) {
                 SystemVariable variable = new SystemVariable(scope, name, new StringLiteral(value));
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
@@ -107,15 +107,15 @@ public class VariableMgrTest {
                 Assertions.assertTrue(error.getMessage().contains("finite number greater than or equal to 1.0"));
                 Assertions.assertThrows(DdlException.class,
                         () -> variableMgr.applySessionVariable(Map.of(name, value), session));
-                Assertions.assertEquals(2.5, session.getBroadcastMemoryLimitExceededCostMultiplier());
+                Assertions.assertEquals(2.5, session.getBroadcastMemExceededPenaltyFactor());
                 Assertions.assertEquals(globalValue,
-                        variableMgr.newSessionVariable().getBroadcastMemoryLimitExceededCostMultiplier());
+                        variableMgr.newSessionVariable().getBroadcastMemExceededPenaltyFactor());
             }
 
             SystemVariable reset = new SystemVariable(scope, name, null);
             SetStmtAnalyzer.analyze(new SetStmt(List.of(reset)), null);
             variableMgr.setSystemVariable(session, reset, false);
-            Assertions.assertEquals(1000.0, session.getBroadcastMemoryLimitExceededCostMultiplier());
+            Assertions.assertEquals(1000.0, session.getBroadcastMemExceededPenaltyFactor());
         }
     }
 

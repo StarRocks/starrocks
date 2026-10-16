@@ -29,26 +29,26 @@ public class SessionVariableTest {
     public void testBroadcastCostMultiplierState() throws Exception {
         SessionVariable variables = new SessionVariable();
         variables.replayFromJson("{\"exec_mem_limit\":4294967296}");
-        Assertions.assertEquals(1000.0, variables.getBroadcastMemoryLimitExceededCostMultiplier());
+        Assertions.assertEquals(1000.0, variables.getBroadcastMemExceededPenaltyFactor());
         Assertions.assertEquals(4294967296L, variables.getMaxExecMemByte());
 
-        variables.setBroadcastMemoryLimitExceededCostMultiplier(2.5);
+        variables.setBroadcastMemExceededPenaltyFactor(2.5);
         Assertions.assertEquals(2.5, variables.getNonDefaultVariables()
-                .get(SessionVariable.BROADCAST_MEMORY_LIMIT_EXCEEDED_COST_MULTIPLIER).actualValue);
+                .get(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR).actualValue);
         SessionVariable clone = variables.clone();
         SessionVariable restored = new SessionVariable();
         restored.replayFromJson(variables.getJsonString());
-        Assertions.assertEquals(2.5, clone.getBroadcastMemoryLimitExceededCostMultiplier());
-        Assertions.assertEquals(2.5, restored.getBroadcastMemoryLimitExceededCostMultiplier());
-        clone.setBroadcastMemoryLimitExceededCostMultiplier(1.0);
-        Assertions.assertEquals(2.5, variables.getBroadcastMemoryLimitExceededCostMultiplier());
+        Assertions.assertEquals(2.5, clone.getBroadcastMemExceededPenaltyFactor());
+        Assertions.assertEquals(2.5, restored.getBroadcastMemExceededPenaltyFactor());
+        clone.setBroadcastMemExceededPenaltyFactor(1.0);
+        Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
 
         for (double value : new double[] {0.0, -1.0, 0.999, Double.NaN,
                 Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
             SemanticException error = Assertions.assertThrows(SemanticException.class,
-                    () -> variables.setBroadcastMemoryLimitExceededCostMultiplier(value));
+                    () -> variables.setBroadcastMemExceededPenaltyFactor(value));
             Assertions.assertTrue(error.getMessage().contains("a finite number greater than or equal to 1.0"));
-            Assertions.assertEquals(2.5, variables.getBroadcastMemoryLimitExceededCostMultiplier());
+            Assertions.assertEquals(2.5, variables.getBroadcastMemExceededPenaltyFactor());
         }
     }
 

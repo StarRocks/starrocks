@@ -62,14 +62,14 @@ public class BroadcastCostMultiplierTest {
     @Test
     public void testConfiguredPenaltyOnlyAboveMemoryLimit() {
         sessionVariable.setMaxExecMemByte(4096);
-        sessionVariable.setBroadcastMemoryLimitExceededCostMultiplier(2.5);
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(2.5);
         assertBroadcastCost(4095, 12285);
         assertBroadcastCost(4096, 12288);
         assertBroadcastCost(4097, 30727.5);
 
-        sessionVariable.setBroadcastMemoryLimitExceededCostMultiplier(1.0);
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(1.0);
         assertBroadcastCost(4097, 12291);
-        sessionVariable.setBroadcastMemoryLimitExceededCostMultiplier(10.0);
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(10.0);
         assertBroadcastCost(4097, 122910);
 
         sessionVariable.setMaxExecMemByte(8192);
@@ -79,7 +79,7 @@ public class BroadcastCostMultiplierTest {
     @Test
     public void testMemoryLimitUsesPerBackendSize() {
         sessionVariable.setMaxExecMemByte(4096);
-        sessionVariable.setBroadcastMemoryLimitExceededCostMultiplier(2.5);
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(2.5);
         // Replication to three backends exceeds the limit, but each backend's input does not.
         assertBroadcastCost(2048, 6144);
         when(connectContext.getAliveBackendNumber()).thenReturn(1);
@@ -92,7 +92,7 @@ public class BroadcastCostMultiplierTest {
     @Test
     public void testOtherDistributionsAreUnaffected() {
         sessionVariable.setMaxExecMemByte(1);
-        sessionVariable.setBroadcastMemoryLimitExceededCostMultiplier(1000.0);
+        sessionVariable.setBroadcastMemExceededPenaltyFactor(1000.0);
         assertCost(distributionCost(DistributionSpec.createGatherDistributionSpec(), 4096), 4096, 0, 4096);
         assertCost(distributionCost(DistributionSpec.createAnyDistributionSpec(), 4096), 4096, 0, 0);
         assertCost(distributionCost(DistributionSpec.createReplicatedDistributionSpec(), 0), 0, 0, 1);
