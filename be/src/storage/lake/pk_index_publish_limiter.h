@@ -58,6 +58,13 @@ public:
         return permit;
     }
 
+    // A running optional preload checks this between chunks and drops its state before
+    // releasing its permit. No limiter lock is held during IO or column allocation.
+    bool has_waiters() {
+        std::lock_guard<std::mutex> lock(_mutex);
+        return !_queue.empty();
+    }
+
     StatusOr<std::unique_ptr<Permit>> acquire(int64_t timeout_ms, const std::function<size_t()>& concurrency,
                                               const std::function<bool()>& cancelled, bool sst_read = false) {
         TRACE_COUNTER_SCOPE_LATENCY_US(sst_read ? "pindex_sst_memory_admission_us" : "pindex_publish_admission_us");

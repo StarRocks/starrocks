@@ -341,7 +341,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 类型：累积
-- 描述：仅存算分离。部分淘汰 publish 准入通道繁忙时跳过的可选 legacy 主键 compaction 预加载次数。这是优化跳过，不是 publish 失败；发布时可按需加载状态。开关 OFF 时继续允许并发预加载。
+- 描述：仅存算分离。部分淘汰 publish 准入通道繁忙时跳过，或在 chunk 边界为已排队 publish 让路而丢弃的可选 legacy 主键 compaction 预加载次数。这是优化跳过，不是 publish 失败；发布时可按需加载状态。开关 OFF 时继续允许并发预加载；切换 ON 后，已在运行的 OFF 预加载也会让路。已开始的同步 IO 会先完成，再执行下一次让路检查。
 
 ## `lake_pk_index_load_duration_us`
 

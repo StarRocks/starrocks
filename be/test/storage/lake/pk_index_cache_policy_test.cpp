@@ -76,9 +76,11 @@ TEST(PkIndexPublishLimiterTest, fifo_wakeup_timeout_and_cancellation) {
     EXPECT_EQ(std::future_status::ready, queued2.get_future().wait_for(std::chrono::seconds(2)));
     EXPECT_EQ(0, sequence.load());
     EXPECT_EQ(nullptr, limiter.try_acquire(1));
+    EXPECT_TRUE(limiter.has_waiters());
     first.reset();
     EXPECT_EQ(0, second.get());
     EXPECT_EQ(1, third.get());
+    EXPECT_FALSE(limiter.has_waiters());
     ASSERT_OK(limiter.acquire(0, concurrency, running).status());
     EXPECT_NE(nullptr, limiter.try_acquire(1));
 }

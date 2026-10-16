@@ -2850,6 +2850,16 @@ void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tab
         return;
     }
     TEST_SYNC_POINT("PrimaryKeyManager::preload_compaction_state:admitted");
+    bool yielded_to_publish = false;
+    auto check_preload = [&]() -> Status {
+        // Re-read the flag: an OFF preload already running when ON is enabled
+        // must also yield to the first queued publish.
+        if (config::lake_pk_index_partial_eviction && _publish_limiter.has_waiters()) {
+            yielded_to_publish = true;
+            return Status::Cancelled("PK compaction preload yielded to queued publish");
+        }
+        return Status::OK();
+    };
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
                          tablet_schema);
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
@@ -2860,15 +2870,20 @@ void PrimaryKeyManager::preload_compaction_state(const TxnLog& txnlog, const Tab
     auto st = Status::OK();
     // skip preload if memory limit exceed
     for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
-        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i);
+        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i, check_preload);
         if (!st.ok()) {
             break;
         }
     }
     if (!st.ok()) {
         _compaction_cache.remove(compaction_entry);
-        LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet.id(),
-                                          st.to_string());
+        if (yielded_to_publish && st.is_cancelled()) {
+            TRACE_COUNTER_INCREMENT("pindex_compaction_preload_yielded_publish_waiting", 1);
+            StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.increment(1);
+        } else {
+            LOG(ERROR) << strings::Substitute("lake primary table preload_compaction_state id:$0 error:$1", tablet.id(),
+                                              st.to_string());
+        }
         // not return error even it fail, because we can load compaction state in publish again.
     } else {
         // just release it, will use it again in publish

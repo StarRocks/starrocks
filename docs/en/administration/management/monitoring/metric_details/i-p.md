@@ -341,7 +341,7 @@ Unused reusable SST read credit is also charged to the update tracker until its 
 
 - Unit: Requests
 - Type: Counter
-- Description: Shared-data only. Optional legacy Primary Key compaction preloads skipped because the partial-eviction publish lane was busy. This is an optimization skip, not a failed publish; publish can load the state on demand. OFF permits concurrent preloading as before.
+- Description: Shared-data only. Optional legacy Primary Key compaction preloads skipped because the partial-eviction publish lane was busy, or discarded between chunks to yield to a queued publish. This is an optimization skip, not a failed publish; publish can load the state on demand. OFF permits concurrent preloading as before. An in-flight OFF preload also yields after the flag is enabled. A synchronous IO already in progress completes before the next yield check.
 
 ## `lake_pk_index_load_duration_us`
 

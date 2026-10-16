@@ -15,6 +15,7 @@
 #include "storage/lake/primary_key_compaction_state.h"
 
 #include "base/debug/trace.h"
+#include "base/testutil/sync_point.h"
 #include "column/chunk_factory.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_lake_fwd.h"
@@ -36,7 +37,9 @@ PrimaryKeyCompactionState::~PrimaryKeyCompactionState() {
 }
 
 Status PrimaryKeyCompactionState::load_segments(Rowset* rowset, PrimaryKeyManager* primary_key_manager,
-                                                const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
+                                                const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id,
+                                                const std::function<Status()>& check_preload) {
+    if (check_preload) RETURN_IF_ERROR(check_preload());
     CHECK_MEM_LIMIT("PrimaryKeyCompactionState::load_segments");
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
     std::lock_guard<std::mutex> lg(_state_lock);
@@ -55,11 +58,11 @@ Status PrimaryKeyCompactionState::load_segments(Rowset* rowset, PrimaryKeyManage
     if (pk_cols.size() == 0 || pk_cols[segment_id] != nullptr) {
         return Status::OK();
     }
-    return _load_segments(rowset, tablet_schema, segment_id);
+    return _load_segments(rowset, tablet_schema, segment_id, check_preload);
 }
 
 Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema,
-                                                 uint32_t segment_id) {
+                                                 uint32_t segment_id, const std::function<Status()>& check_preload) {
     vector<uint32_t> pk_columns;
     pk_columns.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
@@ -72,10 +75,12 @@ Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSch
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type));
 
+    if (check_preload) RETURN_IF_ERROR(check_preload());
     if (_segment_iters.empty()) {
         ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == rowset->num_segments());
+    if (check_preload) RETURN_IF_ERROR(check_preload());
 
     // only hold pkey, so can use larger chunk size
     auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, config::vector_chunk_size);
@@ -86,8 +91,15 @@ Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSch
     auto col = pk_column->clone();
     if (itr != nullptr) {
         while (true) {
+            // Only speculative preloads provide this callback. Publish's required load
+            // retains its original semantics. One synchronous get_next cannot be preempted.
+            if (check_preload) RETURN_IF_ERROR(check_preload());
             chunk->reset();
             auto st = itr->get_next(chunk);
+            // Preserve an actual IO/corruption error even if a publish queued
+            // during that IO. Only successful work is voluntarily discarded.
+            if (!st.ok() && !st.is_end_of_file()) return st;
+            if (check_preload) RETURN_IF_ERROR(check_preload());
             if (st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
@@ -95,6 +107,7 @@ Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSch
             } else {
                 TRY_CATCH_BAD_ALLOC(PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), col.get(),
                                                               pk_encoding_type));
+                TEST_SYNC_POINT("PrimaryKeyCompactionState::_load_segments:chunk_loaded");
             }
         }
         itr->close();
@@ -109,6 +122,7 @@ Status PrimaryKeyCompactionState::_load_segments(Rowset* rowset, const TabletSch
                                                   "compaction state collection",
                                                   segment_id));
     }
+    if (check_preload) RETURN_IF_ERROR(check_preload());
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
     _primary_key_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());

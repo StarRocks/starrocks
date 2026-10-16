@@ -1970,7 +1970,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_pressure_prepare_discards_preloaded_wide_
 TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_excludes_optional_compaction_preload_from_publish) {
     ConfigResetGuard<bool> partial(&config::lake_pk_index_partial_eviction, true);
     ConfigResetGuard<bool> light(&config::enable_light_pk_compaction_publish, false);
-    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 50);
+    ConfigResetGuard<int32_t> timeout(&config::lake_pk_index_publish_wait_timeout_ms, 1000);
     const auto old_limit = _mem_tracker->limit();
     _mem_tracker->set_limit(6 * 1024 * 1024);
     DeferOp restore_limit([&] { _mem_tracker->set_limit(old_limit); });
@@ -2007,38 +2007,60 @@ TEST_P(LakePrimaryKeyPublishTest, test_partial_eviction_excludes_optional_compac
     EXPECT_FALSE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
     EXPECT_GT(_primary_key_mgr->compaction_state_mem_tracker()->consumption(), 0);
     _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
-    // An OFF preload already admitted before switching ON must also drain before a
-    // publisher can mutate. The deliberate admission timeout never reaches tablet locks.
-    config::lake_pk_index_partial_eviction = false;
-    std::promise<void> admitted, finish_preload;
-    auto finish = finish_preload.get_future().share();
-    auto* sync = SyncPoint::GetInstance();
-    sync->SetCallBack("PrimaryKeyManager::preload_compaction_state:admitted", [&](void*) {
-        admitted.set_value();
-        finish.wait();
-    });
-    sync->EnableProcessing();
-    auto preload = std::async(std::launch::async,
-                              [&] { _primary_key_mgr->preload_compaction_state(compaction, tablet, schema); });
-    bool unblocked = false;
-    auto drain = [&] {
-        if (!unblocked) {
-            finish_preload.set_value();
-            unblocked = true;
-        }
-        if (preload.valid()) preload.get();
-    };
-    DeferOp cleanup([&] {
+    // Queue behind a preload after its first real chunk. Both an ON preload and
+    // an OFF preload followed by ON must discard the partial column and yield.
+    for (bool initially_partial : {true, false}) {
+        config::lake_pk_index_partial_eviction = initially_partial;
+        std::promise<void> first_chunk, resume_preload, queued;
+        auto resume = resume_preload.get_future().share();
+        std::atomic<bool> saw_chunk{false}, saw_queue{false};
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("PrimaryKeyCompactionState::_load_segments:chunk_loaded", [&](void*) {
+            if (!saw_chunk.exchange(true)) {
+                first_chunk.set_value();
+                resume.wait();
+            }
+        });
+        sync->SetCallBack("PkIndexPublishLimiter::queued", [&](void*) {
+            if (!saw_queue.exchange(true)) queued.set_value();
+        });
+        sync->EnableProcessing();
+        auto preload = std::async(std::launch::async,
+                                  [&] { _primary_key_mgr->preload_compaction_state(compaction, tablet, schema); });
+        std::future<Status> publisher;
+        bool resumed = false;
+        auto drain = [&] {
+            if (!resumed) {
+                resume_preload.set_value();
+                resumed = true;
+            }
+            if (preload.valid()) preload.get();
+        };
+        DeferOp cleanup([&] {
+            drain();
+            if (publisher.valid()) publisher.get();
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+            _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
+        });
+        ASSERT_EQ(std::future_status::ready, first_chunk.get_future().wait_for(std::chrono::seconds(2)));
+        config::lake_pk_index_partial_eviction = true;
+        publisher = std::async(std::launch::async, [&]() -> Status {
+            auto permit = _primary_key_mgr->acquire_publish_slot();
+            return permit.status();
+        });
+        ASSERT_EQ(std::future_status::ready, queued.get_future().wait_for(std::chrono::seconds(2)));
         drain();
-        sync->DisableProcessing();
-        sync->ClearAllCallBacks();
-        _primary_key_mgr->TEST_remove_compaction_cache(tablet.id(), compaction.txn_id());
-    });
-    EXPECT_EQ(std::future_status::ready, admitted.get_future().wait_for(std::chrono::seconds(2)));
-    config::lake_pk_index_partial_eviction = true;
-    EXPECT_TRUE(_primary_key_mgr->acquire_publish_slot().status().is_time_out());
-    drain();
-    ASSERT_OK(_primary_key_mgr->acquire_publish_slot().status());
+        ASSERT_EQ(std::future_status::ready, publisher.wait_for(std::chrono::seconds(2)));
+        ASSERT_OK(publisher.get());
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_compaction_cache_absent(tablet.id(), compaction.txn_id()));
+        EXPECT_EQ(0, _primary_key_mgr->compaction_state_mem_tracker()->consumption());
+    }
+    EXPECT_EQ(skipped + 3, StorageMetrics::instance()->lake_pk_index_compaction_preload_skipped_total.value());
+    // Required publish can still load the same rowset after speculative work was
+    // discarded; cancellation is not a failed transaction or a poisoned cache hit.
+    ASSERT_OK(publish_single_version(metadata->id(), 2, txn).status());
+    EXPECT_EQ(8192, read_rows(metadata->id(), 2));
     EXPECT_LE(_mem_tracker->peak_consumption(), _mem_tracker->limit());
 }
 
