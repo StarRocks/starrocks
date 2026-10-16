@@ -97,6 +97,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
         expectPrefetch(metadataMgr, session, "external", "db", "insert_source", 1);
         expectPrefetch(metadataMgr, session, "external", "db", "update_source", 1);
         expectPrefetch(metadataMgr, session, "external", "db", "delete_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "merge_source", 1);
 
         Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
                 parse("insert into default_catalog.db.target select * from external.db.insert_source", session),
@@ -107,6 +108,10 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
                 session, metadataMgr));
         Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
                 parse("delete from default_catalog.db.target using external.db.delete_source source where true", session),
+                session, metadataMgr));
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("merge into default_catalog.db.target target using external.db.merge_source source " +
+                        "on target.id = source.id when matched then update set value = source.value", session),
                 session, metadataMgr));
 
         new FullVerifications(metadataMgr) {

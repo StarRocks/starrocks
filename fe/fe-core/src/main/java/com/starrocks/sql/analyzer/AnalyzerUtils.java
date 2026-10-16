@@ -908,6 +908,10 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null && shouldVisitParserOwnedDmlRelations()
+                    && node.getSourceRelation() != null) {
+                visit(node.getSourceRelation(), context);
+            }
             return super.visitMergeIntoStatement(node, context);
         }
 
