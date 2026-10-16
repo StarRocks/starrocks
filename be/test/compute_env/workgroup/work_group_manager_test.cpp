@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <optional>
 
 #include "base/metrics.h"
@@ -140,6 +141,115 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_metrics) {
     EXPECT_EQ(2, get_value("resource_group_driver_queue_level_schedule_count", "1"));
     EXPECT_EQ(std::nullopt, get_value("resource_group_driver_queue_level_accu_time_ns", "2"));
 
+    manager.destroy();
+}
+
+PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counters_survive_workgroup_lifecycle) {
+    MetricRegistry registry("test");
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    std::vector<FakeDriverQueue*> queues;
+    auto factory = [&queues](pipeline::DriverQueueMetrics*) {
+        auto queue = std::make_unique<FakeDriverQueue>();
+        queue->stats.resize(2);
+        queues.push_back(queue.get());
+        return queue;
+    };
+    WorkGroupManager manager(config, &registry, factory, unused_driver_executor_factory());
+    manager.set_workgroup_expiration_time(std::chrono::seconds(0));
+    const std::string name = "wg_queue_lifecycle";
+    auto twg = create_twg(131, 1, name, WorkGroup::DEFAULT_MEM_POOL, 0.5);
+    auto old_wg = std::make_shared<WorkGroup>(twg);
+    manager.add_workgroup(old_wg);
+    auto old_query = old_wg->acquire_running_query_token(false);
+    ASSERT_TRUE(old_query.ok());
+
+    auto get_value = [&registry, &name](const std::string& metric_name) -> std::optional<int64_t> {
+        auto* metric = registry.get_metric(metric_name, MetricLabels().add("name", name).add("level", "1"));
+        return metric == nullptr ? std::nullopt : std::optional<int64_t>(std::stoll(metric->to_string()));
+    };
+    auto check_values = [&](int64_t accu_time, int64_t wait_time, int64_t schedule_count) {
+        EXPECT_EQ(accu_time, get_value("resource_group_driver_queue_level_accu_time_ns"));
+        EXPECT_EQ(wait_time, get_value("resource_group_driver_queue_level_wait_time_ns"));
+        EXPECT_EQ(schedule_count, get_value("resource_group_driver_queue_level_schedule_count"));
+    };
+    queues[0]->stats[1] = {.accu_time_ns = 300, .wait_time_ns = 200, .schedule_count = 2};
+    manager.update_metrics();
+    check_values(300, 200, 2);
+
+    // The old queue has unsampled work. The new queue can already exceed the previous sample,
+    // so comparing successive samples to detect a reset would undercount it.
+    queues[0]->stats[1] = {.accu_time_ns = 400, .wait_time_ns = 350, .schedule_count = 3};
+    twg.version = 2;
+    manager.add_workgroup(std::make_shared<WorkGroup>(twg));
+    queues[1]->stats[1] = {.accu_time_ns = 250, .wait_time_ns = 500, .schedule_count = 5};
+    manager.update_metrics();
+    check_values(250, 850, 8);
+    manager.update_metrics();
+    check_values(250, 850, 8);
+
+    // A draining version can still run after ALTER. Its increments belong to the same series.
+    queues[0]->stats[1].wait_time_ns = 450;
+    queues[0]->stats[1].schedule_count = 4;
+    queues[1]->stats[1].wait_time_ns = 700;
+    queues[1]->stats[1].schedule_count = 7;
+    manager.apply({});
+    manager.update_metrics();
+    check_values(250, 1150, 11);
+
+    // Retiring the queue must preserve its final increments, without counting them twice.
+    queues[0]->stats[1].wait_time_ns = 475;
+    queues[0]->stats[1].schedule_count = 5;
+    old_query.value().reset();
+    manager.apply({});
+    manager.update_metrics();
+    check_values(250, 1175, 12);
+
+    queues[1]->stats[1].wait_time_ns = 750;
+    queues[1]->stats[1].schedule_count = 8;
+    twg.version = 3;
+    manager.apply({make_twg_op(twg, TWorkGroupOpType::WORKGROUP_OP_DELETE)});
+    manager.apply({});
+    manager.update_metrics();
+    check_values(0, 1225, 13);
+    manager.update_metrics();
+    check_values(0, 1225, 13);
+
+    // DROP/CREATE with a new ID and the same name reuses the registered metric series.
+    auto recreated = create_twg(132, 1, name, WorkGroup::DEFAULT_MEM_POOL, 0.5);
+    manager.add_workgroup(std::make_shared<WorkGroup>(recreated));
+    queues[2]->stats[1] = {.accu_time_ns = 150, .wait_time_ns = 75, .schedule_count = 1};
+    manager.update_metrics();
+    check_values(150, 1300, 14);
+
+    queues[2]->stats[1].wait_time_ns = 175;
+    queues[2]->stats[1].schedule_count = 2;
+    manager.destroy();
+    manager.update_metrics();
+    check_values(0, 1400, 15);
+}
+
+PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counter_totals_saturate) {
+    MetricRegistry registry("test");
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    int create_count = 0;
+    auto factory = [&create_count](pipeline::DriverQueueMetrics*) {
+        auto queue = std::make_unique<FakeDriverQueue>();
+        const auto value = create_count++ == 0 ? std::numeric_limits<int64_t>::max() - 1 : 10;
+        queue->stats = {{.accu_time_ns = 0, .wait_time_ns = value, .schedule_count = value}};
+        return queue;
+    };
+    WorkGroupManager manager(config, &registry, factory, unused_driver_executor_factory());
+    manager.add_workgroup(
+            std::make_shared<WorkGroup>(create_twg(133, 1, "wg_queue_limit", WorkGroup::DEFAULT_MEM_POOL, 0.5)));
+    manager.add_workgroup(
+            std::make_shared<WorkGroup>(create_twg(133, 2, "wg_queue_limit", WorkGroup::DEFAULT_MEM_POOL, 0.5)));
+    manager.update_metrics();
+    for (const auto* name :
+         {"resource_group_driver_queue_level_wait_time_ns", "resource_group_driver_queue_level_schedule_count"}) {
+        auto* metric = registry.get_metric(name, MetricLabels().add("name", "wg_queue_limit").add("level", "0"));
+        ASSERT_NE(nullptr, metric);
+        EXPECT_EQ(std::to_string(std::numeric_limits<int64_t>::max()), metric->to_string());
+    }
     manager.destroy();
 }
 
