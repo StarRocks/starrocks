@@ -1942,10 +1942,16 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     auto input_metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
     input_metadata->set_id(next_id());
     auto input_schema = make_varchar_pk_schema();
+    // to_schema_pb appends repeated columns; replacing the cloned INT schema
+    // must not leave its original columns ahead of the long VARCHAR key.
+    input_metadata->clear_schema();
     input_schema->to_schema_pb(input_metadata->mutable_schema());
     input_metadata->mutable_schema()->mutable_column(0)->set_length(512);
     input_metadata->mutable_schema()->set_id(next_id());
     input_schema = std::make_shared<TabletSchema>(input_metadata->schema());
+    ASSERT_EQ(2, input_schema->num_columns());
+    ASSERT_EQ(1, input_schema->num_key_columns());
+    ASSERT_EQ(TYPE_VARCHAR, input_schema->column(0).type());
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*input_metadata));
     std::vector<std::string> input_keys;
     constexpr int kInputRows = 1024;
@@ -1975,8 +1981,16 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     auto input_ref = input.upserts(0)->current();
     ASSERT_NE(nullptr, input_ref.chunk);
     ASSERT_EQ(kInputRows, input_ref.chunk->num_rows());
+    const auto& input_column = input_ref.chunk->get_column_by_index(0);
+    ASSERT_TRUE(input_column->is_binary());
+    ASSERT_EQ(input_keys.front(), input_column->get(0).get_slice().to_string());
+    ASSERT_EQ(input_keys.back(), input_column->get(kInputRows - 1).get_slice().to_string());
     const auto input_first_row = input_ref.chunk->debug_row(0);
     const size_t input_bytes = input.memory_usage();
+    ASSERT_NE(nullptr, input.upserts(0)->standalone_pk_column());
+    LOG(INFO) << "four-tablet preloaded PK bytes=" << input_bytes
+              << " raw_chunk_bytes=" << input_ref.chunk->memory_usage()
+              << " encoded_column_bytes=" << input.upserts(0)->standalone_pk_column()->memory_usage();
     ASSERT_GT(input_bytes, 256 * 1024);
     const int64_t read_and_workspace_bytes = fixture.minimum_bytes + 65536;
     ASSERT_GT(tracker->limit(), read_and_workspace_bytes);
