@@ -239,22 +239,8 @@ struct H3ArrayBuilder {
         offsets->append(static_cast<uint32_t>(values->size()));
     }
 
+    // Valid H3 cell indexes have the sign bit clear, so their BIGINT bits are unchanged.
     Status append(const std::vector<H3Index>& cells) {
-        if (cells.size() > std::numeric_limits<uint32_t>::max() - values->size()) {
-            return Status::InvalidArgument("H3 array offset limit exceeded");
-        }
-        values->reserve(values->size() + cells.size());
-        for (size_t i = 0; i < cells.size(); ++i) {
-            values->append(static_cast<int64_t>(cells[i]));
-        }
-        nulls->append(0);
-        offsets->append(static_cast<uint32_t>(values->size()));
-        return Status::OK();
-    }
-
-    // Copy validated H3 cells in bounded blocks for polygon results. Valid
-    // cell indexes have the sign bit clear, so their BIGINT bits are unchanged.
-    Status append_bulk(const std::vector<H3Index>& cells) {
         static_assert(sizeof(H3Index) == sizeof(int64_t));
         if (cells.size() > std::numeric_limits<uint32_t>::max() - values->size()) {
             return Status::InvalidArgument("H3 array offset limit exceeded");
@@ -747,7 +733,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
         ASSIGN_OR_RETURN(const auto* geometry, h3_geometry(input, row, true, prepared, &local, &varying));
         const size_t count = geometry->type == WkbGeometryType::POLYGON ? 1 : geometry->children.size();
         if (geometry->empty) {
-            RETURN_IF_ERROR(result.append_bulk({}));
+            RETURN_IF_ERROR(result.append({}));
             continue;
         }
         ASSIGN_OR_RETURN(const bool valid, h3_polygon_is_valid(*geometry));
@@ -755,7 +741,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_polygon_to_cells(FunctionContext* context, 
         ASSIGN_OR_RETURN(auto plan, h3_plan_polygon(*geometry, count, res));
         std::vector<H3Index> cells;
         RETURN_IF_ERROR(h3_fill_polygon(plan, res, cells));
-        RETURN_IF_ERROR(result.append_bulk(cells));
+        RETURN_IF_ERROR(result.append(cells));
     }
     return result.build(size, constant);
 }
