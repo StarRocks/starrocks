@@ -24,11 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
->>>>>>> 9f90b646af1... [BugFix][RB-460] Reject unsupported column types under bloom filters (#65509)
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
