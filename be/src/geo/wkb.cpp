@@ -679,7 +679,7 @@ Status validate_geometry(const WkbGeometry& geometry, WkbCoordinateSemantics sem
                 return Status::InvalidArgument("coordinates must be finite");
             }
             if (semantics == WkbCoordinateSemantics::GEOGRAPHY_CRS84 &&
-                (coordinate.x < -180 || coordinate.x > 180 || coordinate.y < -90 || coordinate.y > 90)) {
+                !is_valid_crs84_coordinate(coordinate.x, coordinate.y)) {
                 return Status::InvalidArgument("GEOGRAPHY coordinates must be finite CRS84 longitude/latitude");
             }
         }

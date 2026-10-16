@@ -61,13 +61,9 @@ void print_s2point(std::ostream& os, const S2Point& point) {
     os << std::setprecision(12) << coord.lng().degrees() << " " << coord.lat().degrees();
 }
 
-static inline bool is_valid_lng_lat(double lng, double lat) {
-    return std::abs(lng) <= 180 && std::abs(lat) <= 90;
-}
-
 // Return GEO_PARSE_OK, if and only if this can be converted to a valid S2Point
 static inline GeoParseStatus to_s2point(double lng, double lat, S2Point* point) {
-    if (!is_valid_lng_lat(lng, lat)) {
+    if (!is_valid_crs84_coordinate(lng, lat)) {
         return GEO_PARSE_COORD_INVALID;
     }
     S2LatLng ll = S2LatLng::FromDegrees(lat, lng);
