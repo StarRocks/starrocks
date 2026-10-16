@@ -160,8 +160,7 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counters_survive_workgrou
     auto twg = create_twg(131, 1, name, WorkGroup::DEFAULT_MEM_POOL, 0.5);
     auto old_wg = std::make_shared<WorkGroup>(twg);
     manager.add_workgroup(old_wg);
-    auto old_query = old_wg->acquire_running_query_token(false);
-    ASSERT_TRUE(old_query.ok());
+    old_wg->incr_num_running_drivers();
 
     auto get_value = [&registry, &name](const std::string& metric_name) -> std::optional<int64_t> {
         auto* metric = registry.get_metric(metric_name, MetricLabels().add("name", name).add("level", "1"));
@@ -199,7 +198,7 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counters_survive_workgrou
     // Retiring the queue must preserve its final increments, without counting them twice.
     queues[0]->stats[1].wait_time_ns = 475;
     queues[0]->stats[1].schedule_count = 5;
-    old_query.value().reset();
+    old_wg->decr_num_running_drivers();
     manager.apply({});
     manager.update_metrics();
     check_values(250, 1175, 12);
