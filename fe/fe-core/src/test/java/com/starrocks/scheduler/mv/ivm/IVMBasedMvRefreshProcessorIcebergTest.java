@@ -50,11 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TransactionState;
-import mockit.Invocation;
->>>>>>> 50ce0530a1d ([BugFix] Record the IVM refresh window on the transaction it commits with (#62830))
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
