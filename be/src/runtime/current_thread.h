@@ -366,6 +366,19 @@ public:
         }
     }
 
+    // Transfer already-accounted bytes (e.g. a get_consumed_bytes() delta) to another tracker.
+    // This is not a free: do not recycle the charge into the thread's reservation. Commit the
+    // debit before the credit so a shared ancestor never counts the transferred bytes twice.
+    void mem_transfer_to(MemTracker* tracker, int64_t size) {
+        DCHECK_GE(size, 0);
+        if (size == 0) {
+            return;
+        }
+        _mem_cache_manager.release(size);
+        _mem_cache_manager.commit(false);
+        tracker->consume(size);
+    }
+
     static void mem_consume_without_cache(int64_t size) {
         MemTracker* cur_tracker = mem_tracker();
         if (cur_tracker != nullptr && size != 0) {

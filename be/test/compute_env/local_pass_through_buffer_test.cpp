@@ -244,6 +244,57 @@ TEST_F(LocalPassThroughMemoryTest, buffered_chunks_remain_in_process_budget) {
     EXPECT_EQ(0, _receiver->consumption());
 }
 
+TEST_F(LocalPassThroughMemoryTest, append_with_pending_tls_charge_does_not_double_count) {
+    _input->set_num_rows(128 * 1024 / sizeof(int64_t));
+    flush();
+    auto& thread = CurrentThread::current();
+    int64_t clone_bytes = 0;
+    {
+        const int64_t before_clone = thread.get_consumed_bytes();
+        auto clone = _input->clone_unique();
+        clone_bytes = thread.get_consumed_bytes() - before_clone;
+    }
+    flush();
+    constexpr int64_t batch_size = 2 * 1024 * 1024;
+    ASSERT_GT(clone_bytes, 1);
+    ASSERT_LT(clone_bytes, batch_size);
+
+    // An earlier test's high-water mark must not hide a duplicate append charge.
+    const int64_t peak_gap = _process->peak_consumption() - _process->consumption();
+    _process->consume(peak_gap);
+    DeferOp release_padding([&] { _process->release(peak_gap); });
+    const int64_t process_before = _process->consumption();
+    const int64_t sender_before = _sender->consumption();
+    const int64_t pending_bytes = batch_size - clone_bytes / 2;
+    thread.mem_consume(pending_bytes);
+    DeferOp release_pending([&] {
+        thread.mem_release(pending_bytes);
+        flush();
+    });
+    const int64_t expected_process = process_before + pending_bytes + clone_bytes;
+    const int64_t old_limit = _process->limit();
+    DeferOp restore_limit([&] { _process->set_limit(old_limit); });
+    _process->set_limit(expected_process + clone_bytes / 2);
+
+    // Bypass append(): its immediate flush would hide the false limit-exceeded window.
+    // The clone crosses the positive batching threshold; its transfer debit is smaller than a batch.
+    _sink->append_chunk(0, _input.get(), _input->memory_usage(), 0);
+    EXPECT_EQ(clone_bytes, _sink->total_bytes());
+    EXPECT_EQ(_initial_passthrough_bytes + clone_bytes, _passthrough->consumption());
+    EXPECT_EQ(sender_before + pending_bytes, _sender->consumption());
+    EXPECT_EQ(expected_process, _process->consumption());
+    EXPECT_EQ(expected_process, _process->peak_consumption());
+    EXPECT_EQ(nullptr, _sender->find_limit_exceeded_tracker());
+
+    flush();
+    EXPECT_EQ(expected_process, _process->consumption());
+    EXPECT_EQ(expected_process, _process->peak_consumption());
+    _source->set_cancelled();
+    flush();
+    EXPECT_EQ(process_before + pending_bytes, _process->consumption());
+    EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
+}
+
 TEST_F(LocalPassThroughMemoryTest, pull_transfers_ownership_without_changing_process_usage) {
     const int64_t buffered_bytes = append();
     ASSERT_GT(buffered_bytes, 0);
