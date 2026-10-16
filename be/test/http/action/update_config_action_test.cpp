@@ -37,6 +37,8 @@
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 #include "util/cpu_info.h"
+#include "util/defer_op.h"
+#include "util/threadpool.h"
 
 #ifdef USE_STAROS
 DECLARE_int64(fslib_s3_max_single_part_size);
@@ -91,6 +93,32 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
 
     auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
     ASSERT_EQ(16, load_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_load_sink_close_thread_pool_num_max) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* thread_pool = ExecEnv::GetInstance()->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(action.update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(action.update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, ExecEnv::GetInstance()->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(action.update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
 }
 
 TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {

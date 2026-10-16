@@ -125,6 +125,7 @@ set(EXEC_FILES
         ./exec/hash_variant_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
+        ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
         ./exec/arrow_to_json_converter_test.cpp

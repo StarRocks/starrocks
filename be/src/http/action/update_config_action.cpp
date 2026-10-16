@@ -231,6 +231,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("load_sink_close_thread_pool_num_max", [&]() -> Status {
+            if (config::load_sink_close_thread_pool_num_max <= 0) {
+                return Status::InvalidArgument("load_sink_close_thread_pool_num_max must be greater than 0");
+            }
+            auto* thread_pool = _exec_env->load_sink_close_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::load_sink_close_thread_pool_num_max);
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() -> Status {
             Status st1 = ExecEnv::GetInstance()
                                  ->agent_server()

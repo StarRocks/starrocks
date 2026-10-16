@@ -401,6 +401,16 @@ Status ExecEnv::_init_pk_index_execution_thread_pool() {
             .build(&_pk_index_execution_thread_pool);
 }
 
+Status ExecEnv::_init_load_sink_close_thread_pool() {
+    return ThreadPoolBuilder("load_sink_close")
+            // Creating the first worker in submit() can stall the poller after an idle period.
+            .set_min_threads(1)
+            .set_max_threads(config::load_sink_close_thread_pool_num_max)
+            .set_max_queue_size(std::numeric_limits<int>::max())
+            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+            .build(&_load_sink_close_thread_pool);
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -448,6 +458,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
     REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
+
+    RETURN_IF_ERROR(_init_load_sink_close_thread_pool());
+    REGISTER_THREAD_POOL_METRICS(load_sink_close, _load_sink_close_thread_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -908,6 +921,14 @@ void ExecEnv::stop() {
         component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
+    // No pipeline worker or poller can submit now. Join running closes and cancel queued closes while their
+    // query contexts, sinks and object-store dependencies are still alive.
+    if (_load_sink_close_thread_pool) {
+        start = MonotonicMillis();
+        _load_sink_close_thread_pool->shutdown();
+        component_times.emplace_back("load_sink_close_thread_pool", MonotonicMillis() - start);
+    }
+
     if (_thread_pool) {
         start = MonotonicMillis();
         _thread_pool->shutdown();
@@ -1050,6 +1071,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _load_sink_close_thread_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
     _parallel_compact_mgr.reset();

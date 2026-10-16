@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <thread>
 #include <utility>
 
 #include "common/config.h"
 #include "testutil/scoped_updater.h"
+#include "util/await.h"
 #include "util/cpu_info.h"
 #include "util/threadpool.h"
 
@@ -49,6 +52,22 @@ TEST(ExecEnvTest, PkIndexExecutionThreadPoolSizing) {
         EXPECT_EQ(env.pk_index_execution_thread_pool()->max_threads(), expected_threads);
         env.pk_index_execution_thread_pool()->shutdown();
     }
+}
+
+TEST(ExecEnvTest, LoadSinkCloseKeepsPrestartedWorker) {
+    SCOPED_UPDATE(int32_t, config::load_sink_close_thread_pool_num_max, 4);
+    ExecEnv env;
+    ASSERT_TRUE(env._init_load_sink_close_thread_pool().ok());
+    auto* pool = env.load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, pool);
+    // Exercise production initialization before any close, then stay idle beyond the 500 ms timeout.
+    ASSERT_TRUE(Awaitility().timeout(5000000).until([&]() { return pool->num_threads() == 1; }));
+    std::this_thread::sleep_for(std::chrono::milliseconds(750));
+    ASSERT_EQ(1, pool->num_threads());
+    ASSERT_TRUE(pool->submit_func([]() {}).ok());
+    pool->wait();
+    EXPECT_EQ(1, pool->num_threads());
+    pool->shutdown();
 }
 
 } // namespace starrocks
