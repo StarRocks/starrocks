@@ -1590,8 +1590,8 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).
 
-  * `AUTO` prefers the StarRocks file reader when a data split can be converted to supported raw files, and otherwise uses the paimon-cpp native reader for ordinary data splits. Queries that read FILE/BLOB columns use paimon-cpp.
-  * `JNI` selects the Paimon Java reader for ordinary data splits. `NATIVE` selects paimon-cpp.
+  * `AUTO` prefers compatible StarRocks raw-file reads, then compatible paimon-cpp reads, and otherwise selects JNI. Compatibility checks include file formats, projected columns, historical file schemas, merge functions, and deletion-vector options. FILE/BLOB columns require paimon-cpp; a query fails if no reader can read the selected columns.
+  * `JNI` selects the Paimon Java reader for ordinary data splits. `NATIVE` selects paimon-cpp and reports known incompatibilities instead of silently falling back. AUTO also conservatively selects JNI for SDK timestamp reads and nullable MAP keys in ORC/Avro; explicit NATIVE bypasses these data-dependent precautions and conservative schema-conversion checks.
   * System-table splits remain on JNI. Global-index splits use paimon-cpp regardless of the requested mode, including when `paimon_force_jni_reader` is `true`. For other data splits, `paimon_force_jni_reader=true` overrides this variable and selects JNI.
   * Native read errors do not trigger an automatic retry with JNI.
 * **Default**: AUTO

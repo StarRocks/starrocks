@@ -1358,8 +1358,8 @@ FROM test;
 
 * 描述：控制 Paimon 表使用的 Reader。有效值为 `AUTO`、`JNI` 和 `NATIVE`（不区分大小写）。
 
-  * `AUTO` 在数据 split 可以转换为受支持的原始文件时，优先使用 StarRocks 文件 Reader；其他普通数据 split 使用 paimon-cpp 原生 Reader。查询涉及 FILE/BLOB 列时使用 paimon-cpp。
-  * `JNI` 为普通数据 split 选择 Paimon Java Reader，`NATIVE` 选择 paimon-cpp。
+  * `AUTO` 优先选择兼容的 StarRocks 原始文件读取，其次选择兼容的 paimon-cpp，否则选择 JNI。兼容性判断包括文件格式、读取列、历史文件 schema、合并函数和删除向量选项。FILE/BLOB 列需要 paimon-cpp；没有 Reader 能读取所选列时，查询会报错。
+  * `JNI` 为普通数据 split 选择 Paimon Java Reader；`NATIVE` 选择 paimon-cpp，遇到已知不兼容条件时明确报错，不会静默切换。AUTO 对 SDK 时间戳读取以及 ORC/Avro 中可空 MAP key 采用保守策略，选择 JNI；显式 NATIVE 会绕过这些依赖实际数据的保守判断以及保守的 schema 转换检查。
   * 系统表 split 仍使用 JNI。全局索引 split 始终使用 paimon-cpp，包括显式指定 JNI 或设置 `paimon_force_jni_reader=true` 的情况。对于其他数据 split，`paimon_force_jni_reader=true` 会覆盖本变量并选择 JNI。
   * Native 读取失败时不会自动切换到 JNI 重试。
 * 默认值：AUTO
