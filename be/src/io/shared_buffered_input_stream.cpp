@@ -19,6 +19,7 @@
 #include "common/config.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
+#include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::io {
@@ -225,8 +226,12 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
             // we will count how many extra bytes we read because of alignment.
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
-        sb.buffer.reserve(sb.size);
-        RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+        // Publish the buffer only after the entire read succeeds. A failed read may have written
+        // partial data, which must not be reused by later reads or populated into DataCache.
+        std::vector<uint8_t> read_buffer;
+        raw::stl_vector_resize_uninitialized(&read_buffer, sb.size);
+        RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, read_buffer.data(), sb.size));
+        sb.buffer.swap(read_buffer);
     }
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
