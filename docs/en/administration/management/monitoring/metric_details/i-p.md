@@ -382,6 +382,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: The current size of the RPC thread pool, which is used for handling Routine Load and loading via table functions. The default value is 10, with a maximum value of 1000. This value is dynamically adjusted based on the usage of the thread pool.
 
+## `load_sink_close_active_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes that are running in the load sink close thread pool. In a shared-data cluster, each close writes the combined transaction log of a load to object storage.
+
+## `load_sink_close_execute_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total execution time of completed load sink close tasks, including waits and object-storage writes performed during close. Updated when each task finishes.
+
+## `load_sink_close_executed_tasks_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: The number of load sink close tasks completed by the thread pool, including closes that return an error.
+
+## `load_sink_close_pending_time_ns_total`
+
+- Unit: Nanoseconds
+- Type: Cumulative
+- Description: The total time completed load sink close tasks spent waiting in the thread pool queue. Updated when each task finishes; currently queued tasks are not yet included.
+
+## `load_sink_close_queue_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of load sink closes waiting in the queue of the load sink close thread pool. A value that keeps growing means object-storage writes are slower than loads finish.
+
+## `load_sink_close_running_threads`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The number of threads in the load sink close thread pool.
+
+## `load_sink_close_threadpool_size`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: The maximum number of threads in the load sink close thread pool, set by `load_sink_close_thread_pool_num_max`.
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `low_cardinality_dict_cache_bytes`
@@ -615,6 +657,18 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Unit: Count
 - Description: Current length of the block queue of PipelineDriverPoller in the pipeline engine.
+
+## `pipe_poller_max_driver_check`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by the slowest single driver check in one pass of PipelineDriverPoller. A large value means that checking one blocked driver held up the whole pass.
+
+## `pipe_poller_pass`
+
+- Unit: microsecond
+- Type: Summary
+- Description: Time taken by one pass of PipelineDriverPoller over its blocked drivers. Each executor set has a single poller thread, so a long pass delays every driver that waits on it. The maximum in the recent window is exposed as `pipe_poller_pass_max_latency`.
 
 ## `pipe_prepare_pool_queue_len`
 

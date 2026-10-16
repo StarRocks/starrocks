@@ -14,6 +14,9 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/thread/threadpool.h"
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/pipeline_executor_set.h"
@@ -22,7 +25,9 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
@@ -32,6 +37,7 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 
     _automatic_partition_chunk.reset();
 
+    _close_queue_timer = ADD_TIMER(_unique_metrics, "CloseQueueTime");
     _sink->set_profile(_unique_metrics.get());
     RETURN_IF_ERROR(_sink->prepare(state));
 
@@ -53,6 +59,10 @@ bool OlapTableSinkOperator::is_finished() const {
 }
 
 bool OlapTableSinkOperator::pending_finish() const {
+    if (_close_submitted) {
+        return _pending_close();
+    }
+
     // sink's open not finish, we need check util finish
     if (!_is_open_done) {
         if (!_sink->is_open_done()) {
@@ -90,16 +100,84 @@ bool OlapTableSinkOperator::pending_finish() const {
         return true;
     }
 
-    auto st = _sink->close(_fragment_ctx->runtime_state(), Status::OK());
-    if (!st.ok()) {
-        cancel_fragment_context(_fragment_ctx, st);
-    }
+    // Every channel has processed its last response, so close() no longer waits on RPCs, but it still writes the
+    // combined txn log to object storage, which can take seconds. pending_finish() runs on the pipeline poller, a
+    // single thread that checks every blocked driver of the executor set, or on a pipeline executor thread, so run
+    // the close on the load sink close pool and only check its result here.
+    _submit_close();
+    return _pending_close();
+}
 
+void OlapTableSinkOperator::_submit_close() const {
+    _close_submitted = true;
+    // Constructing or enqueueing the runnable can throw before the pool accepts it. In that case cancellation
+    // must still own the sink; otherwise no task can ever publish _close_done and the driver stays pending.
+    CancelableDefer restore_close_ownership([this]() { _close_submitted = false; });
+    auto* state = _fragment_ctx->runtime_state();
+    const int64_t submit_time_ns = MonotonicNanos();
+    auto close_task = [this, state, submit_time_ns]() {
+        COUNTER_UPDATE(_close_queue_timer, MonotonicNanos() - submit_time_ns);
+        // A fragment cancelled while the close waited in the queue must not write its combined txn log:
+        // set_cancelled() left the sink to this task, so pass the cancellation on as it would have.
+        Status close_status = Status::OK();
+        if (state->is_cancelled()) {
+            close_status = Status::Cancelled("Cancelled by pipeline engine, reason: " +
+                                             _fragment_ctx->final_status().to_string());
+        }
+        Status st;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            st = _sink->close(state, close_status);
+        }
+        _close_status = std::move(st);
+        // The last access to this operator: once _close_done is set, the driver can finish and destroy it.
+        _close_done.store(true, std::memory_order_release);
+    };
+
+    auto* pool = state->query_execution_services() != nullptr
+                         ? state->query_execution_services()->execution->load_sink_close_thread_pool
+                         : nullptr;
+    if (pool != nullptr) {
+        auto task = std::make_shared<CancellableRunnable>(
+                [close_task, query_id = state->query_id(), fragment_instance_id = state->fragment_instance_id()]() {
+                    SCOPED_SET_TRACE_INFO(0, query_id, fragment_instance_id);
+                    close_task();
+                },
+                [this]() {
+                    // Dropped by the pool while it shuts down: fail the load and let the driver finish.
+                    _close_status = Status::Cancelled("olap table sink close dropped by a stopping thread pool");
+                    _close_done.store(true, std::memory_order_release);
+                });
+        // The queue is unbounded, so this only fails when the pool is shutting down.
+        auto st = pool->submit(std::move(task));
+        if (st.ok()) {
+            restore_close_ownership.cancel();
+            return;
+        }
+        LOG(WARNING) << "Fail to submit the olap table sink close, close it inline, fragment_instance_id="
+                     << print_id(state->fragment_instance_id()) << ", error=" << st;
+    }
+    close_task();
+    restore_close_ownership.cancel();
+}
+
+bool OlapTableSinkOperator::_pending_close() const {
+    if (!_close_done.load(std::memory_order_acquire)) {
+        return true;
+    }
+    if (!_close_status.ok()) {
+        cancel_fragment_context(_fragment_ctx, _close_status);
+    }
     return false;
 }
 
 Status OlapTableSinkOperator::set_cancelled(RuntimeState* state) {
     _is_cancelled = true;
+    if (_close_submitted) {
+        // The close task owns the sink until it finishes, and pending_finish() keeps the driver alive until then.
+        // All channels were already closed when it was submitted, so there is nothing left to cancel.
+        return Status::OK();
+    }
     auto final_status = state->fragment_ctx()->final_status();
     std::string reason = "Cancelled by pipeline engine, reason: " + final_status.to_string();
     return _sink->close(state, Status::Cancelled(reason));
