@@ -935,7 +935,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 ### enable_parallel_analyze_table_metadata
 
-* **Description**: Whether to prefetch external table metadata in parallel before statement analysis. When enabled, StarRocks concurrently prefetches metadata for the external tables referenced by a statement. The maximum number of concurrent prefetch tasks is controlled by `prepare_metadata_pool_size`. Metadata for tables in the internal catalog is not prefetched.
+* **Description**: Whether to prefetch external table metadata in parallel before statement analysis. When enabled, StarRocks concurrently prefetches metadata for the external tables referenced by a statement. The maximum number of concurrent prefetch tasks is controlled by `cbo_prepare_metadata_thread_pool_size`. Metadata for tables in the internal catalog is not prefetched.
 * **Default**: false
 * **Introduced in**: -
 
