@@ -14,16 +14,11 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.Config;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,44 +31,25 @@ import org.junit.jupiter.api.Test;
  * so IvmSchemaCompat.compare fails on every later refresh while is_active stays true. Reject the
  * DDL instead and point at the shadow-MV + SWAP rebuild.
  */
-public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
-    private static final String DB = "db_ivm_alter_col";
-
-    private static ConnectContext ctx;
-    private static StarRocksAssert starRocksAssert;
+public class AlterMaterializedViewIvmColumnTest extends MVIVMIcebergTestBase {
 
     @BeforeAll
-    public static void setUp() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        ctx = UtFrameUtils.createDefaultCtx();
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(ctx);
-        starRocksAssert = new StarRocksAssert(ctx);
-        starRocksAssert.withDatabase(DB).useDatabase(DB);
-
-        starRocksAssert.withTable("CREATE TABLE base_tbl (\n"
-                + "  dt DATE NOT NULL, k INT NOT NULL, v BIGINT, w BIGINT\n"
-                + ") DUPLICATE KEY(dt, k)\n"
-                + "DISTRIBUTED BY HASH(k) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1')");
+    public static void beforeClass() throws Exception {
+        MVIVMIcebergTestBase.beforeClass();
+        starRocksAssert.useDatabase(DB_NAME);
     }
 
     private static void createMv(String name, String refreshMode) throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + name + "\n"
-                + "DISTRIBUTED BY HASH(k) BUCKETS 1\n"
                 + "REFRESH DEFERRED MANUAL\n"
                 + "PROPERTIES ('refresh_mode' = '" + refreshMode + "')\n"
-                + "AS SELECT k, SUM(v) AS total FROM base_tbl GROUP BY k");
-    }
-
-    private static MaterializedView getMv(String name) {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        return (MaterializedView) db.getTable(name);
+                + "AS SELECT id, count(*) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id");
     }
 
     private static void runAlter(String sql) throws Exception {
         AlterMaterializedViewStmt stmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        DDLStmtExecutor.execute(stmt, ctx);
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        DDLStmtExecutor.execute(stmt, connectContext);
     }
 
     private static final String IVM_GATE_MARKER = "incrementally maintained materialized view";
@@ -97,7 +73,7 @@ public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
             Assertions.assertNotNull(mv.getRowIdStrategy(),
                     "guard: this shape must materialize as a real IVM MV, else the test is vacuous");
             assertRejectedByIvmGate(
-                    "alter materialized view mv_ivm_add add column w_total as sum(w)", mv);
+                    "alter materialized view mv_ivm_add add column id_total as sum(id)", mv);
         } finally {
             starRocksAssert.dropMaterializedView("mv_ivm_add");
         }
@@ -111,7 +87,7 @@ public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
             Assertions.assertNotNull(mv.getRowIdStrategy(),
                     "guard: this shape must materialize as a real IVM MV, else the test is vacuous");
             assertRejectedByIvmGate(
-                    "alter materialized view mv_ivm_drop drop column total", mv);
+                    "alter materialized view mv_ivm_drop drop column cnt", mv);
         } finally {
             starRocksAssert.dropMaterializedView("mv_ivm_drop");
         }
@@ -125,7 +101,7 @@ public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
         try {
             Config.mv_fast_schema_change_mode = "force";
             assertRejectedByIvmGate(
-                    "alter materialized view mv_ivm_force add column w_total as sum(w)",
+                    "alter materialized view mv_ivm_force add column id_total as sum(id)",
                     getMv("mv_ivm_force"));
         } finally {
             Config.mv_fast_schema_change_mode = originalMode;
@@ -145,7 +121,7 @@ public class AlterMaterializedViewIvmColumnTest extends StarRocksTestBase {
             Assertions.assertNull(mv.getRowIdStrategy(),
                     "guard: a PCT MV has no __ROW_ID__, else this case proves nothing");
             try {
-                runAlter("alter materialized view mv_pct_add add column w_total as sum(w)");
+                runAlter("alter materialized view mv_pct_add add column id_total as sum(id)");
             } catch (Exception e) {
                 Assertions.assertFalse(e.getMessage() != null && e.getMessage().contains(IVM_GATE_MARKER),
                         "the IVM gate must not fire on a PCT MV, got: " + e.getMessage());
