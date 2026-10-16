@@ -23,6 +23,7 @@
 #include "base/utility/defer_op.h"
 #include "common/config_object_storage_fwd.h"
 #include "exec/exec_env.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -44,6 +45,33 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
     MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output2);
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, passthrough_is_rendered_once_as_process_child) {
+    WebPageHandler::ArgumentMap args;
+    const auto& runtime_env = *RuntimeEnv::GetInstance();
+    auto* process = runtime_env.process_mem_tracker();
+    ASSERT_EQ(process, runtime_env.passthrough_mem_tracker()->parent());
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(runtime_env, process, args, &output);
+    const std::string page = output.str();
+    const std::string row = "<tr><td>2</td><td>passthrough</td><td>process</td>";
+    const auto first = page.find(row);
+    ASSERT_NE(std::string::npos, first);
+    EXPECT_EQ(std::string::npos, page.find(row, first + row.size()));
+
+    // Unlike the former manually appended entry, a real child respects the requested depth.
+    args["upper_level"] = "1";
+    std::stringstream root_only;
+    MemTrackerWebPageHandler::handle(runtime_env, process, args, &root_only);
+    EXPECT_EQ(std::string::npos, root_only.str().find("<td>passthrough</td>"));
+
+    args["type"] = "passthrough";
+    args["upper_level"] = "2";
+    std::stringstream passthrough_only;
+    MemTrackerWebPageHandler::handle(runtime_env, process, args, &passthrough_only);
+    EXPECT_NE(std::string::npos, passthrough_only.str().find("<td>passthrough</td>"));
 }
 
 TEST_F(DefaultPathHandlersTest, jemalloc_stats_opts) {
