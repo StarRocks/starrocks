@@ -21,20 +21,12 @@
 #include <memory>
 #include <vector>
 
-<<<<<<< HEAD:be/test/util/thrift_rpc_helper_test.cpp
+#include "common/config.h"
 #include "runtime/client_cache.h"
+#include "runtime/exec_env.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/network_util.h"
-=======
-#include "base/network/network_util.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "common/config_rpc_client_fwd.h"
-#include "common/util/thrift_client_cache.h"
-#include "gen_cpp/BackendService.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/TFileBrokerService.h"
->>>>>>> d18b45e ([BugFix] Jitter BE Thrift RPC retries (#80847)):be/test/platform/thrift_rpc_helper_test.cpp
 
 namespace starrocks {
 
@@ -45,8 +37,6 @@ protected:
     ~ThriftRpcHelperTest() override {}
 };
 
-<<<<<<< HEAD:be/test/util/thrift_rpc_helper_test.cpp
-=======
 TEST_F(ThriftRpcHelperTest, retry_backoff_ceiling) {
     const std::vector<int64_t> expected = {100, 200, 400, 800, 1000, 1000};
     for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
@@ -66,6 +56,13 @@ class ThriftRpcHelperRetryTest : public ThriftRpcHelperTest {
 protected:
     void SetUp() override {
         ThriftRpcHelperTest::SetUp();
+        // ThriftRpcHelper on this branch takes its client cache from ExecEnv, so point the
+        // global ExecEnv's frontend cache at a test-owned cache and restore it on teardown.
+        _exec_env = ExecEnv::GetInstance();
+        _saved_exec_env = ThriftRpcHelper::_s_exec_env;
+        _saved_frontend_cache = _exec_env->_frontend_client_cache;
+        _exec_env->_frontend_client_cache = &_cache;
+        ThriftRpcHelper::setup(_exec_env);
         _saved_interval_ms = config::thrift_client_retry_interval_ms;
         config::thrift_client_retry_interval_ms = 100;
         // Callbacks below simulate RPC outcomes. A listening socket is enough for
@@ -89,14 +86,19 @@ protected:
         config::thrift_client_retry_interval_ms = _saved_interval_ms;
         _cache.close_connections(make_network_address("127.0.0.1", _port));
         _listener->close();
+        _exec_env->_frontend_client_cache = _saved_frontend_cache;
+        ThriftRpcHelper::setup(_saved_exec_env);
         ThriftRpcHelperTest::TearDown();
     }
 
     Status call(const ThriftRpcHelper::ConnectionCallBack<FrontendServiceClient>& callback, int retry_times = 2) {
-        return ThriftRpcHelper::rpc<FrontendServiceClient>(&_cache, "127.0.0.1", _port, callback, 1000, retry_times);
+        return ThriftRpcHelper::rpc<FrontendServiceClient>("127.0.0.1", _port, callback, 1000, retry_times);
     }
 
     FrontendServiceClientCache _cache;
+    ExecEnv* _exec_env = nullptr;
+    ExecEnv* _saved_exec_env = nullptr;
+    FrontendServiceClientCache* _saved_frontend_cache = nullptr;
     std::unique_ptr<apache::thrift::transport::TServerSocket> _listener;
     int _port = 0;
     int64_t _saved_interval_ms = 0;
@@ -210,21 +212,6 @@ TEST_F(ThriftRpcHelperRetryTest, reopen_failure_preserves_original_error) {
     EXPECT_EQ(1, _delays_ms.size());
 }
 
-TEST_F(ThriftRpcHelperTest, rpc_after_clear_returns_setup_error) {
-    FrontendServiceClientCache frontend_cache;
-    ThriftRpcHelper::setup(nullptr, &frontend_cache, nullptr);
-    ThriftRpcHelper::clear();
-
-    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
-            "127.0.0.1", 9020, [](FrontendServiceConnection&) { ADD_FAILURE() << "callback should not run"; }, 1, 0);
-    EXPECT_STATUS(Status::ThriftRpcError(""), st);
-    EXPECT_EQ(
-            "Rpc error: Thrift client has not been setup to send rpc. Maybe BE has not been started completely. Please "
-            "retry later",
-            st.to_string());
-}
-
->>>>>>> d18b45e ([BugFix] Jitter BE Thrift RPC retries (#80847)):be/test/platform/thrift_rpc_helper_test.cpp
 TEST_F(ThriftRpcHelperTest, fe_rpc_impl) {
     {
         auto addr = make_network_address("127.0.0.1", 9020);
