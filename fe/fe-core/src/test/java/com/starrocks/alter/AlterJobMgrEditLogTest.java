@@ -34,8 +34,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class AlterJobMgrEditLogTest {
     private AlterJobMgr alterJobMgr;
@@ -285,5 +289,298 @@ public class AlterJobMgrEditLogTest {
         Assertions.assertNotNull(unchangedView);
         Assertions.assertEquals(originalViewDef, unchangedView.getInlineViewDef());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAlterViewDroppedBeforeTheLockFails() throws Exception {
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        db.registerTableUnlocked(view);
+
+        // A DROP VIEW lands right after alterView looked the view up and before it takes the lock.
+        MockedLocalMetaStore spyMetastore = spy(localMetastore);
+        doAnswer(invocation -> {
+            Table table = (Table) invocation.callRealMethod();
+            db.unRegisterTableUnlocked(table);
+            return table;
+        }).when(spyMetastore).getTable(eq(db.getId()), eq(view.getId()));
+        GlobalStateMgr.getCurrentState().setLocalMetastore(spyMetastore);
+
+        EditLog spyEditLog = spy(GlobalStateMgr.getCurrentState().getEditLog());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), "SELECT 2 as c1", columns, 0L,
+                "test comment", "SELECT 2 as c1");
+        AlterJobException exception = Assertions.assertThrows(AlterJobException.class,
+                () -> alterJobMgr.alterView(alterViewInfo));
+        Assertions.assertTrue(exception.getMessage().contains("was dropped concurrently"), exception.getMessage());
+        verify(spyEditLog, never()).logModifyViewDef(any(AlterViewInfo.class), any());
+        Assertions.assertEquals("SELECT 1 as c1", view.getInlineViewDef());
+    }
+
+    @Test
+    public void testReplayAlterViewOfADroppedViewIsSkipped() throws Exception {
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), 12345L, "SELECT 2 as c1", columns, 0L,
+                "test comment", "SELECT 2 as c1");
+        Assertions.assertDoesNotThrow(() -> alterJobMgr.replayAlterView(alterViewInfo));
+
+        AlterViewInfo infoOfDroppedDb = new AlterViewInfo(db.getId() + 1000, 12345L, "SELECT 2 as c1", columns, 0L,
+                "test comment", "SELECT 2 as c1");
+        Assertions.assertDoesNotThrow(() -> alterJobMgr.replayAlterView(infoOfDroppedDb));
+    }
+
+    @Test
+    public void testAlterViewUpdateSecurityAppliedOnReplay() throws Exception {
+        // CREATE OR REPLACE VIEW resolves a SQL SECURITY characteristic and persists it atomically with the
+        // redefined view through OP_MODIFY_VIEW_DEF. Both the master WAL applier and the follower replay must
+        // honor the updateSecurity/security fields.
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        // The view starts out non-secure.
+        Assertions.assertFalse(view.isSecurity());
+        db.registerTableUnlocked(view);
+
+        String originalViewDef = view.getInlineViewDef();
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        newColumns.add(new Column("c1", IntegerType.INT));
+
+        AlterViewInfo alterViewInfo =
+                new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment", newViewDef);
+        // Simulate CREATE OR REPLACE VIEW ... SECURITY INVOKER (non-secure -> secure).
+        alterViewInfo.setUpdateSecurity(true);
+        alterViewInfo.setSecurity(true);
+
+        alterJobMgr.alterView(alterViewInfo);
+
+        // Master state: the definition changed and the view is now secure.
+        View updatedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(updatedView);
+        Assertions.assertEquals(newViewDef, updatedView.getInlineViewDef());
+        Assertions.assertTrue(updatedView.isSecurity());
+
+        // The journal must round-trip both the updateSecurity flag and the security value.
+        AlterViewInfo replayInfo = (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MODIFY_VIEW_DEF);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertTrue(replayInfo.isUpdateSecurity());
+        Assertions.assertTrue(replayInfo.getSecurity());
+
+        // Follower starts from the old, non-secure state and applies the replay.
+        MockedLocalMetaStore followerMetastore = new MockedLocalMetaStore(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "test_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        List<Column> followerColumns = new ArrayList<>();
+        followerColumns.add(new Column("c1", IntegerType.INT));
+        View followerView = new View(view.getId(), "test_view", followerColumns);
+        followerView.setInlineViewDefWithSqlMode(originalViewDef, 0L);
+        followerView.setSecurity(false);
+        followerDb.registerTableUnlocked(followerView);
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replayAlterView(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        View replayedView = (View) followerDb.getTable(view.getId());
+        Assertions.assertNotNull(replayedView);
+        Assertions.assertEquals(newViewDef, replayedView.getInlineViewDef());
+        Assertions.assertTrue(replayedView.isSecurity());
+    }
+
+    @Test
+    public void testAlterViewReplayLeavesSecurityUnchangedWhenNotUpdated() throws Exception {
+        // A plain ALTER VIEW ... AS (no SECURITY clause) leaves updateSecurity=false, so neither the master WAL
+        // applier nor the follower replay may touch the view's existing SQL SECURITY characteristic.
+        localMetastore.createDb("test_db");
+        Database db = localMetastore.getDb("test_db");
+        Assertions.assertNotNull(db);
+
+        List<Column> columns = new ArrayList<>();
+        columns.add(new Column("c1", IntegerType.INT));
+        View view = new View(1L, "test_view", columns);
+        view.setInlineViewDefWithSqlMode("SELECT 1 as c1", 0L);
+        // The view is already secure before the alter.
+        view.setSecurity(true);
+        db.registerTableUnlocked(view);
+
+        String originalViewDef = view.getInlineViewDef();
+        String newViewDef = "SELECT 2 as c1";
+        List<Column> newColumns = new ArrayList<>();
+        newColumns.add(new Column("c1", IntegerType.INT));
+
+        // The definition-only constructor leaves updateSecurity/security at their defaults (false).
+        AlterViewInfo alterViewInfo =
+                new AlterViewInfo(db.getId(), view.getId(), newViewDef, newColumns, 0L, "test comment", newViewDef);
+        Assertions.assertFalse(alterViewInfo.isUpdateSecurity());
+
+        alterJobMgr.alterView(alterViewInfo);
+
+        // Master: the definition changed, but the pre-existing security characteristic is preserved.
+        View updatedView = (View) localMetastore.getTable("test_db", "test_view");
+        Assertions.assertNotNull(updatedView);
+        Assertions.assertEquals(newViewDef, updatedView.getInlineViewDef());
+        Assertions.assertTrue(updatedView.isSecurity());
+
+        AlterViewInfo replayInfo = (AlterViewInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MODIFY_VIEW_DEF);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertFalse(replayInfo.isUpdateSecurity());
+
+        // Follower is already secure; replaying a non-security alter must not clobber it back to non-secure.
+        MockedLocalMetaStore followerMetastore = new MockedLocalMetaStore(
+                GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "test_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+
+        List<Column> followerColumns = new ArrayList<>();
+        followerColumns.add(new Column("c1", IntegerType.INT));
+        View followerView = new View(view.getId(), "test_view", followerColumns);
+        followerView.setInlineViewDefWithSqlMode(originalViewDef, 0L);
+        followerView.setSecurity(true);
+        followerDb.registerTableUnlocked(followerView);
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replayAlterView(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        View replayedView = (View) followerDb.getTable(view.getId());
+        Assertions.assertNotNull(replayedView);
+        Assertions.assertEquals(newViewDef, replayedView.getInlineViewDef());
+        Assertions.assertTrue(replayedView.isSecurity());
+    }
+
+    @Test
+    public void testSwapTableNormalCase() throws Exception {
+        localMetastore.createDb("swap_db");
+        Database db = localMetastore.getDb("swap_db");
+        Assertions.assertNotNull(db);
+
+        OlapTable originTable = createHashOlapTable(SWAP_TABLE_ID_1, "swap_table_a",
+                SWAP_PARTITION_ID_1, SWAP_PHYSICAL_PARTITION_ID_1, SWAP_INDEX_ID_1, SWAP_TABLET_ID_1);
+        OlapTable newTable = createHashOlapTable(SWAP_TABLE_ID_2, "swap_table_b",
+                SWAP_PARTITION_ID_2, SWAP_PHYSICAL_PARTITION_ID_2, SWAP_INDEX_ID_2, SWAP_TABLET_ID_2);
+        db.registerTableUnlocked(originTable);
+        db.registerTableUnlocked(newTable);
+
+        SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), originTable.getId(), newTable.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log, wal -> alterJobMgr.swapTableInternal(log));
+
+        Assertions.assertEquals(newTable.getId(), db.getTable("swap_table_a").getId());
+        Assertions.assertEquals(originTable.getId(), db.getTable("swap_table_b").getId());
+
+        SwapTableOperationLog replayInfo = (SwapTableOperationLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_SWAP_TABLE);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(originTable.getId(), replayInfo.getOrigTblId());
+        Assertions.assertEquals(newTable.getId(), replayInfo.getNewTblId());
+
+        MockedLocalMetaStore followerMetastore =
+                new MockedLocalMetaStore(
+                        GlobalStateMgr.getCurrentState(), GlobalStateMgr.getCurrentState().getRecycleBin(), null);
+        Database followerDb = new Database(db.getId(), "swap_db");
+        followerMetastore.unprotectCreateDb(followerDb);
+        followerDb.registerTableUnlocked(createHashOlapTable(SWAP_TABLE_ID_1, "swap_table_a",
+                SWAP_PARTITION_ID_1, SWAP_PHYSICAL_PARTITION_ID_1, SWAP_INDEX_ID_1, SWAP_TABLET_ID_1));
+        followerDb.registerTableUnlocked(createHashOlapTable(SWAP_TABLE_ID_2, "swap_table_b",
+                SWAP_PARTITION_ID_2, SWAP_PHYSICAL_PARTITION_ID_2, SWAP_INDEX_ID_2, SWAP_TABLET_ID_2));
+
+        MockedLocalMetaStore originalMetastore = localMetastore;
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            alterJobMgr.replaySwapTable(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        Assertions.assertEquals(SWAP_TABLE_ID_2, followerDb.getTable("swap_table_a").getId());
+        Assertions.assertEquals(SWAP_TABLE_ID_1, followerDb.getTable("swap_table_b").getId());
+    }
+
+    @Test
+    public void testSwapTableEditLogException() throws Exception {
+        localMetastore.createDb("swap_db_error");
+        Database db = localMetastore.getDb("swap_db_error");
+        Assertions.assertNotNull(db);
+
+        OlapTable originTable = createHashOlapTable(SWAP_TABLE_ID_1 + 100, "swap_table_x",
+                SWAP_PARTITION_ID_1 + 100, SWAP_PHYSICAL_PARTITION_ID_1 + 100, SWAP_INDEX_ID_1 + 100,
+                SWAP_TABLET_ID_1 + 100);
+        OlapTable newTable = createHashOlapTable(SWAP_TABLE_ID_2 + 100, "swap_table_y",
+                SWAP_PARTITION_ID_2 + 100, SWAP_PHYSICAL_PARTITION_ID_2 + 100, SWAP_INDEX_ID_2 + 100,
+                SWAP_TABLET_ID_2 + 100);
+        db.registerTableUnlocked(originTable);
+        db.registerTableUnlocked(newTable);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logSwapTable(any(SwapTableOperationLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), originTable.getId(), newTable.getId());
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () ->
+                    GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log, wal -> alterJobMgr.swapTableInternal(log)));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(originTable.getId(), db.getTable("swap_table_x").getId());
+            Assertions.assertEquals(newTable.getId(), db.getTable("swap_table_y").getId());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    private static OlapTable createHashOlapTable(long tableId, String tableName, long partitionId,
+                                                 long physicalPartitionId, long indexId, long tabletId) {
+        List<Column> columns = new ArrayList<>();
+        Column keyColumn = new Column("k1", IntegerType.BIGINT);
+        keyColumn.setIsKey(true);
+        columns.add(keyColumn);
+        columns.add(new Column("v1", IntegerType.BIGINT));
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, List.of(keyColumn));
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId);
+        TabletMeta tabletMeta = new TabletMeta(1L, tableId, partitionId, indexId, TStorageMedium.HDD);
+        baseIndex.addTablet(tablet, tabletMeta);
+        Partition partition = new Partition(partitionId, physicalPartitionId, tableName, baseIndex, distributionInfo);
+
+        OlapTable table = new OlapTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
+        table.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        table.setBaseIndexMetaId(indexId);
+        table.addPartition(partition);
+        table.setTableProperty(new TableProperty(new HashMap<>()));
+        return table;
+    }
+>>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 }
 
