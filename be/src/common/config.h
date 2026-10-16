@@ -1826,6 +1826,12 @@ CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
+// Memory limit of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.
+// A shuffle keeps one partial chunk per destination pipeline driver and only sends it once it holds
+// vector_chunk_size rows; with many destinations x dop and wide rows those partial chunks can retain the whole
+// input. When their total size exceeds this limit they are all sent and cleared; if the capacity they keep is
+// still above half of the limit, partial chunks are released until it is not. A value <= 0 disables the limit.
+CONF_mInt64(exchange_sink_buffer_flush_threshold_bytes, "67108864");
 
 CONF_mInt64(wait_apply_time, "6000"); // 6s
 
