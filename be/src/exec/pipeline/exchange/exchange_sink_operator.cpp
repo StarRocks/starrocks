@@ -126,7 +126,11 @@ private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
     bool _check_use_pass_through();
+<<<<<<< HEAD
     void _prepare_pass_through(RuntimeState* state);
+=======
+    void _prepare_pass_through();
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
     // Account the memory retained by _chunks[driver_sequence] into the parent's profile counter.
     // Container (capacity) usage is re-read each time, which is O(#columns); memory referenced by
     // out-of-line objects (JSON, bitmap, HLL, ...) is only measured for the rows just appended and
@@ -850,7 +854,11 @@ size_t ExchangeSinkOperator::num_buffered_shuffle_rows_for_testing() const {
 }
 #endif
 
+<<<<<<< HEAD
 void ExchangeSinkOperator::_compute_hash_values_and_bucket_ids() {
+=======
+void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
     std::vector<const Column*> partitions_columns;
     partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {

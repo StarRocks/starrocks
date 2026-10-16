@@ -596,17 +596,26 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
         auto* mem_limit = profile.get_counter("SinkBufferMemoryLimit");
         auto* peak_in_flight = profile.get_counter("SinkBufferPeakInFlightRpcNum");
         auto* peak_requests = profile.get_counter("SinkBufferPeakRequestNum");
+<<<<<<< HEAD
         auto* peak_request_bytes = profile.get_counter("PeakRequestBytes");
+=======
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
         ASSERT_NE(peak_mem, nullptr);
         ASSERT_NE(mem_limit, nullptr);
         ASSERT_NE(peak_in_flight, nullptr);
         ASSERT_NE(peak_requests, nullptr);
+<<<<<<< HEAD
         ASSERT_NE(peak_request_bytes, nullptr);
+=======
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
         EXPECT_EQ(COUNTER_VALUE(peak_mem), 128);
         EXPECT_EQ(COUNTER_VALUE(mem_limit), config::sink_buffer_mem_limit_per_driver);
         EXPECT_EQ(COUNTER_VALUE(peak_in_flight), 1);
         EXPECT_EQ(COUNTER_VALUE(peak_requests), 1);
+<<<<<<< HEAD
         EXPECT_EQ(COUNTER_VALUE(peak_request_bytes), 1000);
+=======
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
     }
 
     const auto cancel_start = std::chrono::steady_clock::now();

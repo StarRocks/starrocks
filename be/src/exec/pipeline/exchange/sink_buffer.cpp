@@ -521,7 +521,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->addSuccessHandler(success_function);
 
         update_peak(_peak_in_flight_rpc, ++_total_in_flight_rpc);
+<<<<<<< HEAD
         update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
+=======
+>>>>>>> 71f8182 ([Enhancement] Bound the memory an exchange sink buffers while shuffling (#80696))
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
