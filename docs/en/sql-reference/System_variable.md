@@ -776,6 +776,14 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
+### enable_json_extract_fusion
+
+* **Description**: Enables fast extraction from VARCHAR JSON for constant paths. Default: `true`. `SET` changes the current session; `SET GLOBAL` sets the default for new sessions. The optimizer can also fuse `json_query(parse_json(value), path)` and arrow expressions. Casts retain their target type and error handling.
+
+  With `sql_mode` containing `ALLOW_THROW_EXCEPTION`, extraction validates the entire document and reports JSON parse errors. Without that mode, the fast path reads the requested value and does not guarantee detection of malformed values outside the path. Errors encountered during extraction return NULL. Wildcards, slices, and nonconstant paths use the full parser. Set this variable to `false` to disable both optimizer fusion and fast extraction and restore full-document parsing.
+
+  Sync stream load and routine load do not propagate this session variable to the backend; fast extraction remains disabled for those paths.
+
 ### enable_insert_strict
 
 * **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.

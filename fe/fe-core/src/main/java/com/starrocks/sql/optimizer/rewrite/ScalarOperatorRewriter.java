@@ -25,6 +25,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ConsolidateLikesRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ExtractCommonPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.JsonExtractFusionRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
@@ -55,7 +56,8 @@ public class ScalarOperatorRewriter {
             new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
-            ConsolidateLikesRule.INSTANCE
+            ConsolidateLikesRule.INSTANCE,
+            new JsonExtractFusionRule()
     );
 
     public static final List<ScalarOperatorRewriteRule> FOLD_CONSTANT_RULES = Lists.newArrayList(
@@ -85,7 +87,8 @@ public class ScalarOperatorRewriter {
             new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
-            ConsolidateLikesRule.INSTANCE
+            ConsolidateLikesRule.INSTANCE,
+            new JsonExtractFusionRule()
     );
 
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()

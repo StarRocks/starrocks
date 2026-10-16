@@ -27,6 +27,18 @@
 
 namespace starrocks {
 
+using SimdJsonValue = simdjson::ondemand::value;
+using SimdJsonObject = simdjson::ondemand::object;
+
+// Convert SIMD-JSON object/value to a JsonValue
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
+
+// Convert a SIMD-JSON value into the caller's vpack::Builder (no internal allocation).
+// The builder is NOT cleared by this function; the caller decides reuse pattern.
+// Catches both simdjson and vpack exceptions, mirroring convert_from_simdjson() error handling.
+Status convert_simdjson_to_vpack(SimdJsonValue value, vpack::Builder* out);
+
 // like getNumber, but don't check
 template <LogicalType ResultType>
 static StatusOr<RunTimeCppType<ResultType>> get_number_from_vpjson(const vpack::Slice& slice) {

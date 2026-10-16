@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -1994,26 +1995,93 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testJsonFusionSwitchAndCast() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        try {
+            String sql = "select cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as tinyint) from t1";
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "CAST(json_query_from_string(", "AS TINYINT");
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(false);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "CAST(json_query(parse_json(", "AS TINYINT");
+        } finally {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
+    public void testJsonFusionStrictModeKeepsSharedParse() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        long previousSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            connectContext.getSessionVariable().setSqlMode(previousSqlMode | SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+            String sql = "select cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as bigint), "
+                    + "cast(json_query(parse_json(cast(v4 as varchar)), '$.b') as bigint) from t1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "common expressions:", "parse_json(");
+            Assertions.assertEquals(1, StringUtils.countMatches(plan, "parse_json("));
+            Assertions.assertFalse(plan.contains("json_query_from_string"));
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(previousSqlMode);
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
+    public void testJsonFusionSharesPaths() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        try {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            String first = "cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as bigint)";
+            String second = "cast(json_query(parse_json(cast(v4 as varchar)), '$.b') as bigint)";
+            for (String sql : List.of("select " + first + ", " + second + " from t1",
+                    "select sum(" + first + "), sum(" + second + ") from t1")) {
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "common expressions:", "json_query_many_from_string(");
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "json_query_many_from_string("));
+                Assertions.assertFalse(plan.contains("json_query_from_string("));
+            }
+            String repeated = getFragmentPlan("select " + first + ", " + first + " from t1");
+            Assertions.assertFalse(repeated.contains("json_query_many_from_string("));
+            assertContains(repeated, "json_query_from_string(");
+            String independent = getFragmentPlan("select " + first + ", " + second.replace("v4", "v5") + " from t1");
+            Assertions.assertFalse(independent.contains("json_query_many_from_string("));
+            String lambda = getFragmentPlan("select array_map(x -> "
+                    + "cast(json_query(parse_json(x), '$.a') as bigint) + "
+                    + "cast(json_query(parse_json(x), '$.b') as bigint), [cast(v4 as varchar)]) from t1");
+            Assertions.assertEquals(1, StringUtils.countMatches(lambda, "json_query_many_from_string("));
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(false);
+            String off = getFragmentPlan("select " + first + ", " + second + " from t1");
+            Assertions.assertEquals(1, StringUtils.countMatches(off, "parse_json("));
+            Assertions.assertFalse(off.contains("json_query_many_from_string("));
+        } finally {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
     public void testJsonQuery() throws Exception {
         String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.b.c.d')");
+        assertContains(plan, "json_query_from_string('{\"a\": true}', 'a.b.c.d')");
 
         sql = "select parse_json('{\"a\": true}')->\"$.a\"->\"$.b\"->\"$.c\"->\"$.d\"";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "json_query(parse_json('{\"a\": true}'), '$.a.b.c.d')");
+        assertContains(plan, "json_query_from_string('{\"a\": true}', '$.a.b.c.d')");
 
         sql = "select parse_json('{\"a\": true}')->\"a\"->\"$.*\"";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.*");
+        assertContains(plan, "json_query_from_string('{\"a\": true}', 'a.*");
 
         sql = "select parse_json('{\"a\": true}')->\"a\"->\"$$$$\"";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "json_query(parse_json('{\"a\": true}'), 'a.$$$$')");
+        assertContains(plan, "json_query_from_string('{\"a\": true}', 'a.$$$$')");
 
         sql = "select parse_json('{\"a\": true}')->\"a\"->\"$....\"";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "json_query(json_query(parse_json('{\"a\": true}'), 'a'), '$....')");
+        assertContains(plan, "json_query(json_query_from_string('{\"a\": true}', 'a'), '$....')");
     }
 
     @Test
