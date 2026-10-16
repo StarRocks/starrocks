@@ -15,6 +15,7 @@
 #include <h3/h3api.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -27,6 +28,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/coding.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -503,6 +505,50 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
     return result.build(size, constant);
 }
 
+namespace {
+// Encodes a cell boundary as canonical little-endian WKB: an XY POLYGON with one ring,
+// closed by copying the bytes of the first vertex (so its exact bits, including signed zero, repeat).
+class H3BoundaryWkb {
+public:
+    H3BoundaryWkb() {
+        _bytes[0] = 1;
+        encode_fixed32_le(_bytes.data() + 1, static_cast<uint32_t>(WkbGeometryType::POLYGON));
+        encode_fixed32_le(_bytes.data() + 1 + sizeof(uint32_t), 1);
+    }
+
+    Status encode(const CellBoundary& boundary) {
+        if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
+            return Status::InternalError("H3_ToBoundary returned invalid vertex count");
+        }
+        encode_fixed32_le(_bytes.data() + 1 + 2 * sizeof(uint32_t), boundary.numVerts + 1);
+        for (int i = 0; i < boundary.numVerts; ++i) {
+            const double x = boundary.verts[i].lng * kDegreesPerRadian;
+            const double y = boundary.verts[i].lat * kDegreesPerRadian;
+            if (!std::isfinite(x) || !std::isfinite(y) || x < -180 || x > 180 || y < -90 || y > 90) {
+                return Status::InternalError("H3_ToBoundary returned coordinates outside CRS84");
+            }
+            uint8_t* coordinate = vertex(i);
+            encode_fixed64_le(coordinate, std::bit_cast<uint64_t>(x));
+            encode_fixed64_le(coordinate + sizeof(double), std::bit_cast<uint64_t>(y));
+        }
+        std::memcpy(vertex(boundary.numVerts), vertex(0), kCoordinateSize);
+        _size = kHeaderSize + (boundary.numVerts + 1) * kCoordinateSize;
+        return Status::OK();
+    }
+
+    Slice slice() const { return Slice(reinterpret_cast<const char*>(_bytes.data()), _size); }
+
+private:
+    static constexpr size_t kHeaderSize = sizeof(uint8_t) + 3 * sizeof(uint32_t);
+    static constexpr size_t kCoordinateSize = 2 * sizeof(double);
+
+    uint8_t* vertex(int i) { return _bytes.data() + kHeaderSize + i * kCoordinateSize; }
+
+    std::array<uint8_t, kHeaderSize + (MAX_CELL_BNDRY_VERTS + 1) * kCoordinateSize> _bytes{};
+    size_t _size = 0;
+};
+} // namespace
+
 StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const Columns& columns) {
     const size_t size = columns[0]->size();
     if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
@@ -519,31 +565,27 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
     }
     ColumnViewer<TYPE_BIGINT> input(columns[0]);
     const bool constant = columns[0]->is_constant();
-    auto result = NullableColumn::create(GeoColumn::create(std::move(descriptor)), NullColumn::create());
-    for (size_t row = 0; row < (constant ? 1 : size); ++row) {
+    const size_t rows = constant ? 1 : size;
+    auto data = GeoColumn::create(std::move(descriptor));
+    auto nulls = NullColumn::create();
+    data->reserve(rows);
+    auto& null_data = nulls->get_data();
+    null_data.resize(rows, 0);
+    H3BoundaryWkb wkb;
+    for (size_t row = 0; row < rows; ++row) {
         if (input.is_null(row)) {
-            result->append_nulls(1);
+            data->append_default();
+            null_data[row] = 1;
             continue;
         }
         ASSIGN_OR_RETURN(const H3Index cell, h3_cell(input.value(row)));
         CellBoundary boundary{};
         const H3Error error = cellToBoundary(cell, &boundary);
         if (error != E_SUCCESS) return h3_error("H3_ToBoundary", error);
-        if (boundary.numVerts < 3 || boundary.numVerts > MAX_CELL_BNDRY_VERTS) {
-            return Status::InternalError("H3_ToBoundary returned invalid vertex count");
-        }
-        WkbGeometry polygon;
-        polygon.type = WkbGeometryType::POLYGON;
-        auto& ring = polygon.rings.emplace_back();
-        ring.reserve(static_cast<size_t>(boundary.numVerts) + 1);
-        for (int i = 0; i < boundary.numVerts; ++i) {
-            ring.push_back({boundary.verts[i].lng * kDegreesPerRadian, boundary.verts[i].lat * kDegreesPerRadian});
-        }
-        ring.push_back(ring.front());
-        std::string wkb;
-        RETURN_IF_ERROR(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84));
-        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(wkb.encode(boundary));
+        data->append_wkb(wkb.slice());
     }
+    auto result = NullableColumn::create(std::move(data), std::move(nulls));
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;
 }
