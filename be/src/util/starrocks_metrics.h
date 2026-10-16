@@ -450,6 +450,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(replicate_snapshot);
     METRICS_DEFINE_THREAD_POOL(replicate_file);
     METRICS_DEFINE_THREAD_POOL(automatic_partition);
+    METRICS_DEFINE_THREAD_POOL(load_sink_close);
 
     METRIC_DEFINE_INT_COUNTER(exec_runtime_memory_size, MetricUnit::BYTES);
 

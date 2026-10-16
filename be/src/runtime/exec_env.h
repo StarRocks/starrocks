@@ -323,6 +323,8 @@ public:
 
     ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
 
+    ThreadPool* load_sink_close_thread_pool() { return _load_sink_close_thread_pool.get(); }
+
     RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
@@ -378,6 +380,7 @@ public:
 
 private:
     Status _init_pk_index_execution_thread_pool();
+    Status _init_load_sink_close_thread_pool();
 
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
@@ -434,6 +437,8 @@ private:
     connector::ConnectorSinkSpillExecutor* _connector_sink_spill_executor = nullptr;
 
     std::unique_ptr<ThreadPool> _automatic_partition_pool;
+
+    std::unique_ptr<ThreadPool> _load_sink_close_thread_pool;
 
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
