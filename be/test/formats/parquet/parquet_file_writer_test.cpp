@@ -773,6 +773,36 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     ASSERT_OK(maybe_writer.status());
 }
 
+TEST_F(ParquetFileWriterTest, TestFactoryCompressionLevel) {
+    std::vector type_descs{TYPE_VARCHAR_DESC};
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    std::map<std::string, std::string> options = {{ParquetWriterOptions::COMPRESSION_LEVEL, "9"}};
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::ZSTD, options, _make_type_names(type_descs),
+                                            column_evaluators, std::nullopt, nullptr, _runtime_state);
+    ASSERT_OK(factory.init());
+    auto maybe_writer = factory.create(_file_path);
+    ASSERT_OK(maybe_writer.status());
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnTestHelper::build_column<Slice>({"hello", "hello", "world"}), 0);
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_OK(writer->close().io_status);
+    ASSERT_OK(maybe_writer.value().stream->close());
+    ASSERT_OK(maybe_writer.value().stream->io_status().get());
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
+
+    options[ParquetWriterOptions::COMPRESSION_LEVEL] = "invalid";
+    auto invalid_factory = ParquetFileWriterFactory(fs, TCompressionType::ZSTD, options, _make_type_names(type_descs),
+                                                    column_evaluators, std::nullopt, nullptr, _runtime_state);
+    ASSERT_FALSE(invalid_factory.init().ok());
+}
+
 TEST_F(ParquetFileWriterTest, TestWriteJson) {
     std::vector type_descs{TYPE_JSON_DESC};
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));

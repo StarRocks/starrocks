@@ -309,6 +309,8 @@ struct TIcebergTableSink {
     //   IcebergRowDeltaSink (both)        → both
     11: optional Types.TCompressionType delete_compression_type
     12: optional TIcebergTableSinkExt ext
+    // Explicit compression level for Parquet data files. Unset uses the codec default.
+    16: optional i32 parquet_compression_level
 }
 
 struct THiveTableSink {

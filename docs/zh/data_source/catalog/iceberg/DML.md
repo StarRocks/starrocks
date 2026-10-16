@@ -20,6 +20,8 @@ keywords: ['iceberg', 'dml', 'insert', 'sink data', 'overwrite']
 
 与 StarRocks 的内部表类似，如果您在 Iceberg 表上具有 [INSERT](../../../administration/user_privs/authorization/privilege_item.md#table) 权限，您可以使用 [INSERT](../../../sql-reference/sql-statements/loading_unloading/INSERT.md) 语句将 StarRocks 表的数据下沉到该 Iceberg 表（目前仅支持 Parquet 格式的 Iceberg 表）。
 
+对于 Parquet 数据文件，可以通过 Iceberg 表属性 `write.parquet.compression-level` 设置整数压缩级别。ZSTD 支持 -131072 至 22，GZIP 支持 -1 至 9，Brotli 支持 0 至 11。其他压缩算法不支持显式设置级别。无效值会导致写入失败。未设置该属性时，Parquet 写入器使用所选压缩算法的默认级别。此级别不适用于位置删除文件。
+
 ### 语法
 
 ```SQL

@@ -87,6 +87,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     int64_t page_size = 1024 * 1024;           // 1MB
     int64_t write_batch_size = 4096;
     int64_t rowgroup_size = 128L * 1024 * 1024; // 128MB
+    std::optional<int> compression_level;
     std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
     std::string time_zone = TimezoneUtils::default_time_zone;
     bool use_legacy_decimal_encoding = false;
@@ -101,6 +102,7 @@ struct ParquetWriterOptions : FileWriterOptions {
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
     inline static std::string VERSION = "version";
+    inline static std::string COMPRESSION_LEVEL = "write.parquet.compression-level";
 };
 
 class ParquetFileWriter final : public FileWriter {
