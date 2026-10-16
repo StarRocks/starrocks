@@ -22,10 +22,17 @@ import mockit.Delegate;
 import mockit.Expectations;
 import mockit.FullVerifications;
 import mockit.Injectable;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 class ParallelAnalyzeTableMetadataPrefetcherTest {
     @Test
@@ -90,7 +97,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
-    void testDefersPrefetchFailuresToNormalAnalysis(@Injectable MetadataMgr metadataMgr) {
+    void testLogsAndDefersPrefetchFailuresToNormalAnalysis(@Injectable MetadataMgr metadataMgr) throws Exception {
         ConnectContext session = newSession("external", "db");
         StatementBase statement = parse("select * from external.db.failing_table " +
                 "join external.db.other_table on true", session);
@@ -108,7 +115,11 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
             }
         };
 
-        ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session, metadataMgr);
+        List<String> messages = capturePrefetcherLogs(() ->
+                ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session, metadataMgr));
+
+        Assertions.assertTrue(messages.stream().anyMatch(message ->
+                message.contains("query [" + session.getQueryId() + "], table [external.db.failing_table]")));
 
         new FullVerifications(metadataMgr) {
         };
@@ -158,5 +169,39 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
                 this.times = invocationCount;
             }
         };
+    }
+
+    private static List<String> capturePrefetcherLogs(ThrowingRunnable body) throws Exception {
+        MessageCollector collector = new MessageCollector();
+        Logger logger = (Logger) LogManager.getLogger(ParallelAnalyzeTableMetadataPrefetcher.class);
+        Level level = logger.getLevel();
+        collector.start();
+        logger.addAppender(collector);
+        logger.setLevel(Level.WARN);
+        try {
+            body.run();
+        } finally {
+            logger.setLevel(level);
+            logger.removeAppender(collector);
+            collector.stop();
+        }
+        return collector.messages;
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    private static class MessageCollector extends AbstractAppender {
+        private final List<String> messages = new CopyOnWriteArrayList<>();
+
+        MessageCollector() {
+            super("parallel-analyze-table-metadata-prefetcher-message-collector", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            messages.add(event.getMessage().getFormattedMessage());
+        }
     }
 }

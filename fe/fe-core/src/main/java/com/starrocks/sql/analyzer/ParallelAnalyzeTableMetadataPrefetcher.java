@@ -26,6 +26,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -46,6 +48,8 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
  * session-scoped cache policies observes the same settings as normal analysis.</p>
  */
 public class ParallelAnalyzeTableMetadataPrefetcher {
+    private static final Logger LOG = LogManager.getLogger(ParallelAnalyzeTableMetadataPrefetcher.class);
+
     private ParallelAnalyzeTableMetadataPrefetcher() {
     }
 
@@ -88,7 +92,14 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
                 Tracers forked = ownerTracers.fork(true);
                 forks.add(forked);
                 futures[i] = CompletableFuture.runAsync(() -> prefetchTable(metadataMgr, queryIdString, tableKey,
-                        session, forked), executorService).handle((ignoredResult, throwable) -> null);
+                        session, forked), executorService).handle((ignoredResult, throwable) -> {
+                    if (throwable != null) {
+                        LOG.warn("Failed to prefetch metadata for query [{}], table [{}.{}.{}]; " +
+                                        "analysis will retry the metadata lookup",
+                                queryIdString, tableKey.catalog, tableKey.database, tableKey.table, throwable);
+                    }
+                    return null;
+                });
             }
             CompletableFuture.allOf(futures).join();
             for (Tracers fork : forks) {
