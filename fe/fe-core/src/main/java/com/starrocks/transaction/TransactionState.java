@@ -1052,6 +1052,13 @@ public class TransactionState implements Writable, GsonPreProcessable {
                 && ((InsertTxnCommitAttachment) txnCommitAttachment).getIsVersionOverwrite();
     }
 
+    // Whether this INSERT was planned as a plain insert on the assumption that no transaction had
+    // ever committed to its target partitions; the commit must verify that assumption still holds.
+    public boolean requiresEmptyPartitions() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                && ((InsertTxnCommitAttachment) txnCommitAttachment).getRequireEmptyPartitions();
+    }
+
     public boolean isShadowRewrite() {
         return sourceType == LoadJobSourceType.SHADOW_REWRITE;
     }
