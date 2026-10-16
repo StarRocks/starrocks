@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 
 class ParallelAnalyzeTableMetadataPrefetcherTest {
     @Test
@@ -219,6 +220,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     void testPrefetchBindsInitiatingSession(@Injectable MetadataMgr metadataMgr) {
         ConnectContext session = newSession("external", "db");
         StatementBase statement = parse("select * from external.db.t1", session);
+        AtomicReference<ConnectContext> workerContext = new AtomicReference<>();
 
         new Expectations() {
             {
@@ -227,13 +229,15 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
                 result = new Delegate<Void>() {
                     void prefetchTableMetadataForAnalyze(String queryId, String catalogName, String databaseName,
                                                          String tableName, ConnectContext context) {
-                        Assertions.assertSame(session, ConnectContext.get());
+                        workerContext.set(ConnectContext.get());
                     }
                 };
             }
         };
 
         ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session, metadataMgr);
+
+        Assertions.assertSame(session, workerContext.get());
     }
 
     private static ConnectContext newSession(String catalog, String database) {
