@@ -128,12 +128,6 @@ public class InsertLoadJob extends LoadJob {
         this.coordinator = coordinator;
     }
 
-<<<<<<< HEAD
-=======
-    public long getTableId() {
-        return tableId;
-    }
-
     // Holds on every FE and after a restart: the commit timestamp is set on replay as well, and it is persisted.
     boolean isTxnCommitted() {
         return loadCommittedTimestamp != -1;
@@ -152,12 +146,6 @@ public class InsertLoadJob extends LoadJob {
         }
     }
 
-    @Override
-    public boolean isInternalJob() {
-        return isStatisticsJob;
-    }
-
->>>>>>> e171f26136b... [BugFix] Finish or cancel residual INSERT jobs according to their transactions (#64971)
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
         writeLock();
         try {
@@ -309,15 +297,7 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void replayOnCommitted(TransactionState txnState) {
-<<<<<<< HEAD
-=======
         loadCommittedTimestamp = txnState.getCommitTime();
-        // The live txnCallback is not persisted, so the replaying node asks the factory instead.
-        InsertLoadTxnCallback replayCallback = InsertLoadTxnCallbackFactory.ofReplay(dbId, tableId, txnState);
-        if (replayCallback != null) {
-            replayCallback.replayOnCommitted(txnState);
-        }
->>>>>>> e171f26136b... [BugFix] Finish or cancel residual INSERT jobs according to their transactions (#64971)
     }
 
     @Override

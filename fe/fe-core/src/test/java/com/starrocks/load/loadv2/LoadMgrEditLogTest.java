@@ -408,7 +408,7 @@ public class LoadMgrEditLogTest {
         // A statement on this FE runs this job and records the final state itself.
         InsertLoadJob runningJob = leaderLoadMgr.registerInsertLoadJob("running_label", dbName, tableId,
                 txnMgr.getTransactionIDGenerator().getNextTransactionId(), "load_id", "test_user", EtlJobType.INSERT,
-                System.currentTimeMillis(), new LoadMgr.EstimateStats(0L, 0, 0L), 3600L, 0L, false,
+                System.currentTimeMillis(), new LoadMgr.EstimateStats(0L, 0, 0L), 3600L, 0L,
                 mock(Coordinator.class), null);
         replayTxnState(runningJob, TransactionStatus.COMMITTED);
         replayTxnState(runningJob, TransactionStatus.VISIBLE);
@@ -444,7 +444,7 @@ public class LoadMgrEditLogTest {
         long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                 .getNextTransactionId();
         InsertLoadJob job = new InsertLoadJob(label, dbId, tableId, txnId, "load_id", "test_user",
-                System.currentTimeMillis(), 3600L, 0L, false, mock(Coordinator.class), null);
+                System.currentTimeMillis(), 3600L, 0L, mock(Coordinator.class), null);
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(job, wal -> {
         });
         loadMgr.replayCreateLoadJob(
