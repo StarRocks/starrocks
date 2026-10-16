@@ -119,6 +119,50 @@ class TestBuildParallelism(unittest.TestCase):
         ram = self.run_bash(cmd)
         self.assertEqual(ram, "64")
 
+    def test_detect_total_ram_gb_cgroup_sub_gib(self):
+        # Mock awk returning 64 GiB host memory, and cat returning 512 MiB cgroup limit (536870912)
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { echo 67108864; }
+        cat() { echo 536870912; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "1")
+
+    def test_detect_total_ram_gb_unreadable_meminfo_with_cgroup(self):
+        # Mock unreadable host memory (awk fails), but active 8 GiB container cgroup (8589934592)
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { return 1; }
+        cat() { echo 8589934592; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "8")
+
+    def test_detect_total_ram_gb_cgroup_v1_unbounded_sentinel(self):
+        # Mock unreadable host memory and unbounded cgroup v1 (9223372036854771712) -> returns 0
+        cmd = """
+        starrocks_is_darwin() { return 1; }
+        awk() { return 1; }
+        cat() { echo 9223372036854771712; }
+        starrocks_detect_total_ram_gb
+        """
+        ram = self.run_bash(cmd)
+        self.assertEqual(ram, "0")
+
+    def test_parallelism_unknown_ram_conservative_fallback(self):
+        # Mock 64 cpus, 0 RAM (unknown/unreadable) on modern linker -> fallback to conservative 64 // 4 + 1 = 17
+        cmd = """
+        starrocks_detect_parallelism() { echo 64; }
+        starrocks_detect_total_ram_gb() { echo 0; }
+        starrocks_detect_linker_type() { echo modern; }
+        starrocks_detect_ut_parallelism
+        """
+        p = self.run_bash(cmd, {"PARALLEL": ""})
+        self.assertEqual(p, "17")
+
     def test_parallelism_preserves_caller_env(self):
         p = self.run_bash(
             "starrocks_detect_ut_parallelism",

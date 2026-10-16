@@ -43,23 +43,40 @@ starrocks_detect_total_ram_gb() {
         local ram_bytes
         ram_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
         if [[ -n "${ram_bytes}" && "${ram_bytes}" =~ ^[0-9]+$ && "${ram_bytes}" -gt 0 ]]; then
-            echo "$(( ram_bytes / 1024 / 1024 / 1024 ))"
+            local ram_gb=$(( ram_bytes / 1024 / 1024 / 1024 ))
+            [[ "${ram_gb}" -lt 1 ]] && ram_gb=1
+            echo "${ram_gb}"
             return 0
         fi
-    elif [[ -r /proc/meminfo ]]; then
-        ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
-        if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
-            local ram_gb_host=$(( ram_kb / 1024 / 1024 ))
-            local cgroup_bytes=""
-            cgroup_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+    else
+        local ram_gb_host=0
+        if [[ -r /proc/meminfo ]]; then
+            ram_kb="$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || true)"
+            if [[ -n "${ram_kb}" && "${ram_kb}" =~ ^[0-9]+$ && "${ram_kb}" -gt 0 ]]; then
+                ram_gb_host=$(( ram_kb / 1024 / 1024 ))
+            fi
+        fi
 
-            if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
-                local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
-                if [[ "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
+        local cgroup_bytes=""
+        cgroup_bytes="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || true)"
+        if [[ -n "${cgroup_bytes}" && "${cgroup_bytes}" =~ ^[0-9]+$ && "${cgroup_bytes}" -gt 0 ]]; then
+            local cgroup_gb=$(( cgroup_bytes / 1024 / 1024 / 1024 ))
+            # Disregard cgroup v1 unbounded sentinel limits (e.g. >= 1 PiB / 1048576 GiB)
+            if [[ "${cgroup_gb}" -gt 1048576 ]]; then
+                cgroup_gb=0
+            elif [[ "${cgroup_gb}" -lt 1 ]]; then
+                cgroup_gb=1
+            fi
+
+            if [[ "${cgroup_gb}" -gt 0 ]]; then
+                if [[ "${ram_gb_host}" -eq 0 || "${cgroup_gb}" -lt "${ram_gb_host}" ]]; then
                     echo "${cgroup_gb}"
                     return 0
                 fi
             fi
+        fi
+
+        if [[ "${ram_gb_host}" -gt 0 ]]; then
             echo "${ram_gb_host}"
             return 0
         fi
@@ -150,14 +167,22 @@ starrocks_detect_ut_parallelism() {
     [[ -z "${ram_gb}" ]] && ram_gb="$(starrocks_detect_total_ram_gb)"
     local target_parallel="${cpus}"
 
-    if [[ -n "${ram_gb}" && "${ram_gb}" =~ ^[0-9]+$ && "${ram_gb}" -gt 0 ]]; then
-        local ram_safe_jobs=$(( ram_gb / 2 ))
-        if [[ "${ram_safe_jobs}" -lt 1 ]]; then
-            ram_safe_jobs=1
+    # If RAM is unreadable or unresolved, fall back to conservative legacy ratio
+    if [[ -z "${ram_gb}" || ! "${ram_gb}" =~ ^[0-9]+$ || "${ram_gb}" -le 0 ]]; then
+        local safe_parallel=$(( cpus / 4 + 1 ))
+        if [[ "${safe_parallel}" -lt 1 ]]; then
+            safe_parallel=1
         fi
-        if [[ "${target_parallel}" -gt "${ram_safe_jobs}" ]]; then
-            target_parallel="${ram_safe_jobs}"
-        fi
+        echo "${safe_parallel}"
+        return 0
+    fi
+
+    local ram_safe_jobs=$(( ram_gb / 2 ))
+    if [[ "${ram_safe_jobs}" -lt 1 ]]; then
+        ram_safe_jobs=1
+    fi
+    if [[ "${target_parallel}" -gt "${ram_safe_jobs}" ]]; then
+        target_parallel="${ram_safe_jobs}"
     fi
 
     if [[ "${target_parallel}" -lt 1 ]]; then
