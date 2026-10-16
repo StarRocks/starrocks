@@ -241,7 +241,7 @@ public class IVMWatermarkCommitGapTest extends MVIVMIcebergTestBase {
         Coordinator coordinator = mock(Coordinator.class);
         when(coordinator.getLoadJobType()).thenReturn(TLoadJobType.INSERT_QUERY);
         return new InsertLoadJob("replay", mv.getDbId(), mv.getId(), 1L, "load_id", "test_user",
-                System.currentTimeMillis(), 3600L, 0L, false, coordinator, null);
+                System.currentTimeMillis(), 3600L, 0L, coordinator, null);
     }
 
     private static InsertTxnCommitAttachment attachmentOf(TransactionState txnState) {
