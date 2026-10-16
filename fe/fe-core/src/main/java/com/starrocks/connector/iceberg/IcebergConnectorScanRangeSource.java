@@ -319,6 +319,11 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                             "enable_iceberg_v3_deletion_vector is disabled. " +
                             "Table contains deletion vector file: " + deleteFile.path());
                 }
+                if (deleteFile.contentOffset() == null || deleteFile.contentSizeInBytes() == null) {
+                    throw new StarRocksConnectorException(
+                            "Iceberg deletion vector is missing content_offset or content_size_in_bytes: " +
+                            deleteFile.path());
+                }
 
                 TIcebergDeleteFile dv = new TIcebergDeleteFile();
                 dv.setFull_path(deleteFile.path().toString());

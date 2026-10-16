@@ -43,6 +43,8 @@ Iceberg catalog 是一种外部 catalog，从 StarRocks v2.4 开始支持。使�
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, 和 NO_COMPRESSION      | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.1 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.10、v3.2.5、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li><li>v3 表：查询支持读时合并（merge-on-read）删除向量（即取代 v2 位置删除文件的 `deletion-vector-v1` Puffin blob）。可通过会话变量 `enable_iceberg_v3_deletion_vector` 关闭。 </li></ul> |
 | ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, 和 NO_COMPRESSION | <ul><li>v1 表：支持。 </li><li>v2 表：从 StarRocks v3.0 开始支持，其中对这些 v2 表的查询支持位置删除。在 v3.1.8、v3.2.3、v3.3 及其更高版本中，对 v2 表的查询还支持等值删除。 </li><li>v3 表：查询支持读时合并（merge-on-read）删除向量（即取代 v2 位置删除文件的 `deletion-vector-v1` Puffin blob）。可通过会话变量 `enable_iceberg_v3_deletion_vector` 关闭。 </li></ul> |
 
+读取 v3 删除向量需要 FE 和 BE/CN 节点均支持此功能。请遵循[升级流程](../../../deployment/manage_deployment/upgrade.md)：先升级所有 BE/CN 节点，再升级 FE 节点。
+
 ## 集成准备
 
 在创建 Iceberg catalog 之前，请确保您的 StarRocks 集群可以与 Iceberg 集群的存储系统和元存储集成。

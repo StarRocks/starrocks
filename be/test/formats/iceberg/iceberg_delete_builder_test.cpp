@@ -232,10 +232,13 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
 
 // Builds an Iceberg deletion-vector-v1 blob for the given row positions:
 //   [4-byte big-endian length][4-byte magic][roaring64 portable bitmap][4-byte big-endian CRC].
-static std::vector<uint8_t> make_dv_blob(const std::vector<uint64_t>& positions) {
+static std::vector<uint8_t> make_dv_blob(const std::vector<uint64_t>& positions, bool run_optimize = false) {
     roaring64_bitmap_t* bm = roaring64_bitmap_create();
     for (uint64_t p : positions) {
         roaring64_bitmap_add(bm, p);
+    }
+    if (run_optimize) {
+        roaring64_bitmap_run_optimize(bm);
     }
     size_t bitmap_size = roaring64_bitmap_portable_size_in_bytes(bm);
     std::vector<char> serialized(bitmap_size);
@@ -362,6 +365,51 @@ TEST(IcebergDeletionVectorBlobTest, ParseEmpty) {
     EXPECT_EQ(0u, bitmap.get_cardinality());
 }
 
+TEST(IcebergDeletionVectorBlobTest, ParseValidRunContainer) {
+    const std::vector<uint64_t> positions{0, 1, 2, 3, 4, 5, 6, 7, (1ULL << 32) + 7};
+    const auto blob = make_dv_blob(positions, true);
+    DeletionBitmap bitmap(roaring64_bitmap_create());
+    ASSERT_OK(IcebergDeleteBuilder::parse_deletion_vector_blob(blob.data(), blob.size(), &bitmap));
+    ASSERT_EQ(positions.size(), bitmap.get_cardinality());
+    std::vector<uint64_t> actual(bitmap.get_cardinality());
+    bitmap.to_array(actual);
+    EXPECT_EQ(positions, actual);
+}
+
+TEST(IcebergDeletionVectorBlobTest, ParseRejectsTrailingBitmapBytes) {
+    auto blob = make_dv_blob({1, 2});
+    blob.insert(blob.end() - 4, 0);
+    const uint32_t length_be = BigEndian::FromHost32(blob.size() - 8);
+    memcpy(blob.data(), &length_be, 4);
+    const uint32_t crc_be = BigEndian::FromHost32(crc32(0, blob.data() + 4, blob.size() - 8));
+    memcpy(blob.data() + blob.size() - 4, &crc_be, 4);
+    DeletionBitmap bitmap(roaring64_bitmap_create());
+    auto status = IcebergDeleteBuilder::parse_deletion_vector_blob(blob.data(), blob.size(), &bitmap);
+    EXPECT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.to_string().find("bitmap length mismatch"));
+    EXPECT_EQ(0u, bitmap.get_cardinality());
+}
+
+TEST(IcebergDeletionVectorBlobTest, ParseRejectsInvalidContainers) {
+    std::vector<std::vector<uint8_t>> blobs{make_dv_blob({1, 2}), make_dv_blob({0, 1, 2, 3, 4, 5, 6, 7}, true)};
+    for (auto& blob : blobs) {
+        // Make the array unsorted or the run extend past UINT16_MAX, with a matching checksum.
+        const uint16_t invalid_start = LittleEndian::FromHost16(std::numeric_limits<uint16_t>::max());
+        memcpy(blob.data() + blob.size() - 8, &invalid_start, sizeof(invalid_start));
+        const uint32_t crc_be = BigEndian::FromHost32(crc32(0, blob.data() + 4, blob.size() - 8));
+        memcpy(blob.data() + blob.size() - 4, &crc_be, 4);
+        DeletionBitmap bitmap(roaring64_bitmap_create());
+        bitmap.add_value(99);
+        auto status = IcebergDeleteBuilder::parse_deletion_vector_blob(blob.data(), blob.size(), &bitmap);
+        EXPECT_FALSE(status.ok());
+        EXPECT_NE(std::string::npos, status.to_string().find("Invalid Iceberg deletion vector bitmap"));
+        ASSERT_EQ(1u, bitmap.get_cardinality());
+        std::vector<uint64_t> positions(bitmap.get_cardinality());
+        bitmap.to_array(positions);
+        EXPECT_EQ((std::vector<uint64_t>{99}), positions);
+    }
+}
+
 TEST(IcebergDeletionVectorBlobTest, ParseRejectsCorruptBitmap) {
     auto blob = make_dv_blob({1});
     // Change a row position while leaving the bitmap structurally valid and the stored CRC unchanged.
@@ -393,7 +441,7 @@ TEST(IcebergDeletionVectorBlobTest, ParseRejectsMalformedBitmap) {
     DeletionBitmap bitmap(roaring64_bitmap_create());
     auto status = IcebergDeleteBuilder::parse_deletion_vector_blob(blob.data(), blob.size(), &bitmap);
     EXPECT_FALSE(status.ok());
-    EXPECT_NE(std::string::npos, status.to_string().find("Failed to deserialize"));
+    EXPECT_NE(std::string::npos, status.to_string().find("bitmap length mismatch"));
     EXPECT_EQ(0u, bitmap.get_cardinality());
 }
 

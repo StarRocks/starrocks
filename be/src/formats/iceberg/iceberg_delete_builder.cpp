@@ -34,6 +34,7 @@
 #include "gen_cpp/Types_types.h"
 #include "gutil/endian.h"
 #include "runtime/chunk_helper.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
@@ -252,12 +253,22 @@ Status IcebergDeleteBuilder::parse_deletion_vector_blob(const uint8_t* blob, int
     }
 
     const char* bitmap_ptr = reinterpret_cast<const char*>(blob) + kDvLengthSize + kDvMagicSize;
-    const int64_t bitmap_length = content_size - kDvLengthSize - kDvMagicSize - kDvCrcSize;
+    const size_t bitmap_length = content_size - kDvLengthSize - kDvMagicSize - kDvCrcSize;
+    const size_t serialized_size = roaring64_bitmap_portable_deserialize_size(bitmap_ptr, bitmap_length);
+    if (serialized_size != bitmap_length) {
+        return Status::InternalError(
+                strings::Substitute("Iceberg deletion vector bitmap length mismatch: parsed=$0, expected=$1",
+                                    serialized_size, bitmap_length));
+    }
     roaring64_bitmap_t* deserialized = roaring64_bitmap_portable_deserialize_safe(bitmap_ptr, bitmap_length);
     if (deserialized == nullptr) {
         return Status::InternalError("Failed to deserialize Iceberg deletion vector roaring64 bitmap");
     }
     DeferOp free_bitmap([&deserialized] { roaring64_bitmap_free(deserialized); });
+    const char* reason = nullptr;
+    if (!roaring64_bitmap_internal_validate(deserialized, &reason)) {
+        return Status::InternalError(strings::Substitute("Invalid Iceberg deletion vector bitmap: $0", reason));
+    }
 
     bitmap->merge(deserialized);
     return Status::OK();
@@ -284,7 +295,8 @@ Status IcebergDeleteBuilder::build_deletion_vector(const TIcebergDeleteFile& del
     ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, content_offset, content_size, fs_stats, app_stats,
                                                         shared_buffered_input_stream, cache_input_stream));
 
-    std::vector<uint8_t> blob(content_size);
+    std::vector<uint8_t> blob;
+    TRY_CATCH_BAD_ALLOC(blob.resize(content_size));
     RETURN_IF_ERROR(file->read_at_fully(content_offset, blob.data(), content_size));
 
     RETURN_IF_ERROR(parse_deletion_vector_blob(blob.data(), content_size, _deletion_bitmap.get()));

@@ -47,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TScanRange;
@@ -451,7 +452,9 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         for (TIcebergDeleteFile deleteFile : hdfsScanRange.getDelete_files()) {
-            if (deleteFile.isSetLength()) {
+            if (deleteFile.getFile_format() == THdfsFileFormat.PUFFIN && deleteFile.isSetContent_size_in_bytes()) {
+                weight += deleteFile.getContent_size_in_bytes();
+            } else if (deleteFile.isSetLength()) {
                 weight += deleteFile.getLength();
             }
         }

@@ -185,6 +185,28 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
     }
 
     @Test
+    public void testDeletionVectorWithoutOffsetFailsClearly() {
+        FileScanTask task = mockDataFileTaskWithDV();
+        when(task.deletes().get(0).contentOffset()).thenReturn(null);
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> newScanRangeSource().toScanRanges(task));
+        Assertions.assertTrue(exception.getMessage().contains("missing content_offset or content_size_in_bytes"));
+        Assertions.assertTrue(exception.getMessage().contains("/path/to/dv-file.puffin"));
+    }
+
+    @Test
+    public void testDeletionVectorWithoutSizeFailsClearly() {
+        FileScanTask task = mockDataFileTaskWithDV();
+        when(task.deletes().get(0).contentSizeInBytes()).thenReturn(null);
+
+        StarRocksConnectorException exception = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> newScanRangeSource().toScanRanges(task));
+        Assertions.assertTrue(exception.getMessage().contains("missing content_offset or content_size_in_bytes"));
+        Assertions.assertTrue(exception.getMessage().contains("/path/to/dv-file.puffin"));
+    }
+
+    @Test
     public void testDeletionVectorFailsFastWhenDisabled() {
         ConnectContext ctx = new ConnectContext();
         ctx.getSessionVariable().setEnableIcebergV3DeletionVector(false);

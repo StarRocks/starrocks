@@ -43,6 +43,8 @@ StarRocks を使用して Iceberg からデータをクエリする際には、�
 | Parquet         | SNAPPY, LZ4, ZSTD, GZIP, NO_COMPRESSION      | <ul><li>v1 テーブル: サポートされています。 </li><li>v2 テーブル: StarRocks v3.1 以降でサポートされており、これらの v2 テーブルに対するクエリは位置削除をサポートします。v3.1.10、v3.2.5、v3.3 およびそれ以降のバージョンでは、v2 テーブルに対するクエリは等価削除もサポートします。 </li><li>v3 テーブル: クエリはマージオンリード（merge-on-read）の削除ベクトル（v2 の位置削除ファイルを置き換える `deletion-vector-v1` Puffin blob）をサポートします。セッション変数 `enable_iceberg_v3_deletion_vector` で無効化できます。 </li></ul> |
 | ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, NO_COMPRESSION | <ul><li>v1 テーブル: サポートされています。 </li><li>v2 テーブル: StarRocks v3.0 以降でサポートされており、これらの v2 テーブルに対するクエリは位置削除をサポートします。v3.1.8、v3.2.3、v3.3 およびそれ以降のバージョンでは、v2 テーブルに対するクエリは等価削除もサポートします。 </li><li>v3 テーブル: クエリはマージオンリード（merge-on-read）の削除ベクトル（v2 の位置削除ファイルを置き換える `deletion-vector-v1` Puffin blob）をサポートします。セッション変数 `enable_iceberg_v3_deletion_vector` で無効化できます。 </li></ul> |
 
+v3 の削除ベクトルを読み取るには、FE と BE/CN の両方のノードがこの機能をサポートしている必要があります。[アップグレード手順](../../../deployment/manage_deployment/upgrade.md)に従い、すべての BE/CN ノードをアップグレードしてから FE ノードをアップグレードしてください。
+
 ## 統合準備
 
 Iceberg catalog を作成する前に、StarRocks クラスターが Iceberg クラスターのストレージシステムとメタストアと統合できることを確認してください。

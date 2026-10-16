@@ -26,7 +26,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -109,6 +111,43 @@ public class HDFSBackendSelectorTest {
             }
         }
         return stats;
+    }
+
+    @Test
+    public void testIcebergDeletionVectorAssignmentUsesBlobSize() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "iceberg_tbl";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        List<TScanRangeLocations> locations = createScanRanges(3, 100);
+        TIcebergDeleteFile firstDV = new TIcebergDeleteFile()
+                .setFull_path("/shared.puffin").setFile_format(THdfsFileFormat.PUFFIN)
+                .setLength(10000).setContent_offset(4).setContent_size_in_bytes(40);
+        TIcebergDeleteFile secondDV = new TIcebergDeleteFile()
+                .setFull_path("/shared.puffin").setFile_format(THdfsFileFormat.PUFFIN)
+                .setLength(10000).setContent_offset(44).setContent_size_in_bytes(80);
+        TIcebergDeleteFile positionDelete = new TIcebergDeleteFile()
+                .setFull_path("/positions.orc").setFile_format(THdfsFileFormat.ORC).setLength(200);
+        locations.get(0).scan_range.hdfs_scan_range.setDelete_files(List.of(firstDV, positionDelete));
+        locations.get(1).scan_range.hdfs_scan_range.setDelete_files(List.of(secondDV));
+
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(1);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                true, WarehouseManager.DEFAULT_RESOURCE);
+        HDFSBackendSelector selector = new HDFSBackendSelector(hdfsScanNode, locations,
+                new FragmentScanRangeAssignment(), workerProvider, false, false, false, context);
+        selector.computeScanRangeAssignment();
+
+        Assertions.assertEquals(620L, selector.assignedBytesPerComputeNode.get(computeNodes.get(0L)).longValue());
     }
 
     @Test
