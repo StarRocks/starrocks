@@ -467,6 +467,9 @@ TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
 }
 
 TEST_F(CacheInputStreamTest, failed_shared_buffer_read_does_not_populate_cache) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
     std::string data(block_size, 'a');
     const std::string file_name = "test_failed_shared_buffer_read";
     auto stream = std::make_shared<FailOnceSeekableInputStream>(data.data(), data.size());
