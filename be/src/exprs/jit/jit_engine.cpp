@@ -16,6 +16,12 @@
 
 #include <fmt/format.h>
 #include <glog/logging.h>
+// GCC 14 reports -Wmaybe-uninitialized inside LLVM's own headers when GVNPass is moved into the
+// pass pipeline (GVNPass -> SmallMapVector -> SmallDenseMap::swap over not-yet-used inline
+// buckets). The diagnostic is attributed to the header location, so only the LLVM includes are
+// wrapped.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include <llvm/Analysis/Passes.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -50,6 +56,7 @@
 #include <llvm/Transforms/Utils/Mem2Reg.h>
 #include <llvm/Transforms/Vectorize/LoopVectorize.h>
 #include <llvm/Transforms/Vectorize/SLPVectorizer.h>
+#pragma GCC diagnostic pop
 
 #include <memory>
 #include <mutex>
