@@ -47,11 +47,7 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.SessionCatalog;
 import org.apache.iceberg.catalog.TableIdentifier;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
-import org.apache.iceberg.exceptions.RESTException;
->>>>>>> 2706985 ([BugFix] Skip a nested Iceberg REST namespace dropped while it is being listed (#80846))
 import org.apache.iceberg.rest.RESTSessionCatalog;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.view.BaseView;
