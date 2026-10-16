@@ -46,11 +46,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.SqlUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
->>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;

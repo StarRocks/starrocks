@@ -279,7 +279,7 @@ public class MVVersionManagerTest {
 
         MvTaskRunContext context = buildContext(null, statusWithProcessStartTime(2000L));
         context.setVersionMapResetEpoch(mv.getVersionMapResetEpoch());
-        MVVersionManager manager = new MVVersionManager(mv, context, MaterializedView.RefreshMode.PCT);
+        MVVersionManager manager = new MVVersionManager(mv, context);
         resetBeforeCommit.run();
         manager.updateMVVersionInfo(Map.of(3000L, snapshot), PCellSortedSet.of(), Set.of(3000L),
                 Map.of(), null, Map.of(snapshot, List.of("p1")), true);

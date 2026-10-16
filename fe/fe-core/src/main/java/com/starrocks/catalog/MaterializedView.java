@@ -603,8 +603,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.lastFreshnessConfirmedAt = lastFreshnessConfirmedAt;
         }
 
-<<<<<<< HEAD
-=======
         /**
          * Forgets what the MV's data was confirmed against: the visible version maps, and the freshness a staleness
          * window would otherwise trust in place of them (see isStalenessSatisfied).
@@ -616,28 +614,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             lastFreshnessConfirmedAt = 0;
         }
 
-        public RefreshMode getLastExecutedRefreshMode() {
-            return lastExecutedRefreshMode;
-        }
-
-        public void setLastExecutedRefreshMode(RefreshMode lastExecutedRefreshMode) {
-            this.lastExecutedRefreshMode = lastExecutedRefreshMode;
-        }
-
-        public RefreshModeReason getLastRefreshModeReason() {
-            return lastRefreshModeReason;
-        }
-
-        public String getLastRefreshModeReasonTable() {
-            return lastRefreshModeReasonTable;
-        }
-
-        public void setLastRefreshModeReason(RefreshModeReason reason, String baseTableName) {
-            this.lastRefreshModeReason = reason;
-            this.lastRefreshModeReasonTable = baseTableName;
-        }
-
->>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
         public MvRefreshScheme copy() {
             MvRefreshScheme res = new MvRefreshScheme();
             res.moment = this.moment;

@@ -129,13 +129,10 @@ public class MVVersionManager {
         if (isFinalBatchRun && freshnessBaseline > copiedScheme.getLastFreshnessConfirmedAt()) {
             copiedScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
                 mv.getName(), maxChangedTableRefreshTime);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                wal -> mv.setRefreshScheme(copiedScheme));
+        persistRefreshScheme(copiedScheme);
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -162,60 +159,19 @@ public class MVVersionManager {
                 return;
             }
             copiedScheme.setLastFreshnessConfirmedAt(confirmTime);
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                    wal -> mv.setRefreshScheme(copiedScheme));
+            persistRefreshScheme(copiedScheme);
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
         }
     }
 
-<<<<<<< HEAD
-=======
-    public void clearTvrBaseline(boolean ownsFrozenSnapshot) {
-        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
-        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
-        Map<BaseTableInfo, TvrVersionRange> baseline = refreshContext.getBaseTableInfoTvrVersionRangeMap();
-        Map<BaseTableInfo, TvrVersionRange> frozen = refreshContext.getTempBaseTableInfoTvrDeltaMap();
-        // A table the frozen snapshot does not move is read at its baseline, and the last batch promotes only the
-        // tables that moved, so its entry has to stay.
-        Set<BaseTableInfo> readPastBaseline = baseline.keySet().stream()
-                .filter(table -> !ownsFrozenSnapshot || frozen.get(table) == null || !frozen.get(table).isEmpty())
-                .collect(Collectors.toSet());
-        if (readPastBaseline.isEmpty()) {
-            return;
-        }
-        logger.info("Clear the incremental baseline of {} for materialized view {} before a pct write, " +
-                "pinning owner: {}", readPastBaseline, mv.getName(), refreshContext.getTempTvrOwnerStartTaskRunId());
-        baseline.keySet().removeAll(readPastBaseline);
-        persistRefreshScheme(copiedScheme);
-    }
-
-    // The single place a refresh scheme reaches the edit log, so the executed mode is stamped on every
-    // write; a run that executed nothing passes null and leaves the mode of the run that did. The reason
-    // moves with the mode: read together they must describe one run, not two.
+    // Every refresh scheme this run publishes goes through here.
+    // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
+    // this run started means its version entries and freshness may describe data computed from a definition
+    // that no longer holds, and the caller's copy may predate the reset: publish neither then. A reset racing the
+    // publish below cleared only the scheme this one replaces, so check again after it and journal the clear.
+    // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
     private void persistRefreshScheme(MaterializedView.MvRefreshScheme copiedScheme) {
-        if (runRefreshMode != null) {
-            copiedScheme.setLastExecutedRefreshMode(runRefreshMode);
-            // Only the run that led the batch chose a mode. A later batch of the same job records no
-            // reason, so writing its empty one would erase what the lead run persisted -- and a pct
-            // fallback can run dozens of batches, every one of them reaching here.
-            TaskRunStatus status = mvTaskRunContext.getStatus();
-            if (status != null
-                    && MVRefreshProcessor.isBatchLeadRun(status.getStartTaskRunId(), status.getTaskRunId())) {
-                MVTaskRunExtraMessage extra = status.getMvTaskRunExtraMessage();
-                copiedScheme.setLastRefreshModeReason(
-                        extra == null || Strings.isNullOrEmpty(extra.getRefreshModeReason())
-                                ? null : MaterializedView.RefreshModeReason.valueOf(extra.getRefreshModeReason()),
-                        extra == null ? null : extra.getRefreshModeReasonTable());
-            }
-        }
-        // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
-        // this run started means its version entries and freshness may describe data computed from a definition
-        // that no longer holds, and the copy above may predate the reset: publish neither then. A reset racing the
-        // publish below cleared only the scheme this one replaces, so check again after it and journal the clear.
-        // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
         long runEpoch = mvTaskRunContext == null ? -1 : mvTaskRunContext.getVersionMapResetEpoch();
         boolean resetBeforePublish = runEpoch >= 0
                 && (runEpoch % 2 != 0 || mv.getVersionMapResetEpoch() != runEpoch);
@@ -235,12 +191,12 @@ public class MVVersionManager {
     }
 
     private void logRefreshScheme(MaterializedView.MvRefreshScheme scheme) {
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog = new ChangeMaterializedViewRefreshSchemeLog(mv, scheme);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, scheme);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
                 wal -> mv.setRefreshScheme(scheme));
     }
 
->>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
     // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run
     // refresh has no such property and falls back to this run's own start, which is also the batch start.
     private long freshnessBaselineTime() {

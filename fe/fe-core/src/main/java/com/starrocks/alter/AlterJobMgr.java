@@ -535,20 +535,9 @@ public class AlterJobMgr {
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
-<<<<<<< HEAD
-=======
             if (log.isClearVersionMap()) {
                 mv.getRefreshScheme().clearVersionState();
             }
-            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus()) && !mv.isActive()) {
-                // The leader journals ACTIVE only once the activation actually succeeded, so failing to
-                // reproduce it here is a real divergence between this FE and the leader, not the expected
-                // outcome of replaying a doomed retry. Loud and searchable on purpose.
-                LOG.error("replayed ACTIVE for materialized view {} but could not rebuild its base-table "
-                                + "relationship, so this FE's metadata has diverged from the leader's: {}",
-                        mv.getName(), mv.getInactiveReason());
-            }
->>>>>>> 7e951e16307... [BugFix][POST-1966] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#65432)
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
