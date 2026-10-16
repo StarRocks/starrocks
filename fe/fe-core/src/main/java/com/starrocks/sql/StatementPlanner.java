@@ -424,9 +424,11 @@ public class StatementPlanner {
      * {@link #planDmlOffSnapshots}) -- and the whole set taken in one ordered pass. A table the statement was
      * bound to may have been dropped or replaced in between, and planning off its copy would read metadata no
      * longer published, which no later check catches. That fails the statement, to be retried.
+     *
+     * <p>{@code SPMPlanBuilder} plans a baseline off the copies this takes too, for the same reason.
      */
-    private static Set<OlapTable> copyOlapTablesAndUnlock(StatementBase stmt, ConnectContext session,
-                                                          PlannerMetaLocker locker) {
+    public static Set<OlapTable> copyOlapTablesAndUnlock(StatementBase stmt, ConnectContext session,
+                                                         PlannerMetaLocker locker) {
         Set<OlapTable> copies = Sets.newHashSet();
         if (locker.forTablesNotLockedOf(session, stmt).isEmpty()) {
             try {

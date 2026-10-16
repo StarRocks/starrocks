@@ -515,10 +515,24 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
+    /**
+     * What a constraint analysis of this MV is resolved against: the names it qualifies the constraint's columns
+     * with, and the columns themselves. Each can only change under the MV's write lock -- RENAME, a database rename,
+     * ADD/DROP COLUMN -- which resolveBeforeLock does not hold; the analysis is only applied if all are unchanged.
+     */
+    private record ConstraintBasis(String dbName, String mvName, List<String> columnNames) {
+        static ConstraintBasis of(Database db, MaterializedView mv) {
+            return new ConstraintBasis(db.getFullName(), mv.getName(),
+                    mv.getBaseSchema().stream().map(Column::getName).toList());
+        }
+    }
+
     // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
     // of another kind, or when this clause needs nothing resolved.
     private List<UniqueConstraint> preResolvedUniqueConstraints;
     private List<ForeignKeyConstraint> preResolvedForeignKeyConstraints;
+    // What the SET PROPERTIES constraint analyses were resolved against, null without a constraint.
+    private ConstraintBasis preResolvedConstraintBasis;
     private Boolean preResolvedHasNonNativeBaseTable;
     private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
     private String preResolvedDefineSql;
@@ -543,6 +557,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // Analyze a copy: the analyzers consume the keys they handle, and the visitor still has to see
             // them to build the editlog entry exactly as before.
             Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
+            preResolvedConstraintBasis = properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                    || properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    ? ConstraintBasis.of(db, mv) : null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 preResolvedUniqueConstraints =
                         PropertyAnalyzer.analyzeUniqueConstraint(Maps.newHashMap(properties), db, mv);
@@ -621,6 +638,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         MaterializedView materializedView = (MaterializedView) table;
 
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+        // A constraint analyzed before the lock names the MV and its columns as they were then; applied after a
+        // RENAME or a column change that got in between, it would persist names that no longer resolve.
+        if (preResolvedConstraintBasis != null
+                && !preResolvedConstraintBasis.equals(ConstraintBasis.of(db, materializedView))) {
+            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                    + "please retry the statement", materializedView.getName()));
+        }
         Map<String, String> propClone = Maps.newHashMap();
         propClone.putAll(properties);
         int partitionTTL = INVALID;
@@ -1084,6 +1108,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
                 log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+                // The rebuild relinked the base tables holding this MV's lock only. A DROP of a base table in
+                // another database is not excluded by it, and if it ran before the link it found nothing to
+                // inactivate: recheck once the lock is released, base table lock first, and journal the
+                // inactivation the drop missed.
+                long activatedAtEpoch = materializedView.getStatusSnapshot().epoch();
+                postUnlockActions.add(() -> materializedView.inactivateIfBaseTableDroppedMeanwhile(activatedAtEpoch));
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;
@@ -1382,7 +1412,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null) {
             return;
         }
-        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
+    // or failover instead of reverting to active until the next refresh re-detects the condition.
+    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
         // inactive related mv
         mv.setInactiveAndReason(inactiveReason);
         // write edit log

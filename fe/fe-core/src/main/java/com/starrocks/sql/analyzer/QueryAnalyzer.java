@@ -621,6 +621,11 @@ public class QueryAnalyzer {
                 String catalogName = resolveTableName.getCatalog();
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                } else {
+                    // resolveTable qualifies the relation's name in place, and the policy lookup below goes by that
+                    // name: a pre-resolved table skips it, so qualify it here, or an unqualified name in the
+                    // current external catalog reaches the lookup without its catalog and database.
+                    tableName.normalization(session);
                 }
                 // A resource-mapping Iceberg table is one object shared by every query, and it is planned without
                 // the meta lock (IcebergTable.isMetaLockTarget). Planning writes to the table it works on, so it

@@ -15,11 +15,14 @@
 package com.starrocks.sql;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Invocation;
 import mockit.Mock;
@@ -34,6 +37,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * When planning does not run off copies -- a purely local INSERT / UPDATE / DELETE, or {@code cbo_use_lock_db} --
@@ -150,5 +154,69 @@ public class WholePhaseLockViewTest extends PlanTestBase {
                 + prunedWithoutLock);
         long testDbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
         Assertions.assertEquals(Set.of(testDbId), connectContext.getCurrentSqlDbIds());
+    }
+
+    private static final String REDEFINED_VIEW_SQL = "SELECT `v4` AS `v1`, `v5` AS `v2`, `v6` AS `v3` FROM `test`.`t1`";
+
+    /**
+     * A view's body is walked before the lock is taken. Redefined in between, the analyzer would expand it to tables
+     * the lock does not hold, here t1 in place of t0; the statement fails instead, to be retried.
+     */
+    @Test
+    public void testAViewRedefinedBeforeTheLockFailsTheStatement() throws Exception {
+        connectContext.getSessionVariable().setCboUseDBLock(true);
+        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "v_whole_phase_lock");
+        String definition = view.getInlineViewDef();
+        long sqlMode = view.getSqlMode();
+        AtomicBoolean redefined = new AtomicBoolean();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public void lock(Invocation invocation) {
+                if (redefined.compareAndSet(false, true)) {
+                    view.setInlineViewDefWithSqlMode(REDEFINED_VIEW_SQL, sqlMode);
+                }
+                invocation.proceed();
+            }
+        };
+        try {
+            Exception e = Assertions.assertThrows(Exception.class, () -> getExecPlan("SELECT * FROM " + VIEW));
+            Assertions.assertTrue(e.getMessage().contains("was changed while the statement was being planned"),
+                    e.getMessage());
+            Assertions.assertFalse(pruned.contains("t1"), "planned on the redefined view's table");
+            assertNothingLeftLocked("SELECT * FROM " + VIEW);
+        } finally {
+            view.setInlineViewDefWithSqlMode(definition, sqlMode);
+        }
+    }
+
+    /**
+     * The check is the locker's, not the planner's: SPM, MV refresh and recursive CTEs take the lock through it
+     * directly. A failed check leaves nothing locked, and a later acquisition does not check again.
+     */
+    @Test
+    public void testTheLockerChecksTheWalkedViewsOnItsFirstAcquisition() throws Exception {
+        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "v_whole_phase_lock");
+        String definition = view.getInlineViewDef();
+        long sqlMode = view.getSqlMode();
+        try (PlannerMetaLocker locker = new PlannerMetaLocker(connectContext,
+                SqlParser.parseSingleStatement("SELECT * FROM " + NESTED_VIEW, sqlMode))) {
+            view.setInlineViewDefWithSqlMode(REDEFINED_VIEW_SQL, sqlMode);
+            Exception e = Assertions.assertThrows(Exception.class, locker::lock);
+            Assertions.assertTrue(e.getMessage().contains("v_whole_phase_lock"), e.getMessage());
+            assertNothingLeftLocked("the direct acquisition");
+        } finally {
+            view.setInlineViewDefWithSqlMode(definition, sqlMode);
+        }
+        try (PlannerMetaLocker unchanged = new PlannerMetaLocker(connectContext,
+                SqlParser.parseSingleStatement("SELECT * FROM " + NESTED_VIEW, sqlMode))) {
+            unchanged.lock();
+            unchanged.unlock();
+            view.setInlineViewDefWithSqlMode(REDEFINED_VIEW_SQL, sqlMode);
+            unchanged.lock();
+            unchanged.unlock();
+            assertNothingLeftLocked("the later acquisition");
+        } finally {
+            view.setInlineViewDefWithSqlMode(definition, sqlMode);
+        }
     }
 }

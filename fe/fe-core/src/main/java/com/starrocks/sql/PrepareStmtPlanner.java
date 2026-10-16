@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
@@ -96,6 +97,13 @@ public class PrepareStmtPlanner {
         ExecPlan execPlan = StatementPlanner.plan(stmt, session);
         if (execPlan == null) {
             return null;
+        }
+
+        if (execPlan.getPhysicalPlan().getOp() instanceof PhysicalOlapScanOperator scan
+                && prepareStmtContext.isPlannedOnLiveTable((QueryStatement) stmt, session, (OlapTable) scan.getTable())) {
+            // reset, not just skip: the needReAnalyze() call site arrives holding a plan built against the old schema
+            prepareStmtContext.reset();
+            return execPlan;
         }
 
         prepareStmtContext.setExecPlan(execPlan);
