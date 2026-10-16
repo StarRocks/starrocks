@@ -215,13 +215,8 @@ GROUP_SLOW_TEST_F(UnnestCoreTest, offsets_across_int32_boundary) {
     // so the cumulative copy counts are 0, 1, 2, 3, 4.
     EXPECT_EQ(std::vector<uint32_t>({0, 1, 2, 3, 4}), result.copy_counts);
 
-<<<<<<< HEAD
-    // Every row must carry the element its own offset points at, including the rows whose
-    // start offset is past 2^31.
-=======
     // Every non-NULL row must carry the element its own offset points at, including the rows whose
     // start offset is past 2^31. The first row's element is the leaked payload and must not appear.
->>>>>>> e23521f ([Enhancement] Make UNNEST zero-copy for nullable arrays and LEFT JOIN, and guard the remaining table functions against OOM (#79221))
     const auto* values = ColumnHelper::get_data_column_by_type<TYPE_TINYINT>(result.columns[0].get());
     const auto data = values->immutable_data();
     EXPECT_TRUE(result.columns[0]->is_null(0));
