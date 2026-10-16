@@ -108,7 +108,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         QueryState errorState = new QueryState();
         errorState.setStateType(QueryState.MysqlStateType.ERR);
-        errorState.setError("Too many versions");
+        errorState.setError("Failed to load data into tablet 10001, because of too many versions, current/limit: 1001/1000");
 
         QueryState okState = new QueryState();
         okState.setStateType(QueryState.MysqlStateType.OK);
