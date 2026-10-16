@@ -36,7 +36,6 @@ import org.mockito.ArgumentCaptor;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -116,7 +115,7 @@ public class AlterMVActivateDropRaceTest extends MVTestBase {
             // Followers replay the drop without inactivating anything: the last status journaled must be INACTIVE.
             ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
                     ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
-            verify(spyEditLog, atLeastOnce()).logAlterMvStatus(captor.capture(), any());
+            verify(spyEditLog, atLeastOnce()).logAlterMvStatus(captor.capture());
             // Only this mv's: the task-run pool may journal for the views of earlier cases meanwhile.
             List<AlterMaterializedViewStatusLog> logs = captor.getAllValues().stream()
                     .filter(log -> log.getTableId() == mv.getId()).toList();

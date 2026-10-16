@@ -1607,7 +1607,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null) {
             return;
         }
-        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
+    // or failover instead of reverting to active.
+    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
         // inactive related mv
         mv.setInactiveAndReason(inactiveReason);
         // write edit log
