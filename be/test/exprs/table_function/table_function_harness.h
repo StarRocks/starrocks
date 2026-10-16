@@ -45,7 +45,9 @@
 //     + k, which is how the operator picks the outer-column row (`_input_index_of_first_result +
 //     _next_output_row_offset`);
 //   * under LEFT JOIN a zero-length bracket becomes one all-NULL output row that consumes no source
-//     element - the injection the operator performs while assembling its (bounded) output chunk.
+//     element. Note: on this branch TableFunctionOperator does not perform that injection itself, so
+//     an implementation tested here must emit its LEFT JOIN NULL row on its own (as MultiUnnest
+//     does, which is why its tests expect zero_length_brackets == 0).
 //
 // What it checks on every call:
 //   * the offsets column is batch-local and starts at 0;

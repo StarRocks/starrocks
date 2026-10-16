@@ -78,33 +78,20 @@ public:
         // offsets buffer is also read directly instead of through Datum, which is what the per-row
         // `offsets_column()->get(row).get_int32()` pairs used to cost.
         struct ArgView {
-            Column* column = nullptr; // outermost column, possibly nullable, for is_null()
+            const Column* column = nullptr; // outermost column, possibly nullable, for is_null()
             const Column* elements = nullptr;
             const uint32_t* offsets = nullptr;
         };
-<<<<<<< HEAD
-        std::vector<ArrayView> array_views;
-        array_views.reserve(column_count);
-
-        MutableColumns unnested_array_list;
-        unnested_array_list.reserve(column_count);
+        std::vector<ArgView> arg_views(num_args);
+        MutableColumns outputs(num_args);
         // Everything here is const, all the way down from the input ColumnPtr: nothing on this path
         // may mutate the input columns. That is also what keeps the offsets read on immutable_data(),
         // since the non-const FixedLengthColumnBase::get_data() materializes a
         // ContainerResource-backed column into its own buffer and drops the resource.
-        for (const auto& col : state->get_columns()) {
-            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
-            array_views.emplace_back(
-                    ArrayView{col.get(), &col_array->elements(), col_array->offsets().immutable_data()});
-            unnested_array_list.emplace_back(col_array->elements_column()->clone_empty());
-=======
-        std::vector<ArgView> arg_views(num_args);
-        MutableColumns outputs(num_args);
         for (size_t i = 0; i < num_args; ++i) {
-            Column* column = args[i]->as_mutable_raw_ptr();
-            auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
-            arg_views[i] = ArgView{column, col_array->elements_column().get(),
-                                   col_array->offsets_column()->immutable_data().data()};
+            const Column* column = args[i].get();
+            const auto* col_array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(column));
+            arg_views[i] = ArgView{column, &col_array->elements(), col_array->offsets().immutable_data().data()};
             outputs[i] = col_array->elements_column()->clone_empty();
             if (fn_result_required) {
                 // The output of one call is bounded now, so its size is known up front: one reserve
@@ -113,7 +100,6 @@ public:
                 // allocations observed under query_mem_limit).
                 outputs[i]->reserve(max_output_rows);
             }
->>>>>>> 568ac78 ([Enhancement] Expand multi-array UNNEST a chunk at a time instead of materializing the whole input chunk (#79222))
         }
 
         auto copy_count_column = UInt32Column::create();

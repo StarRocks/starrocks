@@ -18,13 +18,13 @@
 #include <string>
 #include <vector>
 
-#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/table_function/multi_unnest.h"
 #include "exprs/table_function/table_function_harness.h"
 #include "runtime/runtime_state.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
