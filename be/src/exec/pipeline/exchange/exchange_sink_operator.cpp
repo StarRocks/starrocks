@@ -23,6 +23,8 @@
 
 #include "base/compression/block_compression.h"
 #include "base/compression/compression_utils.h"
+#include "column/column_helper.h"
+#include "column/json_column.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_compression_fwd.h"
@@ -129,7 +131,7 @@ private:
     // Container (capacity) usage is re-read each time, which is O(#columns); memory referenced by
     // out-of-line objects (JSON, bitmap, HLL, ...) is only measured for the rows just appended and
     // accumulated, so the cost stays proportional to the rows copied instead of O(rows) per append.
-    void _on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size);
+    void _on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size, bool recount_reference);
     void _on_chunk_buffer_reset(int32_t driver_sequence);
     void _on_chunk_buffer_released(int32_t driver_sequence);
     void _account_chunk_buffer(int64_t delta);
@@ -222,15 +224,32 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     return Status::OK();
 }
 
-void ExchangeSinkOperator::Channel::_on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size) {
+// Number of JSON columns of the chunk that are in the flat representation.
+static size_t num_flat_json_columns(const Chunk& chunk) {
+    size_t num = 0;
+    for (const auto& column : chunk.columns()) {
+        const Column* data_column = ColumnHelper::get_data_column(column.get());
+        if (data_column->is_json() && down_cast<const JsonColumn*>(data_column)->is_flat_json()) {
+            ++num;
+        }
+    }
+    return num;
+}
+
+void ExchangeSinkOperator::Channel::_on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size,
+                                                              bool recount_reference) {
     const Chunk& chunk = *_chunks[driver_sequence];
     const size_t container = chunk.container_memory_usage();
-    const size_t reference = chunk.reference_memory_usage(from, size);
-    const int64_t delta = static_cast<int64_t>(container) -
-                          static_cast<int64_t>(_chunk_container_usages[driver_sequence]) +
-                          static_cast<int64_t>(reference);
+    // The append rewrote the rows already buffered (e.g. flat JSON degraded to plain JSON), so their
+    // referenced memory changed too: recount it for the whole chunk instead of adding the appended rows'.
+    const size_t reference =
+            recount_reference ? chunk.reference_memory_usage()
+                              : _chunk_reference_usages[driver_sequence] + chunk.reference_memory_usage(from, size);
+    const int64_t delta =
+            static_cast<int64_t>(container) - static_cast<int64_t>(_chunk_container_usages[driver_sequence]) +
+            static_cast<int64_t>(reference) - static_cast<int64_t>(_chunk_reference_usages[driver_sequence]);
     _chunk_container_usages[driver_sequence] = container;
-    _chunk_reference_usages[driver_sequence] += reference;
+    _chunk_reference_usages[driver_sequence] = reference;
     _account_chunk_buffer(delta);
 }
 
@@ -316,12 +335,15 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t d
     }
 
     const size_t num_buffered_rows = _chunks[driver_sequence]->num_rows();
+    const size_t num_flat_json = num_buffered_rows > 0 ? num_flat_json_columns(*_chunks[driver_sequence]) : 0;
     {
         SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
         _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
         COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
     }
-    _on_chunk_buffer_appended(driver_sequence, num_buffered_rows, size);
+    const bool recount_reference =
+            num_flat_json > 0 && num_flat_json_columns(*_chunks[driver_sequence]) < num_flat_json;
+    _on_chunk_buffer_appended(driver_sequence, num_buffered_rows, size, recount_reference);
     return Status::OK();
 }
 

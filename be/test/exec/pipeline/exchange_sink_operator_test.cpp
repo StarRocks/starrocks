@@ -27,6 +27,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/json_column.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_exec_flow_fwd.h"
@@ -339,6 +340,66 @@ TEST_F(ExchangeSinkOperatorTest, shuffle_chunk_buffer_counters_follow_reset) {
     EXPECT_GE(COUNTER_VALUE(peak_counter), COUNTER_CURRENT_VALUE(peak_counter));
     // Far below the default memory limit: nothing was flushed because of memory.
     EXPECT_EQ(COUNTER_VALUE(harness.counter("ShuffleBufferFlushCount")), 0);
+}
+
+// INT partition column + a JSON column holding `num_rows` copies of `json`, flattened on `paths` unless `paths`
+// is empty.
+static ChunkPtr make_json_chunk(size_t num_rows, const std::string& json, const std::vector<std::string>& paths,
+                                const std::vector<LogicalType>& types) {
+    auto ints = Int32Column::create();
+    auto plain = JsonColumn::create();
+    for (size_t i = 0; i < num_rows; i++) {
+        ints->append(static_cast<int32_t>(i));
+        auto value = JsonValue::parse(json);
+        CHECK(value.ok());
+        plain->append(std::move(value.value()));
+    }
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(std::move(ints), 0);
+    if (paths.empty()) {
+        chunk->append_column(std::move(plain), 1);
+        return chunk;
+    }
+    JsonFlattener flattener(paths, types, false);
+    flattener.flatten(plain.get());
+    auto flat = JsonColumn::create();
+    flat->set_flat_columns(paths, types, flattener.mutable_result());
+    CHECK(flat->is_flat_json());
+    chunk->append_column(std::move(flat), 1);
+    return chunk;
+}
+
+// Appending flat JSON of another schema degrades a buffered partial chunk to plain JSON. With numeric flat fields
+// the rows already buffered move from the flat sub-columns (container memory only) to JSON values whose payload is
+// reference memory, so the accounted memory must count that payload for the old rows, not only for the new ones.
+TEST_F(ExchangeSinkOperatorTest, shuffle_chunk_buffer_counters_follow_flat_json_degrade) {
+    // Two destination drivers: with a single shuffle the sink sends every chunk as is and buffers nothing.
+    ShuffleSinkHarness harness(_runtime_state.get(), _fragment_context.get(), _destination, /*dest_lo*/ 5,
+                               /*dest_dop*/ 2, /*enable_exchange_perf*/ false);
+    auto* sink = harness.sink();
+    auto* peak_counter = harness.peak_counter();
+    ASSERT_NE(peak_counter, nullptr);
+
+    std::vector<std::string> paths;
+    std::string wide_json = "{";
+    for (int i = 0; i < 40; i++) {
+        paths.emplace_back("k" + std::to_string(i));
+        wide_json += (i == 0 ? "\"" : ", \"") + paths.back() + "\": " + std::to_string(1000000007L * (i + 1));
+    }
+    wide_json += "}";
+    const std::vector<LogicalType> types(paths.size(), TYPE_BIGINT);
+    const size_t num_buffered = 1000;
+    ASSERT_OK(sink->push_chunk(_runtime_state.get(), make_json_chunk(num_buffered, wide_json, paths, types)));
+
+    // The same rows as plain JSON: the payload every buffered row holds once its partial chunk degrades.
+    const auto plain_payload_bytes =
+            static_cast<int64_t>(make_json_chunk(num_buffered, wide_json, {}, {})->reference_memory_usage());
+    ASSERT_GT(plain_payload_bytes, static_cast<int64_t>(num_buffered * 200));
+
+    ASSERT_OK(sink->push_chunk(_runtime_state.get(), make_json_chunk(10, "{\"n\": 2}", {"n"}, {TYPE_BIGINT})));
+    // Still below chunk_size and the memory limit: every row stays buffered, now as plain JSON.
+    EXPECT_EQ(COUNTER_VALUE(harness.counter("ShuffleBufferFlushCount")), 0);
+    EXPECT_GE(COUNTER_CURRENT_VALUE(peak_counter), plain_payload_bytes);
 }
 
 // Drives `num_pushes` full chunks through a sink whose memory limit is half of one input chunk, so every
