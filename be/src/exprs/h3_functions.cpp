@@ -180,12 +180,14 @@ struct H3ArrayBuilder {
         nulls->reserve(rows);
     }
 
-    H3Index* begin_row(size_t capacity) {
+    H3Index* begin_row(size_t capacity, bool zero_fill) {
         _row_begin = values->size();
         values->resize_uninitialized(_row_begin + capacity);
         // H3 can write through the corresponding unsigned type of the BIGINT storage.
         static_assert(std::is_same_v<H3Index, std::make_unsigned_t<int64_t> >);
-        return reinterpret_cast<H3Index*>(values->get_data().data() + _row_begin);
+        auto* cells = reinterpret_cast<H3Index*>(values->get_data().data() + _row_begin);
+        if (zero_fill) std::memset(cells, 0, capacity * sizeof(H3Index));
+        return cells;
     }
 
     Status finish_row(size_t count) {
@@ -374,8 +376,8 @@ StatusOr<ColumnPtr> GeoFunctions::h3_grid_disk(FunctionContext*, const Columns& 
         const H3Error size_error = maxGridDiskSize(k, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_GridDisk", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        H3Index* cells = result.begin_row(static_cast<size_t>(count));
-        std::memset(cells, 0, static_cast<size_t>(count) * sizeof(H3Index));
+        // gridDisk requires a zero-initialized output buffer.
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), true);
         const H3Error error = gridDisk(cell, k, cells);
         if (error != E_SUCCESS) return h3_error("H3_GridDisk", error);
         size_t written = 0;
@@ -411,7 +413,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_children(FunctionContext*, const Columns
         const H3Error size_error = cellToChildrenSize(cell, resolution, &count);
         if (size_error != E_SUCCESS) return h3_error("H3_ToChildren", size_error);
         RETURN_IF_ERROR(h3_array_size_check(count));
-        H3Index* cells = result.begin_row(static_cast<size_t>(count));
+        H3Index* cells = result.begin_row(static_cast<size_t>(count), false);
         const H3Error error = cellToChildren(cell, resolution, cells);
         if (error != E_SUCCESS) return h3_error("H3_ToChildren", error);
         RETURN_IF_ERROR(result.finish_row(static_cast<size_t>(count)));
