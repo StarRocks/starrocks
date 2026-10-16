@@ -91,6 +91,11 @@ public class InsertOverwriteJobRunnerTest {
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_live_number(k1 date, k2 int) " +
+                        "DUPLICATE KEY(k1) PARTITION BY RANGE(k1) "
+                        + "(PARTITION p20250101 VALUES [('2025-01-01'), ('2025-01-02')))"
+                        + " DISTRIBUTED BY HASH(`k2`) BUCKETS 1"
+                        + " PROPERTIES('replication_num'='1', 'partition_live_number'='3');")
                 .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
@@ -414,6 +419,101 @@ public class InsertOverwriteJobRunnerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testInsertOverwriteAbortsWhenTableStateNotNormal() throws Exception {
+        // Guards against the race where an overwrite passes analysis while the table is NORMAL,
+        // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(301L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
+
+        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            Assertions.assertThrows(DmlException.class, runner::run);
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
+    }
+
+    @Test
+    public void testDoCommitAbortsWhenTableStateNotNormal() {
+        // Guards the same race as testInsertOverwriteAbortsWhenTableStateNotNormal, but at doCommit()
+        // itself: the table can flip out of NORMAL after prepare()'s own check passed (e.g. an ALTER
+        // submits while the load is running), so doCommit() re-checks right before the partition swap.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(304L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            // doCommit() wraps every exception from its try block into DmlException("replace partitions
+            // failed", cause) (see its catch (Exception e) below the state check) -- the original message
+            // survives only as the cause.
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::testDoCommit);
+            Assertions.assertNotNull(ex.getCause());
+            Assertions.assertTrue(ex.getCause().getMessage().contains("table state is"));
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testDoCommitWhenSourcePartitionMissing() {
+        // A source partition recorded before the load can be dropped (e.g. by partition TTL) before the swap;
+        // doCommit() must report it with a hint instead of a NullPointerException.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable noTtlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t3");
+        OlapTable ttlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t_live_number");
+        String ttlHint = "also check whether the partition is still within the retention range";
+
+        // source partition resolved by name, table without partition TTL
+        InsertOverwriteJob byNameJob = new InsertOverwriteJob(305L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(noTtlTable.getPartition("p1").getId()), false);
+        byNameJob.setSourcePartitionNames(Lists.newArrayList("p_dropped"));
+        byNameJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        DmlException ex = Assertions.assertThrows(DmlException.class,
+                new InsertOverwriteJobRunner(byNameJob)::testDoCommit);
+        Assertions.assertEquals("replace partitions failed: partition 'p_dropped' of table 't3' no longer exists. " +
+                "Check whether it was dropped or renamed while the INSERT OVERWRITE was running", ex.getMessage());
+
+        // source partition resolved by name, table with partition TTL
+        InsertOverwriteJob ttlJob = new InsertOverwriteJob(306L, database.getId(), ttlTable.getId(),
+                Lists.newArrayList(ttlTable.getPartition("p20250101").getId()), false);
+        ttlJob.setSourcePartitionNames(Lists.newArrayList("p20241231"));
+        ttlJob.setTmpPartitionIds(Lists.newArrayList(ttlTable.getPartition("p20250101").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(ttlJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition 'p20241231' of table 't_live_number' no longer exists"),
+                ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains(ttlHint), ex.getMessage());
+
+        // source partition names not recorded, resolved by id
+        InsertOverwriteJob byIdJob = new InsertOverwriteJob(307L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(-1L), false);
+        byIdJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(byIdJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition id -1 of table 't3' no longer exists"),
+                ex.getMessage());
+        Assertions.assertFalse(ex.getMessage().contains(ttlHint), ex.getMessage());
+    }
+
+    @Test
+>>>>>>> 33f465c ([BugFix] Report a clear error when INSERT OVERWRITE finds a source partition gone at commit (#79902))
     public void testInsertOverwriteWithDuplicatePartitions() throws SQLException {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
         String sql = "insert overwrite t3 partitions(p1, p1) select * from t4";
