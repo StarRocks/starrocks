@@ -424,7 +424,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -437,6 +436,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -1162,8 +1162,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
             // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
             // and the OPERATE/NODE checks below would falsely reject privileged callers.
-            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
-                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+            AuthenticationHandler.authenticateWithClearPassword(ctx, request.getUser(), host,
+                    request.getPasswd());
 
             // getRequired_privilege() can return null when a newer BE sends an enum value
             // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
@@ -1268,13 +1268,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
             return UserIdentity.ROOT;
         }
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8));
+        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = AuthenticationHandler.authenticateWithClearPassword(
+                context, user, clientIp, passwd);
         // check INSERT action on table
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            // Reuse the context authentication just populated: it already carries the identity and the
+            // group-derived roles. Rebuilding it from currentUser alone would drop those groups.
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
@@ -2427,7 +2427,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
+        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
+
+        // The budget is counted over the partitions this transaction would have touched once the request is
+        // served, i.e. the union of the partitions already cached on the transaction and creatingPartitionNames.
+        ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
+        long partitionNumAfterRequest = cachedPartitions.size()
+                + creatingPartitionNames.stream().filter(name -> !cachedPartitions.containsKey(name)).count();
+        if (partitionNumAfterRequest > Config.max_partitions_in_one_batch) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                                     "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
@@ -2435,8 +2442,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
-
-        Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
 
         try {
             // creating partition names is ordered

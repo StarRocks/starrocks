@@ -494,6 +494,15 @@ This topic introduces the following types of BE configurations:
 - Description: When this item is set to greater than `0`, if a driver takes longer than `pipeline_poller_timeout_guard_ms` for a single dispatch in the poller, then the information of the driver and operator is printed.
 - Introduced in: -
 
+### load_sink_close_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
+- Introduced in: -
+
 ### pipeline_prepare_thread_pool_queue_size
 
 - Default: 102400
@@ -528,6 +537,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
+- Introduced in: -
+
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
 - Introduced in: -
 
 ### pk_index_parallel_get_threadpool_size
@@ -628,6 +646,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
 - Introduced in: -
+
+### spill_max_dir_bytes_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum proportion of disk capacity that a spill directory (`spill_local_storage_dir`) can use when it is on the same disk as a storage path (`storage_root_path`). The default value `0.5` means intermediate result spilling can use up to 50% of that disk's capacity. A spill directory on a separate disk is not subject to this limit. This value is read when the BE starts, so a change takes effect only after a restart.
+- Introduced in: v3.2.0
 
 ### string_prefix_zonemap_prefix_len
 

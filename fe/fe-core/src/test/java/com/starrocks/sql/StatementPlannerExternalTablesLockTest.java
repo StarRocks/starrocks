@@ -26,6 +26,7 @@ import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -127,6 +128,13 @@ public class StatementPlannerExternalTablesLockTest extends ConnectorPlanTestBas
             refreshCalls.incrementAndGet();
             throw new RuntimeException("mock refresh failure");
         }
+    }
+
+    // Tests here call analyzeStatement directly, which leaves the per-statement state for plan() to clear; a source
+    // recorded as refreshed by one test would otherwise not be refreshed by the next.
+    @AfterEach
+    public void clearPreResolvedState() {
+        connectContext.getPreResolvedState().clear();
     }
 
     @Test

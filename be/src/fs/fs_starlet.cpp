@@ -61,12 +61,34 @@ bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_writes_second("starlet_io_wr
 using FileSystemFactory = staros::starlet::fslib::FileSystemFactory;
 using WriteOptions = staros::starlet::fslib::WriteOptions;
 using ReadOptions = staros::starlet::fslib::ReadOptions;
+using CacheOptions = staros::starlet::fslib::CacheOptions;
 using Configuration = staros::starlet::fslib::Configuration;
 using FileSystemPtr = std::unique_ptr<staros::starlet::fslib::FileSystem>;
 using ReadOnlyFilePtr = std::unique_ptr<staros::starlet::fslib::ReadOnlyFile>;
 using WritableFilePtr = std::unique_ptr<staros::starlet::fslib::WritableFile>;
 using Anchor = staros::starlet::fslib::Stream::Anchor;
 using EntryStat = staros::starlet::fslib::EntryStat;
+
+// The BE gates the two directions of the local disk cache separately -- skip_disk_cache the
+// lookup, skip_fill_local_cache the fill -- while fslib folds them into a single read mode.
+// Skipping the lookup subsumes the fill: a bypassing read is handed straight to the persistent
+// filesystem, which fills nothing. The skip_read_local_cache flag this enum replaced behaved the
+// same way, so the fold costs no behavior that was ever honored.
+//
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | skip_disk_cache | skip_fill_local_cache | what the BE asks for       | fslib read mode           |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+// | false           | false                 | read cache, fill on miss   | READ_THROUGH              |
+// | false           | true                  | read cache, do not fill    | READ_THROUGH_NO_FILL      |
+// | true            | false                 | skip lookup, still fill    | READ_THROUGH_BYPASS_CACHE |
+// | true            | true                  | do not touch the cache     | READ_THROUGH_BYPASS_CACHE |
+// +-----------------+-----------------------+----------------------------+---------------------------+
+inline CacheOptions::ReadMode to_fslib_read_mode(bool skip_read_cache, bool skip_fill_cache) {
+    if (skip_read_cache) {
+        return CacheOptions::ReadMode::READ_THROUGH_BYPASS_CACHE;
+    }
+    return skip_fill_cache ? CacheOptions::ReadMode::READ_THROUGH_NO_FILL : CacheOptions::ReadMode::READ_THROUGH;
+}
 
 static const std::string kFileTagType = "type";
 static const std::string kFileTagTypeData = "data";
@@ -340,9 +362,8 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
-        opt.skip_read_local_cache = opts.skip_disk_cache;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -370,7 +391,7 @@ public:
             return to_status(fs_st.status());
         }
         auto opt = ReadOptions();
-        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.cache.read_mode = to_fslib_read_mode(opts.skip_disk_cache, opts.skip_fill_local_cache);
         opt.buffer_size = opts.buffer_size;
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 

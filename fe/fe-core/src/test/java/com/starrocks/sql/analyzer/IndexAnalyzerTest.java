@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -136,6 +137,19 @@ public class IndexAnalyzerTest {
                 "Unsupported index type: null");
     }
     
+    @Test
+    public void testCheckColumnBitmapRejectsDecimal256() {
+        Map<String, String> properties = new HashMap<>();
+        Column decimal256 = new Column("v", DecimalType.DEFAULT_DECIMAL256, false, null, true, NULL_DEFAULT_VALUE, "");
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkColumn(decimal256, IndexDef.IndexType.BITMAP, properties, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e.getMessage().contains("DECIMAL256 is not supported in bitmap index. invalid column: v"),
+                e.getMessage());
+
+        Column decimal128 = new Column("v", DecimalType.DEFAULT_DECIMAL128, false, null, true, NULL_DEFAULT_VALUE, "");
+        IndexAnalyzer.checkColumn(decimal128, IndexDef.IndexType.BITMAP, properties, KeysType.DUP_KEYS);
+    }
+
     @Test
     public void testCheckInvertedIndexNgram() {
         // Test case 1: Valid gram_num value

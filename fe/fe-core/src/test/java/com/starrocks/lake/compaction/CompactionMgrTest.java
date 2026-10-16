@@ -208,6 +208,29 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testTriggerClearsRetryDeadline() {
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        try {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier manual = new PartitionIdentifier(1, 2, 3);
+            compactionManager.handleLoadingFinished(manual, 1, System.currentTimeMillis(),
+                    Quantiles.compute(Lists.newArrayList(1d)));
+            compactionManager.enableCompactionAfter(manual, 60_000);
+
+            // A new manual request runs on the next cycle even while the partition is cooling down.
+            compactionManager.triggerManualCompaction(manual);
+            Set<PartitionIdentifier> chosen = new HashSet<>();
+            for (PartitionStatisticsSnapshot snapshot : compactionManager.choosePartitionsToCompact(new HashSet<>())) {
+                chosen.add(snapshot.getPartition());
+            }
+            Assertions.assertEquals(Set.of(manual), chosen);
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+    }
+
+    @Test
     public void testExistCompaction() {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();

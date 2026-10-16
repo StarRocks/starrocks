@@ -87,6 +87,7 @@ set(EXEC_FILES
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
+        ./exec/pipeline/sink/file_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
@@ -97,6 +98,7 @@ set(EXEC_FILES
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/fragment_executor_test.cpp
+        ./exec/pipeline/lookup_operator_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_spill_manager_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -119,8 +121,11 @@ set(EXEC_FILES
         ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
+        ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
         ./exec/arrow_to_json_converter_test.cpp
@@ -206,7 +211,7 @@ set(EXEC_FILES
         ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
-        ./exprs/multi_unnest_core_test.cpp
+        ./exprs/table_function/multi_unnest_core_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
@@ -299,12 +304,8 @@ set(EXEC_FILES
         ./geo/wkt_parse_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
-<<<<<<< HEAD
         ./http/ev_http_server_test.cpp
-=======
-        ./http/dump_tablet_metadata_action_test.cpp
         ./http/greplog_action_test.cpp
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
         ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
@@ -313,6 +314,7 @@ set(EXEC_FILES
         ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+        ./http/update_config_action_redaction_test.cpp
         ./http/action/update_config_action_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/array_input_stream_test.cpp
@@ -325,6 +327,7 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
+        ./io/dir_manager_test.cpp
         ./io/spill_test.cpp
         ./io/spill_block_manager_test.cpp
         ./runtime/agg_state_desc_test.cpp
@@ -424,6 +427,7 @@ set(EXEC_FILES
         ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
+        ./util/hash_util_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp
@@ -468,6 +472,7 @@ set(EXEC_FILES
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
         ./util/timezone_utils_test.cpp
+        ./util/tz_offset_cache_test.cpp
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
@@ -490,6 +495,7 @@ set(EXEC_FILES
         ./service/staros_worker_test.cpp
         ./cache/datacache_utils_test.cpp
         ./cache/datacache_metrics_test.cpp
+        ./cache/mem_space_monitor_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
         ./cache/peer_cache_test.cpp
@@ -587,6 +593,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp

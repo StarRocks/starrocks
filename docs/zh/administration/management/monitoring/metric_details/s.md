@@ -488,8 +488,37 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
-- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
+- 标签：`reason`，跳过原因，取值见下方各表。表中的采样列指目标表的分区列和排序键列。
+- 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
+
+所有导入都可能记录的取值：
+
+| `reason` | 含义 |
+| --- | --- |
+| `disabled_by_config` | 该导入类型对应的 FE 参数 `enable_tablet_pre_split_for_*` 未开启。 |
+| `disabled_by_session` | 会话将 `enable_tablet_pre_split` 设为了 `false`。 |
+| `not_range_distribution` | 目标表不是 Range 分布。 |
+| `table_not_normal` | 目标表不处于 NORMAL 状态，例如正在执行 ALTER。 |
+| `unsupported_sort_key` | 排序键为空，或排序键中有非标量类型的列。 |
+| `has_materialized_view_or_rollup` | 目标表有可见的 Rollup 或同步物化视图。 |
+| `metadata_not_resolved` | 找不到目标分区或它的基础索引，通常是导入期间有 ALTER 在执行。 |
+| `multiple_base_index_tablets` | 分区的基础索引已有多个 tablet，重复导入同一分区时很常见。 |
+| `partition_not_empty` | 分区中已有数据。 |
+| `source_missing_sampled_column` | 导入中没有某个采样列对应的源列或字面量，例如 `FILES()` 的文件里没有该列，或 INSERT 的目标列清单省略了它。 |
+| `unsupported_sampled_projection` | 某个采样列来自采样器无法重现的表达式（如 `from_unixtime(ts)` 或 NULL），或来自类型下推时按其他列类型读取的 `FILES()` 列。 |
+| `unsupported_generated_column` | 某个采样列是采样器无法计算的生成列。FE 日志会记录列名和具体原因。 |
+| `estimate_unavailable` | 从 External Catalog 表执行 INSERT 时，无法根据表统计信息估算源表大小，因而无法确定 tablet 数量。 |
+
+一次导入写多个分区时，逐分区记录的取值：
+
+| `reason` | 含义 |
+| --- | --- |
+| `unsupported_partition_column_type` | 分区列的类型无法采样，如 STRUCT、ARRAY。 |
+| `invalid_partition_value` | 采样到的分区值无法构成合法分区，如 NOT NULL 列出现 NULL，或日期无法解析。 |
+| `grouper_empty` | 按分区分组时，所有样本行都被丢弃。 |
+| `no_matching_partition` | 手动 Range 分区的表：采样值不在本次导入可写入的任何分区范围内。该值直接丢弃，不会据此新建分区。 |
+| `stale_catalog_state` | 分区在采样之后、预分裂之前消失，例如被并发 DROP 或 REPLACE。 |
+| `partition_not_eligible_post_create` | 分区预建后不再满足条件，通常是已有数据或已有多个 tablet。 |
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -527,7 +556,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径（P2-a）计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留样本数最多的分区、丢弃样本数最少的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 
@@ -559,6 +588,39 @@ description: "Alphabetical s"
 - 单位：计数
 - 类型：累计
 - 描述：因基于采样的 Tablet 预分裂未能在限定时间内确认 reshard 作业到达 `FINISHED` 而导致回滚的导入事务总数。`tablet_pre_split_post_submit_hard_cap` 的姊妹计数器。生产导入路径超时后不中止地继续执行（按当时可见的布局做计划）而非中止事务，因此该计数器在当前生产环境保持为零；仅在使用严格语义的 `runPreSplit` 包装路径（测试，或未来选择 "超时即中止" 的调用方）时触发。
+
+## `starrocks_fe_tablet_reshard_job_total`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：`TabletReshardJobMgr` 接纳的 Tablet reshard 作业总数，在作业入队并写入 journal 后递增。既包含自动 reshard（Tablet 分裂与合并），也包含由基于采样的 Tablet 预分裂提交的作业。按状态细分的作业数还可通过通用的 `job` gauge 观察，其标签为 `job="tablet_reshard"`、`type` 与 `state`。仅 Leader FE 递增该计数器；Follower 上保持为零，FE 重启或主从切换后从零重新开始。
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：到达 `FINISHED` 的 Tablet reshard 作业总数。与 `tablet_reshard_job_total` 对比即可看出已接纳的作业中有多少完成。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- 单位：计数
+- 类型：累计
+- 标签：`type`（`split` 或 `merge`）
+- 描述：以 `ABORTED` 结束的 Tablet reshard 作业总数。作业只能在其事务提交前中止；一旦提交便没有回滚路径，此后的失败只会重试而不会中止，因此不会计入这里。该情形请用 `tablet_reshard_publish_failed` 观察。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- 单位：计数
+- 类型：累计
+- 描述：失败并将被重试的 reshard publish 尝试总数，每次尝试递增一次。由于 reshard 事务在 publish 时已经提交，publish 失败会按指数退避（1s 起翻倍，上限 30s）一直重试直到成功：作业保持 `RUNNING` 且永不中止，所以作业卡住期间 `tablet_reshard_job_aborted` 一直是平的。因此告警应以该计数器为准。退避到 30s 上限后，持续失败的分区仍会让它每分钟递增约两次，故 `increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` 可在首次失败后约一分钟内发现卡住的作业。每次失败的原因会写入 `information_schema.tablet_reshard_jobs` 的 `ERROR_MESSAGE` 列以及 `fe.warn.log`。仅 Leader FE 递增该计数器。
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：所有未完成的 reshard 作业中当前正在 reshard 的 Tablet 数量，即实时的 reshard 并行度。非 Leader FE 节点上报 `0`。
 
 ## `starrocks_fe_tablet_max_compaction_score`
 

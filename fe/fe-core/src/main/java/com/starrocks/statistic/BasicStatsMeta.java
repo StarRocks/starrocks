@@ -219,6 +219,16 @@ public class BasicStatsMeta implements Writable {
         deltaRows += delta;
     }
 
+    // Records rows changed without growing the table, e.g. a delete. Only the health check uses deltaRows,
+    // so the row count used by the optimizer is not inflated.
+    public void increaseChangedRows(long changed) {
+        deltaRows += changed;
+    }
+
+    public long getDeltaRows() {
+        return deltaRows;
+    }
+
     public void increaseStatsCollectionCount(AnalyzeStatus status) {
         StatsConstants.AnalyzeType analyzeType = status.getType();
         StatsConstants.ScheduleType scheduleType = status.getScheduleType();

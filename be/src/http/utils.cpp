@@ -41,14 +41,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-<<<<<<< HEAD
-=======
 #include <fmt/format.h>
 // clang-format on
 
-#include "base/path/path_util.h"
-#include "base/string/string_parser.hpp"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/utils.h"
@@ -57,6 +52,7 @@
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "util/path_util.h"
+#include "util/string_parser.hpp"
 #include "util/url_coding.h"
 
 namespace starrocks {

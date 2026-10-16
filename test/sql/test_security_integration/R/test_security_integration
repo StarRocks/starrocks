@@ -37,3 +37,29 @@ alter security integration ldap_pattern set ("authentication_ldap_simple_bind_dn
 drop security integration ldap_pattern;
 -- result:
 -- !result
+-- name: test_ldap_security_integration_group_source
+create security integration ldap_group_source properties(
+    "type"="authentication_ldap_simple", "authentication_ldap_simple_server_host"="localhost", "authentication_ldap_simple_server_port"="389", "authentication_ldap_simple_bind_dn_pattern"="uid=${USER},ou=People,dc=example,dc=com", "authentication_ldap_simple_group_source"="memberof", "authentication_ldap_simple_memberof_attr"="isMemberOf"
+);
+-- result:
+-- !result
+[UC]show create security integration ldap_group_source;
+-- result:
+-- !result
+alter security integration ldap_group_source set ("authentication_ldap_simple_group_source"="both");
+-- result:
+-- !result
+[UC]show create security integration ldap_group_source;
+-- result:
+-- !result
+alter security integration ldap_group_source set ("authentication_ldap_simple_group_source"="memberof_only");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: invalid value 'memberof_only' for property 'authentication_ldap_simple_group_source', legal values are: group_provider, memberof, both.")
+-- !result
+drop security integration ldap_group_source;
+-- result:
+-- !result
+create security integration ldap_bad_group_source properties("type"="authentication_ldap_simple", "authentication_ldap_simple_group_source"="memberof_only");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: invalid value 'memberof_only' for property 'authentication_ldap_simple_group_source', legal values are: group_provider, memberof, both.")
+-- !result

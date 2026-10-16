@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/types.h"
@@ -220,6 +221,86 @@ TEST_F(LakeMetaHelperTest, ScalarTypeIsAlwaysValid) {
     TypeDescriptor type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 
     EXPECT_TRUE(is_valid_type(schema, scalar, top_field, type));
+}
+
+// A struct subfield without a field id (-1 placeholder in field_ids) is matched by its name.
+TEST(ParquetMetaHelperTest, StructSubfieldWithoutFieldIdIsMatchedByName) {
+    ParquetField a;
+    a.name = "a";
+    a.type = ColumnType::SCALAR;
+    a.field_id = 1;
+
+    ParquetField b;
+    b.name = "b";
+    b.type = ColumnType::SCALAR;
+    b.field_id = 2;
+
+    ParquetField col;
+    col.name = "col";
+    col.type = ColumnType::STRUCT;
+    col.field_id = 10;
+    col.children = {a, b};
+
+    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    ParquetMetaHelper helper(/*file_metadata=*/nullptr, /*case_sensitive=*/true);
+
+    // x (id 7) is not in the file, b has no id and is matched by name.
+    TypeDescriptor type = TypeDescriptor::create_struct_type({"x", "b"}, {int_type, int_type});
+    type.field_ids = {7, -1};
+    EXPECT_TRUE(helper._is_valid_type(&col, &type));
+
+    // Neither subfield is in the file.
+    type.field_names = {"x", "y"};
+    EXPECT_FALSE(helper._is_valid_type(&col, &type));
+}
+
+static ParquetField make_int_field(const std::string& name, int idx) {
+    ParquetField f;
+    f.name = name;
+    f.type = ColumnType::SCALAR;
+    f.physical_type = tparquet::Type::INT32;
+    f.physical_column_index = idx;
+    return f;
+}
+
+// field_ids / field_physical_names hold -1 / "" for a subfield without one; such a subfield is matched by its
+// physical name or its name instead.
+TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderFieldIds) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_int_field("a", 0));
+    field.children.back().field_id = 1;
+    field.children.emplace_back(make_int_field("b", 1));
+    field.children.back().field_id = 2;
+    field.children.emplace_back(make_int_field("c", 2));
+    field.children.back().field_id = 3;
+
+    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    // renamed_c is matched by its id, b (no id) by its name.
+    TypeDescriptor col_type = TypeDescriptor::create_struct_type({"renamed_c", "b"}, {int_type, int_type});
+    col_type.field_ids = {3, -1};
+
+    std::vector<int32_t> pos(col_type.children.size());
+    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
+    EXPECT_EQ((std::vector<int32_t>{2, 1}), pos);
+}
+
+TEST(ColumnReaderFactoryTest, StructSubfieldPosWithPlaceholderPhysicalNames) {
+    ParquetField field;
+    field.name = "col";
+    field.type = ColumnType::STRUCT;
+    field.children.emplace_back(make_int_field("a_phys", 0));
+    field.children.emplace_back(make_int_field("b", 1));
+
+    TypeDescriptor int_type = TypeDescriptor::from_logical_type(TYPE_INT);
+    // a is matched by its physical name, b (no physical name) by its name; missing is not in the file.
+    TypeDescriptor col_type = TypeDescriptor::create_struct_type({"a", "b", "missing"}, {int_type, int_type, int_type});
+    col_type.field_physical_names = {"a_phys", "", ""};
+
+    std::vector<int32_t> pos(col_type.children.size());
+    ColumnReaderFactory::get_subfield_pos_with_pruned_type(field, col_type, true, pos);
+    EXPECT_EQ((std::vector<int32_t>{0, 1, -1}), pos);
 }
 
 } // namespace starrocks::parquet

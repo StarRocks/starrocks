@@ -28,12 +28,19 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections.CollectionUtils;
@@ -48,6 +55,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
@@ -118,6 +127,86 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
+    }
+
+    @Test
+    public void testPlanningReacquiresTheLockWithinTheRefreshTimeout() throws Exception {
+        // An MV reading a connector plans its INSERT off copies: the planner lets go of the meta lock and takes it
+        // back before validating. That second acquisition used to block with no bound, unlike the first.
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_relock_mv`\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "hive_relock_mv");
+
+        AtomicInteger tryLocks = new AtomicInteger();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public boolean tryLock(Invocation invocation, long timeout, TimeUnit unit) {
+                // The 2nd acquisition is the first attempt's re-acquire: let it time out once.
+                if (tryLocks.incrementAndGet() == 2) {
+                    return false;
+                }
+                return invocation.proceed();
+            }
+        };
+        try {
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(taskRun);
+            // initial + timed-out re-acquire, then the retried attempt's initial + re-acquire. With an unbounded
+            // re-acquire there is a single tryLock, the one going in.
+            Assertions.assertEquals(4, tryLocks.get());
+            Assertions.assertEquals(2, mv.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                    .getVisibleVersion(), "the retried refresh did not land");
+        } finally {
+            starRocksAssert.dropMaterializedView("hive_relock_mv");
+        }
+    }
+
+    @Test
+    public void testPlanningFailureSurvivesARelockTimeout() throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `hive_relock_fail_mv`\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")\n" +
+                "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate` FROM `hive0`.`partitioned_db`.`lineitem_par`;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "hive_relock_fail_mv");
+
+        // Planning fails while the lock is released, and taking the lock back times out as well.
+        AtomicInteger tryLocks = new AtomicInteger();
+        AtomicInteger relockTimeouts = new AtomicInteger();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public boolean tryLock(Invocation invocation, long timeout, TimeUnit unit) {
+                if (tryLocks.incrementAndGet() % 2 == 0) {
+                    relockTimeouts.incrementAndGet();
+                    return false;
+                }
+                return invocation.proceed();
+            }
+        };
+        new MockUp<RelationTransformer>() {
+            @Mock
+            public LogicalPlan transform(Invocation invocation, Relation relation) {
+                throw new StarRocksPlannerException("planning blew up", ErrorType.INTERNAL_ERROR);
+            }
+        };
+        try {
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            Exception e = Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(taskRun));
+            Assertions.assertTrue(relockTimeouts.get() > 0, "the re-acquire never timed out");
+            // The task run reports the planning failure, not a lock timeout it would only retry.
+            Assertions.assertTrue(e.getMessage().contains("planning blew up"), e.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("hive_relock_fail_mv");
+        }
     }
 
     @Test

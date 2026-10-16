@@ -15,18 +15,11 @@
 #include "http/action/greplog_action.h"
 
 #include "common/greplog.h"
-<<<<<<< HEAD
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
 #include "http/http_status.h"
-=======
 #include "http/utils.h"
-#include "platform/http/http_channel.h"
-#include "platform/http/http_headers.h"
-#include "platform/http/http_request.h"
-#include "platform/http/http_status.h"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 
 namespace starrocks {
 

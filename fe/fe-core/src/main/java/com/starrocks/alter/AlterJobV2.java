@@ -188,6 +188,15 @@ public abstract class AlterJobV2 implements Writable {
         return isDone() && (System.currentTimeMillis() - finishedTimeMs) / 1000 > Config.history_job_keep_max_second;
     }
 
+    /**
+     * Whether the retired schemas this job keeps, if any, are no longer needed by any transaction.
+     * Jobs that keep no history schema have nothing to release. Jobs that do keep one override this
+     * with the same release rule their {@link #isExpire()} applies, but without the age condition.
+     */
+    public boolean isHistorySchemaReleased() {
+        return true;
+    }
+
     public boolean isDone() {
         return jobState.isFinalState();
     }

@@ -31,6 +31,7 @@ set(UTIL_FILES
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
+  compression/zstd_dict.cpp
   coding.cpp
   cpu_info.cpp
   cpu_usage_info.cpp
@@ -53,6 +54,7 @@ set(UTIL_FILES
   metrics.cpp
   metrics/file_scan_metrics.cpp
   metrics/catalog_scan_metrics.cpp
+  metrics/spill_metrics.cpp
   misc.cpp
   murmur_hash3.cpp
   ndv_estimator.cpp
@@ -97,6 +99,7 @@ set(UTIL_FILES
   trace.cpp
   trace_metrics.cpp
   timezone_utils.cpp
+  tz_offset_cache.cpp
   easy_json.cc
   mustache/mustache.cc
   int96.cpp

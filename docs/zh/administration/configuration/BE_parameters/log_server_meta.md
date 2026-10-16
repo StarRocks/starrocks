@@ -526,7 +526,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：毫秒
 - 是否动态：是
-- 描述：Thrift Client 默认的重试时间间隔。
+- 描述：BE Thrift RPC 的基础重试间隔。客户端采用带随机抖动的指数退避：每次重试前，从 0 到 `min(1000, base * 2^retry_index)` 毫秒之间均匀随机选择等待时长。`base` 为该配置值限制在 [0, 1000] 范围内后的结果，`retry_index` 从 0 开始计数。每次 RPC 仅在开始时读取一次配置，执行期间不受配置变更影响。设置为 0 或负数时不等待。最后一次尝试失败后也不再等待。
 - 引入版本：-
 
 ### thrift_connect_timeout_seconds

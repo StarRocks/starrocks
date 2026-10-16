@@ -31,10 +31,14 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
+#include "util/cpu_info.h"
+#include "util/defer_op.h"
+#include "util/threadpool.h"
 
 #ifdef USE_STAROS
 DECLARE_int64(fslib_s3_max_single_part_size);
@@ -91,6 +95,32 @@ TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
     ASSERT_EQ(16, load_pool->max_threads());
 }
 
+TEST_F(UpdateConfigActionTest, test_update_load_sink_close_thread_pool_num_max) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+    auto* thread_pool = ExecEnv::GetInstance()->load_sink_close_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    const int32_t saved_max_threads = config::load_sink_close_thread_pool_num_max;
+    DeferOp restore_pool([&]() {
+        CHECK_OK(action.update_config("load_sink_close_thread_pool_num_max", std::to_string(saved_max_threads)));
+    });
+
+    // Exercise repeated increases and decreases through the same registry used by /api/update_config.
+    for (int32_t max_threads : {2, 4, 1}) {
+        ASSERT_OK(action.update_config("load_sink_close_thread_pool_num_max", std::to_string(max_threads)));
+        EXPECT_EQ(max_threads, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(max_threads, thread_pool->max_threads());
+        EXPECT_EQ(thread_pool, ExecEnv::GetInstance()->load_sink_close_thread_pool());
+    }
+
+    // A zero-sized pool would strand queued closes. Invalid updates must preserve both the config and pool limit.
+    for (const std::string value : {"0", "-1", "invalid", "2147483648"}) {
+        SCOPED_TRACE(value);
+        EXPECT_FALSE(action.update_config("load_sink_close_thread_pool_num_max", value).ok());
+        EXPECT_EQ(1, config::load_sink_close_thread_pool_num_max);
+        EXPECT_EQ(1, thread_pool->max_threads());
+    }
+}
+
 TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
     UpdateConfigAction action(ExecEnv::GetInstance());
     auto* executor =
@@ -106,7 +136,10 @@ TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
     {
         auto st = action.update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
@@ -160,6 +193,46 @@ TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_mis
 
     auto st = action.update_config("parallel_clone_task_per_path", "4");
     CHECK_OK(st);
+}
+
+TEST_F(UpdateConfigActionTest, test_reset_pk_index_execution_threads_to_auto) {
+    auto* thread_pool = ExecEnv::GetInstance()->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    for (int cores : {8, 1, 0}) {
+        SCOPED_TRACE(cores);
+        SCOPED_UPDATE(int, CpuInfo::num_cores_, cores);
+        for (int automatic_value : {0, -1}) {
+            SCOPED_TRACE(automatic_value);
+            ASSERT_OK(action.update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+            EXPECT_EQ(7, thread_pool->max_threads());
+            ASSERT_OK(action.update_config("pk_index_parallel_execution_threadpool_max_threads",
+                                           std::to_string(automatic_value)));
+            EXPECT_EQ(std::max(1, cores), thread_pool->max_threads());
+            EXPECT_EQ(automatic_value, config::pk_index_parallel_execution_threadpool_max_threads);
+        }
+    }
+}
+
+TEST_F(UpdateConfigActionTest, test_invalid_pk_index_execution_threads_preserve_pool) {
+    auto* thread_pool = ExecEnv::GetInstance()->pk_index_execution_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    SCOPED_UPDATE(int32_t, config::pk_index_parallel_execution_threadpool_max_threads,
+                  config::pk_index_parallel_execution_threadpool_max_threads);
+    const int saved_max_threads = thread_pool->max_threads();
+    DeferOp restore_pool([&]() { CHECK_OK(thread_pool->update_max_threads(saved_max_threads)); });
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    ASSERT_OK(action.update_config("pk_index_parallel_execution_threadpool_max_threads", "7"));
+    EXPECT_TRUE(action.update_config("pk_index_parallel_execution_threadpool_max_threads", "invalid")
+                        .is_invalid_argument());
+    EXPECT_EQ(7, thread_pool->max_threads());
+    EXPECT_EQ(7, config::pk_index_parallel_execution_threadpool_max_threads);
 }
 
 TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {

@@ -1583,7 +1583,7 @@ CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
 // The maximum size of a single spill directory, for some case the spill directory may
 // be the same with storage path. Spill will return with error when used size has exceeded
 // the limit.
-CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
+CONF_mDouble(spill_max_dir_bytes_ratio, "0.5"); // 50%
 // min bytes size of spill read buffer. if the buffer size is less than this value, we will disable buffer read
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
@@ -2133,6 +2133,10 @@ CONF_mInt32(avro_reader_buffer_size_bytes, "8388608");
 CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
+// Maximum number of threads that run the final close of load sinks, including the combined txn log write.
+// Keep it separate from pip_sink_io, where other sinks run multi-MB uploads. Must be greater than 0; changes at
+// runtime resize the pool without interrupting closes already running.
+CONF_mInt32(load_sink_close_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
@@ -2185,4 +2189,15 @@ CONF_Int32(cow_optimization_diagnose_level, "0");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// Evaluate each THEN branch of a searched CASE WHEN only on the rows that branch actually owns,
+// instead of evaluating it over the whole chunk and picking rows afterwards. Only applies when the
+// CASE result is a collection type, where building a row is expensive enough to pay for
+// compacting the branch's input rows into a sub-chunk.
+// A branch is compacted when `owned_rows * ratio < chunk_rows`, i.e. when its selectivity is below
+// 1/ratio; above that threshold copying the branch's input costs more than the skipped evaluation
+// saves. 1 means "always compact", and 0 or less turns the whole thing off and restores the previous
+// behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
+// an error is no longer evaluated when no row selects it.
+CONF_mInt32(case_when_selective_eval_ratio, "2");
 } // namespace starrocks::config

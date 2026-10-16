@@ -16,7 +16,10 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.TableName;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.expression.SlotRef;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -28,15 +31,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for the two target-column-list gates in {@link InsertPreSplitHook}:
- * <ul>
- *   <li>{@code targetColumnListIsPreSplitSafe} — the source-agnostic gate: an
- *       explicit list must be a valid INSERT permutation (no unknown/duplicate/
- *       generated names, every required column present) and contain every sort
- *       key, otherwise pre-split is skipped.</li>
- *   <li>{@code targetColumnListIsFullIdentity} — the stricter gate used by the
- *       INSERT-from-table source: the list must be the full base schema in order.</li>
- * </ul>
+ * Unit tests for {@code InsertPreSplitHook#targetColumnListIsPreSplitSafe}, the single
+ * target-column-list gate: it runs for every source, and an explicit list must be a valid
+ * INSERT permutation (no unknown/duplicate/generated names, every required column present)
+ * and contain the sort key of every visible index, otherwise pre-split is skipped. A partial
+ * or reordered list that clears it is admitted as written — no source layers a second,
+ * stricter column-list gate on top.
  */
 public class InsertPreSplitHookColumnListTest {
 
@@ -81,6 +81,14 @@ public class InsertPreSplitHookColumnListTest {
     public void fullValidListWithAllSortKeysIsSafe() {
         Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
                 insertWithTargetColumns(List.of("k", "v")), tableWithBaseColumns("k", "v"), requiredColumns("k")));
+    }
+
+    @Test
+    public void reorderedFullListIsSafe() {
+        // Same columns as the base schema, written in a different order. The gate is a set
+        // check, and InsertSelectSourceColumns pairs the outputs against the list as written.
+        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
+                insertWithTargetColumns(List.of("v", "k")), tableWithBaseColumns("k", "v"), requiredColumns("k")));
     }
 
     @Test
@@ -129,41 +137,19 @@ public class InsertPreSplitHookColumnListTest {
                 insertWithTargetColumns(List.of("K", "V")), tableWithBaseColumns("k", "v"), requiredColumns("k")));
     }
 
-    // ---- targetColumnListIsFullIdentity (INSERT-from-table gate) ----
-
     @Test
-    public void noColumnListIsFullIdentity() {
-        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(null), tableWithBaseColumns("a", "b", "c")));
-    }
+    public void generatedSortKeyColumnNeedNotBeListed() {
+        // A generated column can never be named in a column list. Requiring it there declined every explicit
+        // list on a table whose sort key holds one; the sources compute it from the columns it reads instead,
+        // and decline with the reason when the list omits one of those.
+        Column k = PresplitTestSupport.bigintColumn("k");
+        Column g = PresplitTestSupport.nullableBigintColumn("g");
+        g.setGeneratedColumnExpr(ColumnIdExpr.create(new SlotRef((TableName) null, "k")));
+        OlapTable table = mock(OlapTable.class);
+        when(table.getBaseSchema()).thenReturn(List.of(k, g));
+        when(table.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(k));
 
-    @Test
-    public void fullInOrderListIsIdentity() {
-        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(List.of("a", "b", "c")), tableWithBaseColumns("a", "b", "c")));
-    }
-
-    @Test
-    public void identityIsCaseInsensitive() {
-        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(List.of("A", "B", "C")), tableWithBaseColumns("a", "b", "c")));
-    }
-
-    @Test
-    public void reorderedListIsNotIdentity() {
-        Assertions.assertFalse(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(List.of("a", "c", "b")), tableWithBaseColumns("a", "b", "c")));
-    }
-
-    @Test
-    public void partialListIsNotIdentity() {
-        Assertions.assertFalse(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(List.of("a", "b")), tableWithBaseColumns("a", "b", "c")));
-    }
-
-    @Test
-    public void supersetListIsNotIdentity() {
-        Assertions.assertFalse(InsertPreSplitHook.targetColumnListIsFullIdentity(
-                insertWithTargetColumns(List.of("a", "b", "c", "d")), tableWithBaseColumns("a", "b", "c")));
+        Assertions.assertTrue(InsertPreSplitHook.targetColumnListIsPreSplitSafe(
+                insertWithTargetColumns(List.of("k")), table, List.of(g, k)));
     }
 }

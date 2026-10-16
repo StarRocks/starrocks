@@ -21,13 +21,10 @@
 #include <limits>
 #include <string>
 
-<<<<<<< HEAD
+#include "common/status.h"
 #include "common/utils.h"
 #include "http/http_common.h"
 #include "http/http_request.h"
-=======
-#include "base/status.h"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 
 namespace starrocks {
 

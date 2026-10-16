@@ -148,6 +148,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Azure Data Lake Storage Gen2 账户的 endpoint，例如 `https://test.dfs.core.windows.net`。
 - 引入版本: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: No
+- 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的 OAuth 2.0 令牌 endpoint。在 v3.5.19、v4.0.12 和 v4.1.2 之前，该配置项名为 `azure_adls2_oauth2_oauth2_client_endpoint`。旧名称仍作为别名保留。
+- 引入版本: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - 默认值: 空字符串
@@ -165,6 +174,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的租户 ID。
 - 引入版本: v3.4.4
+
+### `azure_adls2_oauth2_token_file`
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建内置 ADLS2 存储卷时，为 Workload Identity 认证指定的联合令牌文件路径。需同时配置 `azure_adls2_oauth2_tenant_id` 和 `azure_adls2_oauth2_client_id`，并将 `azure_adls2_oauth2_use_managed_identity` 保持为 `false`。请在所有 FE 和 CN 上将文件挂载到相同的可读路径。空字符串表示不使用令牌文件认证。修改后需重启 FE。
 
 ### `azure_adls2_oauth2_use_managed_identity`
 
@@ -246,6 +263,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 是否使用原生 SDK 访问 Azure Blob Storage，从而允许使用托管标识和服务主体进行身份验证。如果此项设置为 `false`，则仅允许使用共享密钥和 SAS Token 进行身份验证。
 - 引入版本: v3.4.4
+
+### `s3_use_native_sdk_for_glob`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 对于 S3 及兼容 S3 协议的对象存储（`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs` 和 `tos`），是否使用原生 AWS S3 SDK 解析 FILES() 表函数中的通配符路径。设置为 `true` 时，通配符前最长的字面前缀会被下推到 S3 `ListObjectsV2`，而不是通过 Hadoop `globStatus` 列举整个父前缀。当前缀下对象很多但匹配项很少时，前者要快得多。设置为 `false` 时回退到 Hadoop `globStatus` 路径。
+- 引入版本: v4.1.4
 
 ### `cloud_native_hdfs_url`
 
@@ -345,6 +371,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 是否使用绑定到 Compute Engine 的服务账户。
 - 引入版本: v3.5.1
+
+### `group_provider`
+
+- 默认值: 空
+- 类型: String[]
+- 单位: -
+- 是否可变: Yes
+- 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
+- 引入版本: v3.5
+
+### `group_provider_http_connect_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的连接超时，必须为正数。服务端在该时间内未接受连接时，CREATE 或 ALTER GROUP PROVIDER 语句失败，Group Provider 保持原有配置。若没有上限，一个永不响应的服务端不仅会卡住该语句，还会卡住每台 FE 的日志回放。
+- 引入版本: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的读取超时，必须为正数。限制已建立连接的服务端最多可以静默多久，超时后读取失败；失败后的行为见 `group_provider_http_connect_timeout_ms`。
+- 引入版本: v4.2
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -686,7 +739,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
+- 描述: 启用后，StarRocks 在存算分离模式下优化云原生表和物化视图的 tablet 创建，通过为物理分区下的所有 tablet 创建单个共享 tablet 元数据，而不是为每个 tablet 创建不同的元数据。这减少了表创建、rollup 和 schema 变更作业期间创建的 tablet 任务和元数据/文件数量。优化仅适用于云原生表/物化视图，并与 `file_bundling` 结合（后者重用相同的优化逻辑）。注意：schema 变更和 rollup 作业明确禁用使用 `file_bundling` 的表的优化，以避免使用相同名称的文件被覆盖。Range 分布的表不使用该优化：这类表的每个 tablet 都有自己的键范围，元数据始终按 tablet 单独创建。谨慎启用——它改变了创建的 tablet 元数据的粒度，并可能影响副本创建和文件命名行为。
 - 引入版本: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -790,6 +843,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于 StarRocks 集群内部身份验证的令牌。如果未指定此参数，StarRocks 会在集群 Leader FE 首次启动时为集群生成一个随机令牌。
 - 引入版本: -
 
+### `authentication_failure_cache_capacity`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `authentication_failure_cache_ttl_second` 最多记住多少条被拒绝的凭据。用于限制一个客户端（或一个不断更换用户名的攻击者）能占用的内存，超出后按最早写入的顺序淘汰。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
+- 引入版本: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串
@@ -825,6 +905,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 socket 读超时。参见 `authentication_ldap_simple_conn_timeout_ms`。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 TCP 连接超时。不设置时会退回到操作系统的 TCP 超时，目录不可达时可能把处理请求的线程占住几分钟——security integration 现在也为 HTTP、Arrow Flight 和 BE→FE 的导入 RPC 做认证，占住的就是这些通道的工作线程。需要认证快速失败时可以调小。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- 默认值: group_provider
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 经 LDAP 认证的用户，其用户组从哪里来的集群级默认值。取值：`group_provider`（只使用已配置的 Group Provider，与低版本行为一致）、`memberof`（只使用用户自身 LDAP 条目上的组成员属性）、`both`（两者取并集）。Security Integration 上的同名属性会覆盖该值。非法取值按 `group_provider` 处理并打印 ERROR 日志，避免一处笔误导致所有 LDAP 用户无法登录。
+- 引入版本: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- 默认值: memberOf
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 用户条目上承载组成员关系的属性名的集群级默认值，在 `authentication_ldap_simple_group_source` 取 `memberof` 或 `both` 时使用。`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP；Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。Security Integration 上的同名属性会覆盖该值。
+- 引入版本: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - 默认值: 空字符串
@@ -849,7 +965,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 在 LDAP 对象中标识用户的属性名称。
+- 描述: 用户条目上承载登录名的属性名，用于拼接搜索绑定模式的过滤器。`uid` 适用于 OpenLDAP；Active Directory 上请设为 `sAMAccountName`，因为 AD 条目的 RDN 是显示名，而它的 `uid` 除非管理员填过否则为空。这个选择同时排除了 `authentication_ldap_simple_bind_dn_pattern`——详见 [Security Integration](../../user_privs/authentication/security_integration.md) 里的同名属性。
 - 引入版本: -
 
 ### `backup_job_default_timeout_ms`
@@ -1470,7 +1586,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，禁用无锁优化（系统始终使用安全的复制和锁定路径）。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
+- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，仅对没有相关物化视图的表应用无锁优化。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。该阈值不适用于同时读取外部 Catalog 表的语句：对这类语句而言，在整个规划阶段持有锁会使锁的持有时长取决于对 FE 无法控制的外部系统发起的分区、统计信息和文件列表请求，而该锁对外部侧不提供任何保护，因此无论内表关联多少个物化视图，此类语句都走无锁路径。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
 - 引入版本: v3.2.1
 
 ### `small_file_dir`

@@ -21,6 +21,19 @@ description: "Alphabetical t - z"
 - 単位: バイト
 - 説明: タブレットメタデータが使用するメモリ。
 
+## `tablet_pre_split_data_tier_file_selection`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `mode` — `subset`（一部のファイルだけをスキャン。スキャン量は `tablet_pre_split_data_tier_scan_byte_limit` で決まる）、`under_limit`（入力が上限以内のため全ファイルをスキャン）、`disabled`（上限が `0` のため全ファイルをスキャン）、`all_selected`（入力は上限を超えたが、ファイル単位の選択、パーティションごとの最低 1 ファイル、最少ファイル数の下限により、結果的に全ファイルが選ばれた）、`partition_from_file_data`（入力は上限を超えたが、パーティション列がパスではなくファイルのデータから取られる、またはパス由来と定数由来のパーティション列が混在するため、サブセットではパーティション全体を取りこぼすおそれがあり、全ファイルをスキャン）、`path_not_expressible`（`INSERT INTO ... SELECT FROM FILES()` のみ。選ばれたファイルのパスに FILES がそのままのパスとして扱えない文字（`,`、`*`、`?`、`[`、`{`、`\`、ホスト以降のパス中の `:`、先頭・末尾の空白）を含むため、ステートメント自身の `path` で全ファイルをスキャン）。
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みにおける data tier サンプリングの累計回数を、スキャン対象ファイルの選び方別に集計したもの。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 単位: -
+- タイプ: ヒストグラム
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みで、data tier の各サンプリングがスキャンしたバイト数の入力全体に対する割合（パーセント、整数に切り捨て）。したがって `100` はすべてのファイルをスキャンしたことを表します。
+
 ## `tablet_schema_mem_bytes`
 
 - 単位: バイト
@@ -36,6 +49,12 @@ description: "Alphabetical t - z"
 - 単位: カウント
 - 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
 
+## `thrift_client_retries_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: FE が発行した Thrift RPC が接続の切断により再試行した累計回数。各再試行の前に、FE はランダムな時間だけ待機（指数バックオフ: 最初の再試行の前は 100～200 ms、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ms に達するまで増加）してから、接続を再開してリクエストを再送します。タイムアウトした呼び出しは再試行されず、カウントもされません。1 回の呼び出しあたりの再試行回数は `thrift_rpc_retry_times` によって制限されます。値が増加し続けている場合、FE と他のノードとの Thrift 接続が頻繁に切断されていることを意味します。よくある原因は、接続先（たとえば Leader FE）の Thrift ワーカー プールが飽和し、新しい接続を即座にクローズしていることです。接続先の `thrift_server_rejected_connections_total` と併せて確認してください。
+
 ## `thrift_connections_total`
 
 - 単位: カウント
@@ -47,6 +66,30 @@ description: "Alphabetical t - z"
 
 - 単位: カウント
 - 説明: 現在開かれているthriftクライアントの数。
+
+## `thrift_server_acceptor_stall_ms`
+
+- 単位: ms
+- タイプ: 瞬間
+- 説明: FE Thrift の accept ループが最後に接続を返してからの経過時間（ミリ秒）。accept ループが停止すると増加しますが、Thrift トラフィックがない FE でも同様に増加するため、この指標のみで警報を出さず、接続の到着レートと併せて判断してください。また、accept ループがまったく動作していない場合（Thrift サーバーの起動前および停止後）もこの値は `0` になるため、しきい値による警報では Thrift サービスの停止と正常稼働を区別できません。
+
+## `thrift_server_expired_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 待機キューでの滞留時間が `thrift_server_queue_timeout_ms` を超えたため、FE Thrift サーバーが処理せずにクローズした接続の総数。このチェックはデフォルトで無効なため、運用者がタイムアウトを有効化するまでこの値は 0 のままです。値が増加している場合、呼び出し元がすでに諦めている可能性が高い接続のバックログを FE が処理していたことを意味します。キューの遅れ具合を把握するには `thrift_server_queue_wait_ms` と併せて確認してください。
+
+## `thrift_server_queue_wait_ms`
+
+- 単位: ms
+- タイプ: 瞬間的
+- 説明: 接続がワーカー スレッドに取り出されるまで FE Thrift サーバーの待機キューに滞留した時間の分位数。期限切れとして破棄された接続も含め、キューから取り出されたすべての接続がサンプリングされるため、分布が `thrift_server_queue_timeout_ms` で頭打ちになることはありません。これは Thrift 飽和の先行指標であり、ワーカー プールがまだ追いついている段階、つまり `thrift_server_rejected_connections_total` が動き出すよりかなり前から上昇します。
+
+## `thrift_server_rejected_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: ワーカー スレッド プールが飽和したために FE Thrift サーバーが即座にクローズした接続の総数。レート制限によって警告ログが抑制されたものも含め、すべての拒否がカウントされます。値が増加している場合はクライアントが拒否されていることを意味します。`thrift-server-pool` の `thread_pool` メトリックと併せて確認してください。増加の速さからワーカー容量の不足量を判断できます。
 
 ## `thrift_used_clients`
 

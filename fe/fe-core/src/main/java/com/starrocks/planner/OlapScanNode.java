@@ -340,7 +340,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             // getBucketNums() is invoked from ExecutionFragment.getOrCreateColocatedAssignment
             // only when BackendSelectorFactory has chosen a colocate-dispatch path. Verify
             // alignment HERE, after the dispatch decision: a misaligned ColocateRangeMgr
-            // would silently produce wrong join results under colocate dispatch.
+            // would silently produce wrong join / aggregation results under colocate dispatch.
             // Non-colocate scans go through NormalBackendSelector and never reach this point.
             //
             // requireAligned fails closed on two conditions: the group is currently unaligned, OR the
@@ -349,7 +349,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
             // position-based assignment when the group is momentarily unaligned (so a non-colocate scan
             // still works); if the group then re-aligns before this guard runs, comparing the built
             // assignment against the aligned mapping catches the stale position pairing that would
-            // otherwise reach the colocate join and silently return wrong results.
+            // otherwise reach the colocate plan and silently return wrong results.
             //
             // Invariant: the bucketSeq fill (getScanRangeLocations, optimizer or legacy path) always runs
             // before backend selection reaches this guard, so tabletId2BucketSeq holds the whole scan's
@@ -1136,15 +1136,19 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                         expr instanceof SlotRef ? desc.getSlot(((SlotRef) expr).getSlotId().asInt()) : null;
                 if (probeSlot != null && probeSlot.getColumn() != null) {
                     // check key columns
-                    String columnName = probeSlot.getColumn().getName();
-                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(columnName)) {
+                    // Identify the probe column by its storage-side id, the one handle a rename does
+                    // not change, and compare both checks below against ids as well - keyColumnNames
+                    // holds ids, and a partition column's name is just as mutable as this one's.
+                    String probeColumnId = probeSlot.getColumn().getColumnId().getId();
+                    if (!keyColumnNames.isEmpty() && keyColumnNames.get(0).equals(probeColumnId)) {
                         sortKeyAscHint = outputAscHint;
                     }
                     // check partition column
                     PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                     if (partitionInfo instanceof RangePartitionInfo) {
                         List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
-                        if (!partitionColumns.isEmpty() && partitionColumns.get(0).getName().equals(columnName)) {
+                        if (!partitionColumns.isEmpty()
+                                && partitionColumns.get(0).getColumnId().getId().equals(probeColumnId)) {
                             partitionKeyAscHint = Optional.of(outputAscHint);
                         }
                     }
@@ -1182,10 +1186,14 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                     columnsDesc.add(tColumn);
                 }
                 // process schema has order by columns
+                // Name these by the column id, not by Column#getName: BE matches them against the
+                // slots, whose col_name is the id (SlotDescriptor#toThrift), so a renamed column
+                // would match nothing - build_scan_keys would stop at it and no short-key range
+                // would be built for the query at all.
                 if (indexMeta.getSortKeyIdxes() != null) {
                     for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                         Column col = indexMeta.getSchema().get(sortKeyIdx);
-                        keyColumnNames.add(col.getName());
+                        keyColumnNames.add(col.getColumnId().getId());
                         keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
                     }
                 } else {
@@ -1194,7 +1202,7 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                             continue;
                         }
 
-                        keyColumnNames.add(col.getName());
+                        keyColumnNames.add(col.getColumnId().getId());
                         keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
                     }
                 }
@@ -1699,6 +1707,9 @@ public class OlapScanNode extends AbstractOlapTableScanNode {
                 if (!col.isKey()) {
                     break;
                 }
+                // Names, not ids, on purpose: this is the query cache digest, not something BE
+                // looks a column up by, and the rest of the normal form (selected_column, the
+                // partition column names) is built from names as well.
                 keyColumnNames.add(col.getName());
                 keyColumnTypes.add(TypeSerializer.toThrift(col.getPrimitiveType()));
             }

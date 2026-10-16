@@ -48,11 +48,7 @@
 #include <vector>
 
 #include "common/configbase.h"
-<<<<<<< HEAD
-=======
 #include "common/logging.h"
-#include "exec/exec_env.h"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 #include "http/action/profile_utils.h"
 #include "http/utils.h"
 #include "http/web_page_handler.h"

@@ -144,7 +144,8 @@ class FilesSampleSubqueryExecutorPartitionColumnTest {
 
         SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
 
-        Assertions.assertTrue(capturedSql.toString().contains("SELECT `user_id`, `ts` FROM FILES"),
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "SELECT /*+ SET_VAR(time_zone='UTC') */ `user_id`, `ts` FROM FILES"),
                 "executor must project sort-key followed by partition-source column: " + capturedSql);
         List<SampleRow> rows = Lists.newArrayList(execution.rows());
         Assertions.assertEquals(2, rows.size());

@@ -16,11 +16,16 @@
 
 #include <gtest/gtest.h>
 
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
+#include "exec/pipeline/query_context.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
+#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -51,6 +56,65 @@ protected:
     RuntimeState dummy_runtime_state;
     RuntimeProfile dummy_runtime_profile{"dummy"};
 };
+
+class PendingTaskExchanger final : public MultiCastLocalExchanger {
+public:
+    bool support_event_scheduler() const override { return false; }
+    Status init_metrics(RuntimeProfile*, bool) override { return Status::OK(); }
+    bool can_pull_chunk(int32_t) const override { return false; }
+    bool can_push_chunk() const override { return false; }
+    Status push_chunk(const ChunkPtr&, int32_t) override { return Status::OK(); }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState*, int32_t) override { return ChunkPtr{}; }
+    void open_source_operator(int32_t) override {}
+    void close_source_operator(int32_t) override {}
+    void open_sink_operator() override {}
+    void close_sink_operator() override {}
+    bool has_pending_io_tasks() const override { return pending; }
+
+    bool pending = false;
+};
+
+TEST(MultiCastLocalExchangeTest, pendingFinishWaitsForSpillTasks) {
+    auto exchanger = std::make_shared<PendingTaskExchanger>();
+    MultiCastLocalExchangeSourceOperatorFactory source_factory(1, 1, 0, exchanger);
+    MultiCastLocalExchangeSinkOperatorFactory sink_factory(2, 1, exchanger);
+    auto source = source_factory.create(1, 0);
+    auto sink = sink_factory.create(1, 0);
+
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+    exchanger->pending = true;
+    ASSERT_TRUE(source->pending_finish());
+    ASSERT_TRUE(sink->pending_finish());
+    exchanger->pending = false;
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+}
+
+TEST(MultiCastLocalExchangeTest, spillableExchangerReportsPendingTasks) {
+    TQueryOptions options;
+    options.__set_enable_spill(true);
+    options.__set_spillable_operator_mask(1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);
+
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->set_query_id(generate_uuid());
+    query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    ASSERT_OK(query_ctx->init_spill_manager(options));
+
+    RuntimeState state(query_ctx->query_id(), generate_uuid(), options, TQueryGlobals{}, ExecEnv::GetInstance());
+    state.init_mem_trackers(query_ctx->mem_tracker());
+    state.set_query_ctx(query_ctx.get());
+    auto exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(&state, 1, 1);
+    MultiCastLocalExchangeSourceOperatorFactory source_factory(1, 1, 0, exchanger);
+    MultiCastLocalExchangeSinkOperatorFactory sink_factory(2, 1, exchanger);
+    auto source = source_factory.create(1, 0);
+    auto sink = sink_factory.create(1, 0);
+
+    ASSERT_FALSE(exchanger->has_pending_io_tasks());
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+}
 
 TEST_F(InMemoryMultiCastLocalExchangerTest, test_push_pop) {
     const int32_t consumer_number = 2;

@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -625,8 +626,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         DistributionProperty leftDistribution = optExpression.getRequiredProperties().get(0).getDistributionProperty();
         DistributionProperty rightDistribution = optExpression.getRequiredProperties().get(1).getDistributionProperty();
-        // Currently only supports broadcast join.
+        // Only broadcast hash join keeps its ON columns dict-encoded: DecodeRewriter rewrites the ON
+        // predicate to dict refs only in visitPhysicalHashJoin. For any non-hash join (NestLoop, Merge)
+        // the generic rewriter never touches onPredicate, so keeping those ON columns encoded would
+        // leave the onPredicate referencing string refs the dict-encoded scan no longer emits, which
+        // fails planning with "Invalid plan: Input dependency cols check failed".
         if (!sessionVariable.isEnableLowCardinalityOptimizeForJoin() ||
+                !(join instanceof PhysicalHashJoinOperator) ||
                 (leftDistribution.isShuffle() && rightDistribution.isShuffle())) {
             onColumns.getStream().forEach(disableRewriteStringColumns::union);
         } else {
@@ -963,7 +969,15 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             // Condition 3: the varchar column has collected global dict
-            Column columnObj = table.getColumn(column.getName());
+            // Extended json subfield columns are per-query artifacts and are not part of the table schema,
+            // so resolve them through the scan's own map first -- the same source checkExtendedColumn() uses.
+            Column columnObj = scan.getColRefToColumnMetaMap().get(column);
+            if (columnObj == null) {
+                columnObj = table.getColumn(column.getName());
+            }
+            if (columnObj == null) {
+                continue;
+            }
             if (!IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                 LOG.debug("{} doesn't have global dict", column.getName());
                 continue;

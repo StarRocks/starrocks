@@ -55,7 +55,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-<<<<<<< HEAD
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
@@ -65,17 +64,6 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/batch_write_util.h"
 #include "runtime/client_cache.h"
-=======
-#include "http/utils.h"
-#include "orchestration/stream_load_orchestrator.h"
-#include "platform/http/http_auth.h"
-#include "platform/http/http_channel.h"
-#include "platform/http/http_headers.h"
-#include "platform/http/http_request.h"
-#include "platform/http/http_response.h"
-#include "platform/thrift_rpc_helper.h"
-#include "runtime/byte_buffer.h"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"

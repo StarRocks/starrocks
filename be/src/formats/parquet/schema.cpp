@@ -101,13 +101,21 @@ static bool is_optional(const tparquet::SchemaElement* schema) {
     return schema->__isset.repetition_type && schema->repetition_type == tparquet::FieldRepetitionType::OPTIONAL;
 }
 
+// A node is a LIST/MAP if either the legacy converted_type or the logicalType says so: writers are
+// expected to set both, but some only set logicalType.
 static bool is_list(const tparquet::SchemaElement* schema) {
-    return schema->__isset.converted_type && schema->converted_type == tparquet::ConvertedType::LIST;
+    if (schema->__isset.converted_type && schema->converted_type == tparquet::ConvertedType::LIST) {
+        return true;
+    }
+    return schema->__isset.logicalType && schema->logicalType.__isset.LIST;
 }
 
 static bool is_map(const tparquet::SchemaElement* schema) {
-    return schema->__isset.converted_type && (schema->converted_type == tparquet::ConvertedType::MAP ||
-                                              schema->converted_type == tparquet::ConvertedType::MAP_KEY_VALUE);
+    if (schema->__isset.converted_type && (schema->converted_type == tparquet::ConvertedType::MAP ||
+                                           schema->converted_type == tparquet::ConvertedType::MAP_KEY_VALUE)) {
+        return true;
+    }
+    return schema->__isset.logicalType && schema->logicalType.__isset.MAP;
 }
 
 Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, const LevelInfo& cur_level_info,
@@ -128,15 +136,13 @@ Status SchemaDescriptor::leaf_to_field(const tparquet::SchemaElement* t_schema, 
     return Status::OK();
 }
 
-// Special case mentioned in the format spec:
+// Backward-compatibility rule from the format spec:
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md
-//   If the name is array or ends in _tuple, this should be a list of struct
-//   even for single child elements.
-bool has_struct_list_name(const std::string& name) {
-    static const Slice array_slice("array", 5);
-    static const Slice tuple_slice("_tuple", 6);
-    Slice slice(name);
-    return slice == array_slice || slice.ends_with(tuple_slice);
+//   If the repeated field is a group with one field and is named either array or uses the
+//   LIST-annotated group's name with _tuple appended then the repeated type is the element type,
+//   i.e. a list of struct even for a single child element.
+static bool has_struct_list_name(const std::string& repeated_name, const std::string& list_name) {
+    return repeated_name == "array" || repeated_name == list_name + "_tuple";
 }
 
 Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement>& t_schemas, size_t pos,
@@ -182,7 +188,27 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         // rather than a primitive value
         //
         // yields list<item: struct<item: TYPE ?nullable> not null> ?nullable
-        if (list_node_schema->num_children == 1 && !has_struct_list_name(list_node_schema->name)) {
+        //
+        // A LIST-annotated repeated group with a single repeated child takes precedence over the
+        // name rule: it is a nested list with two-level encoding, whatever the repeated group is called.
+        //
+        // required/optional group name=whatever {
+        //   repeated group name=array (LIST) {
+        //     repeated TYPE item;
+        //   }
+        // }
+        //
+        // yields list<item: list<item: TYPE not null> not null> ?nullable
+        //
+        // Without the LIST annotation the name rule still applies, so an `array` group with a single
+        // repeated child is a struct element: list<item: struct<item: list<TYPE>>>.
+        bool is_single_element = false;
+        if (list_node_schema->num_children == 1) {
+            ASSIGN_OR_RETURN(const auto* element_schema, _get_schema_element(t_schemas, pos + 2));
+            is_single_element = (is_repeated(element_schema) && is_list(list_node_schema)) ||
+                                !has_struct_list_name(list_node_schema->name, group_schema->name);
+        }
+        if (is_single_element) {
             RETURN_IF_ERROR(node_to_field(t_schemas, pos + 2, cur_level_info, child_field, next_pos));
         } else {
             RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, child_field, next_pos));
@@ -321,6 +347,7 @@ Status SchemaDescriptor::group_to_field(const std::vector<tparquet::SchemaElemen
         RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos, cur_level_info, &field->children[0], next_pos));
 
         field->name = group_schema->name;
+        field->field_id = group_schema->field_id;
         field->type = ColumnType::ARRAY;
         field->is_nullable = false;
         field->level_info = cur_level_info;

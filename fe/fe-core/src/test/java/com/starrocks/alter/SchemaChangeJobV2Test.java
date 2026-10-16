@@ -58,6 +58,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -92,6 +93,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -550,6 +553,49 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testCapKeepsJobWhileItsHistorySchemaIsInUse() throws Exception {
+        Database db = starRocksAssert.getDb(ctx.getDatabase());
+        starRocksAssert.withTable("CREATE TABLE t_cap_history_schema(c0 INT) DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+        OlapTable table = (OlapTable) starRocksAssert.getTable(db.getFullName(), "t_cap_history_schema");
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        int savedLimit = Config.history_job_keep_max_num;
+        List<Long> jobIds = new ArrayList<>();
+        try {
+            TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(
+                    TransactionState.TxnSourceType.BE, "127.0.0.1");
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            MaterializedIndexMeta preAlterIndexMeta = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
+            long runningTxn = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                    db.getId(), List.of(table.getId()), UUID.randomUUID().toString(), coordinator,
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+            SchemaChangeJobV2 job1 = (SchemaChangeJobV2) executeAlterAndWaitFinish(
+                    table, "ALTER TABLE t_cap_history_schema ADD COLUMN c1 BIGINT");
+            jobIds.add(job1.getJobId());
+            SchemaChangeJobV2 job2 = (SchemaChangeJobV2) executeAlterAndWaitFinish(
+                    table, "ALTER TABLE t_cap_history_schema ADD COLUMN c2 BIGINT");
+            jobIds.add(job2.getJobId());
+
+            Config.history_job_keep_max_num = 1;
+            schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+            // job1 is outside the newest-1 window but the running transaction may still be bound to its schema
+            Assertions.assertSame(job1, schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
+            Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
+            assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta, job1.getHistorySchema().orElse(null));
+
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), runningTxn, "fail");
+            schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+            Assertions.assertNull(schemaChangeHandler.getAlterJobsV2().get(job1.getJobId()));
+            Assertions.assertSame(job2, schemaChangeHandler.getAlterJobsV2().get(job2.getJobId()));
+        } finally {
+            Config.history_job_keep_max_num = savedLimit;
+            for (long jobId : jobIds) {
+                schemaChangeHandler.getAlterJobsV2().remove(jobId);
+            }
+        }
+    }
+
+    @Test
     public void testReplayHistorySchema() throws Exception {
         Database db = starRocksAssert.getDb(ctx.getDatabase());
         starRocksAssert.withTable("CREATE TABLE t_history_schema_replay(c0 INT) DUPLICATE KEY(c0) " +
@@ -615,6 +661,98 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assertions.assertNotNull(restoredHistorySchema);
         Assertions.assertEquals(historySchema.getHistoryTxnIdThreshold(), restoredHistorySchema.getHistoryTxnIdThreshold());
         assertHistorySchemaMatches(table, baseIndexMetaId, preAlterIndexMeta, restoredHistorySchema);
+        assertPruned(fseJob);
+        Assertions.assertEquals(
+                SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId, preAlterIndexMeta),
+                restoredHandler.getHistorySchema(db.getId(), table.getId(), preAlterIndexMeta.getSchemaId()).orElse(null));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = JobState.class, names = {"FINISHED", "CANCELLED"})
+    public void testLoadPrunesDoneSchemaChangeJobFromImage(JobState doneState) throws Exception {
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta oldMeta = table.getIndexMetaByMetaId(baseIndexMetaId).shallowCopy();
+
+        SchemaChangeJobV2 doneJob = newPopulatedJob(db, table);
+        doneJob.setHistorySchema(OlapTableHistorySchema.newBuilder()
+                .setHistoryTxnIdThreshold(100L)
+                .addIndexSchema(new IndexSchemaInfo(baseIndexMetaId, table.getIndexNameByMetaId(baseIndexMetaId),
+                        SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId, oldMeta)))
+                .build());
+        doneJob.setJobState(doneState);
+        doneJob.setFinishedTimeMs(System.currentTimeMillis());
+        SchemaChangeJobV2 runningJob = newPopulatedJob(db, table);
+        runningJob.setJobState(JobState.RUNNING);
+
+        List<List<Comparable>> expectedRow = new ArrayList<>();
+        doneJob.getInfo(expectedRow);
+
+        try {
+            handler.addAlterJobV2(doneJob);
+            handler.addAlterJobV2(runningJob);
+
+            UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().save(image.getImageWriter());
+            AlterJobMgr restoredMgr =
+                    new AlterJobMgr(new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+            restoredMgr.load(reader);
+            reader.close();
+
+            SchemaChangeHandler restoredHandler = restoredMgr.getSchemaChangeHandler();
+            SchemaChangeJobV2 restoredDone = (SchemaChangeJobV2) restoredHandler.getAlterJobsV2().get(doneJob.getJobId());
+            Assertions.assertNotNull(restoredDone);
+            assertPruned(restoredDone);
+            List<List<Comparable>> restoredRow = new ArrayList<>();
+            restoredDone.getInfo(restoredRow);
+            Assertions.assertEquals(expectedRow, restoredRow);
+            Assertions.assertEquals(SchemaInfo.fromMaterializedIndex(table, baseIndexMetaId, oldMeta),
+                    restoredHandler.getHistorySchema(db.getId(), table.getId(), oldMeta.getSchemaId()).orElse(null));
+
+            SchemaChangeJobV2 restoredRunning =
+                    (SchemaChangeJobV2) restoredHandler.getAlterJobsV2().get(runningJob.getJobId());
+            Assertions.assertNotNull(restoredRunning);
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "physicalPartitionIndexTabletMap"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "physicalPartitionIndexMap"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "indexMetaIdToSchema"));
+            Assertions.assertFalse(fieldIsEmpty(restoredRunning, "indexMetaIdToShortKey"));
+        } finally {
+            handler.getAlterJobsV2().remove(doneJob.getJobId());
+            handler.getAlterJobsV2().remove(runningJob.getJobId());
+        }
+    }
+
+    private SchemaChangeJobV2 newPopulatedJob(Database db, OlapTable table) {
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        long shadowIndexMetaId = GlobalStateMgr.getCurrentState().getNextId();
+        SchemaChangeJobV2 job = new SchemaChangeJobV2(GlobalStateMgr.getCurrentState().getNextId(), db.getId(),
+                table.getId(), table.getName(), 600_000L);
+        job.addIndexSchema(shadowIndexMetaId, baseIndexMetaId, "shadow_index", 1, 1, (short) 1, table.getBaseSchema());
+        long physicalPartitionId = table.getPhysicalPartitions().iterator().next().getId();
+        job.addTabletIdMap(physicalPartitionId, shadowIndexMetaId, 20001L, 20002L);
+        job.addPartitionShadowIndex(physicalPartitionId, shadowIndexMetaId,
+                new MaterializedIndex(shadowIndexMetaId, IndexState.SHADOW));
+        return job;
+    }
+
+    // The per-job schema maps are private on this branch.
+    private static boolean fieldIsEmpty(SchemaChangeJobV2 job, String field) {
+        Object value = Deencapsulation.getField(job, field);
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).isEmpty();
+        }
+        return ((com.google.common.collect.Table<?, ?, ?>) value).isEmpty();
+    }
+
+    private static void assertPruned(SchemaChangeJobV2 job) {
+        Assertions.assertTrue(fieldIsEmpty(job, "physicalPartitionIndexTabletMap"));
+        Assertions.assertTrue(fieldIsEmpty(job, "physicalPartitionIndexMap"));
+        Assertions.assertTrue(fieldIsEmpty(job, "indexMetaIdToSchema"));
+        Assertions.assertTrue(fieldIsEmpty(job, "indexMetaIdToShortKey"));
     }
 
     private void assertHistorySchemaMatches(OlapTable table, long indexMetaId, MaterializedIndexMeta originMeta,

@@ -294,6 +294,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = isHistorySchemaReleased();
+        return expiredByTime && expiredByHistorySchema;
+    }
+
+    @Override
+    public boolean isHistorySchemaReleased() {
         boolean expiredByHistorySchema = true;
         if (historySchema != null && !historySchema.isExpired()) {
             try {
@@ -309,14 +315,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         jobId, tableName, historySchema.getHistoryTxnIdThreshold());
             }
         }
-        return expiredByTime && expiredByHistorySchema;
+        return expiredByHistorySchema;
     }
 
     /**
      * clear some date structure in this job to save memory
      * these data structures must not used in getInfo method
      */
-    private void pruneMeta() {
+    void pruneMeta() {
         physicalPartitionIndexTabletMap.clear();
         physicalPartitionIndexMap.clear();
         indexMetaIdToSchema.clear();

@@ -768,6 +768,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_MODIFY_NO_DICT_COLUMNS:
                 case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
@@ -1311,6 +1312,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -1803,6 +1810,10 @@ public class EditLog {
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info, walApplier);
+    }
+
+    public void logModifyNoDictColumns(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_NO_DICT_COLUMNS, info, walApplier);
     }
 
     public void logSetHasDelete(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
@@ -2300,5 +2311,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

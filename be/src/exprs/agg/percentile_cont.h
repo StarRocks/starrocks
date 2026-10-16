@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <type_traits>
@@ -67,6 +68,22 @@ struct PercentileState {
     double rate = 0.0;
 };
 
+// Merges the k already-sorted rows of `grid` with a loser tree and picks out the two elements
+// surrounding `goal`. Every row is laid out by merge() as
+//     [min_sentinel, payload (ascending) ..., max_sentinel]
+// so the payload occupies exactly the slots [1, size - 2].
+//
+// Neither the end of a row nor the tree's virtual leaf may be recognised by VALUE:
+//   * real data can be equal to RunTimeTypeLimits<LT>::min_value()/max_value() - for DATE those are
+//     the perfectly ordinary values '0000-01-01' and '9999-12-31' - so a payload element would be
+//     mistaken for the row's terminator, and
+//   * the virtual leaf k, which seeds the tree during the build, would then no longer be strictly
+//     better than every real leaf. It could stay behind in ls[] and later become ls[0], and the loop
+//     would index grid[k]/mp[k], i.e. one past the end of both vectors.
+// A row whose payload is empty (size == 2) has the same effect, because its only readable slot in
+// forward order is the max sentinel.
+// Both are therefore tracked by POSITION, not by value: `done[i]` records whether row i still has
+// payload left, and the virtual leaf is recognised by its index.
 template <LogicalType LT, typename CppType, bool reverse>
 void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
                    std::vector<int>& ls, std::vector<int>& mp, size_t goal, int k, CppType& junior_elm,
@@ -76,22 +93,36 @@ void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std:
     b.resize(k + 1);
     ls.resize(k);
     mp.resize(k);
+    // done[i]: row i has no payload element left. done[k] belongs to the virtual leaf.
+    std::vector<uint8_t> done(k + 1, 0);
+
     for (int i = 0; i < k; ++i) {
-        if constexpr (reverse) {
-            mp[i] = grid[i].size() - 2;
-        } else {
-            mp[i] = 1;
-        }
-    }
-    for (int i = 0; i < k; ++i) {
-        b[i] = grid[i][mp[i]];
-        if constexpr (reverse) {
-            mp[i]--;
-        } else {
-            mp[i]++;
-        }
+        DCHECK_GE(grid[i].size(), 2U);
+        const int last = static_cast<int>(grid[i].size()) - 1;
+        const int pos = reverse ? last - 1 : 1;
+        b[i] = grid[i][pos];
+        // pos lands on a sentinel exactly when the row carries no payload at all.
+        done[i] = reverse ? (pos <= 0) : (pos >= last);
+        mp[i] = reverse ? pos - 1 : pos + 1;
     }
     b[k] = reverse ? maxV : minV;
+    done[k] = 1;
+
+    // Whether leaf x must be stored as the loser of a node whose current loser is y.
+    // The virtual leaf k always wins and is never stored, so that after the build no node refers to
+    // it any more; exhausted rows always lose; only then are values compared.
+    auto loses = [&](int x, int y) {
+        if (y == k) return true;
+        if (x == k) return false;
+        if (done[x]) return true;
+        if (done[y]) return false;
+        if constexpr (reverse) {
+            return b[x] < b[y];
+        } else {
+            return b[x] > b[y];
+        }
+    };
+
     for (int i = 0; i < k; ++i) {
         ls[i] = k;
     }
@@ -100,11 +131,7 @@ void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std:
         int q = i;
         int t = (q + k) / 2;
         while (t > 0) {
-            if constexpr (reverse) {
-                if (b[q] < b[ls[t]]) {
-                    std::swap(q, ls[t]);
-                }
-            } else if (b[q] > b[ls[t]]) {
+            if (loses(q, ls[t])) {
                 std::swap(q, ls[t]);
             }
             t = t / 2;
@@ -112,11 +139,12 @@ void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std:
         ls[0] = q;
     }
 
-    CppType tp = reverse ? minV : maxV;
     size_t cnt = 0;
 
-    while (b[ls[0]] != tp) {
+    // done[k] == 1, so even a degenerate tree can only stop the merge, never read out of range.
+    while (!done[ls[0]]) {
         int q = ls[0];
+        DCHECK_LT(q, k);
         if (UNLIKELY(cnt >= goal)) {
             if (cnt == goal) {
                 if constexpr (reverse)
@@ -133,20 +161,17 @@ void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std:
             }
         }
         cnt++;
-        b[q] = grid[q][mp[q]];
+        // !done[q] guarantees mp[q] is still a valid index into the row.
+        const int pos = mp[q];
+        const int last = static_cast<int>(grid[q].size()) - 1;
+        DCHECK(pos >= 0 && pos <= last);
+        b[q] = grid[q][pos];
+        done[q] = reverse ? (pos <= 0) : (pos >= last);
+        mp[q] = reverse ? pos - 1 : pos + 1;
 
-        if constexpr (reverse) {
-            mp[q]--;
-        } else {
-            mp[q]++;
-        }
         int t = (q + k) / 2;
         while (t > 0) {
-            if constexpr (reverse) {
-                if (b[q] < b[ls[t]]) {
-                    std::swap(q, ls[t]);
-                }
-            } else if (b[q] > b[ls[t]]) {
+            if (loses(q, ls[t])) {
                 std::swap(q, ls[t]);
             }
             t = t / 2;

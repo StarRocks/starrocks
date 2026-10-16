@@ -235,6 +235,12 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
+        boolean expiredByHistorySchema = isHistorySchemaReleased();
+        return expiredByTime && expiredByHistorySchema;
+    }
+
+    @Override
+    public boolean isHistorySchemaReleased() {
         boolean expiredByHistorySchema = true;
         if (historySchema != null && !historySchema.isExpired()) {
             try {
@@ -250,7 +256,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                         jobId, tableName, historySchema.getHistoryTxnIdThreshold());
             }
         }
-        return expiredByTime && expiredByHistorySchema;
+        return expiredByHistorySchema;
     }
 
     List<SchemaInfo> getSchemaInfoList() {

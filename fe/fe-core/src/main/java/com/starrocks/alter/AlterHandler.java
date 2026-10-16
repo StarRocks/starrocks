@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -54,6 +55,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -63,6 +65,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public abstract class AlterHandler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
@@ -125,12 +128,14 @@ public abstract class AlterHandler extends FrontendDaemon {
         return this.alterJobsV2;
     }
 
+    @VisibleForTesting
+    static int maxCapRemovalsPerRound = 1000;
+
     protected void clearExpireFinishedOrCancelledAlterJobsV2() {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            if (alterJobV2.isExpire() && (RunMode.isSharedNothingMode() || GlobalStateMgr.getCurrentState()
-                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs()))) {
+            if (alterJobV2.isExpire() && isDeletionSafe(alterJobV2)) {
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
                 GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log, wal -> {
@@ -139,6 +144,50 @@ public abstract class AlterHandler extends FrontendDaemon {
                 LOG.info("remove expired {} job {}. finish at {}", alterJobV2.getType(),
                         alterJobV2.getJobId(), TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
             }
+        }
+        removeFinishedOrCancelledAlterJobsV2BeyondLimit();
+    }
+
+    private boolean isDeletionSafe(AlterJobV2 alterJobV2) {
+        return RunMode.isSharedNothingMode() || GlobalStateMgr.getCurrentState()
+                .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs());
+    }
+
+    /**
+     * Keep the {@link Config#history_job_keep_max_num} most recently finished jobs and remove older done jobs,
+     * oldest first. An older job that is still protected (its history schema is in use, or a cluster snapshot
+     * needs it) is skipped without removing a newer job in its place.
+     */
+    private void removeFinishedOrCancelledAlterJobsV2BeyondLimit() {
+        int limit = Config.history_job_keep_max_num;
+        if (limit <= 0) {
+            return;
+        }
+        List<AlterJobV2> doneJobs =
+                alterJobsV2.values().stream().filter(AlterJobV2::isDone).collect(Collectors.toList());
+        int candidates = doneJobs.size() - limit;
+        if (candidates <= 0) {
+            return;
+        }
+        doneJobs.sort(Comparator.comparingLong(AlterJobV2::getFinishedTimeMs).thenComparingLong(AlterJobV2::getJobId));
+        int removed = 0;
+        for (AlterJobV2 alterJobV2 : doneJobs.subList(0, candidates)) {
+            if (removed >= maxCapRemovalsPerRound) {
+                LOG.info("removed {} finished alter jobs beyond history_job_keep_max_num {} in this round, "
+                        + "the rest are left to the next round", removed, limit);
+                break;
+            }
+            if (!alterJobV2.isHistorySchemaReleased() || !isDeletionSafe(alterJobV2)) {
+                continue;
+            }
+            RemoveAlterJobV2OperationLog log =
+                    new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
+            GlobalStateMgr.getCurrentState().getEditLog().logRemoveExpiredAlterJobV2(log, wal -> {
+                alterJobsV2.remove(alterJobV2.getJobId());
+            });
+            removed++;
+            LOG.info("remove {} job {} beyond history_job_keep_max_num {}. finish at {}", alterJobV2.getType(),
+                    alterJobV2.getJobId(), limit, TimeUtils.longToTimeString(alterJobV2.getFinishedTimeMs()));
         }
     }
 

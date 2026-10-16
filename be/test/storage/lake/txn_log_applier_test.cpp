@@ -16,9 +16,11 @@
 #include <gtest/gtest.h>
 
 #include "runtime/exec_env.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace lake {
@@ -593,40 +595,57 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
     EXPECT_FALSE(rs.segment_metas(1).has_bundle_file_offset());
 }
 
-// Test that mixed bundle_file_offsets (some TxnLogs with, some without) returns error to prevent
-// data corruption — silently dropping offsets would leave bundled segment paths unresolvable.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
+// The statements of a multi-statement transaction write one log each: bundled when the statement's share
+// of the tablet was one segment at end of stream, standalone when it flushed mid-load. The merged rowset
+// keeps the bundled offsets and gives each standalone segment offset 0, the same bytes as a one-slice bundle.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"seg_a"}, {0}));
-    // Second log does NOT have bundle offsets
+    logs.push_back(make_op_write_log_with_bundle(10012, 10, 5, 100, {"bundle_a"}, {4096}));
     logs.push_back(make_op_write_log(10012, 11, 7, 140, {"seg_b"}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(2, rs.segment_metas_size());
+    EXPECT_EQ(4096, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ("seg_b", rs.segment_metas(1).filename());
+    EXPECT_EQ(123, rs.segment_metas(1).size());
+    // The rowset now encodes into the legacy all-or-nothing offsets array.
+    RowsetMetadataPB saved = rs;
+    ASSERT_OK(normalize_rowset_before_save(&saved));
+    ASSERT_EQ(2, saved.deprecated_bundle_file_offsets_size());
 }
 
-// Test reverse order: first TxnLog has no offsets, second has offsets.
-// This must also be detected as inconsistent and return error.
-TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
+// Same as above with the standalone statement first.
+TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
     auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
 
     TxnLogVector logs;
-    // First log does NOT have bundle offsets
     logs.push_back(make_op_write_log(10013, 10, 5, 100, {"seg_a", "seg_b"}));
-    // Second log has bundle offsets
-    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"seg_c"}, {0}));
+    logs.push_back(make_op_write_log_with_bundle(10013, 11, 7, 140, {"bundle_c"}, {2048}));
 
-    Status st = applier->apply(logs);
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("Inconsistent bundle_file_offsets"));
+    ASSERT_OK(applier->apply(logs));
+    ASSERT_EQ(1, meta->rowsets_size());
+    const auto& rs = meta->rowsets(0);
+    ASSERT_EQ(3, rs.segment_metas_size());
+    ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(0).synthetic_bundle_file_offset());
+    ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
+    EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(2).synthetic_bundle_file_offset());
 }
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.
@@ -1315,6 +1334,83 @@ TEST(TxnLogApplierCompactionTest, PKLakeReplicationDropsDeletePredicate) {
     ASSERT_EQ(2, meta->compaction_inputs_size());
     EXPECT_FALSE(meta->compaction_inputs(0).has_delete_predicate());
     EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
+}
+
+void verify_lake_replication_archives_only_unreferenced_files(bool primary_key, int64_t tablet_id) {
+    const std::string reused_segment = "reused_segment.dat";
+    const std::string garbage_segment = "garbage_segment.dat";
+    const std::string reused_del = "reused.del";
+    const std::string garbage_del = "garbage.del";
+
+    Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), tablet_id);
+    auto meta = primary_key ? build_pk_metadata(tablet_id) : build_non_pk_metadata(tablet_id);
+    meta->set_next_rowset_id(10);
+    auto* old_rowset = meta->add_rowsets();
+    old_rowset->set_id(1);
+    old_rowset->set_num_rows(30);
+    old_rowset->set_data_size(300);
+    old_rowset->set_next_compaction_offset(1);
+    old_rowset->mutable_delete_predicate()->set_version(1);
+    auto* reused_segment_meta = old_rowset->add_segment_metas();
+    reused_segment_meta->set_filename(reused_segment);
+    reused_segment_meta->set_size(100);
+    reused_segment_meta->set_encryption_meta("reused-segment-encryption");
+    auto* garbage_segment_meta = old_rowset->add_segment_metas();
+    garbage_segment_meta->set_filename(garbage_segment);
+    garbage_segment_meta->set_size(200);
+    garbage_segment_meta->set_encryption_meta("garbage-segment-encryption");
+    auto* reused_del_meta = old_rowset->add_del_files();
+    reused_del_meta->set_name(reused_del);
+    reused_del_meta->set_encryption_meta("reused-del-encryption");
+    auto* garbage_del_meta = old_rowset->add_del_files();
+    garbage_del_meta->set_name(garbage_del);
+    garbage_del_meta->set_encryption_meta("garbage-del-encryption");
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(tablet_id);
+    log->set_txn_id(500);
+    auto* op_replication = log->mutable_op_replication();
+    auto* txn_meta = op_replication->mutable_txn_meta();
+    txn_meta->set_txn_id(500);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false);
+    auto* tablet_metadata = op_replication->mutable_tablet_metadata();
+    tablet_metadata->set_id(tablet_id);
+    tablet_metadata->set_next_rowset_id(20);
+    auto* new_rowset = tablet_metadata->add_rowsets();
+    new_rowset->set_id(15);
+    new_rowset->set_num_rows(10);
+    new_rowset->set_data_size(100);
+    auto* new_segment = new_rowset->add_segment_metas();
+    new_segment->set_filename(reused_segment);
+    new_segment->set_size(100);
+    new_rowset->add_del_files()->set_name(reused_del);
+
+    auto status = applier->apply(*log);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_EQ(1, meta->compaction_inputs_size());
+    const auto& garbage_rowset = meta->compaction_inputs(0);
+    EXPECT_FALSE(garbage_rowset.has_delete_predicate());
+    EXPECT_FALSE(garbage_rowset.has_next_compaction_offset());
+    EXPECT_EQ(200, garbage_rowset.data_size());
+    ASSERT_EQ(1, garbage_rowset.segment_metas_size());
+    EXPECT_EQ(garbage_segment, garbage_rowset.segment_metas(0).filename());
+    EXPECT_EQ(200, garbage_rowset.segment_metas(0).size());
+    EXPECT_EQ("garbage-segment-encryption", garbage_rowset.segment_metas(0).encryption_meta());
+    ASSERT_EQ(1, garbage_rowset.del_files_size());
+    EXPECT_EQ(garbage_del, garbage_rowset.del_files(0).name());
+    EXPECT_EQ("garbage-del-encryption", garbage_rowset.del_files(0).encryption_meta());
+}
+
+TEST(TxnLogApplierCompactionTest, NonPKLakeReplicationArchivesOnlyUnreferencedFiles) {
+    verify_lake_replication_archives_only_unreferenced_files(false, 40080);
+}
+
+TEST(TxnLogApplierCompactionTest, PKLakeReplicationArchivesOnlyUnreferencedFiles) {
+    verify_lake_replication_archives_only_unreferenced_files(true, 40081);
 }
 
 // Regression: PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded old

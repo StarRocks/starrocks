@@ -295,6 +295,8 @@ public class CompactionMgr implements MemoryTrackable {
                 v = new PartitionStatistics(partition);
             }
             v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            // A new request runs on the next cycle even if the partition is cooling down.
+            v.setNextCompactionTime(0);
             return v;
         });
         LOG.info("Trigger manual compaction, {}", statistics);

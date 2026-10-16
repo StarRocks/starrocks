@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -928,6 +929,27 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                             columnDef.getPos());
                 }
             });
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableDictColumnsClause(AlterTableDictColumnsClause clause, ConnectContext context) {
+        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY only supports OLAP tables");
+        }
+        if (clause.getColumns() == null || clause.getColumns().isEmpty()) {
+            throw new SemanticException("DISABLE/ENABLE DICTIONARY requires at least one column");
+        }
+        for (String colName : clause.getColumns()) {
+            Column column = table.getColumn(colName);
+            if (column == null) {
+                throw new SemanticException("Column: " + colName + " does not exist in table " + table.getName());
+            }
+            if (!column.getType().isStringType()) {
+                throw new SemanticException("Column: " + colName + " is not a string column; low-cardinality " +
+                        "dictionary only applies to string columns");
+            }
         }
         return null;
     }

@@ -231,6 +231,13 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
+        <dependency>
+            <groupId>com.unboundid</groupId>
+            <artifactId>unboundid-ldapsdk</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.awaitility/awaitility -->
         <dependency>
             <groupId>org.awaitility</groupId>
@@ -272,9 +279,9 @@ under the License.
             <artifactId>commons-io</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+        <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
         <dependency>
-            <groupId>com.baidu</groupId>
+            <groupId>com.starrocks</groupId>
             <artifactId>jprotobuf-rpc-core</artifactId>
         </dependency>
 

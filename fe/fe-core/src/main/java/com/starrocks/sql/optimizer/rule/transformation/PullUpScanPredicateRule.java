@@ -126,10 +126,12 @@ public class PullUpScanPredicateRule extends TransformationRule {
         SubfieldCollector collector = new SubfieldCollector(context.getColumnRefFactory());
         collector.visit(reservedPredicates, null);
 
+        Map<ScalarOperator, ColumnRefOperator> collectedMappings = new HashMap<>();
         collector.getExpressionMapping().forEach((k, v) -> {
             if (!translatingMap.containsKey(k)) {
                 translatingMap.put(k, v);
                 newProjections.put(v, k);
+                collectedMappings.put(k, v);
             }
         });
 
@@ -139,6 +141,21 @@ public class PullUpScanPredicateRule extends TransformationRule {
         }
 
         ColumnRefSet predicateUsedColumnRefSet = reservedPredicates.getUsedColumns();
+
+        // SubfieldCollector mints a column ref for every subfield node it walks, the intermediate ones
+        // included: for `s1.s2[1].a` it maps `s1.s2`, `s1.s2[1]` and `s1.s2[1].a`, while
+        // replaceScalarOperator only substitutes the outermost match into the predicate. Projecting the
+        // unreferenced ones out of the scan makes it emit a wider slice of the column than the
+        // ColumnAccessPath PruneSubfieldRule already computed for this scan, so such a slot is served by a
+        // partially materialized column - e.g. an ARRAY<STRUCT<a, b>> whose `b` field holds no rows, which
+        // reads out of bounds as soon as anything appends that column. Keep only the refs the rewritten
+        // predicate really uses.
+        collectedMappings.forEach((expr, ref) -> {
+            if (!predicateUsedColumnRefSet.contains(ref)) {
+                translatingMap.remove(expr);
+                newProjections.remove(ref);
+            }
+        });
         newScanOperator.buildColumnFilters(pushedPredicates);
 
         List<ColumnRefOperator> predicateUsedColumns = predicateUsedColumnRefSet

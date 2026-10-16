@@ -34,6 +34,8 @@ Description of the return parameters:
 6. Comment:    Configuration item description 
 ```
 
+For configuration items that hold credentials, such as passwords, secret keys, and tokens, `Value` does not show the actual value. If the item is set, `Value` is `******`. If the item is not set, `Value` is empty. Masking affects only the output. The FE still uses the actual value.
+
 ## Examples
 
 1. View the configuration of the current FE node.

@@ -229,51 +229,34 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader
 void ColumnReaderFactory::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                             bool case_sensitive, std::vector<int32_t>& pos) {
     DCHECK(field.type == ColumnType::STRUCT);
+    // A subfield is matched by its field id when it has one, otherwise by its physical name, otherwise by its
+    // name. field_ids / field_physical_names are either empty or hold one entry per child, with -1 / "" for a
+    // subfield that has none.
+    std::unordered_map<int32_t, size_t> field_id_2_pos;
     if (!col_type.field_ids.empty()) {
-        std::unordered_map<int32_t, size_t> field_id_2_pos;
         for (size_t i = 0; i < field.children.size(); i++) {
             field_id_2_pos.emplace(field.children[i].field_id, i);
         }
+    }
+    std::unordered_map<std::string, size_t> field_name_2_pos;
+    for (size_t i = 0; i < field.children.size(); i++) {
+        const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
+        field_name_2_pos.emplace(format_field_name, i);
+    }
 
-        for (size_t i = 0; i < col_type.children.size(); i++) {
+    for (size_t i = 0; i < col_type.children.size(); i++) {
+        if (!col_type.field_ids.empty() && col_type.field_ids[i] != -1) {
             auto it = field_id_2_pos.find(col_type.field_ids[i]);
-            if (it == field_id_2_pos.end()) {
-                pos[i] = -1;
-                continue;
-            }
-            pos[i] = it->second;
-        }
-    } else {
-        std::unordered_map<std::string, size_t> field_name_2_pos;
-        for (size_t i = 0; i < field.children.size(); i++) {
-            const std::string& format_field_name = Utils::format_name(field.children[i].name, case_sensitive);
-            field_name_2_pos.emplace(format_field_name, i);
+            pos[i] = it == field_id_2_pos.end() ? -1 : static_cast<int32_t>(it->second);
+            continue;
         }
 
-        if (!col_type.field_physical_names.empty()) {
-            for (size_t i = 0; i < col_type.children.size(); i++) {
-                const std::string& formatted_physical_name =
-                        Utils::format_name(col_type.field_physical_names[i], case_sensitive);
-
-                auto it = field_name_2_pos.find(formatted_physical_name);
-                if (it == field_name_2_pos.end()) {
-                    pos[i] = -1;
-                    continue;
-                }
-                pos[i] = it->second;
-            }
-        } else {
-            for (size_t i = 0; i < col_type.children.size(); i++) {
-                const std::string formatted_subfield_name = Utils::format_name(col_type.field_names[i], case_sensitive);
-
-                auto it = field_name_2_pos.find(formatted_subfield_name);
-                if (it == field_name_2_pos.end()) {
-                    pos[i] = -1;
-                    continue;
-                }
-                pos[i] = it->second;
-            }
-        }
+        const std::string& subfield_name =
+                !col_type.field_physical_names.empty() && !col_type.field_physical_names[i].empty()
+                        ? col_type.field_physical_names[i]
+                        : col_type.field_names[i];
+        auto it = field_name_2_pos.find(Utils::format_name(subfield_name, case_sensitive));
+        pos[i] = it == field_name_2_pos.end() ? -1 : static_cast<int32_t>(it->second);
     }
 }
 

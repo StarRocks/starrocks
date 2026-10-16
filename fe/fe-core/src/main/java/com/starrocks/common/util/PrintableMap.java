@@ -61,12 +61,14 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("azure.adls1.oauth2_credential");
         SENSITIVE_KEY.add("azure.adls1.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.shared_key");
+        SENSITIVE_KEY.add("azure.adls2.sas_token");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_secret");
         SENSITIVE_KEY.add("authentication_ldap_simple_bind_root_pwd");
         SENSITIVE_KEY.add("authentication_ldap_simple_ssl_conn_trust_store_pwd");
         SENSITIVE_KEY.add("client_secret");
         SENSITIVE_KEY.add("ldap_bind_root_pwd");
+        SENSITIVE_KEY.add("ldap_ssl_conn_trust_store_pwd");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
@@ -113,7 +115,7 @@ public class PrintableMap<K, V> {
                 sb.append("\"");
             }
             if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
-                sb.append("***");
+                sb.append(CredentialMask.SHORT);
             } else {
                 String text = entry.getValue().toString();
                 if (withQuotation) {

@@ -52,6 +52,25 @@ public abstract class TabletReshardJob implements Writable {
         public boolean isFinalState() {
             return this == JobState.FINISHED || this == JobState.ABORTED;
         }
+
+        /**
+         * Whether recovery -- journal replay or an image load -- should register a job in this state
+         * in TabletReshardJobMgr's resharding-tablet registry. It answers what to register, not what
+         * may already be there: replaying ABORTING removes nothing, because both replayAbortingJob()
+         * implementations are no-ops, so an entry registered earlier survives until abort cleanup or
+         * the ABORTED replay unregisters it.
+         *
+         * <p>PENDING is excluded because it has not reserved a commit version yet, so registering
+         * would use the default zero, and getReshardingTablet() reads zero as "redirect every
+         * version". ABORTING and the final states are excluded because they are giving the new
+         * tablets up, however they were reached. The two combine into the case that matters:
+         * abort() only accepts PENDING, so an aborted job journals ABORTING while its version is
+         * still zero, and registering that would redirect every publish on the old tablets into
+         * tablets no publish will ever write.
+         */
+        public boolean redirectsPublish() {
+            return this == JobState.PREPARING || this == JobState.RUNNING || this == JobState.CLEANING;
+        }
     }
 
     public enum JobType {

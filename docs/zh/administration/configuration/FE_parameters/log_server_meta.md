@@ -832,9 +832,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本: v4.2.0
 - 描述: 是否对大部分外部 FE HTTP 接口启用 Basic Auth。凭证通过 `AuthenticationHandler.authenticate()` 校验，因此 LDAP / security integration 在 HTTP 路径上的工作方式与 MySQL 协议一致。以下接口始终豁免:
   - 公开探针 / 可观测性: `/api/bootstrap`、`/api/oauth2`。
-  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/dump`、`/dump_starmgr`、`/service_id`、`/static`、`/api/_meta_replay_state`、`/api/get_small_file`。
+  - 由 handler 自行通过 IP 白名单或 token 鉴权的对等 FE / 控制面端点: `/image`、`/check`、`/journal_id`、`/info`、`/role`、`/static`、`/api/get_small_file`。
 
-  特权接口还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
+  `/dump`、`/dump_starmgr`、`/service_id` 不在豁免范围内：无论该参数如何设置，都只允许已认证的管理员访问。认证方式可以是 HTTP Basic 认证，也可以是登录 FE Web 控制台后获得的会话 cookie。满足以下任一条件即视为管理员：通过登录时处于激活状态的角色拥有 SYSTEM 级 `NODE` 权限，例如将内置角色 `cluster_admin` 设为用户的默认角色（当 `activate_all_roles_on_login` 为 `true` 时，用户被授予的任意角色均可）；是 `root` 用户或拥有 `root` 角色；同时拥有 `db_admin` 和 `user_admin` 角色。
+
+  `/api/_meta_replay_state` 同样不在豁免范围内：无论该参数如何设置，都要求使用以下用户进行 HTTP Basic 认证：`root` 用户、拥有 `root` 角色的用户，或同时拥有 `db_admin` 和 `user_admin` 角色的用户。仅拥有 `NODE` 权限不足以访问该接口。
+
+  受该参数控制的其他特权接口（不包括 `/dump`、`/dump_starmgr`、`/service_id`、`/api/_meta_replay_state`）还要求会话中**当前激活**了 SYSTEM 级 RBAC 权限（`OPERATE` 或 `NODE`）。若用户已 GRANT 但未设为默认角色，需 `SET DEFAULT ROLE <roles> TO <user>;`，或将全局变量 `activate_all_roles_on_login` 设为 `true` 让角色登录时自动激活。LDAP / security integration 的组 → 角色映射会自动激活。
 
 ### `http_web_page_display_hardware`
 
@@ -1070,7 +1074,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 毫秒
 - 是否可变: No
-- 描述: 空闲客户端连接超时的时间长度。
+- 描述: 空闲客户端连接超时的时间长度。FE Thrift 服务器会关闭空闲达到该时长的客户端连接。因此，FE 连接池中通往其他 FE 的连接空闲达到该值的 80% 后，会在下次使用前被替换为新连接，避免在对端可能已经关闭的连接上发送请求。建议所有 FE 使用相同的取值。
 - 引入版本: -
 
 ### `thrift_rpc_max_body_size`
@@ -1097,8 +1101,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: No
-- 描述: 请求待处理队列的长度。如果 Thrift 服务器中正在处理的线程数超过 `thrift_server_max_worker_threads` 中指定的值，则新请求将添加到待处理队列。
+- 描述: 当 `thrift_server_max_worker_threads` 个工作线程全部繁忙时，可排队等待工作线程的连接数量。该值限定的是待处理队列能容纳多少连接，而非最终会处理多少连接：队列已满时到达的连接会被立即关闭，不再重试；已入队但等待时间超过 `thrift_server_queue_timeout_ms` 的连接，会在工作线程取到它时被直接关闭、不予处理。这两种情况分别由 `starrocks_fe_thrift_server_rejected_connections_total` 和 `starrocks_fe_thrift_server_expired_connections_total` 统计。
 - 引入版本: -
+
+### `thrift_server_queue_timeout_ms`
+
+- 默认值: 0
+- 类型: Long
+- 单位: ms
+- 是否可变: Yes
+- 描述: 连接在被工作线程取走之前，可在 Thrift 服务器待处理队列中滞留的最长时间。超过该时间的连接将被直接关闭且不予处理，其前提是此时调用方已经放弃，继续处理只会占住工作线程，使其无法处理仍有人等待的请求。启用后，该值同时限定了突发流量过后队列排空所需的时间，无论此前堆积多深。
+
+  默认值 `0` 表示关闭该检查：无论滞留多久，所有排队连接都会被处理。默认关闭是因为上述前提并不适用于所有调用方，而排队中的连接并未携带服务端可读取的截止时间。各类调用方实际使用的超时相差四个数量级：FE 内部普通 RPC 在 `thrift_rpc_timeout_ms`（10 秒）后放弃；而从 Follower 转发到 Leader 的语句会等待会话执行超时加 `thrift_rpc_timeout_ms`——按 `query_timeout` 默认值约为 310 秒，按 `insert_timeout` 默认值约为 4 小时；BE 的 Stream Load 与事务提交 RPC 则等待 `stream_load_thrift_rpc_timeout_ms`（60 秒）与该导入任务 `timeout_second` 四分之一中的较大值。由于 `query_timeout`、`insert_timeout` 和 `timeout_second` 均可由用户设置且没有上限，不存在对所有集群都安全的固定值：任何短到足以加快恢复的超时，都可能在它本应缓解的饱和期间，切断客户端仍在等待的转发语句。
+
+  请按集群启用，取值应高于该集群客户端实际依赖的最大截止时间——依据该集群的 `query_timeout` 与 `insert_timeout` 推导。每次丢弃都会计入 `starrocks_fe_thrift_server_expired_connections_total`，并输出一条标明对端地址、经过限流的 WARN 日志。无论是否启用该检查，`starrocks_fe_thrift_server_queue_wait_ms` 都会报告队列等待时间，可据此在启用前确定取值。
+- 引入版本: v4.2.0
 
 ## 元数据和集群管理
 
@@ -1633,7 +1650,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
+- 描述: 控制 Thrift RPC 调用将尝试的总次数。此值由 `ThriftRPCRequestExecutor`（以及 `NodeMgr` 和 `VariableMgr` 等调用者）用作重试的循环计数 — 即，值为 3 允许最多三次尝试，包括初始尝试。在 `TTransportException` 上，执行器将尝试重新打开连接并重试此计数；当原因是 `SocketTimeoutException` 或重新打开失败时，它不会重试。每次重试前，执行器会先随机等待一段时间再重新打开连接：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止。这样，同时断开连接的多个调用方不会在同一时刻集中重连。每次尝试都受 `thrift_rpc_timeout_ms` 配置的每次尝试超时限制。增加此值可提高对瞬时连接失败的弹性，但会增加整体 RPC 延迟和资源使用。
 - 引入版本: v3.2.0
 
 ### `thrift_rpc_strict_mode`

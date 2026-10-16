@@ -15,6 +15,7 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
@@ -24,9 +25,35 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class CredentialUtilTest {
+    @Test
+    public void testAdls2SecretsAreMaskedInRenderedProperties() {
+        for (String key : List.of(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY,
+                CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN,
+                CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET)) {
+            for (String secret : List.of("", "abc", "fake-sensitive-credential")) {
+                Map<String, String> properties = new HashMap<>(Map.of(key, secret,
+                        CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net"));
+                CredentialUtil.maskCredential(properties);
+                String rendered = new PrintableMap<>(properties, " = ", true, true).toString();
+                Assertions.assertTrue(rendered.contains("******"), key);
+                Assertions.assertTrue(rendered.contains("account.dfs.core.windows.net"));
+                if (!secret.isEmpty()) {
+                    Assertions.assertFalse(rendered.contains(secret), key);
+                }
+                // SQL renderers that mask directly through PrintableMap must cover the same credentials.
+                rendered = new PrintableMap<>(Map.of(key, secret), " = ", true, true, true).toString();
+                Assertions.assertTrue(rendered.contains("***"), key);
+                if (!secret.isEmpty()) {
+                    Assertions.assertFalse(rendered.contains(secret), key);
+                }
+            }
+        }
+    }
+
     @Test
     public void testMaskCredential() {
         Map<String, String> properties = new HashMap<>();

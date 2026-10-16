@@ -69,6 +69,7 @@ import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -1084,5 +1085,59 @@ public class LakePublishBatchTest {
             commitInfos.add(tabletCommitInfo);
         }
         return commitInfos;
+    }
+
+    @Test
+    public void testBatchInBackoffIsNotResubmitted() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+        List<TabletCommitInfo> tablets = getPartitionTabletCommitInfos(partition);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "backoff_1_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId1, tablets, Lists.newArrayList(), null);
+        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "backoff_2_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId2, tablets, Lists.newArrayList(), null);
+
+        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+        TransactionState state1 = dbTxnMgr.getTransactionState(txnId1);
+        TransactionState state2 = dbTxnMgr.getTransactionState(txnId2);
+        TransactionStateBatch batch = new TransactionStateBatch(Lists.newArrayList(state1, state2));
+
+        // Mark every partition of the batch as having just failed to publish. This is the state a
+        // stalled object store leaves behind, and the daemon used to resubmit the whole batch on
+        // every tick while it lasted.
+        long now = System.currentTimeMillis();
+        for (TransactionState state : Lists.newArrayList(state1, state2)) {
+            for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
+                for (PartitionCommitInfo pci : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                    pci.markPublishFailed(now);
+                }
+            }
+        }
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        daemon.publishVersionForLakeTableBatch(Lists.newArrayList(batch));
+        // Skipped before the batch was claimed, so no publish task was even marked as sent.
+        assertFalse(state1.hasSendTask());
+        assertFalse(state2.hasSendTask());
+
+        // Once the back-off has elapsed the same batch publishes normally.
+        for (TransactionState state : Lists.newArrayList(state1, state2)) {
+            for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
+                for (PartitionCommitInfo pci : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                    // PublishVersionDaemon.RETRY_INTERVAL_MS is 1s.
+                    pci.markPublishFailed(now - 2000);
+                }
+            }
+        }
+        awaitPublish(daemon, waiter1, waiter2);
     }
 }

@@ -136,7 +136,7 @@ public final class TabletPreSplitCoordinator {
         if (baseIndex.getTablets().size() != 1) {
             return skipEligibility(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
         }
-        if (baseIndex.getRowCount() > 0) {
+        if (!PreSplitTargets.isEmptyPartition(partition, baseIndex)) {
             return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
         }
 
@@ -851,7 +851,7 @@ public final class TabletPreSplitCoordinator {
                 return null;
             }
             List<Tablet> tablets = baseIndex.getTablets();
-            if (tablets.size() != 1 || baseIndex.getRowCount() > 0) {
+            if (tablets.size() != 1 || !PreSplitTargets.isEmptyPartition(physicalPartition, baseIndex)) {
                 return null;
             }
             return new ResolvedPartition(physicalPartition.getId(), tablets.get(0).getId());

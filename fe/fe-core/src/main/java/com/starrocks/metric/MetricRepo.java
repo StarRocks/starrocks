@@ -60,6 +60,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
@@ -322,6 +323,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
     public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
+    // A reshard publish is retried until it succeeds (its transaction is already committed, so there is
+    // no rollback path), which means a deterministic failure never shows up as an aborted job. This
+    // counter is the only signal that a reshard job is stuck retrying, so alert on its rate.
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_PUBLISH_FAILED;
 
     // Sample-Based Tablet Pre-Split metrics. The coordinator wires the eligibility-skip,
     // post-submit hard-cap, load-abort counters and the two wait-time histograms. The
@@ -350,9 +355,15 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("reason",
                     () -> new LongCounterMetric("tablet_pre_split_eligibility_skipped",
                             MetricUnit.REQUESTS, "total eligibility-gate skips by reason"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TABLET_PRE_SPLIT_DATA_TIER_FILE_SELECTION =
+            new MetricWithLabelGroup<>("mode",
+                    () -> new LongCounterMetric("tablet_pre_split_data_tier_file_selection",
+                            MetricUnit.REQUESTS,
+                            "total data-tier FILES samples by how their scanned files were chosen"));
     public static Histogram HISTO_TABLET_PRE_SPLIT_PRE_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_POST_SUBMIT_WAIT_MS;
     public static Histogram HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED;
+    public static Histogram HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT;
 
     public static Histogram HISTO_QUERY_LATENCY;
 
@@ -443,6 +454,11 @@ public final class MetricRepo {
 
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
+    public static GaugeMetric<Long> GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS;
+    public static LongCounterMetric COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS;
+    public static Histogram HISTO_THRIFT_SERVER_QUEUE_WAIT_MS;
+    public static LongCounterMetric COUNTER_THRIFT_CLIENT_RETRIES;
 
     private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
@@ -468,6 +484,32 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
         GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
         GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
+
+        GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS = new GaugeMetric<>(
+                "thrift_server_acceptor_stall_ms", MetricUnit.MILLISECONDS,
+                "milliseconds since the thrift accept loop last made progress") {
+            @Override
+            public Long getValue() {
+                return ThriftServer.getAcceptorStallTimeMs();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_THRIFT_SERVER_ACCEPTOR_STALL_MS);
+
+        COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_rejected_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed because its worker pool was saturated");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_REJECTED_CONNECTIONS);
+
+        COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS = new LongCounterMetric(
+                "thrift_server_expired_connections_total", MetricUnit.REQUESTS,
+                "total connections the thrift server closed unserved because they waited in the pending "
+                        + "queue longer than thrift_server_queue_timeout_ms");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_SERVER_EXPIRED_CONNECTIONS);
+
+        COUNTER_THRIFT_CLIENT_RETRIES = new LongCounterMetric(
+                "thrift_client_retries_total", MetricUnit.REQUESTS,
+                "total requests FE thrift rpc calls resent on a reopened connection after the previous one broke");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_THRIFT_CLIENT_RETRIES);
 
         // 1. gauge
         // load jobs
@@ -1039,6 +1081,10 @@ public final class MetricRepo {
         COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
 
+        COUNTER_TABLET_RESHARD_PUBLISH_FAILED = new LongCounterMetric("tablet_reshard_publish_failed",
+                MetricUnit.REQUESTS, "total tablet reshard publish attempts that failed and will be retried");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_PUBLISH_FAILED);
+
         COUNTER_TABLET_PRE_SPLIT_POST_SUBMIT_HARD_CAP = new LongCounterMetric(
                 "tablet_pre_split_post_submit_hard_cap", MetricUnit.REQUESTS,
                 "total Sample-Based Tablet Pre-Split post-submit hard-cap events (load transaction aborted)");
@@ -1077,6 +1123,12 @@ public final class MetricRepo {
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
+        // How long connections sat in the thrift server pending queue before a worker reached them,
+        // sampled whether the connection was then served or dropped as expired. This is the leading
+        // indicator of thrift saturation: it rises while the pool is still keeping up, well before
+        // rejections start.
+        HISTO_THRIFT_SERVER_QUEUE_WAIT_MS = METRIC_REGISTER.histogram(
+                MetricRegistry.name("thrift_server", "queue_wait", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
         HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
@@ -1087,6 +1139,8 @@ public final class MetricRepo {
                 MetricRegistry.name("tablet_pre_split", "post_submit_wait", "ms"));
         HISTO_TABLET_PRE_SPLIT_BOUNDARIES_PLANNED = METRIC_REGISTER.histogram(
                 MetricRegistry.name("tablet_pre_split", "boundaries_planned"));
+        HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_pre_split", "data_tier_scanned_bytes", "percent"));
         // Compaction score (rounded to the nearest integer) of the most recent partition that
         // triggered a lake compaction. The trigger picks partitions by *max* tablet score, so we
         // expose the max (not the average) — keeps the metric aligned with the scheduler's

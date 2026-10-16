@@ -15,9 +15,17 @@
 #include "util/thrift_rpc_helper.h"
 
 #include <gtest/gtest.h>
+#include <thrift/transport/TServerSocket.h>
 
+#include <limits>
+#include <memory>
+#include <vector>
+
+#include "common/config.h"
 #include "runtime/client_cache.h"
+#include "runtime/exec_env.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/network_util.h"
 
 namespace starrocks {
@@ -28,6 +36,181 @@ protected:
 
     ~ThriftRpcHelperTest() override {}
 };
+
+TEST_F(ThriftRpcHelperTest, retry_backoff_ceiling) {
+    const std::vector<int64_t> expected = {100, 200, 400, 800, 1000, 1000};
+    for (int i = 0; i < static_cast<int>(expected.size()); ++i) {
+        EXPECT_EQ(expected[i], ThriftRpcHelper::retry_backoff_ceiling_ms(100, i));
+    }
+    EXPECT_EQ(25, ThriftRpcHelper::retry_backoff_ceiling_ms(25, 0));
+    EXPECT_EQ(100, ThriftRpcHelper::retry_backoff_ceiling_ms(25, 2));
+    EXPECT_EQ(0, ThriftRpcHelper::retry_backoff_ceiling_ms(0, 10));
+    EXPECT_EQ(0, ThriftRpcHelper::retry_backoff_ceiling_ms(-1, 10));
+    EXPECT_EQ(0, ThriftRpcHelper::retry_backoff_ceiling_ms(std::numeric_limits<int64_t>::min(), 10));
+    EXPECT_EQ(1000, ThriftRpcHelper::retry_backoff_ceiling_ms(std::numeric_limits<int64_t>::max(), 0));
+    EXPECT_EQ(1000, ThriftRpcHelper::retry_backoff_ceiling_ms(1, std::numeric_limits<int>::max()));
+    EXPECT_EQ(0, ThriftRpcHelper::retry_backoff_ceiling_ms(0, std::numeric_limits<int>::max()));
+}
+
+class ThriftRpcHelperRetryTest : public ThriftRpcHelperTest {
+protected:
+    void SetUp() override {
+        ThriftRpcHelperTest::SetUp();
+        // ThriftRpcHelper on this branch takes its client cache from ExecEnv, so point the
+        // global ExecEnv's frontend cache at a test-owned cache and restore it on teardown.
+        _exec_env = ExecEnv::GetInstance();
+        _saved_exec_env = ThriftRpcHelper::_s_exec_env;
+        _saved_frontend_cache = _exec_env->_frontend_client_cache;
+        _exec_env->_frontend_client_cache = &_cache;
+        ThriftRpcHelper::setup(_exec_env);
+        _saved_interval_ms = config::thrift_client_retry_interval_ms;
+        config::thrift_client_retry_interval_ms = 100;
+        // Callbacks below simulate RPC outcomes. A listening socket is enough for
+        // the real client cache's initial connect and subsequent reopens.
+        _listener = std::make_unique<apache::thrift::transport::TServerSocket>("127.0.0.1", 0);
+        _listener->listen();
+        _port = _listener->getPort();
+        ASSERT_GT(_port, 0);
+        auto* sync_point = SyncPoint::GetInstance();
+        sync_point->SetCallBack("ThriftRpcHelper::rpc::backoff_ms", [this](void* arg) {
+            auto* delay_ms = static_cast<int64_t*>(arg);
+            _delays_ms.push_back(*delay_ms);
+            *delay_ms = 0;
+        });
+        sync_point->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        config::thrift_client_retry_interval_ms = _saved_interval_ms;
+        _cache.close_connections(make_network_address("127.0.0.1", _port));
+        _listener->close();
+        _exec_env->_frontend_client_cache = _saved_frontend_cache;
+        ThriftRpcHelper::setup(_saved_exec_env);
+        ThriftRpcHelperTest::TearDown();
+    }
+
+    Status call(const ThriftRpcHelper::ConnectionCallBack<FrontendServiceClient>& callback, int retry_times = 2) {
+        return ThriftRpcHelper::rpc<FrontendServiceClient>("127.0.0.1", _port, callback, 1000, retry_times);
+    }
+
+    FrontendServiceClientCache _cache;
+    ExecEnv* _exec_env = nullptr;
+    ExecEnv* _saved_exec_env = nullptr;
+    FrontendServiceClientCache* _saved_frontend_cache = nullptr;
+    std::unique_ptr<apache::thrift::transport::TServerSocket> _listener;
+    int _port = 0;
+    int64_t _saved_interval_ms = 0;
+    std::vector<int64_t> _delays_ms;
+};
+
+TEST_F(ThriftRpcHelperRetryTest, success_does_not_back_off) {
+    int attempts = 0;
+    ASSERT_OK(call([&](FrontendServiceConnection&) { ++attempts; }));
+    EXPECT_EQ(1, attempts);
+    EXPECT_TRUE(_delays_ms.empty());
+}
+
+TEST_F(ThriftRpcHelperRetryTest, recovers_after_retry) {
+    int attempts = 0;
+    ASSERT_OK(call([&](FrontendServiceConnection&) {
+        if (++attempts < 3) {
+            throw apache::thrift::TException("transient failure");
+        }
+    }));
+    EXPECT_EQ(3, attempts);
+    ASSERT_EQ(2, _delays_ms.size());
+    EXPECT_GE(_delays_ms[0], 0);
+    EXPECT_LE(_delays_ms[0], 100);
+    EXPECT_GE(_delays_ms[1], 0);
+    EXPECT_LE(_delays_ms[1], 200);
+}
+
+TEST_F(ThriftRpcHelperRetryTest, exhausted_retries_preserve_error_without_final_wait) {
+    int attempts = 0;
+    auto st = call([&](FrontendServiceConnection&) {
+        ++attempts;
+        throw apache::thrift::transport::TTransportException(apache::thrift::transport::TTransportException::TIMED_OUT,
+                                                             "original timeout");
+    });
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_NE(std::string::npos, st.message().find("original timeout"));
+    EXPECT_EQ(3, attempts);
+    EXPECT_EQ(2, _delays_ms.size());
+}
+
+TEST_F(ThriftRpcHelperRetryTest, zero_retries_does_not_wait) {
+    int attempts = 0;
+    auto st = call(
+            [&](FrontendServiceConnection&) {
+                ++attempts;
+                throw apache::thrift::TException("failure");
+            },
+            0);
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_EQ(1, attempts);
+    EXPECT_TRUE(_delays_ms.empty());
+}
+
+TEST_F(ThriftRpcHelperRetryTest, samples_full_jitter_and_snapshots_interval) {
+    constexpr int retries = 32;
+    int attempts = 0;
+    auto st = call(
+            [&](FrontendServiceConnection&) {
+                ++attempts;
+                config::thrift_client_retry_interval_ms = 0;
+                throw apache::thrift::TException("failure");
+            },
+            retries);
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_EQ(retries + 1, attempts);
+    ASSERT_EQ(retries, _delays_ms.size());
+    bool has_positive_delay = false;
+    bool has_different_delay = false;
+    for (int i = 0; i < retries; ++i) {
+        EXPECT_GE(_delays_ms[i], 0);
+        EXPECT_LE(_delays_ms[i], ThriftRpcHelper::retry_backoff_ceiling_ms(100, i));
+        has_positive_delay |= _delays_ms[i] > 0;
+        has_different_delay |= _delays_ms[i] != _delays_ms[0];
+    }
+    EXPECT_TRUE(has_positive_delay);
+    EXPECT_TRUE(has_different_delay);
+}
+
+TEST_F(ThriftRpcHelperRetryTest, nonpositive_interval_disables_wait) {
+    for (int64_t interval_ms : {0, -1}) {
+        config::thrift_client_retry_interval_ms = interval_ms;
+        _delays_ms.clear();
+        auto st = call([](FrontendServiceConnection&) { throw apache::thrift::TException("failure"); });
+        EXPECT_STATUS(Status::ThriftRpcError(""), st);
+        EXPECT_EQ((std::vector<int64_t>{0, 0}), _delays_ms);
+    }
+}
+
+TEST_F(ThriftRpcHelperRetryTest, initial_connection_failure_does_not_retry) {
+    _listener->close();
+    auto st = call([](FrontendServiceConnection&) { ADD_FAILURE() << "callback should not run"; });
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_TRUE(_delays_ms.empty());
+}
+
+TEST_F(ThriftRpcHelperRetryTest, reopen_failure_preserves_original_error) {
+    SyncPoint::GetInstance()->SetCallBack("ThriftRpcHelper::rpc::backoff_ms", [this](void* arg) {
+        _delays_ms.push_back(*static_cast<int64_t*>(arg));
+        *static_cast<int64_t*>(arg) = 0;
+        _listener->close();
+    });
+    int attempts = 0;
+    auto st = call([&](FrontendServiceConnection&) {
+        ++attempts;
+        throw apache::thrift::TException("original failure");
+    });
+    EXPECT_STATUS(Status::ThriftRpcError(""), st);
+    EXPECT_NE(std::string::npos, st.message().find("original failure"));
+    EXPECT_EQ(1, attempts);
+    EXPECT_EQ(1, _delays_ms.size());
+}
 
 TEST_F(ThriftRpcHelperTest, fe_rpc_impl) {
     {

@@ -62,6 +62,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
+import java.util.function.Predicate;
 
 /*
  * if you want to visit the atrribute(such as queryID,defaultDb)
@@ -104,6 +105,11 @@ public class ProfileManager implements MemoryTrackable {
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP, SQL_DIALECT));
 
+    /**
+     * One cached profile. An element is built completely by {@link #createElement} and {@link #pushProfile}
+     * before it is published into the map, and is never modified afterwards. Readers rely on that: they take a
+     * snapshot of the map under the read lock and then read the elements without it.
+     */
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
         public long startTimeMs = -1;
@@ -156,6 +162,11 @@ public class ProfileManager implements MemoryTrackable {
                 default:
                     return profile.toString();
             }
+        }
+
+        /** The user who ran the query, as recorded in the summary profile; null when the profile records none. */
+        public String getUser() {
+            return infoStrings.get(USER);
         }
 
         public List<String> toRow(ConnectContext context) {
@@ -231,6 +242,10 @@ public class ProfileManager implements MemoryTrackable {
         return profileString;
     }
 
+    /**
+     * Publishes a profile. The element is finished (info strings, serialized content, plan) before it is put
+     * into the map under the write lock, which is what lets readers use it lock-free after a snapshot.
+     */
     public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
@@ -318,27 +333,34 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
-    public List<List<String>> getAllQueries() {
+    /**
+     * Rows of {@link #PROFILE_HEADERS} for the cached profiles accepted by {@code filter}, newest first.
+     *
+     * Thread safety: the set of profiles is snapshotted under the read lock by {@link #getAllProfileElements()};
+     * the filter and the row formatting then run on that snapshot without the lock. This is safe because an
+     * element is immutable once published (see {@link ProfileElement}), and it is deliberate: the filter may
+     * consult the access controller, and holding the lock across that call would block every profile push on
+     * this frontend. Callers see a consistent view of the map as of the snapshot, as before.
+     */
+    public List<List<String>> getAllQueries(Predicate<ProfileElement> filter) {
         ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
         List<List<String>> result = Lists.newLinkedList();
-        readLock.lock();
-        try {
-            for (ProfileElement element : profileMap.values()) {
-                Map<String, String> infoStrings = element.infoStrings;
-                List<String> row = Lists.newArrayList();
-                for (String str : PROFILE_HEADERS) {
-                    if (START_TIME.equals(str)) {
-                        row.add(formatTimestamp(element.startTimeMs, sessionZone));
-                    } else if (END_TIME.equals(str)) {
-                        row.add(formatTimestamp(element.endTimeMs, sessionZone));
-                    } else {
-                        row.add(infoStrings.get(str));
-                    }
-                }
-                result.add(0, row);
+        for (ProfileElement element : getAllProfileElements()) {
+            if (!filter.test(element)) {
+                continue;
             }
-        } finally {
-            readLock.unlock();
+            Map<String, String> infoStrings = element.infoStrings;
+            List<String> row = Lists.newArrayList();
+            for (String str : PROFILE_HEADERS) {
+                if (START_TIME.equals(str)) {
+                    row.add(formatTimestamp(element.startTimeMs, sessionZone));
+                } else if (END_TIME.equals(str)) {
+                    row.add(formatTimestamp(element.endTimeMs, sessionZone));
+                } else {
+                    row.add(infoStrings.get(str));
+                }
+            }
+            result.add(0, row);
         }
         return result;
     }
@@ -389,6 +411,10 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
+    /**
+     * A snapshot of the cached profiles, taken under the read lock. The elements may be read after the lock is
+     * released because they are immutable once published (see {@link ProfileElement}).
+     */
     public List<ProfileElement> getAllProfileElements() {
         List<ProfileElement> result = Lists.newArrayList();
         readLock.lock();

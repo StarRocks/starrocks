@@ -162,6 +162,14 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：存算分离集群下，主键表轻量 Compaction 发布阶段，`RowsMapperIterator` 流水化读取 `.lcrm` 文件时使用的 sub-chunk 粒度。每个输出 segment 被切分为 `ceil(segment_bytes / lake_rows_mapper_sub_chunk_bytes)` 个 sub-chunk，独立流水化。值越小，少而大的输出 segment 能获得越高的并发度，但代价是更多的范围读取和消费时一次额外的 memcpy。默认 4 MiB，与 starcache 磁盘层 block 大小对齐。
 
+### lake_vacuum_enable_task_timeout
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Vacuum 任务是否遵循请求中携带的超时时间（`VacuumRequest.timeout_ms`），并在超时后自行终止。设为 `false` 时，无论 FE 调用方等待多久，Vacuum 任务都会一直运行至完成。
+
 ### lake_vacuum_min_batch_delete_size
 
 - 默认值：200

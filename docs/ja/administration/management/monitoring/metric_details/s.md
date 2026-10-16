@@ -462,8 +462,37 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- ラベル: `reason` — `SkipReason` 列挙値（小文字化）。取り込み単位の値：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。マルチパーティション経路（P2-a）のパーティション単位の値：`unsupported_partition_column_type`（パーティションソース列の型が投影不可。例：STRUCT/ARRAY）、`invalid_partition_value`（サンプル取得したパーティションセル値を `AddPartitionClause` に整形できない。例：非 NULL 列で NULL が現れた／日付がパースできない）、`grouper_empty`（フォーマッタや analyzer によって全サンプル行が破棄された）、`stale_catalog_state`（grouper が見ていたパーティションが、コーディネーターが READ ロック下で再解決する直前に消えた — 並行する partition drop/replace）、`partition_not_eligible_post_create`（事前作成後のパーティション単位 eligibility 再チェックに失敗。通常はパーティションが空でない／マルチタブレット化したことが原因）。
-- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路（P2-a）では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+- ラベル: `reason`。スキップの理由で、値は下の表のとおりです。表中のサンプリング対象列とは、ターゲットテーブルのパーティション列とソートキー列を指します。
+- 説明: FE 側の eligibility ゲートがサンプラーを起動する前にサンプリングベースのタブレット事前分割を拒否した回数を、理由別に集計した累計値。運用者はこのカウンタを参照することで「事前分割が実行されていない」原因を、どの eligibility 分岐に起因するか一目で判別できます。マルチパーティション経路では、grouper とパーティション単位の再解決から出るパーティション単位のスキップ理由も同じカウンタで記録します。
+
+どの取り込みでも記録されうる値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `disabled_by_config` | 取り込み種別に対応する FE パラメータ `enable_tablet_pre_split_for_*` が無効。 |
+| `disabled_by_session` | セッションで `enable_tablet_pre_split` が `false` に設定されている。 |
+| `not_range_distribution` | ターゲットテーブルが Range 分散ではない。 |
+| `table_not_normal` | ターゲットテーブルが NORMAL 状態ではない（ALTER 実行中など）。 |
+| `unsupported_sort_key` | ソートキーが空、またはソートキーにスカラー型でない列がある。 |
+| `has_materialized_view_or_rollup` | ターゲットテーブルに可視のロールアップまたは同期マテリアライズドビューがある。 |
+| `metadata_not_resolved` | パーティションまたはそのベースインデックスが見つからない。通常は取り込み中に ALTER が実行されたため。 |
+| `multiple_base_index_tablets` | パーティションのベースインデックスに既に複数のタブレットがある。同じパーティションへの再取り込みでよく起きる。 |
+| `partition_not_empty` | パーティションに既にデータがある。 |
+| `source_missing_sampled_column` | サンプリング対象列に対応するソース列またはリテラルが取り込みにない（`FILES()` のファイルにその列がない、INSERT のターゲット列リストが省略しているなど）。 |
+| `unsupported_sampled_projection` | サンプリング対象列が、サンプラーで再現できない式（`from_unixtime(ts)` や NULL など）、または型のプッシュダウンで別の列の型として読み取られる `FILES()` の列から供給される。 |
+| `unsupported_generated_column` | サンプリング対象列が、サンプラーで値を計算できない生成列。列名と具体的な理由は FE ログに記録される。 |
+| `estimate_unavailable` | External Catalog のテーブルからの INSERT で、テーブル統計からソーステーブルのサイズを見積もれないため、タブレット数を決められない。 |
+
+1 回の取り込みで複数のパーティションに書き込む場合に、パーティション単位で記録される値：
+
+| `reason` | 記録される条件 |
+| --- | --- |
+| `unsupported_partition_column_type` | パーティション列の型をサンプリングできない（STRUCT、ARRAY など）。 |
+| `invalid_partition_value` | サンプリングしたパーティション値から有効なパーティションを作れない（NOT NULL 列の NULL、パースできない日付など）。 |
+| `grouper_empty` | パーティションごとにグループ化する際、すべてのサンプル行が破棄された。 |
+| `no_matching_partition` | 手動 Range パーティションのテーブルで、サンプリングした値が取り込みの書き込み先となるどのレンジにも含まれない。その値は破棄され、新しいパーティションは作成されない。 |
+| `stale_catalog_state` | サンプリング後、事前分割の前にパーティションが消えた（並行する DROP や REPLACE など）。 |
+| `partition_not_eligible_post_create` | 事前作成後にパーティションが条件を満たさなくなった。通常は既にデータがあるか、複数のタブレットを持つため。 |
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
 
@@ -501,7 +530,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積
-- 説明: マルチパーティション経路（P2-a）のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はサンプル数が多いパーティションを残し、サンプル数が少ない末尾を切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
+- 説明: マルチパーティション経路のカウンタ。1 回の取り込みあたりの予測パーティション数が `tablet_pre_split_max_partitions_per_load` を超えたために grouper が破棄したパーティション数。grouper はデータ量の多いパーティション（data tier が一部のファイルだけをサンプリングし、かつパーティション値がファイルパスから取られる場合はバイト数、それ以外はサンプル数で判断）を残し、少ないものを切り捨てます。破棄されたパーティションは BE ランタイムの自動パーティション作成にフォールバックし、事前分割は行われません。継続的に非ゼロの場合は上限が効いているサインなので、`tablet_pre_split_max_partitions_per_load` を引き上げるか、取り込みのパーティション基数を下げることを検討してください。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 
@@ -533,6 +562,39 @@ description: "Alphabetical s"
 - 単位: カウント
 - タイプ: 累積
 - 説明: サンプリングベースのタブレット事前分割が、受理された reshard ジョブの `FINISHED` 到達を期限内に確認できなかったために中止された取り込みトランザクションの累計回数。`tablet_pre_split_post_submit_hard_cap` の兄弟カウンタ。本番の取り込み経路は post-submit タイムアウト時に取り込みを中止せず、その時点で可視のレイアウトに対して継続実行するため、このカウンタは現状の本番環境では 0 のままです。厳格な `runPreSplit` ラッパー（テスト、または将来「タイムアウト＝中止」を選択する呼び出し元）を使った場合にのみ発火します。
+
+## `starrocks_fe_tablet_reshard_job_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `TabletReshardJobMgr` が受理したタブレット reshard ジョブの累計数。ジョブがキューに入り journal に書き込まれた時点でインクリメントされます。自動 reshard（タブレットの分割とマージ）と、サンプリングベースのタブレット事前分割が提出したジョブの両方を含みます。状態別のジョブ数は、`job="tablet_reshard"`、`type`、`state` のラベルを持つ汎用の `job` ゲージからも取得できます。このカウンタをインクリメントするのは Leader FE のみで、フォロワーでは 0 のままです。また FE の再起動やリーダー切り替え後は 0 から再開します。
+
+## `starrocks_fe_tablet_reshard_job_finished`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `FINISHED` に到達したタブレット reshard ジョブの累計数。`tablet_reshard_job_total` と比較することで、受理されたジョブのうちどれだけが完了したかが分かります。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_job_aborted`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `type`（`split` または `merge`）
+- 説明: `ABORTED` で終了したタブレット reshard ジョブの累計数。ジョブが中止できるのはトランザクションのコミット前だけです。コミット後はロールバック経路がないため、それ以降の失敗は中止ではなく再試行され、ここには計上されません。そのケースは `tablet_reshard_publish_failed` で検出してください。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_publish_failed`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 失敗して再試行される reshard publish 試行の累計数。試行ごとに 1 ずつインクリメントされます。reshard のトランザクションは publish 時点で既にコミット済みなので、publish が失敗すると成功するまで指数バックオフ（1 秒から倍増、上限 30 秒）で再試行されます。ジョブは `RUNNING` のままで中止されないため、ジョブが詰まっている間も `tablet_reshard_job_aborted` は平坦なままです。したがってアラートはこのカウンタを対象にしてください。30 秒の上限に達した後も、失敗し続けるパーティションは 1 分あたり約 2 回このカウンタを動かすため、`increase(starrocks_fe_tablet_reshard_publish_failed[5m]) > 0` で最初の失敗から 1 分程度で詰まりを検出できます。各失敗の理由は `information_schema.tablet_reshard_jobs` の `ERROR_MESSAGE` 列と `fe.warn.log` に記録されます。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `starrocks_fe_tablet_reshard_parallel_tablets`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 未完了のすべての reshard ジョブにおいて現在 reshard 中のタブレット数、すなわちリアルタイムの reshard 並列度。Leader 以外の FE ノードは `0` を報告します。
 
 ## `starrocks_fe_tablet_max_compaction_score`
 

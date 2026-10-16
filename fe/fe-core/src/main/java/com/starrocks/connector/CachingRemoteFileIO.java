@@ -123,6 +123,16 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * The keys this level holds that a scan of the table at {@code tableLocation} loaded, wherever they point: a
+     * partition can live outside its table's directory, where {@link #getPresentPathKeyInCache} does not look.
+     */
+    public List<RemotePathKey> getPresentPathKeysOfTable(String tableLocation) {
+        return cache.asMap().keySet().stream()
+                .filter(pathKey -> tableLocation.equals(pathKey.getTableLocation()))
+                .collect(Collectors.toList());
+    }
+
     public void updateRemoteFiles(RemotePathKey pathKey) {
         if (fileIO instanceof CachingRemoteFileIO) {
             ((CachingRemoteFileIO) fileIO).updateRemoteFiles(pathKey);

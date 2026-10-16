@@ -147,6 +147,15 @@ This topic introduces the following types of FE configurations:
 - Description: The endpoint of your Azure Data Lake Storage Gen2 Account, for example, `https://test.dfs.core.windows.net`.
 - Introduced in: v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: The OAuth 2.0 token endpoint of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. Before v3.5.19, v4.0.12, and v4.1.2, this item was named `azure_adls2_oauth2_oauth2_client_endpoint`. The former name is still accepted as an alias.
+- Introduced in: v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - Default: Empty string
@@ -164,6 +173,14 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
+
+### `azure_adls2_oauth2_token_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the federated token file used for Workload Identity authentication when creating the built-in ADLS2 storage volume. Set it together with `azure_adls2_oauth2_tenant_id` and `azure_adls2_oauth2_client_id`, and keep `azure_adls2_oauth2_use_managed_identity` as `false`. Mount the file at the same readable path on every FE and CN. An empty string disables token-file authentication. Restart the FE after changing this configuration.
 
 ### `azure_adls2_oauth2_use_managed_identity`
 
@@ -245,6 +262,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Whether to use the native SDK to access Azure Blob Storage, thus allowing authentication with Managed Identities and Service Principals. If this item is set to `false`, only authentication with Shared Key and SAS Token is allowed.
 - Introduced in: v3.4.4
+
+### `s3_use_native_sdk_for_glob`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to use the native AWS S3 SDK to resolve glob paths in the FILES() table function for S3 and S3-compatible object stores (`s3`, `s3a`, `s3n`, `oss`, `cosn`, `ks3`, `obs`, and `tos`). When this item is set to `true`, the longest literal prefix of a wildcard is pushed down to S3 `ListObjectsV2` instead of listing the whole parent prefix through Hadoop `globStatus`, which is much faster when the prefix holds many objects but few of them match. Set this item to `false` to fall back to the Hadoop `globStatus` path.
+- Introduced in: v4.1.4
 
 ### `cloud_native_hdfs_url`
 
@@ -344,6 +370,33 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
+
+### `group_provider`
+
+- Default: Empty
+- Type: String[]
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
+- Introduced in: v3.5
+
+### `group_provider_http_connect_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Connect timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. If the server does not accept the connection within this time, the CREATE or ALTER GROUP PROVIDER statement fails and the group provider keeps its previous configuration. Without a bound, a server that never answers would block not only the statement but also journal replay on every FE.
+- Introduced in: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Read timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see `group_provider_http_connect_timeout_ms` for the failure behavior.
+- Introduced in: v4.2
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -676,7 +729,7 @@ This topic introduces the following types of FE configurations:
 - Type: boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
+- Description: When enabled, StarRocks optimizes tablet creation for cloud-native tables and materialized views in shared-data mode by creating a single shared tablet metadata for all tablets under a physical partition instead of distinct metadata per tablet. This reduces the number of tablet creation tasks and metadata/files produced during table creation, rollup, and schema-change jobs. The optimization is applied only for cloud-native tables/materialized views and is combined with `file_bundling` (the latter reuses the same optimization logic). Note: schema-change and rollup jobs explicitly disable the optimization for tables using `file_bundling` to avoid overwriting files with identical names. Tables that use range distribution never use the optimization: each of their tablets carries its own key range, so its metadata is always created per tablet. Enable cautiously — it changes the granularity of created tablet metadata and can affect how replica creation and file naming behave.
 - Introduced in: v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -790,6 +843,33 @@ This topic introduces the following types of FE configurations:
 - Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 - Introduced in: -
 
+### `authentication_failure_cache_capacity`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many rejected credentials `authentication_failure_cache_ttl_second` remembers at most. It bounds the memory a client - or an attacker cycling usernames - can occupy; the oldest entries are evicted first.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case. When this item is set to `true`, a login whose name differs only in case from a user created with `AUTHENTICATION_LDAP_SIMPLE` still resolves to that user, so its per-user DN and the roles granted to it apply; and a login authenticated by an LDAP security integration takes its session identity from the name held by the directory rather than the one typed by the client. Because this both widens which stored user a login may resolve to and changes the value reported by `current_user()` and `SHOW PROCESSLIST`, it is disabled by default. Users authenticated by native password, JWT, or OAuth2 are never affected. If two users created with `AUTHENTICATION_LDAP_SIMPLE` have names that differ only in case, a login matching both of them is refused rather than resolved to either. Group names are matched without regard to case independently of this item.
+- Introduced in: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string
@@ -825,6 +905,42 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Socket read timeout for the LDAP bind performed by `authentication_ldap_simple`. See `authentication_ldap_simple_conn_timeout_ms`.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: TCP connect timeout for the LDAP bind performed by `authentication_ldap_simple`. Without it the bind falls back to the operating system's TCP timeout, which can hold the thread serving the request - an HTTP worker or a Thrift handler, now that a security integration also authenticates those channels - for minutes when the directory is unreachable. Lower it if authentication has to fail fast.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- Default: group_provider
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for where the groups of an LDAP-authenticated user come from. Valid values: `group_provider` (only the configured group providers, the behavior of earlier versions), `memberof` (only the group membership attribute of the user's own LDAP entry), `both` (the union of the two). A security integration property of the same name overrides this value. An illegal value is treated as `group_provider` and logged at ERROR level, so that a typo cannot lock every LDAP user out.
+- Introduced in: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- Default: memberOf
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
+- Introduced in: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string
@@ -849,7 +965,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The name of the attribute that identifies users in LDAP objects.
+- Description: The name of the attribute that carries the login name on a user entry, used to build the search filter of search-and-bind mode. `uid` suits OpenLDAP; on Active Directory set it to `sAMAccountName`, because an AD entry's RDN is the display name and its `uid` is empty unless an administrator populated it. That choice also rules out `authentication_ldap_simple_bind_dn_pattern` - see the property of the same name in [Security Integration](../../user_privs/authentication/security_integration.md).
 - Introduced in: -
 
 ### `backup_job_default_timeout_ms`
@@ -1470,7 +1586,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is disable (the system always use the safe, copy-and-lock path). When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
+- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is applied only for tables that carry no related materialized view. When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. This threshold is not applied to a statement that also reads a table in an external catalog: holding the lock for the whole planning phase would bind it to partition, statistics, and file-list requests to a system outside the FE's control, while that lock protects nothing on the external side, so such a statement uses the non-lock path however many related materialized views the internal table carries. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
 - Introduced in: v3.2.1
 
 ### `small_file_dir`

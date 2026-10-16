@@ -80,6 +80,44 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 单次进程 profile 收集的持续时间（秒）。当 `proc_profile_cpu_enable` 或 `proc_profile_mem_enable` 设置为 `true` 时，AsyncProfiler 启动，收集器线程休眠此持续时间，然后 profiler 停止并写入 profile。较大的值会增加样本覆盖率和文件大小，但会延长 profiler 运行时并延迟后续收集；较小的值会减少开销，但可能会产生不足的样本。确保此值与 `proc_profile_file_retained_days` 和 `proc_profile_file_retained_size_bytes` 等保留设置对齐。
 - 引入版本: v3.2.12
 
+
+### `enable_dict_thrash_guard`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否启用全局字典抖动守卫（thrash guard）。对于"滚动"低基数列——其瞬时不同值数量始终低于字典阈值，但取值集合持续轮换（例如按天分区、每天导入新值的列）——不会触发基数黑名单，但每次导入都会引入当前全局字典中缺失的值并使其失效。每次失效都会触发一次全表字典重采集，浪费 IO，并在存算分离集群中严重争用 segment 元数据缓存锁。启用该守卫后，StarRocks 会统计每个列的字典在 `dict_thrash_guard_window_sec` 时间窗口内的失效次数；当某列达到 `dict_thrash_guard_threshold` 次失效时，StarRocks 会禁止采集该列的全局字典。该禁用立即生效，并作为表的 `no_dict_columns` 属性持久化，因此能在 FE 重启和 Leader 切换后保留。如需重新启用某列的字典采集，执行 `ALTER TABLE ... ENABLE DICTIONARY (column)`。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_window_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 全局字典抖动守卫统计某列字典失效次数所用的时间窗口长度（秒）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+### `dict_thrash_guard_threshold`
+
+- 默认值: 5
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 在 `dict_thrash_guard_window_sec` 时间窗口内，触发全局字典抖动守卫禁止采集某列全局字典的失效次数阈值。设置为 `0` 可在保持守卫启用的同时禁用次数检查（不会自动禁用任何列）。仅当 `enable_dict_thrash_guard` 为 `true` 时生效。
+- 引入版本: v4.2.0
+
+
+### `min_max_stats_collect_interval_sec`
+
+- 默认值: 60
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 同一列两次 min/max 统计采集之间的最小间隔。min/max 统计（用于将 `min()`/`max()` 折叠为常量、以及构建压缩 group-by key）通过读取每个 segment zone-map 元数据的 `[_META_]` MetaScan 按需采集；若不节流，频繁导入的列会在每次导入后重扫，和全局字典重采集一样争用 segment 元数据缓存。间隔窗口内跳过 min/max 优化而非重新采集——绝不返回陈旧值，因此只影响优化、不影响正确性。设置为 `0` 可禁用节流。
+- 引入版本: v4.2.0
+
 ### `enable_external_predicate_columns_collection`
 
 - 默认值: true
@@ -618,6 +656,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SPLIT/MERGE 批处理作业历史的最大保留时间。
 - 引入版本: v4.1.0
 
+### `tablet_reshard_colocate_checker_membership_batch_size`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群下，Range Colocate 检查器在单次 `getShardInfo` 成员关系读取批量 RPC 中发送给 StarOS 的最大 Tablet 数量。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_batch_size`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: Range Colocate 检查器在单次 `queryShardGroupStable` 放置收敛批量 RPC 中发送给 StarOS 的最大 PACK Shard Group 数量。每个 Group 的稳定性检查在服务端计算，因此较小的批量可以限制单次 RPC 的延迟，完整结果通过多次调用累积得到。小于 `1` 的值按 `1` 处理。
+- 引入版本: v4.1.3
+
+### `tablet_reshard_colocate_checker_convergence_cache_ttl_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: Milliseconds
+- 是否可变: Yes
+- 描述: Range Colocate 检查器放置收敛负缓存的 TTL。在该时间窗口内，StarOS 上次报告为尚未收敛的 PACK Shard Group 不会被重新查询，从而在该 Group 仍在迁移期间降低每轮 `queryShardGroupStable` 的负载。仅缓存未收敛的结果，因此过期条目最多只会将该 Group 转为稳定状态的时间延迟一个时间窗口，而不会导致提前转为稳定。小于或等于 `0` 的值将禁用该缓存。
+- 引入版本: v4.1.3
+
 ### `enable_tablet_pre_split_for_insert_from_files`
 
 - 默认值: true
@@ -642,7 +707,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO`，也支持手动 Range 分区的目标表：只对已有的空分区做分裂，不会新建任何分区。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_pre_submit_timeout_seconds`
@@ -672,6 +737,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 data-tier 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_data_tier_scan_byte_limit`
+
+- 默认值: 4294967296 (4 GiB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 扫描 Broker Load 或 `INSERT INTO ... SELECT FROM FILES()` 源文件时的字节数软上限。输入超过该值时只从部分文件中采样，采样耗时不再随数据量增长。例外是分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列：这时仍扫描全部文件，因为取子集可能漏掉整个分区。选取时先按路径排序，再按相等的字节间隔抽取，因此较大的文件更容易被选中。分区列取自文件路径（`COLUMNS FROM PATH` 或 `columns_from_path`）时，每个分区按字节占比分摊上限，且至少选取一个文件（分区数多于 `tablet_pre_split_data_tier_max_scan_files` 时除外）；各分区的数据量按其全部文件的字节数计算。由于按整个文件选取，实际扫描量可能超过该值（例如单个文件本身就大于上限）。Tablet 数仍按全部输入计算。设为 `0` 表示扫描全部文件。
+
+### `tablet_pre_split_data_tier_min_scan_files`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）至少扫描的文件数，保证单个文件很大、或每个文件只包含排序键的一小段范围时，样本仍覆盖足够多的独立文件。分区列取自文件路径时，该下限按字节占比分摊到各分区。满足这一下限可能使扫描量超过 `tablet_pre_split_data_tier_scan_byte_limit`，但扫描量达到该值的 4 倍后就不再为凑足下限而增加文件，因此文件很大时扫描时间不会成倍增长。`tablet_pre_split_data_tier_max_scan_files` 为正数时优先于该下限。
+
+### `tablet_pre_split_data_tier_max_scan_files`
+
+- 默认值: 512
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）最多扫描的文件数。子集中的每个文件在读数据之前都要做一次元数据查询，不设上限时，由大量小文件组成的子集光是查询就可能耗费数分钟。分区列取自文件路径时，该上限按字节占比分摊到各分区；每个分区仍至少选取一个文件，因此实际文件数可能超过该上限，超出部分最多为每个分区一个文件。分区数多于该上限时，只从数据量最大的那些分区中各选取一个文件。该上限优先于 `tablet_pre_split_data_tier_min_scan_files`。设为 `0` 或负值表示不设上限。
+
 ### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - 默认值: 0.3
@@ -681,13 +770,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 meta tier（Parquet/ORC row-group 元数据）计算边界时容忍的最大重叠率。超过该阈值时按最小值排序的累计行数将不再单调，meta tier 会回退到 data tier（行采样）。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_meta_tier_footer_read_parallelism`
+
+- 默认值: 16
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂 meta tier 从文件类导入源（`FILES()` 或 Broker Load）并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
+- 引入版本: v4.1.0
+
 ### `tablet_pre_split_max_partitions_per_load`
 
 - 默认值: 32
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_target_size`
@@ -703,15 +801,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 降级或线上回滚前安全关闭该特性的步骤：
 
 1. 将三个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load` 和 `enable_tablet_pre_split_for_insert_from_table`。新导入将立即跳过预分裂。
-2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
+2. 等待预分裂创建的在途 reshard 作业排空。可用以下查询监控：
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   该查询不再返回任何行时，回滚即完成。只有 `FINISHED` 和 `ABORTED` 是终态，处于 `PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` 等非终态的作业都仍在执行中。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 
 #### 多分区基于采样的 Tablet 预分裂行为说明（P2-a）
 
-多分区路径将基于采样的 Tablet 预分裂扩展到单条语句命中多个分区的导入场景。两条运维注意事项：
+多分区路径将基于采样的 Tablet 预分裂扩展到单条语句命中多个分区的导入场景。三条运维注意事项：
 
 - **Broker Load 触发载入不对称。** 多分区预分裂钩子在 `BrokerLoadJob.createLoadingTask` 中触发，**晚于** `task.prepare()` 构建该次导入的 sink plan（plan 基于当时的 catalog 状态）。因此 Broker Load 路径下，预建分区和分裂后的 tablet 布局只对**后续**针对同一张表的导入可见 —— 触发本次预分裂的 Broker Load 自身仍按原布局运行，命中的分区走 BE 运行时自动建分区。INSERT-from-FILES 钩子在 `StatementPlanner.plan()` 之前触发，因此触发本次预分裂的 INSERT 本身就能受益。
 - **后续 INSERT 失败时的空分区残留。** 当预建成功，但触发本次预建的 INSERT 因不相关原因失败（FILES schema 不匹配、BE 崩溃、导入超时等），空的预建分区会留在 catalog 中。这与 `ALTER TABLE ADD PARTITION` 在后续失败时的语义一致 —— ALTER 同样不会回滚已建分区。介意残留的运维可以用 `ALTER TABLE ... DROP PARTITION` 手动删除；实际上空分区代价很低，下次重试导入时会复用。
+- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。手动分区表的 `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
 
 #### 生产部署建议
 

@@ -367,11 +367,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
     RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
 
-    // Update segments_read_count after filtering
-    if (options.stats) {
-        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
-    }
-
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i].segment;
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
@@ -402,6 +397,15 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
         } else {
             seg_options.is_first_split_of_segment = true;
+        }
+        // A split tablet hands the same segment to several readers (one per rowid range, or one per
+        // short-key range with every segment each). Count every open, and count the segment itself only in
+        // the split that owns its segment-level stats.
+        if (options.stats != nullptr) {
+            options.stats->segments_read_count++;
+            if (seg_options.is_first_split_of_segment) {
+                options.stats->phy_segments_count++;
+            }
         }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);

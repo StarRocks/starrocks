@@ -52,6 +52,9 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateTemporaryTableStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.HintNode;
@@ -76,8 +79,10 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.AnalyticExpr;
@@ -712,12 +717,19 @@ public class QueryAnalyzer {
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
                 }
+                // Taken before time travel binds, which reads the native table too.
+                if (table != null) {
+                    table = table.forQueryPlanning();
+                }
                 table = QueryPeriodResolver.resolveAndBindTable(tableRelation, table, session, metadataMgr);
 
                 Relation r;
                 if (table instanceof View) {
                     View view = (View) table;
-                    QueryStatement queryStatement = view.getQueryStatement();
+                    QueryStatement queryStatement = takePreResolvedViewBody(view);
+                    if (queryStatement == null) {
+                        queryStatement = view.getQueryStatement();
+                    }
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
 
                     inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
@@ -726,10 +738,13 @@ public class QueryAnalyzer {
                     r = viewRelation;
                 } else if (table instanceof ConnectorView) {
                     ConnectorView connectorView = (ConnectorView) table;
-                    QueryStatement queryStatement = connectorView.getQueryStatement();
                     View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
                             connectorView.getType());
                     view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
+                    QueryStatement queryStatement = takePreResolvedViewBody(view);
+                    if (queryStatement == null) {
+                        queryStatement = connectorView.getQueryStatement();
+                    }
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     inheritPolicyRewriteFlag(tableRelation, viewRelation, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
@@ -1090,7 +1105,7 @@ public class QueryAnalyzer {
 
                 // Validate ASOF JOIN conditions
                 if (join.getJoinOp().isAsofJoin()) {
-                    validateAsofJoinConditions(joinEqual);
+                    validateAsofJoinConditions(joinEqual, leftScope, rightScope);
                 }
 
                 // check the join on predicate, example:
@@ -1160,12 +1175,12 @@ public class QueryAnalyzer {
             return newFields;
         }
 
-        private void validateAsofJoinConditions(Expr joinPredicate) {
+        private void validateAsofJoinConditions(Expr joinPredicate, Scope leftScope, Scope rightScope) {
             if (joinPredicate == null) {
                 throw new SemanticException("ASOF JOIN requires ON clause with join conditions");
             }
 
-            AsofJoinConditionValidator validator = new AsofJoinConditionValidator();
+            AsofJoinConditionValidator validator = new AsofJoinConditionValidator(leftScope, rightScope);
             validator.validate(joinPredicate);
         }
 
@@ -1237,7 +1252,7 @@ public class QueryAnalyzer {
          * @return Final RelationFields - deduplicated if USING clause present, original joinedFields otherwise
          *
          * @see com.starrocks.sql.optimizer.transformer.RelationTransformer#buildFullOuterJoinUsingPlan(
-         * JoinRelation, OptExprBuilder, ScalarOperator)
+         * JoinRelation, OptExprBuilder, LogicalPlan, LogicalPlan)
          */
         private RelationFields createJoinRelationFields(RelationFields joinedFields, JoinRelation join,
                                                         Scope leftScope, Scope rightScope) {
@@ -1889,13 +1904,22 @@ public class QueryAnalyzer {
     }
 
     /**
-     * A lightweight visitor that pre-resolves only external (non-internal catalog) TableRelation,
+     * How deep the pre-pass follows nested views. A bound rather than a cycle check: a view that references
+     * itself cannot be created, but a definition can still be rewritten into a cycle, and the pre-pass must
+     * never be the thing that hangs or overflows. Whatever it stops short of is simply expanded under the
+     * lock, the way all of it was before.
+     */
+    private static final int MAX_PRE_RESOLVED_VIEW_DEPTH = 16;
+
+    /**
+     * A lightweight visitor that pre-resolves external (non-internal catalog) relations,
      * so connector metadata fetch is done without holding PlannerMetaLock.
      * Similar to TableCollector but inverts the logic: skips internal tables, pre-resolves external tables.
      */
     private class ExternalTablesOnlyVisitor extends AstTraverser<Void, Void> {
         private final Deque<Set<String>> cteNameStack = new ArrayDeque<>();
         private final boolean refreshFilesystemExternalTables;
+        private int viewExpansionDepth;
 
         private ExternalTablesOnlyVisitor(boolean refreshFilesystemExternalTables) {
             this.refreshFilesystemExternalTables = refreshFilesystemExternalTables;
@@ -1931,6 +1955,162 @@ public class QueryAnalyzer {
             return super.visitSetOp(node, context);
         }
 
+        /**
+         * A DML's query statement is built by its own analyzer, so at this point -- before the lock is taken
+         * -- there is nothing for the inherited traversal to walk: {@link AstTraverser} reaches an UPDATE /
+         * DELETE / MERGE INTO's tables only through {@code getQueryStatement()}. Walk the raw clauses
+         * instead, so an external table one of them reads is pre-resolved exactly like one a SELECT reads.
+         * Without this the locked analyzer resolves it, and that connector round trip happens with the meta
+         * lock held -- the tail of the same problem
+         * {@code StatementPlanner#planDmlOffSnapshots} takes the optimizer off that lock for.
+         *
+         * <p>The write target is not visited as a relation, but it is pre-resolved when it lives in an
+         * external catalog -- see {@link #preResolveExternalWriteTarget}. An internal target stays with the
+         * locked analyzer, since that is the object the lock protects.
+         */
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
+            if (node.getQueryStatement() != null) {
+                return super.visitUpdateStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getFromRelations());
+                visitIfPresent(node.getWherePredicate());
+                if (node.getAssignments() != null) {
+                    node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
+            if (node.getQueryStatement() != null) {
+                return super.visitDeleteStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getUsingRelations());
+                visitIfPresent(node.getWherePredicate());
+            });
+            return null;
+        }
+
+        /**
+         * A CTAS writing into an external catalog holds the lock only for the internal tables its SELECT
+         * reads, yet {@code CreateTableAnalyzer} asks the target catalog, with that lock held, whether the
+         * database exists and whether the table already does. Ask here instead; the same rules as
+         * {@link #preResolveExternalWriteTarget} apply.
+         */
+        private void preResolveExternalCreateTarget(CreateTableStmt createTableStmt) {
+            // A temporary table lives in the internal catalog, and its analyzer does not ask tableExists.
+            if (createTableStmt == null || createTableStmt instanceof CreateTemporaryTableStmt
+                    || createTableStmt.getTableRef() == null) {
+                return;
+            }
+            TableName tableName;
+            try {
+                TableRef tableRef = createTableStmt.getTableRef();
+                tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
+                tableName.normalization(session);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (Strings.isNullOrEmpty(tableName.getCatalog()) || Strings.isNullOrEmpty(tableName.getDb())
+                    || CatalogMgr.isInternalCatalog(tableName.getCatalog())
+                    || !GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(tableName.getCatalog())) {
+                return;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Database db = metadataMgr.getDb(session, tableName.getCatalog(), tableName.getDb());
+                if (db == null) {
+                    return;
+                }
+                boolean exists = metadataMgr.tableExists(session, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                session.getPreResolvedState().put(PreResolvedState.CREATE_TARGET, tableName,
+                        new PreResolvedState.CreateTarget(db, exists));
+            } catch (RuntimeException e) {
+                // left to the locked analyzer, which reports it the way it always has
+            }
+        }
+
+        /**
+         * Resolve a DML's write target here, without the lock, when it lives in an external catalog.
+         *
+         * <p>An internal target is left alone: it is the object the lock is taken for, and the locked
+         * analyzer is where it belongs. An external one is the opposite -- {@code PlannerMetaLocker} never
+         * put it in the lock set, so the lock makes nothing about it stable, and resolving it under the lock
+         * only binds the lock's hold time to that catalog's latency. The four DML analyzers pick the answer
+         * up through {@link PreResolvedState#WRITE_TARGET}.
+         *
+         * <p>Nothing here may change what the statement does. A name that does not normalize, a catalog that
+         * is not registered, a table that is not there, a connector that refuses -- all of them leave the
+         * stash empty and the analyzer resolves the target exactly as it did before, reporting the same
+         * error at the same place.
+         */
+        private void preResolveExternalWriteTarget(TableRef tableRef) {
+            if (tableRef == null) {
+                return;
+            }
+            TableName tableName;
+            try {
+                tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
+                tableName.normalization(session);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (Strings.isNullOrEmpty(tableName.getCatalog()) || Strings.isNullOrEmpty(tableName.getDb())
+                    || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                return;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                if (table != null) {
+                    session.getPreResolvedState().put(PreResolvedState.WRITE_TARGET, tableName, table);
+                }
+            } catch (RuntimeException e) {
+                // left to the locked analyzer, which reports it the way it always has
+            }
+        }
+
+        /**
+         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
+         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         */
+        private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            if (scoped) {
+                cteNameStack.push(collectCteNames(cteRelations));
+            }
+            try {
+                if (scoped) {
+                    cteRelations.forEach(this::visit);
+                }
+                body.run();
+            } finally {
+                if (scoped) {
+                    cteNameStack.pop();
+                }
+            }
+        }
+
+        private void visitAll(List<Relation> relations) {
+            if (relations != null) {
+                relations.forEach(this::visitIfPresent);
+            }
+        }
+
+        private void visitIfPresent(ParseNode node) {
+            if (node != null) {
+                visit(node);
+            }
+        }
+
         @Override
         public Void visitTable(TableRelation tableRelation, Void context) {
             if (tableRelation.getTable() != null) {
@@ -1961,8 +2141,10 @@ public class QueryAnalyzer {
                 return null;
             }
 
-            // Only pre-resolve external tables (non-internal catalog)
+            // Only pre-resolve external tables (non-internal catalog). An internal object still gets one
+            // look, because a view is an internal object whose body may read through a connector.
             if (CatalogMgr.isInternalCatalog(catalogName)) {
+                preResolveViewBody(catalogName, dbName, tableName.getTbl());
                 return null;
             }
 
@@ -1984,6 +2166,15 @@ public class QueryAnalyzer {
                         throw unsupportedException("Unsupported table type for partition clause, type: " + table.getType());
                     }
                     tableRelation.setTable(table);
+                    // The masking / row-access policy lookup of this table runs under the lock, and would ask
+                    // the catalog for the database and the table again to build their TableUID.
+                    Authorizer.preResolvePolicyTarget(session,
+                            new TableName(catalogName, dbName, tableName.getTbl()), table);
+                    if (table instanceof ConnectorView connectorView) {
+                        // A view in an external catalog: same story as an internal one, its body is opaque
+                        // until expansion. Capture it under the View the expansion will build for it.
+                        preResolveConnectorViewBody(connectorView);
+                    }
                 }
                 // If table == null (CTE or non-existent table), leave it unresolved.
                 // The main visitor will handle it correctly.
@@ -1991,16 +2182,112 @@ public class QueryAnalyzer {
             return null;
         }
 
+        /**
+         * Parse the body of the view this name refers to, if it is one, and pre-resolve the external tables
+         * inside it. Nothing here is allowed to change what the statement does: a name that turns out not to
+         * be a view, a view that no longer exists, or a body that will not parse is left entirely to the
+         * locked analyzer, which reports it the way it always has.
+         *
+         * <p>The lookup reads internal catalog metadata without the lock. It only reads -- and only the
+         * definition text, which {@code PreResolvedViewBodies} re-checks against the live view once the lock
+         * is held -- so a view redefined in between costs a re-parse, not a wrong answer.
+         */
+        private void preResolveViewBody(String catalogName, String dbName, String tableName) {
+            if (viewExpansionDepth >= MAX_PRE_RESOLVED_VIEW_DEPTH) {
+                return;
+            }
+            Table table;
+            try {
+                table = metadataMgr.getTable(session, catalogName, dbName, tableName);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (!(table instanceof View view)) {
+                return;
+            }
+            QueryStatement body;
+            try {
+                body = view.getQueryStatement();
+            } catch (RuntimeException e) {
+                return;
+            }
+            captureViewBody(view, body);
+        }
+
+        /**
+         * Same as above for a view in an external catalog. Its body has to come from
+         * {@link ConnectorView#getQueryStatement()} -- that one applies the SQL dialect and qualifies the
+         * relations inside -- while the key has to be the throwaway {@link View} expansion will look it up
+         * with.
+         */
+        private void preResolveConnectorViewBody(ConnectorView connectorView) {
+            if (viewExpansionDepth >= MAX_PRE_RESOLVED_VIEW_DEPTH) {
+                return;
+            }
+            QueryStatement body;
+            try {
+                body = connectorView.getQueryStatement();
+            } catch (RuntimeException e) {
+                return;
+            }
+            captureViewBody(asViewForPreResolve(connectorView), body);
+        }
+
+        private void captureViewBody(View view, QueryStatement body) {
+            // A view body is its own name scope: a CTE declared by the enclosing statement must not shadow a
+            // table named inside it. Walk the body with the enclosing scopes set aside.
+            Deque<Set<String>> enclosingCtes = new ArrayDeque<>(cteNameStack);
+            cteNameStack.clear();
+            viewExpansionDepth++;
+            try {
+                // Nested views are reached by recursion: the body's own relations run through visitTable.
+                visit(body);
+            } catch (RuntimeException e) {
+                // Pre-resolution is an optimization. Whatever this was, the locked analyzer will meet it
+                // again and is the one that gets to report it.
+                return;
+            } finally {
+                viewExpansionDepth--;
+                cteNameStack.clear();
+                cteNameStack.addAll(enclosingCtes);
+            }
+            session.getPreResolvedState().viewBodies().put(view, body);
+        }
+
+        /**
+         * The throwaway {@link View} that {@code resolveTableRef} mints for a connector view, rebuilt here so
+         * the body is filed under the same identity and definition text the expansion will look it up with.
+         */
+        private View asViewForPreResolve(ConnectorView connectorView) {
+            View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
+                    connectorView.getType());
+            view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
+            return view;
+        }
+
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
                                                      TableName tableName, Table resolvedTable) {
-            metadataMgr.refreshTable(catalogName, dbName, resolvedTable, Lists.newArrayList(), false);
-            Table refreshedTable = metadataMgr.getTable(session, catalogName, dbName, tableName.getTbl());
+            // Read twice -- directly and through a view, say -- it is refreshed once and bound to one object.
+            Table refreshedTable = InsertSourceRefresher.refreshedTable(session, resolvedTable);
+            if (refreshedTable == null) {
+                refreshedTable = InsertSourceRefresher.refreshAndReload(session, catalogName, dbName,
+                        tableName.getTbl(), resolvedTable);
+            }
+            // A table gone by now is left to the refresh after analysis, which fails the statement for it.
             return refreshedTable != null ? refreshedTable : resolvedTable;
         }
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, Void context) {
-            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            // An internal target's metadata is deliberately not touched here -- that is the object the lock
+            // is taken for. An external one is pre-resolved, because the lock covers nothing about it and
+            // resolving it under the lock only binds the hold time to that catalog. Not for the targets
+            // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
+            // are built from the statement rather than looked up.
+            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
+                    && !statement.useBlackHoleTableAsTargetTable()) {
+                preResolveExternalWriteTarget(statement.getTableRef());
+            }
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
@@ -2009,7 +2296,10 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitCreateTableAsSelectStatement(CreateTableAsSelectStmt statement, Void context) {
-            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            // The target table does not exist yet, so it is not resolved as a table; for an external target,
+            // what CreateTableAnalyzer asks its catalog is, see preResolveExternalCreateTarget. The query part
+            // is walked like any other; the INSERT the CTAS carries is not, since its target is that same table.
+            preResolveExternalCreateTarget(statement.getCreateTableStmt());
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }
@@ -2144,6 +2434,14 @@ public class QueryAnalyzer {
             }
             return scope;
         }
+    }
+
+    /**
+     * The body the unlocked pre-pass already parsed and resolved the external tables of, when it got to this
+     * view and the view has not been redefined since. Null means expand it here, as before.
+     */
+    private QueryStatement takePreResolvedViewBody(View view) {
+        return session.getPreResolvedState().viewBodies().take(view);
     }
 
     public Table resolveTable(TableRelation tableRelation) {
@@ -2423,9 +2721,25 @@ public class QueryAnalyzer {
     }
 
     private static class AsofJoinConditionValidator {
+        // Which side of the join an operand of the temporal condition reads its columns from.
+        private enum OperandSide {
+            LEFT,
+            RIGHT,
+            BOTH,
+            // Reads neither child: a constant, or a column of an enclosing query.
+            NONE
+        }
+
+        private final Scope leftScope;
+        private final Scope rightScope;
         private int equalityPredicateCount = 0;
         private int inequalityPredicateCount = 0;
         private boolean containsOrOperator = false;
+
+        AsofJoinConditionValidator(Scope leftScope, Scope rightScope) {
+            this.leftScope = leftScope;
+            this.rightScope = rightScope;
+        }
 
         public void validate(Expr joinPredicate) {
             visit(joinPredicate);
@@ -2457,6 +2771,7 @@ public class QueryAnalyzer {
                 } else if (binary.getOp().isRange()) {
                     inequalityPredicateCount++;
                     validateTemporalConditionTypes(binary);
+                    validateTemporalConditionSides(binary);
                 } else {
                     throw new SemanticException("ASOF JOIN does not support '" + binary.getOp() + "' operator " +
                             "in join ON clause");
@@ -2482,6 +2797,61 @@ public class QueryAnalyzer {
 
         private boolean isTemporalOrderingType(Type type) {
             return type.isBigint() || type.isDate() || type.isDatetime();
+        }
+
+        // The temporal condition is what the ASOF match is computed on: the BE reads one operand from
+        // the probe chunk and the other from the build chunk. If both operands read the same side there
+        // is no temporal relation between the two tables at all, and the BE ends up asking the build
+        // chunk for a column that only the probe side carries.
+        private void validateTemporalConditionSides(BinaryPredicate predicate) {
+            OperandSide leftOperandSide = operandSide(predicate.getChild(0));
+            OperandSide rightOperandSide = operandSide(predicate.getChild(1));
+
+            // Exactly one operand per side, in either order. Anything else - both operands on one side, an
+            // operand mixing the two, or an operand that reads neither child (a constant, an outer
+            // reference) - leaves the join without a temporal column on one of its sides.
+            boolean relatesTheTwoSides =
+                    (leftOperandSide == OperandSide.LEFT && rightOperandSide == OperandSide.RIGHT) ||
+                            (leftOperandSide == OperandSide.RIGHT && rightOperandSide == OperandSide.LEFT);
+
+            if (!relatesTheTwoSides) {
+                throw new SemanticException(
+                        "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                                + "with a column from the right side, found: " + ExprToSql.toMySql(predicate),
+                        predicate.getPos());
+            }
+        }
+
+        private OperandSide operandSide(Expr operand) {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            operand.collect(SlotRef.class, slotRefs);
+
+            boolean readsLeft = false;
+            boolean readsRight = false;
+            for (SlotRef slotRef : slotRefs) {
+                if (readsScope(leftScope, slotRef)) {
+                    readsLeft = true;
+                } else if (readsScope(rightScope, slotRef)) {
+                    readsRight = true;
+                }
+            }
+
+            if (readsLeft && readsRight) {
+                return OperandSide.BOTH;
+            } else if (readsLeft) {
+                return OperandSide.LEFT;
+            } else if (readsRight) {
+                return OperandSide.RIGHT;
+            }
+            return OperandSide.NONE;
+        }
+
+        // Only this scope's own fields count. `Scope.tryResolveField` walks up to the parent scope, which
+        // resolves an outer query's column here: with a chained join whose left child is itself a join (that
+        // scope does have a parent), a right-side column that shares its name with an outer relation would be
+        // charged to the left side and a perfectly valid join rejected.
+        private boolean readsScope(Scope scope, SlotRef slotRef) {
+            return !scope.getRelationFields().resolveFields(slotRef).isEmpty();
         }
     }
 }

@@ -148,6 +148,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 アカウントのエンドポイント。例: `https://test.dfs.core.windows.net`。
 - 導入時期：v3.4.1
 
+### `azure_adls2_oauth2_client_endpoint`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：No
+- 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID の OAuth 2.0 トークンエンドポイント。v3.5.19、v4.0.12、v4.1.2 より前は、この項目は `azure_adls2_oauth2_oauth2_client_endpoint` という名前でした。旧名称は現在もエイリアスとして受け付けられます。
+- 導入時期：v3.4.4
+
 ### `azure_adls2_oauth2_client_id`
 
 - デフォルト：Empty string
@@ -165,6 +174,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のテナント ID。
 - 導入時期：v3.4.4
+
+### `azure_adls2_oauth2_token_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：いいえ
+- 説明：組み込み ADLS2 ストレージボリュームの作成時に、ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。`azure_adls2_oauth2_tenant_id` と `azure_adls2_oauth2_client_id` も設定し、`azure_adls2_oauth2_use_managed_identity` は `false` のままにします。すべての FE と CN で同じ読み取り可能なパスにファイルをマウントしてください。空文字列の場合、トークン ファイル認証は使用しません。変更後は FE の再起動が必要です。
 
 ### `azure_adls2_oauth2_use_managed_identity`
 
@@ -246,6 +263,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：Azure Blob Storage にアクセスするためにネイティブ SDK を使用するかどうか。これにより、マネージド ID およびサービスプリンシパルでの認証が可能になります。この項目が `false` に設定されている場合、共有キーと SAS トークンでの認証のみが許可されます。
 - 導入時期：v3.4.4
+
+### `s3_use_native_sdk_for_glob`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：S3 および S3 互換オブジェクトストア (`s3`、`s3a`、`s3n`、`oss`、`cosn`、`ks3`、`obs`、`tos`) について、FILES() テーブル関数内の glob パスの解決にネイティブ AWS S3 SDK を使用するかどうか。この項目が `true` に設定されている場合、ワイルドカードの最長リテラルプレフィックスが S3 `ListObjectsV2` にプッシュダウンされ、Hadoop `globStatus` で親プレフィックス全体を列挙する必要がなくなります。プレフィックス配下のオブジェクトが多く、一致するものが少ない場合はこちらのほうが大幅に高速です。`false` に設定すると Hadoop `globStatus` の経路にフォールバックします。
+- 導入時期：v4.1.4
 
 ### `cloud_native_hdfs_url`
 
@@ -345,6 +371,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：Compute Engine にバインドされているサービスアカウントを使用するかどうか。
 - 導入時期：v3.5.1
+
+### `group_provider`
+
+- デフォルト：Empty
+- タイプ：String[]
+- 単位：-
+- 変更可能：Yes
+- 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
+- 導入時期：v3.5
+
+### `group_provider_http_connect_timeout_ms`
+
+- デフォルト：5000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の接続タイムアウト。正の値でなければなりません。この時間内にサーバーが接続を受け付けない場合、CREATE または ALTER GROUP PROVIDER ステートメントは失敗し、Group Provider は以前の設定を保持します。上限がなければ、応答しないサーバーはステートメントだけでなく、すべての FE のジャーナル再生もブロックします。
+- 導入時期：v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の読み取りタイムアウト。正の値でなければなりません。接続済みのサーバーが応答しないまま待てる時間の上限で、超過すると取得は失敗します。失敗時の動作は `group_provider_http_connect_timeout_ms` を参照してください。
+- 導入時期：v4.2
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -699,7 +752,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：有効にすると、StarRocks は共有データモードのクラウドネイティブテーブルおよびマテリアライズドビューのタブレット作成を最適化し、タブレットごとに個別のメタデータではなく、物理パーティション下のすべてのタブレットに単一の共有タブレットメタデータを作成します。これにより、テーブル作成、ロールアップ、スキーマ変更ジョブ中に作成されるタブレット作成タスクとメタデータ/ファイルの数が削減されます。この最適化はクラウドネイティブテーブル/マテリアライズドビューにのみ適用され、`file_bundling` と組み合わせて使用されます (後者は同じ最適化ロジックを再利用します)。注: スキーマ変更およびロールアップジョブは、同じ名前のファイルが上書きされるのを避けるため、`file_bundling` を使用するテーブルでは明示的に最適化を無効にします。注意して有効にしてください。作成されるタブレットメタデータの粒度が変更され、レプリカ作成とファイル命名の動作に影響する可能性があります。
+- 説明：有効にすると、StarRocks は共有データモードのクラウドネイティブテーブルおよびマテリアライズドビューのタブレット作成を最適化し、タブレットごとに個別のメタデータではなく、物理パーティション下のすべてのタブレットに単一の共有タブレットメタデータを作成します。これにより、テーブル作成、ロールアップ、スキーマ変更ジョブ中に作成されるタブレット作成タスクとメタデータ/ファイルの数が削減されます。この最適化はクラウドネイティブテーブル/マテリアライズドビューにのみ適用され、`file_bundling` と組み合わせて使用されます (後者は同じ最適化ロジックを再利用します)。注: スキーマ変更およびロールアップジョブは、同じ名前のファイルが上書きされるのを避けるため、`file_bundling` を使用するテーブルでは明示的に最適化を無効にします。Range 分散のテーブルではこの最適化は使用されません。各タブレットが固有のキー範囲を持つため、メタデータは常にタブレットごとに作成されます。注意して有効にしてください。作成されるタブレットメタデータの粒度が変更され、レプリカ作成とファイル命名の動作に影響する可能性があります。
 - 導入時期：v3.3.1, v3.4.0, v3.5.0
 
 ### `lake_create_tablet_max_retries`
@@ -794,6 +847,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が属する StarRocks クラスター内で ID 認証に使用されるトークン。このパラメーターが指定されていない場合、StarRocks はクラスターのリーダー FE が最初に起動されたときに、クラスターのランダムなトークンを生成します。
 - 導入時期：-
 
+### `authentication_failure_cache_capacity`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_failure_cache_ttl_second` が記憶する拒否済み認証情報の最大件数。1 つのクライアント（またはユーザー名を次々に変える攻撃者）が占有できるメモリを制限し、超過分は古いものから破棄されます。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarRocks 側での LDAP/AD ユーザー名の照合を大文字小文字の区別なしに緩めるかどうか。`true` に設定すると、`AUTHENTICATION_LDAP_SIMPLE` で作成されたユーザーと大文字小文字だけが異なるログイン名でもそのユーザーに解決されるため、ユーザーごとの DN と付与されたロールが有効になります。また LDAP security integration で認証されたログインは、クライアントが入力した表記ではなくディレクトリが保持する名前をセッション ID として使用します。この項目はログインが解決しうる保存済みユーザーの範囲を広げ、さらに `current_user()` と `SHOW PROCESSLIST` が返す値を変えるため、デフォルトでは無効です。ネイティブパスワード、JWT、OAuth2 で認証されたユーザーは影響を受けません。`AUTHENTICATION_LDAP_SIMPLE` で作成された 2 つのユーザーの名前が大文字小文字だけ異なる場合、その両方に一致するログインはどちらかに解決されるのではなく拒否されます。グループ名の照合はこの項目とは独立しています。
+- 導入時期：v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string
@@ -829,6 +909,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドのソケット読み取りタイムアウト。`authentication_ldap_simple_conn_timeout_ms` を参照してください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドの TCP 接続タイムアウト。設定しない場合は OS の TCP タイムアウトにフォールバックし、ディレクトリに到達できないときにリクエストを処理しているスレッド（security integration が HTTP・Arrow Flight・BE→FE のロード RPC も認証するようになったため、これらのチャネルのワーカースレッド）を数分間占有する可能性があります。認証を早く失敗させたい場合は小さくしてください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- デフォルト：group_provider
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：LDAP で認証されたユーザーのグループの取得元に関するクラスター全体のデフォルト値。有効な値：`group_provider`（設定された Group Provider のみ。以前のバージョンと同じ動作）、`memberof`（ユーザー自身の LDAP エントリーのグループメンバーシップ属性のみ）、`both`（両方の和集合）。同名の security integration プロパティがこの値を上書きします。不正な値は `group_provider` として扱われ、ERROR レベルで記録されます。これにより、入力ミスによってすべての LDAP ユーザーがログインできなくなることを防ぎます。
+- 導入時期：v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- デフォルト：memberOf
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性名のクラスター全体のデフォルト値。`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。同名の security integration プロパティがこの値を上書きします。
+- 導入時期：v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - デフォルト：Empty string
@@ -853,7 +969,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
+- 説明：ユーザーエントリー上でログイン名を保持する属性の名前で、検索バインドモードの検索フィルターの構築に使われます。`uid` は OpenLDAP に適しています。Active Directory では `sAMAccountName` を設定してください。AD のエントリーの RDN は表示名であり、`uid` は管理者が設定しない限り空だからです。この選択により `authentication_ldap_simple_bind_dn_pattern` は使えなくなります。詳細は [Security Integration](../../user_privs/authentication/security_integration.md) の同名プロパティを参照してください。
 - 導入時期：-
 
 ### `backup_job_default_timeout_ms`
@@ -1475,7 +1591,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
+- 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目を 0 未満に設定した場合、システムは常に非ロック最適化を適用し、クエリのために関連するマテリアライズドビューをコピーしません（FE のメモリ使用量とメタデータのコピー/ロック競合は減りますが、メタデータの並行性問題のリスクが高まる可能性があります）。0 に設定した場合、関連するマテリアライズドビューを持たないテーブルにのみ非ロック最適化を適用します。0 より大きい値に設定した場合、関連するマテリアライズドビューの数が設定した閾値以下のテーブルにのみ非ロック最適化を適用します。この閾値は、外部 Catalog のテーブルも読み取る文には適用されません。そのような文でプランニングフェーズ全体にわたってロックを保持すると、FE が制御できない外部システムへのパーティション、統計情報、ファイル一覧の要求にロックの保持時間が左右される一方、そのロックは外部側を何も保護しないためです。したがって、内部テーブルが関連するマテリアライズドビューをいくつ持っていても、そのような文は非ロックパスを使用します。さらに、値が 0 以上の場合、プランナーはマテリアライズドビュー関連の書き換えパスを有効にするために、クエリの OLAP テーブルをオプティマイザコンテキストに記録します。0 未満の場合、この手順はスキップされます。
+- 導入時期：v3.2.1
 
 ### `transform_type_prefer_string_for_varchar`
 

@@ -482,6 +482,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：当该值大于 `0` 时，则在轮询器中，如果某个 Driver 的单次调度时间超过了 `pipeline_poller_timeout_guard_ms` 的时间，则会打印该 Driver 以及 Operator 信息。
 - 引入版本：-
 
+### load_sink_close_thread_pool_num_max
+
+- 默认值：64
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：执行导入 Sink 最终关闭（Close）操作的线程数上限。存算分离集群下，该操作会向对象存储写入合并事务日志；放在这个线程池中执行，可以避免慢写入阻塞 Pipeline 的 Poller 线程和执行线程。线程全部繁忙时，后续的关闭操作在线程池队列中排队。队列长度不受限制，不会丢弃任何关闭操作。取值必须大于 0。支持运行时修改，无需重启 BE 或 CN。降低上限不会中断正在执行的关闭操作。初始化时会预启动一个线程并在空闲时保留；其余线程空闲 500 ms 后可退出。
+- 引入版本：-
+
 ### pipeline_prepare_thread_pool_queue_size
 
 - 默认值：102400
@@ -525,6 +534,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
+- 引入版本：-
+
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
 - 引入版本：-
 
 ### pk_index_parallel_get_threadpool_size
@@ -624,6 +642,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：限制 ConnectorScanNode 可同时运行的远端扫描器（HDFS/对象存储等）数量上限。启动时会用此值裁剪估算并发，运行时调度 pending scanner 也会受其限制，用于控制线程、内存和文件句柄压力。
+- 引入版本：v3.2.0
+
+### spill_max_dir_bytes_ratio
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：落盘目录（`spill_local_storage_dir`）与存储路径（`storage_root_path`）位于同一块磁盘时，中间结果落盘最多可占用的磁盘容量比例。默认值 `0.5` 表示落盘最多使用该磁盘容量的 50%。落盘目录位于独立磁盘时不受此限制。该参数仅在 BE 启动时读取，修改后需重启 BE 才能生效。
 - 引入版本：v3.2.0
 
 ### string_prefix_zonemap_prefix_len

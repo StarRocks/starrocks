@@ -100,6 +100,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableAutoIncrementClause;
 import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableDictColumnsClause;
 import com.starrocks.sql.ast.AlterTableModifyDefaultBucketsClause;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -500,6 +501,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1086,6 +1088,13 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             String functionName = functionCallExpr.getFunctionName().toLowerCase();
             List<Expr> paramsExpr = functionCallExpr.getParams().exprs();
             if (PARTITION_FUNCTIONS.contains(functionName)) {
+                // A partition function with no arguments (e.g. RANGE(substr(k)) parsed with an
+                // empty arg list) must surface a clean "unsupported expression" error instead of
+                // a raw IndexOutOfBoundsException from paramsExpr.get(0) below.
+                if (paramsExpr.isEmpty()) {
+                    throw new ParsingException(
+                            PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                }
                 Expr firstExpr = paramsExpr.get(0);
                 if (firstExpr instanceof SlotRef) {
                     columnList.add(((SlotRef) firstExpr).getColumnName());
@@ -1097,9 +1106,22 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
             }
             if (functionName.equals(FunctionSet.FROM_UNIXTIME) || functionName.equals(FunctionSet.FROM_UNIXTIME_MS)) {
-                if (hasCast || paramsExpr.size() > 1) {
+                // from_unixtime(ts[, format[, time_zone]]) -- from_unixtime_ms() has only the
+                // one-argument overload, so extra arguments there would resolve to nothing the BE can
+                // run. The format and the time zone must be written out: a partition value has to be
+                // computable at load time, and the checks that license range pruning -- that the
+                // format lays the fields out biggest-first and that the zone is not mid-rollback --
+                // can only read a literal.
+                int maxParams = functionName.equals(FunctionSet.FROM_UNIXTIME) ? 3 : 1;
+                if (hasCast || paramsExpr.size() > maxParams) {
                     throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"),
                             pos);
+                }
+                for (int i = 1; i < paramsExpr.size(); i++) {
+                    if (!(paramsExpr.get(i) instanceof StringLiteral literal) || literal.getValue().isEmpty()) {
+                        throw new ParsingException(
+                                PARSER_ERROR_MSG.unsupportedExprWithInfo(ExprToSql.toSql(expr), "PARTITION BY"), pos);
+                    }
                 }
             }
         }
@@ -1862,8 +1884,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
 
+        // INTEGER_VALUE() is an empty list, never null, when no job ids are given. Keep the list
+        // null in that case so the handler cancels all unfinished jobs of the table.
         List<Long> alterJobIdList = null;
-        if (context.INTEGER_VALUE() != null) {
+        if (!context.INTEGER_VALUE().isEmpty()) {
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
@@ -5355,6 +5379,17 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     }
 
     @Override
+    public ParseNode visitAlterTableDictColumnsClause(
+            com.starrocks.sql.parser.StarRocksParser.AlterTableDictColumnsClauseContext context) {
+        boolean enable = context.ENABLE() != null;
+        java.util.List<String> columns = new java.util.ArrayList<>();
+        for (com.starrocks.sql.parser.StarRocksParser.IdentifierContext id : context.identifier()) {
+            columns.add(getIdentifierName(id));
+        }
+        return new AlterTableDictColumnsClause(enable, columns, createPos(context));
+    }
+
+    @Override
     public ParseNode visitDropColumnClause(com.starrocks.sql.parser.StarRocksParser.DropColumnClauseContext context) {
         String columnName = getIdentifierName(context.identifier(0));
         String rollupName = null;
@@ -7535,6 +7570,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
         return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterGroupProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        // Case-sensitive like CREATE GROUP PROVIDER: property values (DNs, filters, passwords) must not be
+        // folded. The list may legally be empty here - the analyzer turns that into a readable error.
+        Map<String, String> properties = getProperties(context.property(), false);
+        return new AlterGroupProviderStmt(name, properties, createPos(context));
     }
 
     @Override

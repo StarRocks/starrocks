@@ -574,7 +574,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_task_run_fe_evaluation = true;
 
-    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`
+    // whether mask credential info in `information_schema.tasks` and `information_schema.task_runs`,
+    // and in the task run definitions archived to `_statistics_.task_run_history`
     // if task count is big, mask process can be time consuming
     @ConfField(mutable = true)
     public static boolean enable_task_info_mask_credential = true;
@@ -585,6 +586,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
+
+    /**
+     * The max number of finished or cancelled alter jobs kept per alter handler (schema change and
+     * optimize jobs share one budget, rollup jobs have another). Beyond it, the jobs that finished
+     * earliest are removed first, regardless of {@link #history_job_keep_max_second}. A job is kept
+     * while a running transaction may still be bound to its history schema or, in shared-data mode,
+     * while a cluster snapshot still needs it, so the count can temporarily exceed this limit.
+     * A value <= 0 disables the limit.
+     */
+    @ConfField(mutable = true)
+    public static int history_job_keep_max_num = 1000;
 
     /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted
@@ -1266,11 +1278,44 @@ public class Config extends ConfigBase {
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
-     * If there is no thread to handle new request, the request will be pend to a queue,
-     * the pending queue size is thrift_server_queue_size
+     * How many connections may wait for a worker while all thrift_server_max_worker_threads workers
+     * are busy. This bounds what the queue can hold, not what it will serve: a connection arriving
+     * once the queue is full is closed immediately rather than retried, and a queued connection that
+     * waits past thrift_server_queue_timeout_ms is closed unserved when a worker reaches it. The two
+     * cases are counted apart, by thrift_server_rejected_connections_total and
+     * thrift_server_expired_connections_total.
      */
     @ConfField
     public static int thrift_server_queue_size = 4096;
+
+    /**
+     * How long a connection may wait in the thrift server pending queue before a worker picks it up.
+     * A connection that has waited longer is closed unserved, on the assumption that its caller has
+     * abandoned it and serving it only holds a worker away from work someone is still waiting for.
+     * With the check armed the queue can only ever hold fresh work, so it drains in O(timeout) after
+     * a spike however deep it grew.
+     * <p>
+     * Off by default, because that assumption does not hold for every caller and the server cannot
+     * tell which it is serving. A queued connection carries no deadline the acceptor can read, and
+     * the deadlines callers actually use span four orders of magnitude: plain FE-internal RPCs give
+     * up after thrift_rpc_timeout_ms (10s), but a statement forwarded from a follower waits
+     * getExecTimeout() + thrift_rpc_timeout_ms -- 310s for a query at the default query_timeout, and
+     * about four hours for an INSERT at the default insert_timeout -- and BE stream-load and
+     * txn-commit RPCs wait stream_load_thrift_rpc_timeout_ms (60s) or a quarter of a load's own
+     * timeout_second, whichever is larger. query_timeout, insert_timeout and timeout_second are all
+     * user-settable and unbounded, so no fixed value is safe for every cluster: any timeout short
+     * enough to help recovery can cut off a forwarded statement whose client is still waiting, during
+     * exactly the saturation this is meant to shorten. Serving work whose caller has gone is the
+     * lesser evil, so the default keeps it.
+     * <p>
+     * Arm it per cluster, above the largest deadline that cluster's clients actually rely on -- start
+     * from its query_timeout and insert_timeout rather than from this file. Mutable, so it can be
+     * armed, retuned, or switched back off without a restart. Every drop is counted in
+     * thrift_server_expired_connections_total, and thrift_server_queue_wait_ms shows what the queue
+     * waits look like before anything is armed at all.
+     */
+    @ConfField(mutable = true)
+    public static long thrift_server_queue_timeout_ms = 0;
 
     /**
      * Maximal wait seconds for straggler node in load
@@ -1715,8 +1760,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2284,13 +2335,33 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int authentication_ldap_simple_server_port = 389;
 
+    @ConfField(mutable = true, comment = "TCP connect timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple. Without it the bind falls back to the OS TCP timeout, which can pin " +
+            "the request thread for minutes when the directory is unreachable. Matches the default of the other " +
+            "LDAP paths (group provider, enterprise ldap integration).")
+    public static int authentication_ldap_simple_conn_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "Socket read timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple.")
+    public static int authentication_ldap_simple_conn_read_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "How long (seconds) a rejected credential is remembered so that a " +
+            "client retrying the same wrong password does not produce one LDAP bind per attempt. The cache key " +
+            "includes a hash of the credential, so fixing the password takes effect immediately. 0 disables it.")
+    public static int authentication_failure_cache_ttl_second = 10;
+
+    @ConfField(mutable = true, comment = "Maximum number of rejected credentials remembered by " +
+            "authentication_failure_cache_ttl_second. Bounds the memory a client (or an attacker) cycling " +
+            "usernames can occupy.")
+    public static int authentication_failure_cache_capacity = 1024;
+
     @ConfField(mutable = true, comment = "false to enable ssl connection")
     public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
 
     @ConfField(mutable = true, comment = "ldap ssl trust store file path, supports perm and jks formats")
     public static String authentication_ldap_simple_ssl_conn_trust_store_path = "";
 
-    @ConfField(mutable = true, comment = "LDAP SSL trust store file password; " +
+    @ConfField(mutable = true, sensitive = true, comment = "LDAP SSL trust store file password; " +
             "no password is required for files in PEM format.")
     public static String authentication_ldap_simple_ssl_conn_trust_store_pwd = "";
 
@@ -2315,7 +2386,7 @@ public class Config extends ConfigBase {
     /**
      * the root DN password to search users for authentication_ldap_simple
      */
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, sensitive = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
@@ -2330,6 +2401,44 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
+     * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
+     * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
+     * A security integration property of the same name overrides this value.
+     * This is a policy switch rather than a per-server setting, so a cluster-wide default is useful:
+     * turning memberOf on everywhere is a single ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true, comment = "where the groups of an LDAP authenticated user come from: " +
+            "group_provider (default) | memberof | both")
+    public static String authentication_ldap_simple_group_source = "group_provider";
+
+    /**
+     * Name of the attribute on the user entry that carries its group membership.
+     * "memberOf" fits Active Directory and OpenLDAP with the memberof overlay;
+     * Sun/Oracle Directory Server and 389-DS use "isMemberOf".
+     */
+    @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
+            "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
+    public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
+     * Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case.
+     * <p>
+     * When true, a login whose name differs only in case from a user created with
+     * AUTHENTICATION_LDAP_SIMPLE still resolves to that user, so its per-user DN and the roles
+     * granted to it apply; and a login authenticated by an LDAP security integration takes its
+     * session identity from the name the directory holds rather than the one the client typed.
+     * <p>
+     * This both widens which stored user a login may resolve to and changes the value reported by
+     * current_user() and SHOW PROCESSLIST, so it is opt-in. Native-password, JWT and OAuth2 users
+     * are never affected. Group names are matched without regard to case independently of this.
+     */
+    @ConfField(mutable = true, comment = "Whether to relax LDAP/AD user name matching to be " +
+            "case-insensitive on the StarRocks side. Affects native users whose auth plugin is " +
+            "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
+            "Does not affect native-password, JWT or OAuth2 users.")
+    public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -2339,7 +2448,7 @@ public class Config extends ConfigBase {
     /**
      * Cluster token used for internal authentication.
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String auth_token = "";
 
     /**
@@ -2348,6 +2457,29 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, a cached query profile can be read only by the user who ran the query or by a holder of
+     * SYSTEM OPERATE. This gates SHOW PROFILELIST, ANALYZE PROFILE, get_query_profile(), the /api/profile,
+     * /api/query/progress and /api/query_detail endpoints (the last keeps listing every query but drops the
+     * profile text and the plan rendered from it), and the /query and /query_profile web pages; the OPERATE
+     * requirement that enable_http_auth already places on the endpoints is unchanged.
+     * Off by default so an upgrade keeps the earlier behavior, in which every authenticated user can read every
+     * profile; turn it on to restrict profile visibility.
+     *
+     * Turning it on has two visible consequences beyond the rule itself, both deliberate. /api/query/progress
+     * stops accepting anonymous requests, because the rule needs a caller identity -- an existing anonymous
+     * poller of it starts getting 401. And get_query_profile() requires SYSTEM OPERATE for an id whose profile
+     * is not cached on the connected frontend, since the RPC that fetches it from the other frontends carries
+     * no caller identity to authorize there; that narrows the cross-frontend lookup to OPERATE holders while
+     * the check is on.
+     *
+     * Mutable so the check can be toggled without a restart. Changing it needs SYSTEM OPERATE, which already grants
+     * full profile visibility, so the knob opens no path its holder lacks. Callers that apply it across several
+     * rows snapshot it once so a flip mid-operation cannot produce a half-filtered result.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_query_profile_access_check = false;
 
     /**
      * When set to true, guava cache is used to cache the privilege collection
@@ -2585,6 +2717,33 @@ public class Config extends ConfigBase {
     @ConfField
     public static int low_cardinality_threshold = 255;
 
+    // Global-dictionary thrash guard.
+    // A "rolling low-cardinality" column (distinct values stay under low_cardinality_threshold at any
+    // instant but the value set keeps rotating, e.g. an id whose active set churns) never trips the
+    // cardinality blacklist, yet every load introduces values missing from the current global dict and
+    // invalidates it. Each invalidation forces a full MetaScan re-collection, wasting IO and, on
+    // shared-data, hammering the segment metadata cache lock. This guard detects a dictionary that is
+    // invalidated too often and forbids collecting it, so it stops thrashing.
+    @ConfField(mutable = true, comment = "Enable the global-dictionary thrash guard that forbids " +
+            "dictionaries which keep getting invalidated and re-collected.")
+    public static boolean enable_dict_thrash_guard = true;
+
+    @ConfField(mutable = true, comment = "Sliding time window (in seconds) used by the global-dictionary " +
+            "thrash guard to count how often a column dictionary is invalidated.")
+    public static int dict_thrash_guard_window_sec = 60;
+
+    @ConfField(mutable = true, comment = "If a column dictionary is invalidated at least this many times " +
+            "within dict_thrash_guard_window_sec, the thrash guard forbids collecting it. Set to 0 to " +
+            "disable the count check while keeping the guard enabled.")
+    public static int dict_thrash_guard_threshold = 5;
+
+    @ConfField(mutable = true, comment = "Minimum interval, in seconds, between two min/max statistics " +
+            "collections for the same column. Min/max stats are collected on demand via a [_META_] " +
+            "MetaScan that reads every segment's zone-map metadata; a frequently loaded column would " +
+            "otherwise re-scan on every load. Within the interval the min/max optimization is skipped " +
+            "rather than re-collected (a stale value is never served). Set to 0 to disable throttling.")
+    public static int min_max_stats_collect_interval_sec = 60;
+
     /**
      * The column statistic cache update interval
      */
@@ -2792,6 +2951,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Per statistics-scan estimated-row budget for external-table analyze; " +
             "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
     public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
+
+    // A collection query reads one partition under the scan caps above into constant-size sketches and in
+    // practice returns in well under a second. Without a ceiling of its own each one inherits whatever is
+    // left of statistic_collect_query_timeout - the budget for the entire job - so a single stuck query can
+    // spend it all and leave every partition after it uncollected. The default is a tenth of the default job
+    // budget: far above anything the scan caps can produce, while still bounding one query's share of the
+    // job. Mutable so a cold or distant object store can be given more room without a restart.
+    @ConfField(mutable = true, comment = "Per-query timeout for external-table analyze collection queries; " +
+            "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
+            "additionally bounded by statistic_collect_query_timeout.")
+    public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -3258,7 +3428,7 @@ public class Config extends ConfigBase {
      * set this to enable Transparent Data Encryption(TDE)
      * once set, should not be changed, or the data depending on this key cannot be read anymore
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String default_master_key = "";
 
     /**
@@ -3346,9 +3516,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean aws_s3_use_instance_profile = false;
 
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_access_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String aws_s3_secret_key = "";
 
     @ConfField
@@ -3365,9 +3535,9 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_blob_sas_token = "";
 
     // azure adls2
@@ -3375,9 +3545,9 @@ public class Config extends ConfigBase {
     public static String azure_adls2_endpoint = "";
     @ConfField
     public static String azure_adls2_path = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_shared_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_sas_token = "";
     @ConfField
     public static boolean azure_adls2_oauth2_use_managed_identity = false;
@@ -3385,10 +3555,13 @@ public class Config extends ConfigBase {
     public static String azure_adls2_oauth2_tenant_id = "";
     @ConfField
     public static String azure_adls2_oauth2_client_id = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String azure_adls2_oauth2_client_secret = "";
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
+
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
 
     // gcp gs
     @ConfField
@@ -3397,11 +3570,11 @@ public class Config extends ConfigBase {
     public static String gcp_gcs_path = "";
     @ConfField
     public static String gcp_gcs_use_compute_engine_service_account = "true";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_email = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key = "";
-    @ConfField
+    @ConfField(sensitive = true)
     public static String gcp_gcs_service_account_private_key_id = "";
     @ConfField
     public static String gcp_gcs_impersonation_service_account = "";
@@ -3842,13 +4015,13 @@ public class Config extends ConfigBase {
     /**
      * the password of keystore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_keystore_password = "";
 
     /**
      * the password of private key
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_key_password = "";
 
     /**
@@ -3860,7 +4033,7 @@ public class Config extends ConfigBase {
     /**
      * the password of truststore file
      */
-    @ConfField
+    @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
 
     /**
@@ -4503,7 +4676,7 @@ public class Config extends ConfigBase {
     /**
      * The secret used to authorize StarRocks client with the authorization server.
      */
-    @ConfField(mutable = false)
+    @ConfField(mutable = false, sensitive = true)
     public static String oauth2_client_secret = "";
 
     /**
@@ -4559,6 +4732,26 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
+
+    /**
+     * Connect timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s)
+     * URL. Must be positive.
+     * <p>
+     * Without a bound the fetch can hang forever on a server that accepts the connection and never
+     * answers - and it runs not only on the statement's own session but on the journal replay thread,
+     * where it would stop the FE from applying this and every later metadata operation, and from becoming
+     * ready at all during a restart.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_connect_timeout_ms = 5000;
+
+    /**
+     * Read timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s) URL.
+     * Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see
+     * `group_provider_http_connect_timeout_ms` for why the fetch must be bounded at all.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_read_timeout_ms = 30000;
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
@@ -4691,10 +4884,11 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
-            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
-            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
-            + "enable_tablet_pre_split must also be true for pre-split to run.")
+            + "INSERT INTO ... SELECT FROM <table> loads whose source is an internal OLAP table or a "
+            + "table in an external catalog (views excluded), including explicit real/temp partitions "
+            + "and static/dynamic overwrite. Default on as of v4.1.0 after the GA gate. Set to false "
+            + "to disable cluster-wide. The session variable enable_tablet_pre_split must also be "
+            + "true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
@@ -4730,15 +4924,52 @@ public class Config extends ConfigBase {
             + "so an oversize row still produces a non-empty sample.")
     public static long tablet_pre_split_sample_byte_limit = 16L * 1024L * 1024L;
 
+    @ConfField(mutable = true, comment = "Soft limit on the source-file bytes the Sample-Based Tablet Pre-Split "
+            + "data tier scans for a Broker Load or INSERT-from-FILES load. A larger input is sampled from a "
+            + "subset of its files, so sampling time no longer grows with the input, while the tablet count is "
+            + "still sized from every file. Files are sorted by path and picked at even byte intervals, which "
+            + "favors larger files; each path partition (COLUMNS FROM PATH / columns_from_path) gets a share in "
+            + "proportion to its bytes and at least one file. Files are taken whole, so a scan can exceed the "
+            + "limit. The exception is a partition column read from the file data rather than from the path, or "
+            + "path and literal partition columns mixed: every file is then still scanned, because a subset "
+            + "could miss whole partitions. 0 scans every file.")
+    public static long tablet_pre_split_data_tier_scan_byte_limit = 4L * 1024L * 1024L * 1024L;
+
+    @ConfField(mutable = true, comment = "Fewest files the Sample-Based Tablet Pre-Split data tier scans "
+            + "once it samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit), "
+            + "so the sample spans enough independent files even when each file is large or holds only a narrow "
+            + "range of the sort key. Split across path partitions by bytes. This floor can take the scan above the "
+            + "byte limit, but adds no files once the scan reaches four times that limit. A positive "
+            + "tablet_pre_split_data_tier_max_scan_files takes precedence.")
+    public static int tablet_pre_split_data_tier_min_scan_files = 64;
+
+    @ConfField(mutable = true, comment = "Most files the Sample-Based Tablet Pre-Split data tier scans once it "
+            + "samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit). Every file in "
+            + "a subset costs FILES one metadata lookup before it reads anything, so a subset of many small "
+            + "files would otherwise stall on thousands of lookups. Split across path partitions by bytes; every "
+            + "partition keeps at least one file, so the cap can be exceeded by up to one file per partition; "
+            + "with more partitions than the cap, only the heaviest are sampled, one file each. 0 or a negative "
+            + "value removes the cap.")
+    public static int tablet_pre_split_data_tier_max_scan_files = 512;
+
     @ConfField(mutable = true, comment = "Maximum overlap fraction tolerated when Sample-Based "
             + "Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. "
             + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
             + "order so meta tier falls back to data tier (row sampling).")
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
+    @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
+            + "Pre-Split meta tier reads concurrently from a file-backed load source (FILES() or "
+            + "Broker Load). Footer reads are independent per file and the sampler sorts the "
+            + "aggregated stats, so concurrency only cuts the wall time of the pre-split hook "
+            + "(each footer is a remote round-trip; a many-file source otherwise serializes "
+            + "hundreds of round-trips). 1 disables concurrency.")
+    public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
+
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
             + "Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions "
-            + "(those with the lowest sample count) are dropped and fall back to runtime auto-create "
+            + "(the lightest: fewest input bytes when the data tier knows them per partition, otherwise fewest "
+            + "sampled rows) are dropped and fall back to runtime auto-create "
             + "with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to "
             + "zero or a negative value to disable the cap.")
     public static int tablet_pre_split_max_partitions_per_load = 32;

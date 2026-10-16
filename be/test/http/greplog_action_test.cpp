@@ -17,9 +17,9 @@
 #include <event2/http.h>
 #include <gtest/gtest.h>
 
-#include "platform/http/http_channel.h"
-#include "platform/http/http_request.h"
-#include "platform/http/http_status.h"
+#include "http/http_channel.h"
+#include "http/http_request.h"
+#include "http/http_status.h"
 
 namespace starrocks {
 

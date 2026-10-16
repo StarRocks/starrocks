@@ -35,7 +35,6 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
-<<<<<<< HEAD
 #include "http/http_channel.h"
 #include "http/http_common.h"
 #include "http/http_headers.h"
@@ -43,16 +42,6 @@
 #include "http/http_response.h"
 #include "http/utils.h"
 #include "runtime/client_cache.h"
-=======
-#include "http/utils.h"
-#include "orchestration/stream_load_orchestrator.h"
-#include "platform/http/http_channel.h"
-#include "platform/http/http_headers.h"
-#include "platform/http/http_request.h"
-#include "platform/http/http_response.h"
-#include "platform/thrift_rpc_helper.h"
-#include "runtime/byte_buffer.h"
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -473,8 +462,19 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     } else {
         request.__set_strip_outer_array(false);
     }
-    if (http_req->header(HTTP_PARTIAL_UPDATE) == "true") {
-        request.__set_partial_update(true);
+    // Match the regular stream load endpoint: accept "true"/"false" case-insensitively and
+    // reject anything else. This endpoint used to compare the header byte-exactly against
+    // "true", so "TRUE" (the casing the docs list as valid) or any other casing of true silently
+    // degraded into a full upsert that overwrote every column the columns header did not list
+    // with NULL or its default value.
+    if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {
+            request.__set_partial_update(false);
+        } else if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "true")) {
+            request.__set_partial_update(true);
+        } else {
+            return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
+        }
     } else {
         request.__set_partial_update(false);
     }

@@ -15,11 +15,27 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
+#include "storage/tablet_schema_helper.h"
+#include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+
+void expect_sample_counter(RuntimeProfile* profile, const char* name, TUnit::type unit, int64_t value) {
+    auto it = profile->_counter_map.find(name);
+    ASSERT_NE(it, profile->_counter_map.end()) << name;
+    EXPECT_EQ(it->second.second, "SegmentRead") << name;
+    EXPECT_EQ(it->second.first->type(), unit) << name;
+    EXPECT_EQ(it->second.first->value(), value) << name;
+}
+
+} // namespace
 
 class OlapScanOperatorTest : public ::testing::Test {
 public:
@@ -110,6 +126,56 @@ TEST_F(OlapScanOperatorTest, test_finish_sequence) {
     scan_node.close(&_runtime_state);
 
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// Each sample counter must report its own statistic. SampleTime used to be fed sample_population_size,
+// so a block/page count was rendered as a duration in the profile.
+TEST_F(OlapScanOperatorTest, sample_counters_report_their_own_statistic) {
+    OlapScanNode scan_node(&_object_pool, _tnode, *_tbl);
+    auto scan_ctx_factory =
+            std::make_shared<OlapScanContextFactory>(&scan_node, 1, false, false, std::move(_chunk_buffer_limiter));
+    OlapScanOperatorFactory scan_operator_factory(1, &scan_node, scan_ctx_factory);
+    auto scan_operator = std::make_shared<OlapScanOperator>(&scan_operator_factory, 1, 0, 1, &scan_node,
+                                                            scan_ctx_factory->get_or_create(0));
+    TScanRange scan_range;
+    auto chunk_source = scan_operator->create_chunk_source(std::make_unique<ScanMorsel>(1, scan_range), 0);
+    auto* olap_chunk_source = down_cast<OlapChunkSource*>(chunk_source.get());
+
+    ASSERT_TRUE(olap_chunk_source->ChunkSource::prepare(&_runtime_state).ok());
+    olap_chunk_source->_runtime_state = &_runtime_state;
+    olap_chunk_source->_init_counter(&_runtime_state);
+
+    FragmentContext fragment_ctx;
+    _runtime_state.set_fragment_ctx(&fragment_ctx);
+
+    // _update_counter() only reads the reader statistics and the table metrics, so a reader over an empty
+    // schema is enough to check how the sample statistics are mapped onto the profile counters.
+    olap_chunk_source->_table_metrics = std::make_shared<TableMetrics>(1, false);
+    olap_chunk_source->_reader = std::make_shared<TabletReader>(nullptr, Version(0, 1), Schema(),
+                                                                TabletSchemaHelper::create_tablet_schema());
+
+    olap_chunk_source->_params.sample_options.__set_enable_sampling(true);
+    olap_chunk_source->_params.sample_options.__set_sample_method(SampleMethod::BY_BLOCK);
+    olap_chunk_source->_params.sample_options.__set_probability_percent(10);
+
+    // Distinct values so that a counter fed from the wrong statistic is unambiguous.
+    auto* stats = olap_chunk_source->_reader->mutable_stats();
+    stats->sample_time_ns = 111;
+    stats->sample_build_histogram_time_ns = 222;
+    stats->sample_size = 333;
+    stats->sample_population_size = 444;
+    stats->sample_build_histogram_count = 555;
+
+    olap_chunk_source->_update_counter();
+
+    auto* profile = olap_chunk_source->_runtime_profile;
+    expect_sample_counter(profile, "SampleTime", TUnit::TIME_NS, 111);
+    expect_sample_counter(profile, "SampleBuildHistogramTime", TUnit::TIME_NS, 222);
+    expect_sample_counter(profile, "SampleSize", TUnit::UNIT, 333);
+    expect_sample_counter(profile, "SamplePopulationSize", TUnit::UNIT, 444);
+    expect_sample_counter(profile, "SampleBuildHistogramCount", TUnit::UNIT, 555);
+
+    scan_node.close(&_runtime_state);
 }
 
 } // namespace starrocks::pipeline

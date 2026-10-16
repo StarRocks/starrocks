@@ -78,6 +78,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.apache.commons.io.FileUtils;
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
@@ -157,6 +158,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -928,6 +930,75 @@ public class PaimonMetadataTest {
         catalog.dropTable(identifier, true);
         catalog.dropDatabase("test_db", true, true);
         Files.delete(tmpDir);
+    }
+
+    @Test
+    public void testBranchRequestIsIsolatedByTable() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_branch_isolation_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            Schema schema = Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .option(CoreOptions.BUCKET.key(), "-1")
+                    .build();
+            Identifier branchedIdentifier = Identifier.create("test_db", "branched_table");
+            Identifier mainIdentifier = Identifier.create("test_db", "main_table");
+            catalog.createTable(branchedIdentifier, schema, false);
+            catalog.createTable(mainIdentifier, schema, false);
+
+            FileStoreTable branchedNativeTable = (FileStoreTable) catalog.getTable(branchedIdentifier);
+            FileStoreTable mainNativeTable = (FileStoreTable) catalog.getTable(mainIdentifier);
+            writeRows(branchedNativeTable, GenericRow.of(1));
+            writeRows(mainNativeTable, GenericRow.of(2));
+            branchedNativeTable.createBranch("dev");
+            // Give the branch a snapshot without depending on empty-table scan handling.
+            writeRows(branchedNativeTable.switchToBranch("dev"), GenericRow.of(3));
+
+            PaimonMetadata branchMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            ConnectorTableVersion branchVersion = new ConnectorTableVersion(
+                    PointerType.VERSION, new ConstantOperator("branch:dev", VARCHAR));
+            long branchSnapshotId = branchMetadata.getSnapshotIdFromVersion(branchedNativeTable, branchVersion);
+
+            PaimonTable branchedTable = (PaimonTable) branchMetadata.getTable(
+                    context, "test_db", "branched_table");
+            PaimonTable mainTable = (PaimonTable) branchMetadata.getTable(
+                    context, "test_db", "main_table");
+            GetRemoteFilesParams mainParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id"))
+                    .setLimit(-1)
+                    .setTableVersionRange(TvrTableSnapshot.of(mainNativeTable.latestSnapshot().orElseThrow().id()))
+                    .build();
+            GetRemoteFilesParams branchParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id"))
+                    .setLimit(-1)
+                    .setTableVersionRange(TvrTableSnapshot.of(branchSnapshotId))
+                    .build();
+
+            // Planning another table must neither consume nor inherit the pending branch request.
+            branchMetadata.getRemoteFiles(mainTable, mainParams);
+            branchMetadata.getRemoteFiles(branchedTable, branchParams);
+
+            assertNotEquals("dev", CoreOptions.branch(mainTable.getNativeTable().options()));
+            assertEquals("dev", CoreOptions.branch(branchedTable.getNativeTable().options()));
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    private static void writeRows(FileStoreTable table, GenericRow... rows) throws Exception {
+        BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder();
+        try (BatchTableWrite write = writeBuilder.newWrite();
+                BatchTableCommit commit = writeBuilder.newCommit()) {
+            for (GenericRow row : rows) {
+                write.write(row);
+            }
+            commit.commit(write.prepareCommit());
+        }
     }
 
     @Test

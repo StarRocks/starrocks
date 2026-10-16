@@ -72,6 +72,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
+#include "util/credential_mask.h"
 #include "util/logging.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -230,6 +231,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("load_sink_close_thread_pool_num_max", [&]() -> Status {
+            if (config::load_sink_close_thread_pool_num_max <= 0) {
+                return Status::InvalidArgument("load_sink_close_thread_pool_num_max must be greater than 0");
+            }
+            auto* thread_pool = _exec_env->load_sink_close_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::load_sink_close_thread_pool_num_max);
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() -> Status {
             Status st1 = ExecEnv::GetInstance()
                                  ->agent_server()
@@ -303,7 +314,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("pk_index_parallel_execution_threadpool_max_threads", [&]() -> Status {
             auto thread_pool = _exec_env->pk_index_execution_thread_pool();
             if (thread_pool != nullptr) {
-                return thread_pool->update_max_threads(config::pk_index_parallel_execution_threadpool_max_threads);
+                int max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+                if (max_thread_count <= 0) {
+                    max_thread_count = CpuInfo::num_cores();
+                }
+                return thread_pool->update_max_threads(std::max(1, max_thread_count));
             }
             return Status::OK();
         });
@@ -433,7 +448,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();
             if (tablet_manager != nullptr) {
-                tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+                return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
             return Status::OK();
         });
@@ -528,7 +543,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     LOG(WARNING) << strings::Substitute("Failed to rollback config: $0.", name);
                 }
             } else {
-                LOG(INFO) << "set_config " << name << "=" << value << " success";
+                LOG(INFO) << "set_config " << name << "="
+                          << (config::is_sensitive_config(name) ? kCredentialMask : value) << " success";
             }
         }
     }
@@ -536,7 +552,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 }
 
 void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+    // A credential config's new value must not reach the log or the response, so it is masked everywhere below.
+    LOG(INFO) << req->debug_string(config::is_sensitive_config);
 
     Status s;
     std::string msg;
@@ -549,8 +566,10 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         const std::string& new_value = req->params()->begin()->second;
         s = update_config(config, new_value);
         if (!s.ok()) {
-            LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
-            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
+            const std::string shown_value =
+                    config::is_sensitive_config(config) ? std::string(kCredentialMask) : new_value;
+            LOG(WARNING) << "set_config " << config << "=" << shown_value << " failed";
+            msg = strings::Substitute("set $0=$1 failed, reason: $2", config, shown_value, s.to_string());
         }
     }
 

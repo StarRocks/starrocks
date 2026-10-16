@@ -1476,6 +1476,7 @@ public class StmtExecutor {
 
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
+            context.getAuditEventBuilder().setCustomQueryId(clonedSessionVariable.getCustomQueryId());
         }
     }
 
@@ -2265,6 +2266,10 @@ public class StmtExecutor {
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
         ProfileManager.ProfileElement profileElement = ProfileManager.getInstance().getProfileElement(queryId);
         Preconditions.checkNotNull(profileElement, "query not exists");
+        // Checked again here, not only in the analyzer: a profile absent at analysis time is allowed through,
+        // and a running query publishes its profile every runtime_profile_report_interval, so it can appear
+        // between the two lookups.
+        Authorizer.checkQueryProfileAccessAndReport(context, profileElement);
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {

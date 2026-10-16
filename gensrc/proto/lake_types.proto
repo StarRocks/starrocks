@@ -208,6 +208,10 @@ message SegmentMetadataPB {
     // Offset of this segment inside a bundle file. Use has_bundle_file_offset()
     // to test presence: 0 is a legitimate value (first segment in a bundle).
     optional int64 bundle_file_offset = 12;
+    // The bundle offset was synthesized for a complete standalone file when a rowset mixed
+    // bundled and standalone segments. Readers still use offset 0; replication uses this flag
+    // to distinguish that physical file from a shared bundle object.
+    optional bool synthetic_bundle_file_offset = 14 [default=false];
 }
 
 message RowsetMetadataPB {

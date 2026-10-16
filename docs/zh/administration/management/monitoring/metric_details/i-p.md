@@ -278,6 +278,48 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
 
+## `load_sink_close_active_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中正在执行的关闭操作数。存算分离集群下，每个关闭操作会向对象存储写入一次导入的合并事务日志。
+
+## `load_sink_close_execute_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务的累计执行时间，包含关闭过程中的等待和对象存储写入耗时。在每个任务结束时更新。
+
+## `load_sink_close_executed_tasks_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：线程池已完成的导入 Sink 关闭任务数，包含返回错误的关闭任务。
+
+## `load_sink_close_pending_time_ns_total`
+
+- 单位：纳秒
+- 类型：累积
+- 描述：已完成的导入 Sink 关闭任务在线程池队列中等待的累计时间。在每个任务结束时更新，尚未包含当前仍在排队的任务。
+
+## `load_sink_close_queue_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：在导入 Sink 关闭线程池队列中等待的关闭操作数。该值持续增长，说明对象存储写入跟不上导入结束的速度。
+
+## `load_sink_close_running_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池中的线程数。
+
+## `load_sink_close_threadpool_size`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 Sink 关闭线程池的最大线程数，由 `load_sink_close_thread_pool_num_max` 设置。
+
 ## `local_column_pool_bytes (Deprecated)`
 
 ## `max_disk_io_util_percent`
@@ -496,10 +538,27 @@ description: "Alphabetical i - p"
 - 单位：计数
 - 描述：BE 中管道执行器驱动程序调度的累计次数。
 
+## `pipe_drivers`
+
+- 单位：计数
+- 描述：BE 准入控制当前预留的逻辑 driver 配额。包含 fragment 实例化 driver 和 operator 期间持有的配额，以及实例化后尚未释放的配额。该值遵循逻辑 DOP 计数规则（包括 colocate 执行组），并非已实例化的 driver 对象数或运行线程数。配额释放时（包括准备失败或 fragment 完成时），该值随之减少。
+
 ## `pipe_poller_block_queue_len`
 
 - 单位：计数
 - 描述：管道引擎中 PipelineDriverPoller 的阻塞队列当前长度。
+
+## `pipe_poller_max_driver_check`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 每轮轮询中耗时最长的单个 Driver 检查所用的时间。该值偏大，说明某个阻塞 Driver 的检查拖慢了整轮轮询。
+
+## `pipe_poller_pass`
+
+- 单位：微秒
+- 类型：汇总
+- 描述：PipelineDriverPoller 检查一遍所有阻塞 Driver 所用的时间。每个执行器集合只有一个 Poller 线程，一轮耗时过长会推迟所有等待该线程检查的 Driver。最近窗口内的最大值见 `pipe_poller_pass_max_latency`。
 
 ## `pipe_prepare_pool_queue_len`
 

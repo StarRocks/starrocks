@@ -64,6 +64,7 @@
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/diagnose_daemon.h"
 #include "runtime/dummy_load_path_mgr.h"
@@ -97,8 +98,10 @@
 #include "storage/update_manager.h"
 #include "udf/python/env.h"
 #include "util/brpc_stub_cache.h"
+#include "util/compression/block_compression.h"
 #include "util/cpu_info.h"
 #include "util/mem_info.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
 #include "util/priority_thread_pool.hpp"
@@ -158,6 +161,70 @@ static StatusOr<int64_t> calc_max_consistency_memory(int64_t process_mem_limit) 
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
+namespace {
+// The per-thread ZSTD dictionary decompression contexts (util/compression) are created
+// on whichever thread first decodes a dictionary page and live until that thread exits.
+// Global malloc is hooked, so without this they would be charged to whatever tracker was
+// current at creation -- usually a query's -- and stay charged there long after the query
+// finished. Switching the thread-local tracker across the allocation MOVES that charge to
+// the process tracker; it does not add a second one. set_mem_tracker() commits whatever
+// the allocation cache is holding to the OLD tracker before it switches, so nothing lands
+// on the wrong side of the swap.
+//
+// The tracker is resolved on every enter rather than cached: a thread can exit after the
+// environment is torn down (its thread_local cache destructor frees the contexts then), and
+// a cached MemTracker* would dangle. When the environment is gone the scope does nothing and
+// the free is charged through the malloc hook's own fallback, which resolves to the process
+// tracker -- the same place the allocation was charged.
+//
+// The depth counter keeps a future nested use honest: only the outermost scope saves and
+// restores, so an inner one cannot overwrite what the outer one has to put back.
+thread_local MemTracker* tls_saved_dctx_tracker = nullptr;
+thread_local int tls_dctx_scope_depth = 0;
+thread_local bool tls_dctx_switched = false;
+
+void enter_dctx_alloc_scope() {
+    if (tls_dctx_scope_depth++ > 0) return;
+    // Two guards, in this order, and neither is optional.
+    //
+    // tls_is_thread_status_init is the same POD thread_local the malloc hook checks
+    // (mem_hook.cpp MEMORY_CONSUME_SIZE / MEMORY_RELEASE_SIZE): CurrentThread's
+    // constructor sets it, its destructor clears it, and it has no destructor of its own
+    // so it is always readable. It matters because dict_dctx_cache() can be the first
+    // dynamically initialized thread_local on a thread -- the cache is created, and only
+    // then does this scope initialize CurrentThread -- which makes CurrentThread destroyed
+    // FIRST at thread exit and the cache second. The cache's destructor frees its contexts,
+    // so without this guard it would touch tls_thread_status after that object's lifetime
+    // ended. The hook stops touching it at the same moment for the same reason, and its
+    // fallback resolves to the process tracker, so the free is still attributed correctly
+    // while nothing dead is read.
+    //
+    // CurrentThread::mem_tracker() is then the env check as well: it consults
+    // GlobalEnv::is_init() and returns null once the environment is gone, so nothing here
+    // has to test the environment itself.
+    if (!tls_is_thread_status_init) return;
+    MemTracker* saved = CurrentThread::mem_tracker();
+    if (saved == nullptr) return;
+    tls_saved_dctx_tracker = saved;
+    tls_dctx_switched = true;
+    (void)tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->process_mem_tracker());
+}
+
+void leave_dctx_alloc_scope() {
+    if (--tls_dctx_scope_depth > 0) return;
+    tls_dctx_scope_depth = 0;
+    // Restore only what was actually switched. A scope that bailed out above -- nested, or
+    // CurrentThread already destroyed, or the environment gone -- must not put anything back:
+    // it would touch the same state the guards exist to avoid, and flush the thread's
+    // allocation cache for a swap that never happened.
+    if (!tls_dctx_switched) return;
+    tls_dctx_switched = false;
+    (void)tls_thread_status.set_mem_tracker(tls_saved_dctx_tracker);
+    tls_saved_dctx_tracker = nullptr;
+}
+
+} // namespace
+
 bool GlobalEnv::_is_init = false;
 
 bool GlobalEnv::is_init() {
@@ -197,6 +264,9 @@ Status GlobalEnv::_init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTrackerType::PROCESS, bytes_limit, nullptr);
+    // Give the dictionary decompression contexts a stable home before anything can read
+    // a segment; see the hooks above.
+    set_dict_dctx_alloc_scope(&enter_dctx_alloc_scope, &leave_dctx_alloc_scope);
     _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
@@ -319,6 +389,28 @@ ExecEnv* ExecEnv::GetInstance() {
 ExecEnv::ExecEnv() = default;
 ExecEnv::~ExecEnv() = default;
 
+Status ExecEnv::_init_pk_index_execution_thread_pool() {
+    int32_t max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
+    if (max_thread_count <= 0) {
+        max_thread_count = CpuInfo::num_cores();
+    }
+    return ThreadPoolBuilder("cloud_native_pk_index_execution")
+            .set_min_threads(1)
+            .set_max_threads(std::max(1, max_thread_count))
+            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
+            .build(&_pk_index_execution_thread_pool);
+}
+
+Status ExecEnv::_init_load_sink_close_thread_pool() {
+    return ThreadPoolBuilder("load_sink_close")
+            // Creating the first worker in submit() can stall the poller after an idle period.
+            .set_min_threads(1)
+            .set_max_threads(config::load_sink_close_thread_pool_num_max)
+            .set_max_queue_size(std::numeric_limits<int>::max())
+            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+            .build(&_load_sink_close_thread_pool);
+}
+
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -366,6 +458,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_automatic_partition_pool));
     REGISTER_THREAD_POOL_METRICS(automatic_partition, _automatic_partition_pool);
+
+    RETURN_IF_ERROR(_init_load_sink_close_thread_pool());
+    REGISTER_THREAD_POOL_METRICS(load_sink_close, _load_sink_close_thread_pool);
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads == 0) {
@@ -583,15 +678,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     REGISTER_THREAD_POOL_METRICS(put_aggregate_metadata, _put_aggregate_metadata_thread_pool);
     _parallel_compact_mgr = std::make_unique<lake::LakePersistentIndexParallelCompactMgr>(_lake_tablet_manager);
     RETURN_IF_ERROR_WITH_WARN(_parallel_compact_mgr->init(), "init ParallelCompactMgr failed");
-    max_thread_count = config::pk_index_parallel_execution_threadpool_max_threads;
-    if (max_thread_count <= 0) {
-        max_thread_count = CpuInfo::num_cores() / 2;
-    }
-    RETURN_IF_ERROR(ThreadPoolBuilder("cloud_native_pk_index_execution")
-                            .set_min_threads(1)
-                            .set_max_threads(std::max(1, max_thread_count))
-                            .set_max_queue_size(config::pk_index_parallel_execution_threadpool_size)
-                            .build(&_pk_index_execution_thread_pool));
+    RETURN_IF_ERROR(_init_pk_index_execution_thread_pool());
     REGISTER_THREAD_POOL_METRICS(cloud_native_pk_index_execution, _pk_index_execution_thread_pool);
     max_thread_count = config::pk_index_memtable_flush_threadpool_max_threads;
     if (max_thread_count <= 0) {
@@ -666,6 +753,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+    // Bridge the local spill DirManager into the spill_disk_bytes_used gauge
+    // via a collect-time hook so the metrics registry stays decoupled from
+    // spill internals. The callback captures a raw pointer because the
+    // DirManager lives for the lifetime of ExecEnv.
+    if (auto* spill_metrics = StarRocksMetrics::instance()->spill_metrics(); spill_metrics != nullptr) {
+        StarRocksMetrics::instance()->metrics()->register_hook(
+                "spill_disk_bytes_used", [dir_mgr = _spill_dir_mgr.get(), spill_metrics]() {
+                    int64_t local_bytes = 0;
+                    for (auto& dir : dir_mgr->dirs()) {
+                        local_bytes += dir->get_current_size();
+                    }
+                    spill_metrics->local_disk_bytes_used()->set_value(local_bytes);
+                });
+    }
 
     _global_spill_manager = std::make_shared<spill::GlobalSpillManager>();
 
@@ -820,6 +921,14 @@ void ExecEnv::stop() {
         component_times.emplace_back("workgroup_manager", MonotonicMillis() - start);
     }
 
+    // No pipeline worker or poller can submit now. Join running closes and cancel queued closes while their
+    // query contexts, sinks and object-store dependencies are still alive.
+    if (_load_sink_close_thread_pool) {
+        start = MonotonicMillis();
+        _load_sink_close_thread_pool->shutdown();
+        component_times.emplace_back("load_sink_close_thread_pool", MonotonicMillis() - start);
+    }
+
     if (_thread_pool) {
         start = MonotonicMillis();
         _thread_pool->shutdown();
@@ -962,6 +1071,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_diagnose_daemon);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
+    _load_sink_close_thread_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
     _parallel_compact_mgr.reset();

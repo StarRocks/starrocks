@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -978,6 +979,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             if (coord.join(waitSecond)) {
                 Status status = coord.getExecStatus();
+                // Record where the rejected rows are logged before any check below fails the load, also when
+                // every row was rejected: information_schema.load_tracking_logs reads them through this URL.
+                this.trackingUrl = coord.getTrackingUrl();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
                     // A load that was cancelled never reports its counters, so reaching this without an
@@ -991,14 +995,18 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
+                    String msg = status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg();
+                    // Point to the rejected rows, as the error of a load over the max filter ratio does.
+                    if (!Strings.isNullOrEmpty(trackingUrl)) {
+                        msg += ", tracking_url: " + trackingUrl;
+                    }
+                    throw new LoadException(msg);
                 }
 
                 if (coord.isEnableLoadProfile()) {
                     collectProfile(false);
                 }
 
-                this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }

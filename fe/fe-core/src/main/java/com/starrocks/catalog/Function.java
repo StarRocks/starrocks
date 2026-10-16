@@ -45,6 +45,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.HdfsURI;
@@ -73,7 +74,6 @@ import java.util.stream.Collectors;
  * Base class for all functions.
  */
 public class Function implements Writable {
-    private static final String MASKED_LOCATION = "***";
 
     // Enum for how to compare function signatures.
     // For decimal types, the type in the function can be a wildcard, i.e. decimal(*,*).
@@ -906,10 +906,10 @@ public class Function implements Writable {
         try {
             JsonObject propertyObject = JsonParser.parseString(properties).getAsJsonObject();
             if (propertyObject.has(CreateFunctionStmt.FILE_KEY)) {
-                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, MASKED_LOCATION);
+                propertyObject.addProperty(CreateFunctionStmt.FILE_KEY, CredentialMask.SHORT);
             }
             if (propertyObject.has("object_file")) {
-                propertyObject.addProperty("object_file", MASKED_LOCATION);
+                propertyObject.addProperty("object_file", CredentialMask.SHORT);
             }
             return new Gson().toJson(propertyObject);
         } catch (RuntimeException e) {

@@ -669,32 +669,13 @@ TEST_F(StreamLoadActionTest, stream_load_put_rpc_timeout_setting) {
     }
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(StreamLoadActionTest, format_arrow) {
-    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                            _batch_write_mgr.get());
-    HttpRequest request(_evhttp_req);
-    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
-    request._params.emplace(HTTP_DB_KEY, "db");
-    request._params.emplace(HTTP_TABLE_KEY, "tbl");
-    request._headers.emplace(HTTP_FORMAT_KEY, "arrow");
-    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-    request.set_handler(&action);
-    ASSERT_EQ(0, action.on_header(&request));
-    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
-    ASSERT_NE(nullptr, ctx);
-    ASSERT_EQ(TFileFormatType::FORMAT_ARROW, ctx->format);
-}
-
 // Numeric request headers are attacker-controlled. std::stoll throws
 // std::invalid_argument on a value that is not a number and std::out_of_range
 // on one that does not fit; in production these run inside a libevent callback
 // with no handler above them, so a throw takes down the whole BE process
 // instead of failing the one request.
 TEST_F(StreamLoadActionTest, content_length_not_a_number) {
-    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                            _batch_write_mgr.get());
+    StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -712,8 +693,7 @@ TEST_F(StreamLoadActionTest, content_length_not_a_number) {
 }
 
 TEST_F(StreamLoadActionTest, content_length_does_not_fit_in_int64) {
-    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                            _batch_write_mgr.get());
+    StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -734,8 +714,7 @@ TEST_F(StreamLoadActionTest, content_length_does_not_fit_in_int64) {
 // std::invalid_argument. std::out_of_range is a sibling of that type, not a
 // subclass, so an over-long number escaped the handler.
 TEST_F(StreamLoadActionTest, skip_header_does_not_fit_in_int64) {
-    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                            _batch_write_mgr.get());
+    StreamLoadAction action(&_env, _limiter.get());
 
     HttpRequest request(_evhttp_req);
     request._params.emplace(HTTP_DB_KEY, "db");
@@ -786,8 +765,7 @@ TEST_F(StreamLoadActionTest, numeric_headers_rejected) {
 
     for (const auto& tc : test_cases) {
         k_response_str = "";
-        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                                _batch_write_mgr.get());
+        StreamLoadAction action(&_env, _limiter.get());
 
         HttpRequest request(_evhttp_req);
         request._params.emplace(HTTP_DB_KEY, "db");
@@ -812,8 +790,7 @@ TEST_F(StreamLoadActionTest, numeric_headers_rejected) {
 // The same headers with values the parser accepts must still reach the plan
 // request unchanged.
 TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
-    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
-                            _batch_write_mgr.get());
+    StreamLoadAction action(&_env, _limiter.get());
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
         SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
@@ -848,5 +825,4 @@ TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
     EXPECT_EQ(2097152, ctx->put_result.params.query_options.mem_limit);
 }
 
->>>>>>> a6cb26f ([BugFix] Do not let a malformed numeric HTTP parameter kill the BE (#79022))
 } // namespace starrocks
