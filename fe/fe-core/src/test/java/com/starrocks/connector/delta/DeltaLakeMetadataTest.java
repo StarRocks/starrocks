@@ -21,6 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
@@ -45,20 +46,26 @@ import com.starrocks.connector.metastore.MetastoreTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import io.delta.kernel.Scan;
 import io.delta.kernel.ScanBuilder;
 import io.delta.kernel.data.ColumnVector;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
+import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.internal.data.DefaultColumnarBatch;
 import io.delta.kernel.defaults.internal.data.vector.DefaultBinaryVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultMapVector;
 import io.delta.kernel.defaults.internal.data.vector.DefaultStructVector;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.expressions.Predicate;
+import io.delta.kernel.internal.InternalScanFileUtils;
 import io.delta.kernel.internal.ScanBuilderImpl;
 import io.delta.kernel.internal.ScanImpl;
 import io.delta.kernel.internal.SnapshotImpl;
+import io.delta.kernel.internal.actions.Metadata;
+import io.delta.kernel.internal.data.GenericRow;
+import io.delta.kernel.internal.util.VectorUtils;
 import io.delta.kernel.types.BasePrimitiveType;
 import io.delta.kernel.types.DataType;
 import io.delta.kernel.types.MapType;
@@ -75,9 +82,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DeltaLakeMetadataTest {
     private HiveMetaClient client;
@@ -420,6 +431,121 @@ public class DeltaLakeMetadataTest {
     }
 
     @Test
+    public void testTriggerPlanFilesDelegatesAndSkipsScannedTable() {
+        PredicateSearchKey key = newSearchKey();
+        Deencapsulation.<Set<PredicateSearchKey>>getField(deltaLakeMetadata, "scannedTables").add(key);
+        ColumnRefOperator columnRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "id", true);
+
+        Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                ConstantOperator.TRUE,
+                Map.of(columnRef, new Column("id", com.starrocks.type.IntegerType.INT)));
+        Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                ConstantOperator.TRUE,
+                List.of("id"));
+    }
+
+    @Test
+    public void testFailedPrecollectionFutureDoesNotPropagateToOtherCallers() {
+        PredicateSearchKey key = newSearchKey();
+        CompletableFuture<Void> failedFuture = new CompletableFuture<>();
+        failedFuture.completeExceptionally(new RuntimeException("expected failure"));
+        scanTaskFutures().put(key, failedFuture);
+
+        Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                ConstantOperator.TRUE, new ConnectContext(), List.of(), Tracers.get());
+
+        Assertions.assertNull(Deencapsulation.invoke(deltaLakeMetadata, "getPreparedScanTasks", key));
+    }
+
+    @Test
+    public void testCompletedPrecollectionFutureIsSharedByOtherCallers() {
+        PredicateSearchKey key = newSearchKey();
+        CompletableFuture<Void> completedFuture = CompletableFuture.completedFuture(null);
+        FileScanTask task = new FileScanTask(null, 0L, Map.of(), null);
+        scanTaskFutures().put(key, completedFuture);
+        Deencapsulation.<Map<PredicateSearchKey, List<FileScanTask>>>getField(deltaLakeMetadata, "splitTasks")
+                .put(key, List.of(task));
+
+        Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                ConstantOperator.TRUE, new ConnectContext(), List.of(), Tracers.get());
+
+        List<FileScanTask> prepared = Deencapsulation.invoke(deltaLakeMetadata, "getPreparedScanTasks", key);
+        Assertions.assertEquals(List.of(task), prepared);
+    }
+
+    @Test
+    public void testTriggerPlanFilesSkipsCollectorThatCompletedBetweenChecks() {
+        PredicateSearchKey key = newSearchKey();
+        Set<PredicateSearchKey> scannedTables = Deencapsulation.getField(deltaLakeMetadata, "scannedTables");
+        ConcurrentHashMap<PredicateSearchKey, CompletableFuture<Void>> futures =
+                new ScanCompletionRaceMap(scannedTables);
+        Deencapsulation.setField(deltaLakeMetadata, "scanTaskFutures", futures);
+
+        Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                ConstantOperator.TRUE, new ConnectContext(), List.of(), Tracers.get());
+
+        Assertions.assertFalse(futures.containsKey(key));
+    }
+
+    @Test
+    public void testTriggerPlanFilesCleansUpAfterCollectionFailure() {
+        PredicateSearchKey key = newSearchKey();
+
+        Assertions.assertThrows(RuntimeException.class,
+                () -> Deencapsulation.invoke(deltaLakeMetadata, "triggerDeltaLakePlanFilesIfNeeded", key, newTable(),
+                        ConstantOperator.TRUE, new ConnectContext(), List.of(), Tracers.get()));
+        Assertions.assertFalse(scanTaskFutures().containsKey(key));
+    }
+
+    @Test
+    public void testCollectPlanFilesUpdatesStatisticsForEachFile(@Mocked SnapshotImpl snapshot,
+                                                                 @Mocked Metadata metadata,
+                                                                 @Mocked Engine engine,
+                                                                 @Mocked ScanBuilderImpl scanBuilder,
+                                                                 @Mocked ScanImpl scan,
+                                                                 @Mocked FilteredColumnarBatch batch) {
+        StructType schema = new StructType().add("id", io.delta.kernel.types.IntegerType.INTEGER);
+        CloseableIterator<FilteredColumnarBatch> batches = singleElementIterator(batch);
+        CloseableIterator<Row> rows = singleElementIterator(scanFileRow());
+        new Expectations() {
+            {
+                snapshot.getMetadata();
+                result = metadata;
+                minTimes = 0;
+
+                metadata.getSchema();
+                result = schema;
+                minTimes = 0;
+
+                metadata.getPartitionColNames();
+                result = Set.of();
+                minTimes = 0;
+
+                snapshot.getScanBuilder();
+                result = scanBuilder;
+
+                scanBuilder.withFilter((Predicate) any);
+                result = scanBuilder;
+
+                scanBuilder.build();
+                result = scan;
+
+                scan.getScanFiles(engine, true);
+                result = batches;
+
+                batch.getRows();
+                result = rows;
+            }
+        };
+        DeltaLakeTable table = new DeltaLakeTable(1, "delta0", "db1", "table1",
+                List.of(new Column("id", com.starrocks.type.IntegerType.INT)), List.of(), snapshot, engine,
+                new MetastoreTable("db1", "table1", "path/to/table", 123));
+
+        Deencapsulation.invoke(deltaLakeMetadata, "collectDeltaLakePlanFiles", newSearchKey(), table,
+                ConstantOperator.TRUE, new ConnectContext(), List.of("id"), Tracers.get());
+    }
+
+    @Test
     public void testIdentityStringPartitionColumns() {
         // Only string-typed partition columns are identity string partition columns: a non-string partition column
         // and a string non-partition column are both excluded. (Delta partitioning is always identity.)
@@ -439,5 +565,64 @@ public class DeltaLakeMetadataTest {
     private static DeltaLakeTable newTable() {
         return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(), Lists.newArrayList(),
                 null, null, new MetastoreTable("db1", "table1", "path/to/table", 123));
+    }
+
+    private static PredicateSearchKey newSearchKey() {
+        return PredicateSearchKey.of("db1", "table1", GetRemoteFilesParams.newBuilder().build());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<PredicateSearchKey, CompletableFuture<Void>> scanTaskFutures() {
+        return Deencapsulation.getField(deltaLakeMetadata, "scanTaskFutures");
+    }
+
+    private static Row scanFileRow() {
+        StructType addFileSchema = (StructType) InternalScanFileUtils.SCAN_FILE_SCHEMA_WITH_STATS.get("add").getDataType();
+        Map<Integer, Object> addValues = new HashMap<>();
+        addValues.put(addFileSchema.indexOf("path"), "part-00000.parquet");
+        addValues.put(addFileSchema.indexOf("size"), 100L);
+        addValues.put(addFileSchema.indexOf("modificationTime"), 1L);
+        addValues.put(addFileSchema.indexOf("partitionValues"), VectorUtils.stringStringMapValue(Map.of()));
+        Row addFile = new GenericRow(addFileSchema, addValues);
+
+        Map<Integer, Object> scanValues = new HashMap<>();
+        scanValues.put(InternalScanFileUtils.ADD_FILE_ORDINAL, addFile);
+        scanValues.put(InternalScanFileUtils.SCAN_FILE_SCHEMA.indexOf("tableRoot"), "s3://bucket/table");
+        return new GenericRow(InternalScanFileUtils.SCAN_FILE_SCHEMA, scanValues);
+    }
+
+    private static <T> CloseableIterator<T> singleElementIterator(T element) {
+        return new CloseableIterator<>() {
+            private boolean available = true;
+
+            @Override
+            public boolean hasNext() {
+                return available;
+            }
+
+            @Override
+            public T next() {
+                available = false;
+                return element;
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+    }
+
+    private static class ScanCompletionRaceMap extends ConcurrentHashMap<PredicateSearchKey, CompletableFuture<Void>> {
+        private final Set<PredicateSearchKey> scannedTables;
+
+        private ScanCompletionRaceMap(Set<PredicateSearchKey> scannedTables) {
+            this.scannedTables = scannedTables;
+        }
+
+        @Override
+        public CompletableFuture<Void> putIfAbsent(PredicateSearchKey key, CompletableFuture<Void> future) {
+            scannedTables.add(key);
+            return super.putIfAbsent(key, future);
+        }
     }
 }
