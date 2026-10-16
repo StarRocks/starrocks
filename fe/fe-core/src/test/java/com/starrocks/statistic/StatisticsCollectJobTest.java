@@ -1717,6 +1717,71 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testScopedJobsSkipTableWithStatisticAutoCollectDisabled() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("t0_stats_partition");
+        NativeAnalyzeJob defaultJob = new NativeAnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID,
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Map.of(StatisticAutoCollector.DEFAULT_JOB_FLAG, "true"), StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        NativeAnalyzeJob dbJob = new NativeAnalyzeJob(db.getId(), StatsConstants.DEFAULT_ALL_ID,
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        NativeAnalyzeJob tableJob = new NativeAnalyzeJob(db.getId(), table.getId(),
+                List.of(), List.of(), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        Assertions.assertTrue(collectsTable(defaultJob, "t0_stats_partition"));
+
+        try {
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t0_stats_partition SET ('enable_statistic_auto_collect' = 'false')");
+            Assertions.assertFalse(collectsTable(defaultJob, "t0_stats_partition"));
+            Assertions.assertFalse(collectsTable(dbJob, "t0_stats_partition"));
+            Assertions.assertTrue(collectsTable(defaultJob, "t1_stats"));
+            Assertions.assertTrue(collectsTable(tableJob, "t0_stats_partition"));
+        } finally {
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t0_stats_partition SET ('enable_statistic_auto_collect' = 'true')");
+        }
+        Assertions.assertTrue(collectsTable(defaultJob, "t0_stats_partition"));
+    }
+
+    @Test
+    public void testStatisticAutoCollectTableProperty() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_auto_collect_off (k1 bigint, v1 bigint) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES ('replication_num' = '1', 'enable_statistic_auto_collect' = 'false')");
+        try {
+            OlapTable table = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                    .getDb("test").getTable("t_auto_collect_off");
+            Assertions.assertFalse(table.enableStatisticAutoCollect());
+            assertContains(starRocksAssert.showCreateTable("SHOW CREATE TABLE test.t_auto_collect_off"),
+                    "\"enable_statistic_auto_collect\" = \"false\"");
+
+            Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t_auto_collect_off SET ('enable_statistic_auto_collect' = 'off')"));
+            Assertions.assertFalse(table.enableStatisticAutoCollect());
+
+            starRocksAssert.alterTableProperties(
+                    "ALTER TABLE test.t_auto_collect_off SET ('enable_statistic_auto_collect' = 'true')");
+            Assertions.assertTrue(table.enableStatisticAutoCollect());
+            Assertions.assertFalse(starRocksAssert.showCreateTable("SHOW CREATE TABLE test.t_auto_collect_off")
+                    .contains("enable_statistic_auto_collect"));
+        } finally {
+            starRocksAssert.dropTable("test.t_auto_collect_off");
+        }
+
+        Assertions.assertThrows(Exception.class, () -> starRocksAssert.withTable(
+                "CREATE TABLE test.t_auto_collect_bad (k1 bigint) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                        "PROPERTIES ('replication_num' = '1', 'enable_statistic_auto_collect' = 'off')"));
+    }
+
+    private static boolean collectsTable(NativeAnalyzeJob job, String tableName) {
+        return StatisticsCollectJobFactory.buildStatisticsCollectJob(job).stream()
+                .anyMatch(j -> j.getTable().getName().equals(tableName));
+    }
+
+    @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
         OlapTable olapTable =

@@ -953,6 +953,91 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (オプション): 同名の列の割合のしきい値。同名の列の割合がこの値よりも低い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
 - `flat_json.column.max` (オプション): Flat JSONによって抽出できるサブフィールドの最大数。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `100`。
 
+<<<<<<< HEAD
+=======
+### クラウドネイティブテーブルで Light-weight Tablet Creation を有効にする
+
+*クラウドネイティブ（共有データ）テーブルでのみ利用できます*
+
+クラウドネイティブテーブルで Light-weight Tablet Creation を有効にすると、通常の `CreateReplicaTask` の BE/CN ノードへのディスパッチをスキップできます。
+
+`light_weight_tablet_creation` を `true` に設定すると、次のようになります。
+
+- DDL 操作（CREATE TABLE や ADD PARTITION など）では `CreateReplicaTask` の発行がスキップされ、作成時に v1 タブレットメタデータやスキーマファイルがオブジェクトストレージに書き込まれません。
+
+- 初期タブレットメタデータは、オブジェクトストレージに事前に格納されるのではなく、必要に応じて FE から遅延取得されます。
+
+このプロパティを CREATE TABLE 実行時に明示的に設定しない場合、FE 設定 `lake_enable_light_weight_tablet_creation`（デフォルト: `false`）に従います。
+
+### 統計情報の自動収集で特定のテーブルをスキップする
+
+`enable_statistic_auto_collect` を `false` に設定すると、統計情報の自動収集でそのテーブルがスキップされます。デフォルト: `true`。
+
+```SQL
+PROPERTIES (
+    "enable_statistic_auto_collect" = "false"
+)
+```
+
+このプロパティが `false` の場合:
+
+- StarRocks が提供する自動収集タスク、および `CREATE ANALYZE ALL` または `CREATE ANALYZE DATABASE` で作成した自動収集タスクは、このテーブルをスキップします。
+- このテーブルを明示的に指定した収集タスク（`CREATE ANALYZE TABLE` で作成したもの、または `ANALYZE TABLE` で実行したもの）は、引き続きこのテーブルの統計情報を収集します。
+- データロード時にトリガーされる統計情報の収集には影響しません。これは `enable_statistic_collect_on_first_load` で別途制御されます。
+
+このプロパティは [ALTER TABLE](ALTER_TABLE.md) で変更できます。マテリアライズドビューではサポートされていません。
+
+### 行レベル TTL
+
+行レベル TTL は、パーティション単位ではなく行単位で期限切れを判定します。行の有効期限が過ぎるとその行は期限切れとなり、期限切れの行はバックグラウンドで削除されます。
+
+行レベル TTL は、共有データクラスタの主キーテーブルでのみサポートされます。また、クラスタ全体で先に有効化する必要があります。FE 設定項目 `enable_row_ttl` が `false` の間は、まだ行レベル TTL が設定されていないテーブルに追加することはできません。テーブル作成時も同様です。
+
+```SQL
+PROPERTIES (
+    "row_ttl_expire_at" = "<expression>",
+    "row_ttl_check_interval_second" = "<int_value>",
+    "row_ttl_time_zone" = "<string_value>"
+)
+```
+
+- `row_ttl_expire_at`（行レベル TTL を使う場合は必須）：行の有効期限。式は次の 4 つの形式のいずれかで、`<column>` が時刻カラムです。
+
+  ```SQL
+  <column>
+  <column> + INTERVAL <n> <unit>
+  to_datetime(<column>[, <scale>])
+  to_datetime(<column>[, <scale>]) + INTERVAL <n> <unit>
+  ```
+
+  - 書き方によって時刻カラムの型が決まります。カラム名だけを書く場合（INTERVAL の有無にかかわらず）は `DATE` または `DATETIME` カラムを壁時計時刻として読み取ります。`to_datetime(<column>)` は `INT` または `BIGINT` カラムを Unix タイムスタンプとして読み取ります。それ以外のカラム型はすべて拒否されます。`AUTO_INCREMENT` カラムも、時刻ではなく連番を保持するため使用できません。
+  - `<unit>` は `YEAR`、`QUARTER`、`MONTH`、`WEEK`、`DAY`、`HOUR`、`MINUTE`、`SECOND` のいずれかです。`<n>` は 1 から 2147483647 までの整数です。
+  - `<scale>` は `0`、`3`、`6` のいずれかで、それぞれ秒、ミリ秒、マイクロ秒を表します。既定値は `0` です。
+  - 時刻カラムは生成カラムでもよく、主キーの一部やパーティションカラムでもかまいません。
+  - 時刻カラムが NULL の行は期限切れになりません。
+
+- `row_ttl_check_interval_second`（任意）：このテーブルで期限切れの行を確認する間隔（秒）。正の整数である必要があります。指定しない場合は FE 設定項目 `default_row_ttl_check_interval_second` が使われ、テーブルに固定されるのではなく毎回の処理で都度読み取られます。
+
+- `row_ttl_time_zone`（任意）：有効期限を計算するタイムゾーン。値はセッション変数 `time_zone` と同じで、`Asia/Shanghai` のような地域名、`+08:00` のようなオフセット、または `CST` を指定できます。指定しない場合はクラスタの `time_zone` が毎回の処理で都度読み取られます。
+
+  時刻カラムが `DATE` または `DATETIME` の場合にこのプロパティが最も重要になります。比較の基準となるタイムゾーンを決めるためです。StarRocks の `DATETIME` はタイムゾーンを持たないため、そのカラムがどのタイムゾーンの壁時計時刻で書かれたかはどこにも記録されていません。Unix タイムスタンプのカラムでは原点に曖昧さがないため、タイムゾーンは `DAY` 以上の単位のカレンダー計算にのみ使われます。
+
+:::note
+時刻カラムが生成カラムの場合、そのテーブルへのカラムモードの部分更新では、すべての生成カラムのソースカラムを漏れなく指定する必要があります。指定しないとロード全体が拒否されます。これは行レベル TTL が持ち込んだものではなく既存のエンジンの挙動ですが、生成カラムを時刻カラムに使う場合は必ず遭遇します。
+:::
+
+#### 例
+
+```SQL
+"row_ttl_expire_at" = "expire_at"
+"row_ttl_expire_at" = "event_time + INTERVAL 7 DAY"
+"row_ttl_expire_at" = "to_datetime(created_at_ms, 3)"
+"row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY"
+```
+
+テーブル作成後に行レベル TTL を変更または削除する方法は [ALTER TABLE](ALTER_TABLE.md) を参照してください。
+
+>>>>>>> a98c6b90d2a... [BugFix][RB-478] Let a table opt out of automatic statistics collection (#65500)
 ## 例
 
 ### ハッシュバケットとカラム型ストレージを持つ集計テーブル
