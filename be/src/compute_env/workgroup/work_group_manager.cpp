@@ -56,8 +56,10 @@ struct WorkGroupMetrics {
         }
 
         void publish_counters() {
-            if (wait_time_ns != nullptr) wait_time_ns->set_value(_wait_time_ns);
-            if (schedule_count != nullptr) schedule_count->set_value(_schedule_count);
+            // Saturation stays sticky even if a wrapped queue counter later becomes positive again.
+            if (wait_time_ns != nullptr) wait_time_ns->set_value(std::max(wait_time_ns->value(), _wait_time_ns));
+            if (schedule_count != nullptr)
+                schedule_count->set_value(std::max(schedule_count->value(), _schedule_count));
         }
 
         // Take over the metrics of `other` that are registered, and keep the others.

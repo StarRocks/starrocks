@@ -231,10 +231,12 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counter_totals_saturate) 
     MetricRegistry registry("test");
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     int create_count = 0;
-    auto factory = [&create_count](pipeline::DriverQueueMetrics*) {
+    std::vector<FakeDriverQueue*> queues;
+    auto factory = [&create_count, &queues](pipeline::DriverQueueMetrics*) {
         auto queue = std::make_unique<FakeDriverQueue>();
         const auto value = create_count++ == 0 ? std::numeric_limits<int64_t>::max() - 1 : 10;
         queue->stats = {{.accu_time_ns = 0, .wait_time_ns = value, .schedule_count = value}};
+        queues.push_back(queue.get());
         return queue;
     };
     WorkGroupManager manager(config, &registry, factory, unused_driver_executor_factory());
@@ -243,12 +245,22 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_counter_totals_saturate) 
     manager.add_workgroup(
             std::make_shared<WorkGroup>(create_twg(133, 2, "wg_queue_limit", WorkGroup::DEFAULT_MEM_POOL, 0.5)));
     manager.update_metrics();
-    for (const auto* name :
-         {"resource_group_driver_queue_level_wait_time_ns", "resource_group_driver_queue_level_schedule_count"}) {
-        auto* metric = registry.get_metric(name, MetricLabels().add("name", "wg_queue_limit").add("level", "0"));
-        ASSERT_NE(nullptr, metric);
-        EXPECT_EQ(std::to_string(std::numeric_limits<int64_t>::max()), metric->to_string());
-    }
+    auto check_saturated = [&] {
+        for (const auto* name :
+             {"resource_group_driver_queue_level_wait_time_ns", "resource_group_driver_queue_level_schedule_count"}) {
+            auto* metric = registry.get_metric(name, MetricLabels().add("name", "wg_queue_limit").add("level", "0"));
+            ASSERT_NE(nullptr, metric);
+            EXPECT_EQ(std::to_string(std::numeric_limits<int64_t>::max()), metric->to_string());
+        }
+    };
+    check_saturated();
+    for (auto* queue : queues) queue->stats[0] = {.wait_time_ns = -1, .schedule_count = -1};
+    manager.update_metrics();
+    check_saturated();
+    // A complete wrap can make the queue's raw counters positive again; the exported total remains saturated.
+    for (auto* queue : queues) queue->stats[0] = {.wait_time_ns = 1, .schedule_count = 1};
+    manager.update_metrics();
+    check_saturated();
     manager.destroy();
 }
 
