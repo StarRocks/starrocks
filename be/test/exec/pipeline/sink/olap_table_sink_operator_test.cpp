@@ -24,6 +24,7 @@
 #include <thread>
 
 #include "exec/pipeline/fragment_context.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
@@ -104,6 +105,8 @@ protected:
                           .build(&_exec_env->_load_sink_close_thread_pool));
         auto* exec_env = _exec_env.get();
         _fragment_ctx = _pool.add(new FragmentContext);
+        // Cancellation uses the fragment's executors. The isolated ExecEnv owns only the close pool.
+        _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
         _fragment_ctx->set_runtime_state(
                 std::make_shared<RuntimeState>(TUniqueId(), TUniqueId(), TQueryOptions(), TQueryGlobals(), exec_env));
         _runtime_state = _fragment_ctx->runtime_state();
