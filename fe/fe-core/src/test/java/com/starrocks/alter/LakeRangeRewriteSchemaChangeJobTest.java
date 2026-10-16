@@ -1851,6 +1851,48 @@ public class LakeRangeRewriteSchemaChangeJobTest {
     }
 
     @Test
+    public void testForceCancelRefusedUntilEarlierLoadIsVisible() throws Exception {
+        // A load committed at C-1 and not yet finished on FE (it may already be published on BE), then the job
+        // reserved C. The force cancel must be refused before any no-op publish: otherwise the FE visible bump
+        // to C is skipped and C never becomes visible. Once the load is visible the force cancel goes through.
+        LakeRangeRewriteSchemaChangeJob job = jobInFinishedRewriting();
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long loadVersion = physicalPartition.getNextVersion();
+        physicalPartition.setNextVersion(loadVersion + 1);
+        job.setPublishExecutor(j -> false);
+        job.runFinishedRewritingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = loadVersion + 1;
+        Assertions.assertEquals(commitVersion + 1, physicalPartition.getNextVersion());
+        Assertions.assertEquals(commitVersion - 2, physicalPartition.getVisibleVersion());
+
+        AtomicInteger noOpPublishes = new AtomicInteger();
+        new MockUp<com.starrocks.lake.Utils>() {
+            @Mock
+            public boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
+                                                   java.util.Map<Long, Long> commitVersionMap,
+                                                   java.util.Map<Long, List<Tablet>> tabletsByPartition,
+                                                   com.starrocks.warehouse.cngroup.ComputeResource cr,
+                                                   boolean useAggregatePublish, PublishProperty publishProperty) {
+                noOpPublishes.incrementAndGet();
+                return true;
+            }
+        };
+
+        Assertions.assertFalse(job.cancelImpl("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+        Assertions.assertEquals(0, noOpPublishes.get());
+
+        // The load finishes.
+        physicalPartition.setVisibleVersion(loadVersion, System.currentTimeMillis());
+        Assertions.assertTrue(job.cancelImpl("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(1, noOpPublishes.get());
+        Assertions.assertEquals(commitVersion, physicalPartition.getVisibleVersion());
+    }
+
+    @Test
     public void testForceCancelReplayAdvancesVisibleVersion() throws Exception {
         // Regression: forceSkippedAtCommitted was not copied in replay()'s field-copy block,
         // so a follower replaying a force-cancelled job (recovered from a pre-cancel image) saw
