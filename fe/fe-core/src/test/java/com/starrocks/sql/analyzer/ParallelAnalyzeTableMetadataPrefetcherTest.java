@@ -168,6 +168,23 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
+    void testPrefetchesTablesBelowPivotRelations(@Injectable MetadataMgr metadataMgr) {
+        ConnectContext session = newSession("external", "db");
+        expectPrefetch(metadataMgr, session, "external", "db", "pivot_source1", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "pivot_source2", 1);
+
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("select * from external.db.pivot_source1 " +
+                        "pivot (sum(value) for category in ('a')) union all " +
+                        "select * from external.db.pivot_source2 " +
+                        "pivot (sum(value) for category in ('b'))", session),
+                session, metadataMgr));
+
+        new FullVerifications(metadataMgr) {
+        };
+    }
+
+    @Test
     void testLogsAndDefersPrefetchFailuresToNormalAnalysis(@Injectable MetadataMgr metadataMgr) throws Exception {
         ConnectContext session = newSession("external", "db");
         StatementBase statement = parse("select * from external.db.failing_table " +

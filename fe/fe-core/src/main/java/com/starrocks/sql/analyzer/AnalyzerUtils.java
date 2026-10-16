@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.PivotRelation;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -958,6 +959,12 @@ public class AnalyzerUtils {
             }
             Table table = node.getTable();
             tables.put(node.getName(), table);
+            return null;
+        }
+
+        @Override
+        public Void visitPivotRelation(PivotRelation node, Void context) {
+            visitIfPresent(node.getQuery(), context);
             return null;
         }
 
