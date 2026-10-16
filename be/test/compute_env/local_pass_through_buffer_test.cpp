@@ -203,6 +203,16 @@ protected:
         return _sink->total_bytes();
     }
 
+    int64_t append_large_chunk() {
+        // Exceed CurrentThread's 2 MiB accounting batch so cleanup commits its temporary
+        // charge immediately, rather than cancelling it against the subsequent free.
+        _input->set_num_rows(4 * 1024 * 1024 / sizeof(int64_t));
+        flush();
+        _before_buffering = _process->consumption();
+        _sender_input_bytes = _sender->consumption();
+        return append();
+    }
+
     MemTracker* _process = nullptr;
     MemTracker* _passthrough = nullptr;
     int64_t _initial_process_bytes = 0;
@@ -290,6 +300,49 @@ TEST_F(LocalPassThroughMemoryTest, last_context_releases_unconsumed_memory) {
     flush();
     EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
     EXPECT_EQ(_before_buffering, _process->consumption());
+}
+
+TEST_F(LocalPassThroughMemoryTest, large_cancellation_does_not_inflate_process_peak) {
+    const int64_t buffered_bytes = append_large_chunk();
+    ASSERT_GE(buffered_bytes, 4 * 1024 * 1024);
+
+    // The process tracker is shared across tests and retains its high-water mark. Pad current
+    // consumption to that mark so an earlier test cannot mask a duplicate cleanup charge.
+    const int64_t peak_gap = _process->peak_consumption() - _process->consumption();
+    _process->consume(peak_gap);
+    DeferOp release_padding([&] { _process->release(peak_gap); });
+    const int64_t peak_before_cleanup = _process->peak_consumption();
+
+    CurrentThreadMemTrackerSetter receiver_scope(_receiver.get());
+    _source->set_cancelled();
+    flush();
+    EXPECT_EQ(peak_before_cleanup, _process->peak_consumption());
+    EXPECT_EQ(_before_buffering + peak_gap, _process->consumption());
+    EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
+    EXPECT_EQ(0, _source->total_bytes());
+    EXPECT_EQ(0, _receiver->consumption());
+}
+
+TEST_F(LocalPassThroughMemoryTest, large_destruction_does_not_inflate_process_peak) {
+    const int64_t buffered_bytes = append_large_chunk();
+    ASSERT_GE(buffered_bytes, 4 * 1024 * 1024);
+
+    // Keep this check independent of the process high-water mark left by other tests.
+    const int64_t peak_gap = _process->peak_consumption() - _process->consumption();
+    _process->consume(peak_gap);
+    DeferOp release_padding([&] { _process->release(peak_gap); });
+    const int64_t peak_before_cleanup = _process->peak_consumption();
+
+    _manager.close_fragment_instance(_query_id);
+    _sink.reset();
+    EXPECT_EQ(_initial_passthrough_bytes + buffered_bytes, _passthrough->consumption());
+    CurrentThreadMemTrackerSetter receiver_scope(_receiver.get());
+    _source.reset();
+    flush();
+    EXPECT_EQ(peak_before_cleanup, _process->peak_consumption());
+    EXPECT_EQ(_before_buffering + peak_gap, _process->consumption());
+    EXPECT_EQ(_initial_passthrough_bytes, _passthrough->consumption());
+    EXPECT_EQ(0, _receiver->consumption());
 }
 
 TEST_F(LocalPassThroughMemoryTest, buffered_memory_triggers_process_limit_checks) {
