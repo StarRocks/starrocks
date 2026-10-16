@@ -29,12 +29,14 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.VectorIndexMetric;
+import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
 import com.starrocks.connector.paimon.PaimonGlobalIndexService;
 import com.starrocks.connector.paimon.PaimonMetadata;
+import com.starrocks.planner.PaimonIndexScanNode;
+import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
@@ -46,6 +48,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.VarcharType;
@@ -82,6 +87,10 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
+    private static final Map<String, String> APPROXIMATE_SCORE_ORDERS = Map.of(
+            "approx_l2_distance", "ASC",
+            "approx_cosine_similarity", "DESC",
+            "approx_inner_product", "DESC");
     private static PaimonMetadata indexedMetadata;
     private static AtomicInteger indexMetadataLoads;
 
@@ -100,10 +109,8 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                     : versionRange.end().orElse(ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID);
             if ("vector_table".equals(table.getName())) {
                 ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
-                        IndexType.VECTOR, "lumina", 1, "embedding", false, false,
-                        Map.of(ConnectorIndexDescriptor.OPTION_METRIC, VectorIndexMetric.L2.name(),
-                                ConnectorIndexDescriptor.OPTION_DIMENSION, "2"),
-                        Set.of(Operation.VECTOR_TOP_N), Coverage.UNKNOWN);
+                        IndexType.RANGE, "btree", 0, "pk", Map.of(),
+                        Set.of(Operation.EQUAL), Coverage.UNKNOWN);
                 return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
                         List.of(descriptor), Map.of("pk", 0, "embedding", 1), Set.of());
             }
@@ -222,14 +229,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     public void testVirtualIndexSqlPlansDistributedShards() throws Exception {
         PaimonTable table = (PaimonTable) indexedMetadata.getTable(
                 connectContext, "pmn_db1", "unpartitioned_table");
-        FileStoreTable nativeTable = (FileStoreTable) table.getNativeTable();
-        long snapshotId = nativeTable.latestSnapshot().orElseThrow().id();
-        ColumnRefOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "pk", true);
-        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
-                BinaryType.EQ, column, ConstantOperator.createVarchar("1")), Map.of(1, 0));
-        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(
-                nativeTable.location().toString(), "main", snapshotId,
-                nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
+        PaimonGlobalIndexRequest request = createVirtualIndexRequest(table);
         doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
                 .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
         try {
@@ -238,7 +238,8 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
             for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
                 String plan = getFragmentPlan("SELECT " + projection + " FROM "
                         + "`unpartitioned_table$global_index` WHERE args = '" + request.toTransportString() + "'");
-                assertContains(plan, "TABLE: unpartitioned_table$global_index", "SNAPSHOT: " + snapshotId, "SHARDS: 2");
+                assertContains(plan, "TABLE: unpartitioned_table$global_index",
+                        "SNAPSHOT: " + request.getSnapshotId(), "SHARDS: 2");
             }
 
             SessionVariable defaults = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
@@ -284,6 +285,86 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
+    public void testVirtualIndexResultPredicatesRunAboveScan() throws Exception {
+        PaimonTable table = (PaimonTable) indexedMetadata.getTable(
+                connectContext, "pmn_db1", "unpartitioned_table");
+        String transport = createVirtualIndexRequest(table).toTransportString();
+        doAnswer(invocation -> List.of(new ConnectorIndexShard(0, 4), new ConnectorIndexShard(5, 9)))
+                .when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
+        try {
+            for (String projection : List.of("to_base64(index_result)", "count(*)", "args")) {
+                for (String limit : List.of("", " LIMIT 1")) {
+                    ExecPlan plan = getExecPlan("SELECT " + projection + " FROM `unpartitioned_table$global_index` "
+                            + "WHERE args = '" + transport + "' AND index_result IS NULL" + limit);
+                    String explain = plan.getExplainString(TExplainLevel.NORMAL);
+                    assertContains(explain, "SELECT", "index_result IS NULL", "SHARDS: 2");
+                    Assertions.assertEquals(1, plan.getScanNodes().size());
+                    PaimonIndexScanNode scan = (PaimonIndexScanNode) plan.getScanNodes().get(0);
+                    SlotDescriptor resultSlot = scan.getDesc().getSlots().stream()
+                            .filter(slot -> IndexTable.INDEX_RESULT_COLUMN_NAME.equals(slot.getColumn().getName()))
+                            .findFirst().orElseThrow();
+                    Assertions.assertTrue(resultSlot.isMaterialized());
+                    Assertions.assertTrue(resultSlot.toThrift().isIsMaterialized());
+
+                    List<TPlanNode> nodes = scan.getFragment().getPlanRoot().treeToThrift().getNodes();
+                    List<TPlanNode> selects = nodes.stream()
+                            .filter(node -> node.getNode_type() == TPlanNodeType.SELECT_NODE).toList();
+                    Assertions.assertEquals(1, selects.size(), explain);
+                    TPlanNode select = selects.get(0);
+                    TPlanNode scanThrift = nodes.get(nodes.indexOf(select) + 1);
+                    Assertions.assertEquals(1, select.getNum_children());
+                    Assertions.assertEquals(TPlanNodeType.HDFS_SCAN_NODE, scanThrift.getNode_type());
+                    Assertions.assertEquals(scan.getId().asInt(), scanThrift.getNode_id());
+                    Assertions.assertEquals(-1, scanThrift.getLimit(), "LIMIT must not precede the result filter");
+                    Assertions.assertEquals(0, scanThrift.getConjunctsSize(), "args must not become a BE conjunct");
+                    Assertions.assertEquals(1, select.getConjunctsSize());
+                    Assertions.assertEquals("is_null_pred", select.getConjuncts().get(0).getNodes().get(0)
+                            .getFn().getName().getFunction_name());
+                    Assertions.assertEquals(List.of(resultSlot.getId().asInt()),
+                            select.getConjuncts().get(0).getNodes().stream()
+                                    .filter(node -> node.getNode_type() == TExprNodeType.SLOT_REF)
+                                    .map(node -> node.getSlot_ref().getSlot_id()).toList());
+                    if (!"count(*)".equals(projection)) {
+                        Assertions.assertEquals(limit.isEmpty() ? -1 : 1, select.getLimit(), explain);
+                    }
+                }
+            }
+
+            ExecPlan argsOnlyPlan = getExecPlan("SELECT args FROM `unpartitioned_table$global_index` "
+                    + "WHERE '" + transport + "' = args LIMIT 1");
+            PaimonIndexScanNode scan = (PaimonIndexScanNode) argsOnlyPlan.getScanNodes().get(0);
+            Assertions.assertEquals(1, scan.getLimit());
+            Assertions.assertEquals(2, scan.getScanRangeLocations(0L).size());
+            Assertions.assertTrue(scan.getFragment().getPlanRoot().treeToThrift().getNodes().stream()
+                    .noneMatch(node -> node.getNode_type() == TPlanNodeType.SELECT_NODE));
+        } finally {
+            doCallRealMethod().when(indexedMetadata).getIndexShards(any(Table.class), anyLong(), anyMap());
+        }
+    }
+
+    @Test
+    public void testVirtualIndexRejectsUnsupportedArgsPredicates() {
+        for (String predicate : List.of("args <> 'request'", "args = ''", "args IS NULL",
+                "args = to_base64(index_result)", "args = 'request' OR index_result IS NULL")) {
+            Exception exception = Assertions.assertThrows(Exception.class,
+                    () -> getExecPlan("SELECT args FROM `unpartitioned_table$global_index` WHERE " + predicate));
+            Assertions.assertTrue(exception.getMessage().contains("exactly one non-empty string"),
+                    exception.toString());
+        }
+        verify(indexedMetadata, never()).getIndexShards(any(Table.class), anyLong(), anyMap());
+    }
+
+    private static PaimonGlobalIndexRequest createVirtualIndexRequest(PaimonTable table) {
+        FileStoreTable nativeTable = (FileStoreTable) table.getNativeTable();
+        long snapshotId = nativeTable.latestSnapshot().orElseThrow().id();
+        ColumnRefOperator column = new ColumnRefOperator(1, VarcharType.VARCHAR, "pk", true);
+        IndexCondition condition = new IndexCondition(new BinaryPredicateOperator(
+                BinaryType.EQ, column, ConstantOperator.createVarchar("1")), Map.of(1, 0));
+        return PaimonGlobalIndexRequest.create(nativeTable.location().toString(), "main", snapshotId,
+                nativeTable.schema().id(), nativeTable.schema().timeMillis(), condition);
+    }
+
+    @Test
     public void testUnsupportedPredicateSkipsMetadataIo() throws Exception {
         String plan = getLogicalFragmentPlan(
                 "SELECT pk FROM unpartitioned_table WHERE length(pk) = 1");
@@ -317,81 +398,64 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testVectorTopNPlanningThroughMetadataMgr() throws Exception {
-        String plan = getLogicalFragmentPlan(
-                "SELECT pk, approx_l2_distance([1.0, 2.0], embedding) AS score "
-                        + "FROM vector_table ORDER BY score ASC LIMIT 10");
-
-        assertContains(plan, "index[");
-        assertContains(plan, "metric=L2");
-        assertContains(plan, "k=10");
-        assertContains(plan, "nullsFirst=true");
-        assertContains(plan, "score=approx_l2_distance");
-        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
-                any(Table.class), any(TvrVersionRange.class));
-        Assertions.assertTrue(indexMetadataLoads.get() > 0);
-    }
-
-    @Test
-    public void testBoundVectorCastPlanningThroughMetadataMgr() throws Exception {
-        // This is the SQL expression shape after binding a prepared vector parameter.
-        String plan = getLogicalFragmentPlan(
-                "SELECT pk, approx_l2_distance(CAST('[ 1e0, 2.0 ]' AS ARRAY<FLOAT>), embedding) AS score "
-                        + "FROM vector_table ORDER BY score ASC LIMIT 10");
-
-        assertContains(plan, "index[");
-        assertContains(plan, "metric=L2");
-        assertContains(plan, "k=10");
-        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
-                any(Table.class), any(TvrVersionRange.class));
-    }
-
-    @Test
-    public void testValueChangingVectorCastIsNotAnnotated() throws Exception {
-        String plan = getLogicalFragmentPlan(
-                "SELECT pk, approx_l2_distance("
-                        + "CAST(CAST(CAST('[1.9,2.9]' AS ARRAY<FLOAT>) AS ARRAY<INT>) AS ARRAY<FLOAT>), "
-                        + "embedding) AS score FROM vector_table ORDER BY score ASC LIMIT 10");
-
-        Assertions.assertFalse(plan.contains("index["));
-        verify(indexedMetadata, never()).getIndexMetadata(
-                any(Table.class), any(TvrVersionRange.class));
-    }
-
-    @Test
-    public void testJavaOnlyVectorNumbersAreNotAnnotated() throws Exception {
-        for (String literal : List.of("[1f,2f]", "[1d,2d]", "[0x1p0,0x1p1]")) {
-            String plan = getLogicalFragmentPlan(
-                    "SELECT pk, approx_l2_distance(CAST('" + literal + "' AS ARRAY<FLOAT>), embedding) AS score "
-                            + "FROM vector_table ORDER BY score ASC LIMIT 10");
-            Assertions.assertFalse(plan.contains("index["), literal);
+    public void testApproximateTopNUsesOrdinaryScanWithoutIndexDiscovery() throws Exception {
+        try {
+            for (int stage : List.of(0, 1, 2)) {
+                connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
+                for (Map.Entry<String, String> score : APPROXIMATE_SCORE_ORDERS.entrySet()) {
+                    String sql = "SELECT pk, " + score.getKey() + "([1.0, 2.0], embedding) AS score "
+                            + "FROM vector_table ORDER BY score " + score.getValue() + " LIMIT 10";
+                    String plan = getLogicalFragmentPlan(sql);
+                    assertContains(plan, "PAIMON SCAN", "TOP-N");
+                    Assertions.assertFalse(plan.contains("index["), plan);
+                    assertContains(getFragmentPlan(sql), score.getKey(), "TOP-N");
+                }
+            }
+            verify(indexedMetadata, never()).getIndexMetadata(
+                    any(Table.class), any(TvrVersionRange.class));
+            Assertions.assertEquals(0, indexMetadataLoads.get());
+        } finally {
+            connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
         }
+    }
+
+    @Test
+    public void testBoundVectorCastUsesOrdinaryScanWithoutIndexDiscovery() throws Exception {
+        // This is the SQL expression shape after binding a prepared vector parameter.
+        String sql = "SELECT pk, approx_l2_distance(CAST('[ 1e0, 2.0 ]' AS ARRAY<FLOAT>), embedding) AS score "
+                + "FROM vector_table ORDER BY score ASC LIMIT 10";
+        String plan = getLogicalFragmentPlan(sql);
+
+        assertContains(plan, "PAIMON SCAN", "TOP-N");
+        Assertions.assertFalse(plan.contains("index["), plan);
+        assertContains(getFragmentPlan(sql), "approx_l2_distance", "TOP-N");
         verify(indexedMetadata, never()).getIndexMetadata(
                 any(Table.class), any(TvrVersionRange.class));
     }
 
     @Test
-    public void testVectorRankWindowIsNotAnnotated() throws Exception {
-        String plan = getLogicalFragmentPlan(
-                "SELECT pk FROM (SELECT pk, RANK() OVER (ORDER BY "
-                        + "approx_l2_distance([1.0, 2.0], embedding)) AS ranking "
-                        + "FROM vector_table) ranked WHERE ranking <= 10");
-
-        Assertions.assertFalse(plan.contains("index["));
-        verify(indexedMetadata, never()).getIndexMetadata(
-                any(Table.class), any(TvrVersionRange.class));
-        Assertions.assertEquals(0, indexMetadataLoads.get());
-    }
-
-    @Test
-    public void testVectorMetricMismatchIsNotAnnotated() throws Exception {
-        String plan = getLogicalFragmentPlan(
-                "SELECT pk, approx_cosine_similarity([1.0, 2.0], embedding) AS score "
-                        + "FROM vector_table ORDER BY score DESC LIMIT 10");
-
-        Assertions.assertFalse(plan.contains("index["));
-        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
-                any(Table.class), any(TvrVersionRange.class));
-        Assertions.assertTrue(indexMetadataLoads.get() > 0);
+    public void testApproximateTopNPreservesIndependentScalarIndexPlanning() throws Exception {
+        try {
+            for (int stage : List.of(1, 2)) {
+                connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
+                for (Map.Entry<String, String> score : APPROXIMATE_SCORE_ORDERS.entrySet()) {
+                    String sql = "SELECT pk, " + score.getKey() + "([1.0, 2.0], embedding) AS score "
+                            + "FROM vector_table WHERE pk = 1 ORDER BY score " + score.getValue() + " LIMIT 10";
+                    String plan = getLogicalFragmentPlan(sql);
+                    assertContains(plan, "PAIMON SCAN", "TOP-N", "index[predicate=");
+                    int start = plan.indexOf("index[");
+                    String indexRequest = plan.substring(start, plan.indexOf(']', start) + 1);
+                    assertContains(indexRequest, "pk = 1");
+                    Assertions.assertFalse(indexRequest.contains("approx_"), indexRequest);
+                    Assertions.assertFalse(plan.contains("_INDEX_SCORE"), plan);
+                    assertContains(getFragmentPlan(sql), score.getKey(), "PREDICATES:", "TOP-N");
+                }
+            }
+            verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                    any(Table.class), any(TvrVersionRange.class));
+            Assertions.assertTrue(indexMetadataLoads.get() > 0);
+        } finally {
+            connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
+        }
     }
 }

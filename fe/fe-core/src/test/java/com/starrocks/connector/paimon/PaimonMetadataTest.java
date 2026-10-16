@@ -88,6 +88,7 @@ import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -110,6 +111,7 @@ import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
+import org.apache.paimon.index.IndexFileMeta;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
@@ -1524,7 +1526,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testMixedScalarProvidersUseSdkPlanning() throws Exception {
+    public void testMixedProvidersUseSdkPlanningEvenWhenNotDiscovered() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_mixed_indexes_");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
         context.setThreadLocalInfo();
@@ -1548,6 +1550,21 @@ public class PaimonMetadataTest {
             // Both indexes cover all rows. The guard must reject provider ambiguity alone.
             buildScalarIndex(nativeTable, "id", tmpDir, "bitmap");
             long mixed = nativeTable.latestSnapshot().orElseThrow().id();
+            assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
+            assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
+
+            // Discovery intentionally ignores vector providers. Coverage must still inspect the
+            // original manifest, including providers absent from the advertised descriptors.
+            new MockUp<IndexFileMeta>() {
+                @Mock
+                public String indexType(Invocation invocation) {
+                    String provider = invocation.proceed();
+                    return "bitmap".equals(provider) ? "lumina" : provider;
+                }
+            };
+            ConnectorIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));
+            assertEquals(1, discovered.getDescriptors().size());
+            assertEquals("btree", discovered.getDescriptors().get(0).getProvider());
             assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
             assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
         } finally {
