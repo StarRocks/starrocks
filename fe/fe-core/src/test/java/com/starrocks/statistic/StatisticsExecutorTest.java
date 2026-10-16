@@ -106,13 +106,6 @@ public class StatisticsExecutorTest extends PlanTestBase {
         String sql = "insert into test.t0 values(1,2,3)";
         ConnectContext context = StatisticUtils.buildConnectContext();
 
-        QueryState errorState = new QueryState();
-        errorState.setStateType(QueryState.MysqlStateType.ERR);
-        errorState.setError("Failed to load data into tablet 10001, because of too many versions, current/limit: 1001/1000");
-
-        QueryState okState = new QueryState();
-        okState.setStateType(QueryState.MysqlStateType.OK);
-
         new Expectations(context) {
             {
                 context.getState().getStateType();
@@ -134,6 +127,27 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
 
         collectJob.collectStatisticSync(sql, context, analyzeStatus);
+
+        // The backend reports "too many versions" in lowercase; the job must wait it out and retry
+        // instead of failing on the first attempt.
+        long oldSleep = Config.statistic_collect_too_many_version_sleep;
+        Config.statistic_collect_too_many_version_sleep = 0;
+        try {
+            new Expectations(context) {
+                {
+                    context.getState().getStateType();
+                    returns(QueryState.MysqlStateType.ERR, QueryState.MysqlStateType.OK);
+
+                    context.getState().getErrorMessage();
+                    result = "Failed to load data into tablet 10001, because of too many versions, " +
+                            "current/limit: 1001/1000";
+                }
+            };
+
+            collectJob.collectStatisticSync(sql, context, analyzeStatus);
+        } finally {
+            Config.statistic_collect_too_many_version_sleep = oldSleep;
+        }
     }
 
     @Test
