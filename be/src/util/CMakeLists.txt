@@ -98,6 +98,7 @@ set(UTIL_FILES
   trace.cpp
   trace_metrics.cpp
   timezone_utils.cpp
+  tz_offset_cache.cpp
   easy_json.cc
   mustache/mustache.cc
   int96.cpp

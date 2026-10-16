@@ -19,7 +19,6 @@
 #include <libdivide.h>
 
 #include <algorithm>
-#include <memory>
 #include <string_view>
 #include <unordered_map>
 
@@ -39,6 +38,7 @@ typedef unsigned long ulong;
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "util/tz_offset_cache.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -324,14 +324,12 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
 
-    // Thread-private (no shared/atomic state, so no cross-core contention under a high degree
+    // Call-private (no shared/atomic state, so no cross-core contention under a high degree
     // of parallelism) cache of the currently-valid DST offset window for `from`/`to`. Real-world
     // timestamp columns are almost always time-clustered within a scanned chunk, so most
     // consecutive rows land in the same window and skip cctz's transition search entirely. See
-    // base/time/tz_offset_cache.h.
-    auto* thread_state = context->get_or_create_thread_state<ConvertTzThreadState>(
-            [] { return std::make_unique<ConvertTzThreadState>(); });
-    TzOffsetCache& cache = thread_state->cache;
+    // util/tz_offset_cache.h.
+    TzOffsetCache cache;
 
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row)) {

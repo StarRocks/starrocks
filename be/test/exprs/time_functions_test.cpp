@@ -24,12 +24,6 @@
 #include <utility>
 #include <vector>
 
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/time/timezone_utils.h"
-#include "base/utility/defer_op.h"
->>>>>>> 9f6237c ([Enhancement] Cache DST offset lookups in convert_tz to avoid redundant per-row timezone conversion (#78459))
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"

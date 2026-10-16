@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "base/time/tz_offset_cache.h"
+#include "util/tz_offset_cache.h"
 
 #include <gtest/gtest.h>
 
@@ -22,8 +22,8 @@
 #include <random>
 #include <vector>
 
-#include "base/testutil/parallel_test.h"
-#include "base/time/timezone_utils.h"
+#include "testutil/parallel_test.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -43,7 +43,7 @@ cctz::time_point<cctz::seconds> ground_truth_unix_for_civil(const cctz::civil_se
     return cctz::convert(cs, tz);
 }
 
-// Stands in for what a real caller (TimestampValue::to_unix_second(), which base/ cannot call)
+// Stands in for what a real caller (e.g. TimestampValue::to_unix_second())
 // computes: the civil fields reinterpreted as literal UTC seconds. This test only needs *a*
 // correct implementation of that quantity, not the production one -- cross-checking against
 // TimestampValue itself is done at the exprs/ level (time_functions_test.cpp), which can see

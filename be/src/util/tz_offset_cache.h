@@ -31,10 +31,9 @@ namespace starrocks {
 // same kind of window privately per caller instead.
 //
 // Not thread-safe and not meant to be shared: each execution thread (or, in exprs/, each
-// FunctionContext worker via FunctionContext::get_or_create_thread_state) should own its own
-// instance. A single instance is reused across an unbounded number of calls and automatically
-// adapts as the input strays outside its current window -- there is no reset needed between
-// unrelated calls to the *same* (offset semantics never change for a fixed IANA zone), but an
+// function evaluation call) should own its own instance. A single instance can be reused across
+// an unbounded number of calls and automatically adapts as the input strays outside its current
+// window -- there is no reset needed between unrelated calls to the *same* (offset semantics never change for a fixed IANA zone), but an
 // instance must not be reused across two different cctz::time_zone values without expecting a
 // cache miss on the first call after the switch (which is always handled correctly, just not
 // from the fast path).
@@ -57,8 +56,7 @@ public:
     //
     // `civil_as_utc_sec` is the same wall-clock fields reinterpreted as literal UTC seconds since
     // the epoch (i.e. what they'd mean with no timezone applied at all) -- the caller computes
-    // this via a cheap, non-cctz calendar routine (e.g. TimestampValue::to_unix_second(), which
-    // this class -- living in base/, below types/ -- cannot call itself) so the common
+    // this via a cheap, non-cctz calendar routine (e.g. TimestampValue::to_unix_second()) so the common
     // cache-hit path never has to touch cctz::civil_second at all. Passing a value inconsistent
     // with the other fields is a caller bug; it is only used verbatim, never re-derived.
     int64_t unix_for_civil(int64_t civil_as_utc_sec, int year, int month, int day, int hour, int minute, int second,
