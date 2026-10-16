@@ -98,11 +98,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-<<<<<<< HEAD
-=======
-import java.util.UUID;
 import java.util.function.Supplier;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import java.util.stream.Collectors;
 
 import static com.starrocks.type.PrimitiveType.BOOLEAN;

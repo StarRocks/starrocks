@@ -16,11 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -35,7 +31,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.WALApplier;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -346,8 +341,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
         new MockUp<EditLog>() {
             @Mock
-            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
-                                         WALApplier walApplier) {
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log) {
                 journaled.add(log);
                 invocation.proceed();
             }

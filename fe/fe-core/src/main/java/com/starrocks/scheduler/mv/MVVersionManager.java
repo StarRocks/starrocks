@@ -132,14 +132,10 @@ public class MVVersionManager {
         if (isFinalBatchRun && freshnessBaseline > mvRefreshScheme.getLastFreshnessConfirmedAt()) {
             mvRefreshScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-<<<<<<< HEAD
-        updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
-=======
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
                 mv.getName(), maxChangedTableRefreshTime);
-        persistRefreshScheme(copiedScheme);
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
+        persistRefreshScheme(mvRefreshScheme);
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,

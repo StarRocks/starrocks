@@ -428,12 +428,6 @@ public class InsertOverwriteJobRunner {
         } else {
             throw new RuntimeException("Unsupported partitionDesc");
         }
-<<<<<<< HEAD
-        for (String partitionColName : partitionColNames) {
-            Partition partition = olapTable.getPartition(partitionColName);
-            if (!sourcePartitionIds.contains(partition.getId())) {
-                sourcePartitionIds.add(partition.getId());
-=======
         // addPartitions released its lock: a DROP TABLE / DROP PARTITION may have landed since, so collect the ids
         // under the target's lock and fail with a clear error instead of an NPE.
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
@@ -441,7 +435,8 @@ public class InsertOverwriteJobRunner {
             if (db.getTable(olapTable.getId()) != olapTable) {
                 throw new DmlException("table %s was dropped concurrently", olapTable.getName());
             }
-            for (String partitionName : partitionNames) {
+            // NOTE: despite the name, partitionColNames holds the names of the partitions just added
+            for (String partitionName : partitionColNames) {
                 Partition partition = olapTable.getPartition(partitionName);
                 if (partition == null) {
                     throw new DmlException("partition %s of table %s was dropped concurrently",
@@ -450,7 +445,6 @@ public class InsertOverwriteJobRunner {
                 if (!sourcePartitionIds.contains(partition.getId())) {
                     sourcePartitionIds.add(partition.getId());
                 }
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
             }
         }
     }
