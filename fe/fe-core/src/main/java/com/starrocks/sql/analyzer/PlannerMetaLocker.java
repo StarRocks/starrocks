@@ -192,7 +192,13 @@ public class PlannerMetaLocker implements AutoCloseable {
      */
     public PlannerMetaLocker forAllTablesOf(ConnectContext session, StatementBase analyzedStatement) {
         PlannerMetaLocker all = new PlannerMetaLocker(queryId, acquireTimeoutMs);
+<<<<<<< HEAD
         new TableCollector(session, all.dbs, all.tables).visit(analyzedStatement);
+=======
+        TableCollector collector = new TableCollector(session, all.dbs, all.tables, false);
+        collector.analyzed = true;
+        collector.visit(analyzedStatement);
+>>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
         return all;
     }
 
@@ -482,6 +488,11 @@ public class PlannerMetaLocker implements AutoCloseable {
         private boolean inBodyRewrittenByPolicy = false;
         // Collect nothing but what the policies of already resolved external tables read.
         private boolean externalPoliciesOnly = false;
+        // Walking an analyzed statement: every policy the analyzer applied is in it already, as the subquery it was
+        // rewritten to (QueryAnalyzer clears the relation's policy flag then), and the tables it reads are walked as
+        // any other. A relation still flagged had no policy when analyzed, so looking its policies up again -- per
+        // column, through Ranger -- would only find what the statement does not read.
+        private boolean analyzed = false;
         private boolean mayReachExternalTablePolicy = false;
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
@@ -657,7 +668,7 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
             boolean rewrittenByPolicy = (inBodyRewrittenByPolicy || node.isNeedRewrittenByPolicy())
                     && !node.isSyncMVQuery() && !node.isCacheStatsQuery();
-            if (rewrittenByPolicy) {
+            if (rewrittenByPolicy && !analyzed) {
                 visitPolicyBodies(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         dbAndTable.first.getFullName(), dbAndTable.second.getName()), dbAndTable.second);
             }

@@ -16,6 +16,11 @@ package com.starrocks.scheduler.mv;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+>>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockParams;
 import com.starrocks.scheduler.MVTaskRunProcessor;
@@ -25,14 +30,25 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.ast.StatementBase;
+>>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * An external base table has no usable lock identity: BaseTableInfo's external constructor leaves tableId at
@@ -112,4 +128,76 @@ public class MVRefreshLockParamsTest extends MVTestBase {
         // The -1 default that external BaseTableInfos carry must never show up as a lock id.
         lockParams.getTables().values().forEach(ids -> Assertions.assertFalse(ids.contains(-1L)));
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Pinned on the property (no FE metadata lock is held while an external base table is resolved) rather
+     * than on where the call sits in the source, so it keeps holding if the code moves. The internal base
+     * table is asserted the other way round on purpose: resolving it is a local metastore read, and keeping
+     * it inside the lock is what makes the snapshot taken right after it consistent.
+     */
+    @Test
+    public void testExternalBaseTablesAreResolvedBeforeTheLock() throws Exception {
+        LockProbe resolved = LockProbe.onAnyThread();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(Invocation invocation, ConnectContext context,
+                                                          BaseTableInfo baseTableInfo) {
+                resolved.record(baseTableInfo.getTableName());
+                return invocation.proceed(context, baseTableInfo);
+            }
+        };
+
+        buildRefreshProcessor("lock_params_mixed_mv").collectBaseTableSnapshotInfos();
+
+        resolved.assertReachedOutsideTheLock("lineitem_par",
+                "an external base table is resolved through the connector and must not be resolved under the lock");
+        Assertions.assertTrue(resolved.everUnderLock("lock_params_tbl"),
+                "an internal base table must stay resolved under the lock that protects its snapshot");
+    }
+
+    /**
+     * The refresh takes its lock within mv_refresh_try_lock_timeout_ms and bounds every later acquisition the same
+     * way. Planning the INSERT off copies collects them while that lock is held; a locker of its own there would
+     * wait without a bound, on top of the held lock. The INSERT of a refresh plans off copies only when it reads
+     * through a connector (AnalyzerUtils#isCopySafe), hence the MV over a hive table.
+     */
+    @Test
+    public void testRefreshPlanningTakesNoUnboundedLock() throws Exception {
+        Thread refresher = Thread.currentThread();
+        List<String> unbounded = new CopyOnWriteArrayList<>();
+        new MockUp<PlannerMetaLocker>() {
+            @Mock
+            public void lock(Invocation invocation) {
+                if (Thread.currentThread() == refresher) {
+                    // The caller: the first frame of ours that is not the locker or this probe.
+                    Arrays.stream(new Throwable().getStackTrace())
+                            .filter(f -> f.getClassName().startsWith("com.starrocks.")
+                                    && !f.getClassName().startsWith(PlannerMetaLocker.class.getName())
+                                    && !f.getClassName().startsWith(MVRefreshLockParamsTest.class.getName()))
+                            .findFirst().ifPresent(f -> unbounded.add(f.toString()));
+                }
+                invocation.proceed();
+            }
+        };
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "lock_params_mixed_mv");
+        Set<String> plannedOffCopies = new CopyOnWriteArraySet<>();
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public Set<OlapTable> collectOriginalOlapTables(Invocation invocation, ConnectContext session,
+                                                            StatementBase stmt, PlannerMetaLocker heldLocker) {
+                plannedOffCopies.add(stmt.getClass().getSimpleName());
+                return invocation.proceed(session, stmt, heldLocker);
+            }
+        };
+        refreshMV(db.getFullName(), mv);
+        Assertions.assertEquals(Set.of("InsertStmt"), plannedOffCopies,
+                "the refresh did not plan its INSERT off copies, so this is not testing it");
+        Assertions.assertTrue(unbounded.isEmpty(), "an MV refresh waited on the planner lock without a bound: "
+                + unbounded);
+    }
+>>>>>>> c04ae419999... [BugFix][RB-374] Drop repeated policy lookups and unbounded waits left by the planner lock fixes (#65617)
 }
