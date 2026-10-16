@@ -184,6 +184,21 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+    void testPrefetchInformationSchemaMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        CatalogConnectorMetadata catalogConnectorMetadata = new CatalogConnectorMetadata(
+                connectorMetadata,
+                informationSchemaMetadata,
+                metaMetadata
+        );
+
+        catalogConnectorMetadata.prefetchTableMetadataForAnalyze(InfoSchemaDb.DATABASE_NAME, "tables",
+                new ConnectContext());
+
+        new FullVerifications(connectorMetadata) {
+        };
+    }
+
+    @Test
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateInnerContext();
         ctx.setThreadLocalInfo();
