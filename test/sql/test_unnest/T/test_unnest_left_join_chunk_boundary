@@ -1,0 +1,45 @@
+-- name: test_unnest_left_join_chunk_boundary
+-- LEFT JOIN UNNEST turns a row whose array is NULL or empty into a single NULL row. That row is
+-- injected while the output chunk is assembled and consumes no source element, so it must survive
+-- every chunk boundary: results have to be identical for all chunk sizes, including sizes that make
+-- a chunk end exactly on an injected row.
+CREATE TABLE bnd_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `arr` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- 3334 empty arrays, 3333 NULL arrays and 3333 two-element arrays, interleaved.
+INSERT INTO bnd_${uuid0}
+SELECT g, CASE WHEN g % 3 = 0 THEN NULL WHEN g % 3 = 1 THEN [] ELSE [g, g * 2] END
+FROM TABLE(generate_series(1, 10000)) t(g);
+
+SET pipeline_dop = 1;
+
+-- Expected for every chunk size: 13333 rows total, 6666 of them non-NULL, sum 49995000.
+SET chunk_size = 3;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+SET chunk_size = 7;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+SET chunk_size = 13;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+SET chunk_size = 4096;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE;
+
+-- Inner join takes no injection path and must be unaffected.
+SET chunk_size = 3;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0}, UNNEST(arr) AS u(v);
+SET chunk_size = 4096;
+SELECT count(1), count(v), sum(v) FROM bnd_${uuid0}, UNNEST(arr) AS u(v);
+
+-- Only empty and NULL arrays survive the filter, so every bracket is an injection.
+SET chunk_size = 4;
+SELECT count(1), count(v) FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE WHERE id % 3 <> 2;
+
+-- Outer columns must stay aligned with the injected rows, not just counted correctly.
+SET chunk_size = 5;
+SELECT id, arr, v FROM bnd_${uuid0} LEFT JOIN UNNEST(arr) AS u(v) ON TRUE WHERE id <= 7 ORDER BY id, v;
+
+DROP TABLE bnd_${uuid0};

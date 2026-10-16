@@ -26,8 +26,8 @@
 #include "platform/key_cache.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/filter_policy.h"
@@ -53,10 +53,11 @@ Status PkTabletUnsortSSTWriter::reset_sst_writer(const std::shared_ptr<LocationP
         _encryption_meta = std::move(pair.encryption_meta);
     }
     if (location_provider && fs) {
-        ASSIGN_OR_RETURN(_wf,
-                         fs->new_writable_file(wopts, location_provider->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(_wf, fs->new_writable_file(
+                                      wopts, location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     } else {
-        ASSIGN_OR_RETURN(_wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename())));
+        ASSIGN_OR_RETURN(
+                _wf, fs::new_writable_file(wopts, _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id))));
     }
     _map.clear();
     _deleted_rowids.clear();
@@ -184,9 +185,9 @@ bool PkTabletUnsortSSTWriter::is_map_full() const {
         return true;
     }
     // Under memory pressure, spill at a lower bound, mirroring LakePersistentIndex::is_memtable_full.
-    auto* update_mgr = _tablet_mgr->update_mgr();
-    if (update_mgr != nullptr && update_mgr->mem_tracker() != nullptr &&
-        update_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
+    auto* primary_key_mgr = _tablet_mgr->primary_key_mgr();
+    if (primary_key_mgr != nullptr && primary_key_mgr->mem_tracker() != nullptr &&
+        primary_key_mgr->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
         mem_usage >= static_cast<size_t>(config::l0_min_mem_usage)) {
         return true;
     }
@@ -217,8 +218,8 @@ Status PkTabletUnsortSSTWriter::flush_map_to_intermediate_sst() {
         encryption_meta = std::move(pair.encryption_meta);
     }
     const std::string location = (_location_provider && _fs)
-                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename())
-                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename());
+                                         ? _location_provider->sst_location(_tablet_id, gen_sst_filename(_txn_id))
+                                         : _tablet_mgr->sst_location(_tablet_id, gen_sst_filename(_txn_id));
     std::unique_ptr<WritableFile> wf;
     if (_location_provider && _fs) {
         ASSIGN_OR_RETURN(wf, _fs->new_writable_file(wopts, location));
@@ -271,8 +272,15 @@ Status PkTabletUnsortSSTWriter::merge_intermediates_into(sstable::TableBuilder* 
             ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, sst.location));
         }
         std::unique_ptr<sstable::Table> table;
-        RETURN_IF_ERROR(sstable::Table::Open(sstable::Options{}, rf.get(), sst.size, table));
-        auto* iter = table->NewIterator(sstable::ReadOptions{});
+        // Verify block checksums when re-reading the intermediate ssts this load just
+        // wrote: corrupted bytes (usually a bad local cache copy) must fail as
+        // Corruption instead of being silently merged into a wrong dedup result.
+        sstable::Options open_options;
+        open_options.paranoid_checks = config::lake_pk_index_sst_verify_checksum;
+        RETURN_IF_ERROR(sstable::Table::Open(open_options, rf.get(), sst.size, table));
+        sstable::ReadOptions read_options;
+        read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
+        auto* iter = table->NewIterator(read_options);
         iter_holders.emplace_back(iter);
         child_iters.push_back(iter);
         rfs.push_back(std::move(rf));

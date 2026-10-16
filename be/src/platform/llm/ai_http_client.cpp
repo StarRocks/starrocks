@@ -280,7 +280,8 @@ AIHttpValidationResult validate_request(const AIHttpRequest& request, const AIHt
     if (result != AIHttpValidationResult::OK) {
         return result;
     }
-    if (request.request_deadline_ns < 0 || request.connect_timeout_ms < 0 ||
+    if (request.request_deadline_ns < 0 || request.attempt_timeout_ms < 0 ||
+        request.attempt_timeout_ms > std::numeric_limits<long>::max() || request.connect_timeout_ms < 0 ||
         request.connect_timeout_ms > std::numeric_limits<long>::max() || request.max_response_bytes == 0) {
         return AIHttpValidationResult::INVALID_REQUEST;
     }
@@ -882,12 +883,17 @@ private:
             ok = set_option(attempt->easy, CURLOPT_CONNECTTIMEOUT_MS,
                             static_cast<long>(attempt->request.connect_timeout_ms));
         }
+        long timeout_ms = static_cast<long>(attempt->request.attempt_timeout_ms);
         if (ok && attempt->request.request_deadline_ns > 0) {
-            const long timeout_ms = deadline_timeout_ms(attempt->request.request_deadline_ns);
-            if (timeout_ms <= 0) {
+            const long remaining_ms = deadline_timeout_ms(attempt->request.request_deadline_ns);
+            if (remaining_ms <= 0) {
                 attempt->local_failure = AIHttpNoResponseCode::DEADLINE;
                 return false;
             }
+            timeout_ms = timeout_ms == 0 ? remaining_ms : std::min(timeout_ms, remaining_ms);
+        }
+        // Keep the live Query deadline in lifecycle polling so extensions remain visible.
+        if (ok && timeout_ms > 0) {
             ok = set_option(attempt->easy, CURLOPT_TIMEOUT_MS, timeout_ms);
         }
         if (ok && !_options.ca_bundle_path.empty()) {

@@ -248,9 +248,22 @@ int LambdaFunction::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     if (_is_prepared) {
         slot_ids->insert(slot_ids->end(), _captured_slot_ids.begin(), _captured_slot_ids.end());
         return _captured_slot_ids.size();
-    } else {
-        return get_child(0)->get_slot_ids(slot_ids);
     }
+    int num = get_child(0)->get_slot_ids(slot_ids);
+    // The lambda expr alone is not the whole picture: the FE may have hoisted a common sub
+    // expression out of it into this lambda's own common sub expression list, rewriting the body to
+    // reference the hoisted slot instead. A column the hoisted definition depends on - notably an
+    // enclosing lambda's argument - then appears nowhere in the body, so reporting only the body
+    // hides it from callers that run before prepare(), i.e. ArrayMapExpr/ArraySortLambdaExpr::prepare
+    // and extract_outer_common_exprs. Such a caller would judge the surrounding expression
+    // independent of that argument and stop supplying its column, and evaluating this lambda would
+    // then fail to find it. Report the definitions' dependencies as well; prepare() takes the same
+    // children into account when it builds _captured_slot_ids, so both branches stay consistent.
+    const int child_num = get_num_children() - 2 * _common_sub_expr_num;
+    for (auto i = child_num + _common_sub_expr_num; i < child_num + 2 * _common_sub_expr_num; ++i) {
+        num += get_child(i)->get_slot_ids(slot_ids);
+    }
+    return num;
 }
 
 std::string LambdaFunction::debug_string() const {

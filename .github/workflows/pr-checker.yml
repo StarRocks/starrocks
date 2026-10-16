@@ -55,7 +55,15 @@ jobs:
           ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
-            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
+            # REST "Add assignees to an issue", not `gh pr edit`: the latter also
+            # queries Projects (classic), which GitHub has sunset -- on a runner with
+            # an older gh it fails with "GraphQL: Projects (classic) is being
+            # deprecated" and the `|| true` swallowed it, so nothing got assigned.
+            # The body is passed as JSON (--input -) so the array does not depend on
+            # gh's `key[]=` sugar, which not every gh version supports.
+            echo "{\"assignees\":[\"${author}\"]}" \
+              | gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/assignees" --input - --silent \
+              || echo "::warning::failed to assign ${author} to #${PR_NUMBER}"
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 
@@ -79,6 +87,11 @@ jobs:
       - name: update body
         if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
+          # MUST stay a PAT: this step edits the PR body to check "[x] This is a
+          # backport pr", and the edit must emit an `edited` event that re-triggers
+          # this workflow so `check backport pr's title` runs on the updated body.
+          # GITHUB_TOKEN edits do not trigger workflows, which would silently skip
+          # the backport-title check.
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
           gh pr view ${PR_NUMBER} -R ${REPO} --json body -q .body > body.txt
@@ -255,3 +268,18 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
 
+
+  conflict-marker-check:
+    # Deliberately NOT exempted for backport / cherry-pick PRs the way changelist-check
+    # is: an automated backport that hits a conflict and commits its own markers is
+    # exactly the case this gate exists for.
+    runs-on: [self-hosted, quick]
+    env:
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ secrets.PAT }}
+    steps:
+      - name: Check Conflict Markers
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/check-conflict-markers.py

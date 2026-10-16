@@ -95,6 +95,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     public MVTaskRunProcessor() {
     }
 
+    @Override
+    public void postTaskRun(TaskRunContext context) {
+        // Older MV tasks may still have an ANALYZE statement persisted in postRun. MV refresh no longer
+        // generates this statement, so do not let the generic task post-processor execute the legacy value.
+        // Statistics maintenance for refreshed partitions is handled by the insert-overwrite path.
+    }
+
     @VisibleForTesting
     @Override
     public TaskRunContext prepare(TaskRunContext context) throws Exception {
@@ -114,6 +121,9 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         this.mv = (MaterializedView) table;
         // refresh mv until mv is reloaded.
         mv.waitForReloaded();
+        // Before the run reads the MV's definition or any base table: a reset after this point means the data
+        // this run writes may come from a definition that no longer holds.
+        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating
@@ -150,6 +160,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
         // prepare mv context
         this.mvTaskRunContext = new MvTaskRunContext(context);
+        this.mvTaskRunContext.setVersionMapResetEpoch(versionMapResetEpoch);
         // prepare partition ttl number
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         this.mvTaskRunContext.setPartitionTTLNumber(partitionTTLNumber);

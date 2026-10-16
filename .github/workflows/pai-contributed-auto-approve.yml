@@ -1,0 +1,75 @@
+name: PAI Contributed Auto Approve
+run-name: PAI Contributed Auto Approve(#${{ github.event.number }})
+
+# Auto-approve the PRs carrying the `PAI-contributed` label -- changes contributed upstream
+# by the reverse sync.
+#
+# WHY: these PRs are created by the sync bot from changes that were already reviewed and
+# merged downstream, so nobody on the StarRocks side owns reviewing them and they accumulate
+# unapproved -- 39 were open when this was written, the oldest #77435. The mirror direction
+# is already automated on the downstream side using the same APPROVE_PAT account.
+#
+# This workflow is flow only. Every decision -- provenance, idempotency, how many approvals
+# the base branch needs -- lives in ci-tool bin/auto-approve-contributed.sh, where it can be
+# run and tested outside a workflow trigger.
+#
+# The `PAI-contributed` label filter below is a cheap pre-filter, NOT the authorization: any
+# user with triage rights can add a label. The script re-derives trust from the PR author,
+# the head repo and the head branch shape, and skips unless all three match the sync flow.
+#
+# The label is applied at creation for main PRs (cd-repo-sync.yml `compute labels`) but only
+# after open for backport PRs (contributed-backport-label.yml) -- hence the `labeled` trigger.
+# `synchronize` is needed because main has dismiss_stale_reviews=true: a push drops the
+# approval and it has to be re-submitted.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, labeled, synchronize]
+    branches:
+      - main
+      - 'branch-*'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  auto-approve:
+    name: Auto approve PAI-contributed PR
+    if: >
+      github.repository == 'StarRocks/starrocks' &&
+      (
+        contains(github.event.pull_request.labels.*.name, 'PAI-contributed') ||
+        contains(github.event.pull_request.labels.*.name, 'cd-contributed')
+      )
+    runs-on: [self-hosted, normal]
+    steps:
+      - name: Auto approve
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          # GitHub refuses a self-approval, so APPROVE_PAT must be a different account from
+          # the SYNC_PAT that opens these PRs.
+          APPROVE_TOKEN: ${{ secrets.APPROVE_PAT }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          cd ci-tool
+          # A transient pull failure should not block the flow, but it must not pass silently
+          # either: this step approves PRs with a live PAT, so running an unknown-vintage copy
+          # of the script is worse than skipping a run.
+          git pull >/dev/null 2>&1 || echo "::warning::ci-tool git pull failed; running the cached copy on this runner"
+          # Fail loudly rather than with "No such file or directory" when the runner's cached
+          # ci-tool predates the script.
+          if [[ ! -x ./bin/auto-approve-contributed.sh ]]; then
+            echo "::error::ci-tool has no executable bin/auto-approve-contributed.sh (stale checkout on this runner)"
+            exit 1
+          fi
+          ./bin/auto-approve-contributed.sh
+
+      - name: clean
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*

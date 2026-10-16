@@ -12,8 +12,6 @@ import Beta from '../../_assets/commonMarkdown/_beta.mdx'
 
 このトピックでは、StarRocks のベクターインデックス機能とそれを使用した近似最近傍探索 (ANNS) の方法について紹介します。
 
-ベクターインデックス機能は、v3.4 以降の共有なしクラスタでのみサポートされています。
-
 ## 概要
 
 現在、StarRocks はセグメントファイルレベルでのベクターインデックスをサポートしています。インデックスは各検索項目をセグメントファイル内の行 ID にマッピングし、ベクトル距離の計算を行わずに対応するデータ行を直接特定することで高速なデータ取得を可能にします。システムは現在、Inverted File with Product Quantization (IVFPQ) と Hierarchical Navigable Small World (HNSW) の 2 種類のベクターインデックスを提供しており、それぞれ独自の組織構造を持っています。
@@ -45,11 +43,15 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 
 ## 使用方法
 
-各テーブルは 1 つのベクターインデックスのみをサポートします。
+### 前提条件
+
+- 各テーブルは 1 つのベクターインデックスのみをサポートします。
+- インデックス対象の列は、`ARRAY<FLOAT> NOT NULL`でなければなりません。
+- ネイティブの DUPLICATE KEY および PRIMARY KEY テーブルのみが、ベクトルインデックスをサポートします。
 
 ### ベクターインデックスの作成
 
-このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[Append vector index](#append-vector-index) を参照してください。
+このチュートリアルでは、テーブルを作成しながらベクターインデックスを作成します。既存のテーブルにベクターインデックスを追加することもできます。詳細な手順については、[ベクターインデックスの追加](#ベクターインデックスの追加) を参照してください。
 
 - 次の例では、テーブル `hnsw` のカラム `vector` に HNSW ベクターインデックス `hnsw_vector` を作成します。
 
@@ -88,6 +90,41 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
     DUPLICATE KEY(id)
     DISTRIBUTED BY HASH(id) BUCKETS 1;
     ```
+
+- 以下の例では、`async` ビルドモードを使用して、共有データクラスタ内のクラウドネイティブテーブルに HNSW ベクトルインデックスを作成します。
+
+    ```SQL
+    CREATE TABLE hnsw_async (
+        id BIGINT NOT NULL,
+        vector ARRAY<FLOAT> NOT NULL,
+        INDEX hnsw_vector (vector) USING VECTOR (
+            "index_type" = "hnsw",
+            "dim" = "768",
+            "metric_type" = "cosine_similarity",
+            "is_vector_normed" = "true",
+            "index_build_mode" = "async"
+        )
+    ) ENGINE=OLAP
+    DUPLICATE KEY(id)
+    DISTRIBUTED BY HASH(id);
+    ```
+
+    `information_schema.partitions_meta` をクエリすることで、非同期ビルドの進行状況を確認できます。
+
+    ```SQL
+    SELECT
+        TABLE_NAME,
+        PARTITION_NAME,
+        VISIBLE_VERSION,
+        MIN_VI_BUILT_VERSION,
+        MAX_VI_BUILT_VERSION
+    FROM information_schema.partitions_meta
+    WHERE TABLE_NAME = 'hnsw_async';
+    ```
+
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` と等しい場合、パーティション内のすべてのタブレットのインデックスが可視バージョンに達していることを示します。
+    - `MIN_VI_BUILT_VERSION` が `VISIBLE_VERSION` より小さい場合、少なくとも 1 つのインデックスが構築中であることを示します。このようなセグメントを含むクエリは、ブルートフォーススキャンに切り替わります。
+    - `MIN_VI_BUILT_VERSION` が `MAX_VI_BUILT_VERSION` より小さい場合、タブレットごとにインデックスの構築進捗状況が異なることを示しています。
 
 #### インデックス構築パラメータ
 
@@ -150,6 +187,12 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 - **必須**: いいえ
 - **説明**: HNSW 固有のパラメータ。最も近い隣接点を含む候補リストのサイズ。`1` 以上の整数である必要があります。グラフ構築プロセス中の検索深度を制御するために使用されます。具体的には、`efconstruction` はグラフ構築プロセス中の各頂点の検索リスト（候補リストとも呼ばれる）のサイズを定義します。この候補リストは、現在の頂点の隣接候補を格納するために使用され、リストのサイズは `efconstruction` です。`efconstruction` の値が大きいほど、グラフ構築プロセス中に頂点の隣接候補として考慮される候補が増え、その結果、グラフの品質（接続性の向上など）が向上しますが、グラフ構築の時間消費と計算の複雑さも増加します。
 
+##### efsearch
+
+- **デフォルト**: 40
+- **必須**: いいえ
+- **説明**:  HNSW 固有のパラメータ。精度と速度のトレードオフを制御するパラメータ。階層的なグラフ構造の検索中に、このパラメータは検索中の候補リストのサイズを制御します。`efsearch` の値が大きいほど、精度が高くなりますが、速度が低下します。このパラメータはインデックス作成時に指定できます。クエリ内の `ann_params` にこのパラメータが含まれていない場合、システムはこの値に基づいて適応的なスケーリングを実行します。明示的に指定されたクエリレベルの値が優先され、適応的なスケーリングはバイパスされます。
+
 ##### quantizer
 
 - **デフォルト**: `flat`（量子化なし）
@@ -193,6 +236,10 @@ HNSW は効率性と精度の両方を提供し、さまざまなデータとク
 #### ベクターインデックスの追加
 
 既存のテーブルにベクターインデックスを追加するには、[CREATE INDEX](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_INDEX.md) または [ALTER TABLE ADD INDEX](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用します。
+
+:::note
+共有データクラスタ内のクラウドネイティブテーブルの場合、ALTER TABLE ADD INDEX ステートメントは既存のデータを書き換え、そのデータに基づいてインデックスを構築します。`index_build_mode` が `async` に設定されている場合でも、システムはスキーマ変更が完了する前にインデックスの構築を完了させます。
+:::
 
 例:
 
@@ -578,7 +625,3 @@ LIMIT 5;
 |      avgRowSize=4.0                                                                                                                                 |
 +-----------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
-
-## 制限事項
-
-- 各テーブルは 1 つのベクターインデックスのみをサポートします。

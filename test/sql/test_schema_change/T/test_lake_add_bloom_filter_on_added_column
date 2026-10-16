@@ -1,0 +1,230 @@
+-- name: test_lake_add_bloom_filter_on_added_column @cloud
+-- Regression for StarRocksTest#12090: a bloom filter on a column introduced by
+-- ALTER TABLE ADD COLUMN always failed the fast-path index alter -- 5/5 on an
+-- idle table, with no concurrency, no fault injection, and on an empty table too.
+--
+-- Two layers were involved. The fast path resolved index column names against the
+-- tablet metadata schema instead of the schema FE attaches to the request; under
+-- fast schema evolution v2 a metadata-only ADD COLUMN updates only the FE catalog,
+-- so tablet metadata can still be short the very column being indexed ("ADD INDEX
+-- fast path: column bfc not found in new schema"). Past that, the per-segment index
+-- builders used the non-defaulting column iterator, so historical segments -- which
+-- a metadata-only ADD COLUMN never rewrites -- failed with ".dat does not contain
+-- column of id N".
+--
+-- Target behaviour: the alter FINISHES. Segments written before the ADD COLUMN carry
+-- no index for the new column, and their rows read as the declared default, so
+-- results stay correct and only pruning is lost there. Segments written afterwards
+-- build the index inline.
+--
+-- Note on coverage: a pre-existing segment picks up the index only when a later
+-- rewrite resolves a schema carrying the index flag. If a write followed the
+-- ADD COLUMN, that write archived the then-current schema and pinned the existing
+-- rowsets to it; compacting such a rowset on its own resolves the pinned
+-- pre-ADD-COLUMN schema and pins the output to it again -- a fixed point -- so it
+-- recovers only when compacted alongside a rowset pinned to the indexed schema.
+-- Pinned in MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point;
+-- the cases below assert only what is actually guaranteed (FINISHED + correct
+-- results).
+--
+-- wait_alter_table_finish() asserts the job reached FINISHED, so a regression to
+-- either layer fails this test at the ALTER.
+create database lake_bf_added_col_${uuid0};
+use lake_bf_added_col_${uuid0};
+
+-- Case A: fast schema evolution v2 + file bundling, historical data present.
+-- The exact shape reported in the issue.
+CREATE TABLE t_v2_bundled (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "file_bundling" = "true",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+
+-- Written before the column exists, so no segment physically contains it.
+insert into t_v2_bundled select x, x * 13 + 1, repeat('x', 32) from table(generate_series(1, 2000)) t(x);
+
+ALTER TABLE t_v2_bundled ADD COLUMN bfc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_v2_bundled SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+-- Historical rows read the declared default through the default-value iterator.
+select assert_true(count(*) = 2000) from t_v2_bundled;
+select assert_true(count(*) = 2000) from t_v2_bundled where bfc = 0;
+select assert_true(count(*) = 0) from t_v2_bundled where bfc = 7;
+
+-- Post-alter writes carry real values; those segments build the index inline.
+insert into t_v2_bundled (k, v, pad, bfc) select x, x, 'a', 7 from table(generate_series(2001, 2100)) t(x);
+select assert_true(count(*) = 2100) from t_v2_bundled;
+select assert_true(count(*) = 100) from t_v2_bundled where bfc = 7;
+select assert_true(count(*) = 2000) from t_v2_bundled where bfc = 0;
+
+-- Case B: same, but on an EMPTY table. Without any write there is nothing to
+-- trigger the tablet-metadata schema catch-up, so the stale-schema window is
+-- unbounded -- this case reproduced 100% and is the cleanest proof that the fix
+-- does not merely depend on timing.
+CREATE TABLE t_v2_empty (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+
+ALTER TABLE t_v2_empty ADD COLUMN bfc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_v2_empty SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 0) from t_v2_empty;
+insert into t_v2_empty (k, v, bfc) select x, x, x % 5 from table(generate_series(1, 100)) t(x);
+select assert_true(count(*) = 100) from t_v2_empty;
+select assert_true(count(*) = 20) from t_v2_empty where bfc = 3;
+
+-- Case C: fast schema evolution v2 disabled. The tablet metadata schema syncs
+-- through the older path, so name resolution succeeds and the failure used to
+-- surface from the other layer instead (".dat does not contain column of id N").
+CREATE TABLE t_v1 (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "cloud_native_fast_schema_evolution_v2" = "false"
+);
+
+insert into t_v1 select x, x * 7, repeat('y', 32) from table(generate_series(1, 1000)) t(x);
+
+ALTER TABLE t_v1 ADD COLUMN bfc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_v1 SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 1000) from t_v1 where bfc = 0;
+insert into t_v1 (k, v, pad, bfc) select x, x, 'z', 4 from table(generate_series(1001, 1100)) t(x);
+select assert_true(count(*) = 100) from t_v1 where bfc = 4;
+select assert_true(count(*) = 1100) from t_v1;
+
+-- Case D: file bundling off, historical data present. Bundling changes how
+-- segments are packed into physical files, which the per-segment index builder
+-- has to account for, so both settings are covered.
+CREATE TABLE t_unbundled (
+    k bigint NOT NULL,
+    v bigint,
+    pad varchar(64)
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "file_bundling" = "false",
+    "cloud_native_fast_schema_evolution_v2" = "true"
+);
+
+insert into t_unbundled select x, x * 3, repeat('z', 32) from table(generate_series(1, 1000)) t(x);
+insert into t_unbundled select x, x * 3, repeat('z', 32) from table(generate_series(1001, 2000)) t(x);
+
+ALTER TABLE t_unbundled ADD COLUMN bfc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_unbundled SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 2000) from t_unbundled where bfc = 0;
+select assert_true(count(*) = 2000) from t_unbundled;
+
+-- Case E: a NULLABLE added column with no declared default. Still legitimately
+-- absent from historical segments (they read as NULL), so it must skip rather
+-- than be treated as corruption.
+CREATE TABLE t_nullable (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_nullable select x, x from table(generate_series(1, 500)) t(x);
+
+ALTER TABLE t_nullable ADD COLUMN bfc INT NULL;
+function: wait_alter_table_finish()
+
+ALTER TABLE t_nullable SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 500) from t_nullable where bfc is null;
+select assert_true(count(*) = 0) from t_nullable where bfc = 1;
+
+-- Case F: a SECOND added column indexed after the first. In the soak run each
+-- newly added column failed again on the same segment file (column ids 9 then 10),
+-- so adding one more must keep working.
+ALTER TABLE t_v2_bundled ADD COLUMN bfc2 INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_v2_bundled SET ("bloom_filter_columns" = "bfc,bfc2");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 2100) from t_v2_bundled where bfc2 = 0;
+select assert_true(count(*) = 100) from t_v2_bundled where bfc = 7;
+
+-- Case G: PRIMARY KEY table. The soak run hit this on t_pk_0 too, and PK tablets
+-- publish through a different txn-log applier than non-PK ones, so the schema
+-- installation has to propagate on both.
+CREATE TABLE t_pk (
+    k bigint NOT NULL,
+    v bigint
+) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_pk select x, x from table(generate_series(1, 1000)) t(x);
+
+ALTER TABLE t_pk ADD COLUMN bfc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_pk SET ("bloom_filter_columns" = "bfc");
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 1000) from t_pk where bfc = 0;
+insert into t_pk (k, v, bfc) select x, x, 5 from table(generate_series(1001, 1100)) t(x);
+select assert_true(count(*) = 100) from t_pk where bfc = 5;
+select assert_true(count(*) = 1100) from t_pk;
+
+-- Case H: BITMAP index on an ALTER-added column. The bitmap and bloom builders
+-- share the same per-segment classification, so the fix applies to both; the
+-- issue only reports bloom because the soak workload only exercised bloom. This
+-- case is the end-to-end evidence for the bitmap half of that claim.
+CREATE TABLE t_bitmap (
+    k bigint NOT NULL,
+    v bigint
+) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+insert into t_bitmap select x, x from table(generate_series(1, 1000)) t(x);
+
+ALTER TABLE t_bitmap ADD COLUMN bmc INT DEFAULT '0';
+function: wait_alter_table_finish()
+
+ALTER TABLE t_bitmap ADD INDEX idx_bmc(bmc) USING BITMAP;
+function: wait_alter_table_finish()
+
+select assert_true(count(*) = 1000) from t_bitmap where bmc = 0;
+select assert_true(count(*) = 0) from t_bitmap where bmc = 9;
+insert into t_bitmap (k, v, bmc) select x, x, 9 from table(generate_series(1001, 1100)) t(x);
+select assert_true(count(*) = 100) from t_bitmap where bmc = 9;
+select assert_true(count(*) = 1000) from t_bitmap where bmc = 0;
+select assert_true(count(*) = 1100) from t_bitmap;
+
+drop database lake_bf_added_col_${uuid0};

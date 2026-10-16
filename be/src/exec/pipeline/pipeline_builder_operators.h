@@ -78,6 +78,36 @@ OpFactories maybe_interpolate_local_shuffle_exchange(PipelineBuilderContext* con
                                                      int32_t plan_node_id, OpFactories& pred_operators,
                                                      const PartitionExprsGenerator& self_partition_exprs_generator);
 
+/// Local shuffle one input of an operator whose inputs share a driver-partitioned state -- the
+/// per-driver hash set of EXCEPT/INTERSECT, or the per-driver hash table of a hash join.
+///
+/// Such inputs cannot each pick whatever partitioning suits their own source: a key has to reach the
+/// SAME driver from every input, or one input's rows never meet the other's.
+/// maybe_interpolate_local_shuffle_exchange decides per source -- it skips entirely when the source
+/// reports could_local_shuffle() == false, and it reuses the source's partition type and bucket
+/// properties when it has them -- so two inputs with different sources end up hashed by different
+/// functions, or one is repartitioned and the other is not. This ignores what the source claims and
+/// applies exactly the scheme the caller passes, so all inputs can be put on one.
+/// `part_type` and `bucket_properties` are that shared scheme; every input must be handed the same
+/// pair, together with its own corresponding key exprs.
+OpFactories interpolate_local_forced_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
+                                                      int32_t plan_node_id, OpFactories& pred_operators,
+                                                      const std::vector<ExprContext*>& partition_expr_ctxs,
+                                                      TPartitionType::type part_type,
+                                                      const std::vector<TBucketProperty>& bucket_properties);
+
+/// Whether `shuffled`, an input reporting could_local_shuffle() == true, ends up on the same drivers as
+/// `received` when each is left to maybe_interpolate_local_shuffle_exchange on its own, with its own
+/// corresponding key exprs -- i.e. whether the pair needs no interpolate_local_forced_shuffle_exchange.
+///
+/// That holds when `received` is an exchange its sender already partitioned per driver
+/// (could_local_shuffle() == false) and the local shuffle `shuffled` gets is the very function that
+/// sender used: both hash the key by their shared partition type and pick the driver by xorshift32 of
+/// that hash (see Shuffler). It does not hold for a bucket shuffle sender following the FE's
+/// bucket-to-driver assignment, which no local shuffle reproduces.
+bool local_shuffle_matches_sender(PipelineBuilderContext* context, const OpFactories& shuffled,
+                                  const OpFactories& received);
+
 OpFactories maybe_interpolate_local_bucket_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
                                                             int32_t plan_node_id, OpFactories& pred_operators,
                                                             const std::vector<ExprContext*>& partition_expr_ctxs);

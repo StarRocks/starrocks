@@ -77,7 +77,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -132,7 +131,8 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void handleRequest(BaseRequest request) {
         BaseResponse response = new BaseResponse();
-        String url = request.getRequest().uri();
+        // Logged when the uri cannot be sanitized; the query may hold a credential.
+        String url = WebUtils.hideHttpReqQuery(request.getRequest().uri());
         try {
             url = WebUtils.sanitizeHttpReqUri(request.getRequest().uri());
             execute(request, response);
@@ -196,8 +196,8 @@ public class RestBaseAction extends BaseAction {
             Set<Long> currentRoleIds;
             Set<String> currentGroups;
             try {
-                AuthenticationHandler.authenticate(authCtx, authInfo.fullUserName,
-                        authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
+                AuthenticationHandler.authenticateWithClearPassword(authCtx, authInfo.fullUserName,
+                        authInfo.remoteIp, authInfo.password);
                 currentUser = authCtx.getCurrentUserIdentity();
                 currentRoleIds = authCtx.getCurrentRoleIds();
                 currentGroups = authCtx.getGroups();

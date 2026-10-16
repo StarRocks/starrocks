@@ -20,6 +20,31 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+struct AIStatisticsCounter {
+    const char* name;
+    int64_t AIExecutionStatistics::*value;
+    TUnit::type unit = TUnit::UNIT;
+};
+
+constexpr std::array<AIStatisticsCounter, 12> kAIStatisticsCounters = {{
+        {"AITaskCount", &AIExecutionStatistics::task_count},
+        {"AIRequestCount", &AIExecutionStatistics::request_count},
+        {"AIRetryCount", &AIExecutionStatistics::retry_count},
+        {"AITimeoutCount", &AIExecutionStatistics::timeout_count},
+        {"AIErrorCount", &AIExecutionStatistics::error_count},
+        {"AIHttpTime", &AIExecutionStatistics::http_time_ns, TUnit::TIME_NS},
+        {"AIPromptTokens", &AIExecutionStatistics::prompt_tokens},
+        {"AICompletionTokens", &AIExecutionStatistics::completion_tokens},
+        {"AITotalTokens", &AIExecutionStatistics::total_tokens},
+        {"AIPromptUsageCount", &AIExecutionStatistics::prompt_usage_count},
+        {"AICompletionUsageCount", &AIExecutionStatistics::completion_usage_count},
+        {"AITotalUsageCount", &AIExecutionStatistics::total_usage_count},
+}};
+
+} // namespace
+
 AISinkOperator::AISinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                int32_t degree_of_parallelism, std::shared_ptr<AIProjectProcessor> processor)
         : Operator(factory, id, "ai_sink", plan_node_id, false, driver_sequence),
@@ -192,7 +217,16 @@ AISourceOperator::AISourceOperator(OperatorFactory* factory, int32_t id, int32_t
           _degree_of_parallelism(degree_of_parallelism) {}
 
 Status AISourceOperator::prepare(RuntimeState* state) {
+    static_assert(std::tuple_size_v<decltype(_ai_counters)> == kAIStatisticsCounters.size());
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    // Every source lane owns its counters. In particular, HTTP time is the
+    // sum of accepted attempt durations, not an average across DOP lanes.
+    auto strategy = RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM);
+    strategy.__set_saturating_sum(true);
+    for (size_t i = 0; i < kAIStatisticsCounters.size(); ++i) {
+        const auto& counter = kAIStatisticsCounters[i];
+        _ai_counters[i] = _unique_metrics->add_counter(counter.name, counter.unit, strategy);
+    }
     RETURN_IF_ERROR(_processor->prepare(state, _degree_of_parallelism));
     RETURN_IF_ERROR(_processor->configuration_status());
     if (!state->enable_event_scheduler()) {
@@ -203,7 +237,17 @@ Status AISourceOperator::prepare(RuntimeState* state) {
 }
 
 void AISourceOperator::close(RuntimeState* state) {
+    update_metrics(state);
     Operator::close(state);
+}
+
+void AISourceOperator::update_metrics(RuntimeState*) {
+    const AIExecutionStatistics statistics = _processor->statistics(_driver_sequence);
+    for (size_t i = 0; i < kAIStatisticsCounters.size(); ++i) {
+        if (_ai_counters[i] != nullptr) {
+            COUNTER_SET(_ai_counters[i], statistics.*kAIStatisticsCounters[i].value);
+        }
+    }
 }
 
 bool AISourceOperator::has_output() const {

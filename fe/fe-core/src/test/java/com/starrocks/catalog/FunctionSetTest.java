@@ -26,6 +26,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DecimalType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
@@ -396,12 +397,16 @@ public class FunctionSetTest {
                 .sorted(Comparator.comparingLong(Function::getFunctionId))
                 .toList();
 
-        long[] expectedIds = {200100L, 200101L, 200102L, 200103L};
+        long[] expectedIds = {200100L, 200101L, 200102L, 200103L, 200104L, 200105L, 200106L, 200107L};
         Type[][] expectedArgs = {
                 {VarcharType.VARCHAR},
                 {VarcharType.VARCHAR, AnyMapType.ANY_MAP},
                 {VarcharType.VARCHAR, VarcharType.VARCHAR},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, AnyMapType.ANY_MAP},
+                {VarcharType.VARCHAR, FileType.FILE},
+                {VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, AnyMapType.ANY_MAP}
         };
 
         Assertions.assertEquals(expectedIds.length, aiCompleteFunctions.size());
@@ -425,7 +430,10 @@ public class FunctionSetTest {
         }
 
         Assertions.assertTrue(FunctionSet.nonDeterministicFunctions.contains("ai_complete"));
+    }
 
+    @Test
+    public void testLegacyAIQueryRemainsOrdinaryBuiltin() {
         Function aiQuery = functionSet.getBuiltinFunctions().stream()
                 .filter(fn -> fn.getFunctionId() == 200000L)
                 .findFirst()
@@ -433,6 +441,33 @@ public class FunctionSetTest {
         Assertions.assertEquals("ai_query", aiQuery.functionName());
         Assertions.assertFalse(aiQuery.isAi());
         Assertions.assertEquals(TFunctionBinaryType.BUILTIN, aiQuery.getBinaryType());
+        Assertions.assertNull(aiQuery.getAiModelSource());
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
+    }
+
+    @Test
+    public void testGrantableAIFunctionFamiliesRejectMalformedMetadata() {
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("AI_COMPLETE"));
+        for (String name : List.of("lower", "missing_ai", "db.ai_complete", "db.ai_query", "*", " ai_complete")) {
+            Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(name));
+        }
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(null));
+
+        Function overload = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> "ai_complete".equals(fn.functionName())).findFirst().orElseThrow();
+        overload.setUserVisible(false);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setUserVisible(true);
+        overload.setBinaryType(TFunctionBinaryType.BUILTIN);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setBinaryType(TFunctionBinaryType.AI);
+        overload.setAiModelSource(null);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setAiModelSource(TAIModelSource.PROVIDER);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setAiModelSource(TAIModelSource.SYSTEM);
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("ai_complete"));
     }
 
     @Test
@@ -440,9 +475,11 @@ public class FunctionSetTest {
         Type mapType = new MapType(VarcharType.VARCHAR, VarcharType.VARCHAR);
         Type[][] concreteArgs = {
                 {VarcharType.VARCHAR, mapType},
-                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType}
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, mapType},
+                {VarcharType.VARCHAR, FileType.FILE, mapType},
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, FileType.FILE, mapType}
         };
-        long[] expectedIds = {200101L, 200103L};
+        long[] expectedIds = {200101L, 200103L, 200105L, 200107L};
 
         for (int i = 0; i < concreteArgs.length; i++) {
             Function resolved = functionSet.getFunction(

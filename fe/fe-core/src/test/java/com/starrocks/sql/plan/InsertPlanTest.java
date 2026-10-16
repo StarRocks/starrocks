@@ -1123,7 +1123,7 @@ public class InsertPlanTest extends PlanTestBase {
 
         String sql = "insert into iceberg_catalog_lineage.iceberg_db.iceberg_lineage_table select 1, 2, 3, 4";
         InsertStmt insertStmt = (InsertStmt) SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
-        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true);
+        IcebergRewriteStmt rewriteStmt = new IcebergRewriteStmt(insertStmt, true, true, false);
 
         String actualRes = getInsertExecPlan(rewriteStmt, sql);
         Assertions.assertTrue(actualRes.contains(IcebergTable.ROW_ID), actualRes);
@@ -1699,6 +1699,16 @@ public class InsertPlanTest extends PlanTestBase {
                 "     constant exprs: \n" +
                 "         NULL\n";
         Assertions.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesCsvWithDuplicateColumnNames() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\" = \"csv\", \"partition_by\" = \"V2\") " +
+                "select a.v1, a.v2, b.v1 from t0 a join t0 b on a.v1 = b.v1");
+        Assertions.assertTrue(actual.contains(" OUTPUT EXPRS:1: v1 | 2: v2 | 4: v1\n"), actual);
+        Assertions.assertTrue(actual.contains("    PARTITION BY: [v2]\n"), actual);
+        Assertions.assertTrue(actual.contains("  PARTITION: HASH_PARTITIONED: 2: v2\n"), actual);
     }
 
     @Test

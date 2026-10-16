@@ -34,10 +34,18 @@
 
 #include "http/utils.h"
 
+// Google style keys the include categories on the .h suffix, so clang-format sorts
+// <fmt/format.h> in with the C system headers. The project order puts third-party
+// after them, which the formatter will not produce on its own.
+// clang-format off
 #include <fcntl.h>
 #include <sys/stat.h>
 
+#include <fmt/format.h>
+// clang-format on
+
 #include "base/path/path_util.h"
+#include "base/string/string_parser.hpp"
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"
@@ -151,6 +159,20 @@ void do_dir_response(const std::string& dir_path, HttpRequest* req) {
     }
 
     HttpChannel::send_reply(req, result.str());
+}
+
+Status parse_int64_param(const std::string& name, const std::string& value, int64_t* result, int64_t min, int64_t max) {
+    StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
+    int64_t parsed = StringParser::string_to_int<int64_t>(value.data(), value.length(), &parse_result);
+    if (parse_result == StringParser::PARSE_FAILURE) {
+        return Status::InvalidArgument(fmt::format("Invalid parameter {}. The value must be an integer", name));
+    }
+    if (parse_result != StringParser::PARSE_SUCCESS || parsed < min || parsed > max) {
+        return Status::InvalidArgument(
+                fmt::format("Invalid parameter {}. The value must be between {} and {}", name, min, max));
+    }
+    *result = parsed;
+    return Status::OK();
 }
 
 } // namespace starrocks

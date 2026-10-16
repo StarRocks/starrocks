@@ -33,6 +33,25 @@ namespace starrocks::workgroup {
 // ------------------------------------------------------------------------------------
 
 struct WorkGroupMetrics {
+    struct DriverQueueLevelMetrics {
+        std::unique_ptr<IntGauge> accu_time_ns = nullptr;
+        std::unique_ptr<IntAtomicCounter> wait_time_ns = nullptr;
+        std::unique_ptr<IntAtomicCounter> schedule_count = nullptr;
+
+        void set_value(const pipeline::DriverQueueLevelStats& stats) {
+            if (accu_time_ns != nullptr) accu_time_ns->set_value(stats.accu_time_ns);
+            if (wait_time_ns != nullptr) wait_time_ns->set_value(stats.wait_time_ns);
+            if (schedule_count != nullptr) schedule_count->set_value(stats.schedule_count);
+        }
+
+        // Take over the metrics of `other` that are registered, and keep the others.
+        void move_registered_from(DriverQueueLevelMetrics& other) {
+            if (other.accu_time_ns != nullptr) accu_time_ns = std::move(other.accu_time_ns);
+            if (other.wait_time_ns != nullptr) wait_time_ns = std::move(other.wait_time_ns);
+            if (other.schedule_count != nullptr) schedule_count = std::move(other.schedule_count);
+        }
+    };
+
     int128_t group_unique_id;
 
     std::unique_ptr<DoubleGauge> cpu_limit = nullptr;
@@ -50,6 +69,9 @@ struct WorkGroupMetrics {
     std::unique_ptr<DoubleGauge> inuse_cpu_cores = nullptr;
     int64_t timestamp_ns = 0;
     int64_t cpu_runtime_ns = 0;
+
+    // Indexed by the level of the driver queue.
+    std::vector<DriverQueueLevelMetrics> driver_queue_levels;
 };
 
 // ------------------------------------------------------------------------------------
@@ -175,6 +197,25 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
                 _metrics->register_metric("resource_group_bigquery_count", MetricLabels().add("name", wg->name()),
                                           resource_group_bigquery_count.get());
 
+        // accumulated time and ready wait of each driver queue level
+        auto register_or_reset = [this](const std::string& name, const MetricLabels& labels, auto& metric) {
+            if (!_metrics->register_metric(name, labels, metric.get())) {
+                metric.reset();
+            }
+        };
+        std::vector<WorkGroupMetrics::DriverQueueLevelMetrics> driver_queue_levels(
+                wg->driver_sched_entity()->queue()->level_stats().size());
+        for (size_t level = 0; level < driver_queue_levels.size(); ++level) {
+            const auto labels = MetricLabels().add("name", wg->name()).add("level", std::to_string(level));
+            auto& level_metrics = driver_queue_levels[level];
+            level_metrics.accu_time_ns = std::make_unique<IntGauge>(MetricUnit::NANOSECONDS);
+            register_or_reset("resource_group_driver_queue_level_accu_time_ns", labels, level_metrics.accu_time_ns);
+            level_metrics.wait_time_ns = std::make_unique<IntAtomicCounter>(MetricUnit::NANOSECONDS);
+            register_or_reset("resource_group_driver_queue_level_wait_time_ns", labels, level_metrics.wait_time_ns);
+            level_metrics.schedule_count = std::make_unique<IntAtomicCounter>(MetricUnit::NOUNIT);
+            register_or_reset("resource_group_driver_queue_level_schedule_count", labels, level_metrics.schedule_count);
+        }
+
         unique_lock.lock();
         auto it = _wg_metrics.find(wg->name());
         if (it == _wg_metrics.end()) {
@@ -200,6 +241,10 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
         if (concurrency_registered)
             wg_metrics->concurrency_overflow_count = std::move(resource_group_concurrency_overflow);
         if (bigquery_registered) wg_metrics->bigquery_count = std::move(resource_group_bigquery_count);
+        wg_metrics->driver_queue_levels.resize(driver_queue_levels.size());
+        for (size_t level = 0; level < driver_queue_levels.size(); ++level) {
+            wg_metrics->driver_queue_levels[level].move_registered_from(driver_queue_levels[level]);
+        }
     }
     _wg_metrics[wg->name()]->group_unique_id = wg->unique_id();
 }
@@ -264,6 +309,12 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->inuse_cpu_cores->set_value(inuse_cpu_cores);
             wg_metrics->timestamp_ns = new_timestamp_ns;
             wg_metrics->cpu_runtime_ns = new_cpu_runtime_ns;
+
+            const auto level_stats = wg->driver_sched_entity()->queue()->level_stats();
+            for (size_t level = 0; level < wg_metrics->driver_queue_levels.size() && level < level_stats.size();
+                 ++level) {
+                wg_metrics->driver_queue_levels[level].set_value(level_stats[level]);
+            }
         } else {
             VLOG(2) << "workgroup update_metrics " << name << ", workgroup not exists so cleanup metrics";
 
@@ -279,6 +330,9 @@ void WorkGroupManager::update_metrics_unlocked() {
             wg_metrics->concurrency_overflow_count->set_value(0);
             wg_metrics->bigquery_count->set_value(0);
             wg_metrics->inuse_cpu_cores->set_value(0);
+            for (auto& level_metrics : wg_metrics->driver_queue_levels) {
+                level_metrics.set_value({});
+            }
         }
     }
 }

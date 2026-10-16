@@ -19,7 +19,9 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
+import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -220,6 +222,37 @@ public class TabletReshardUtils {
         } catch (IllegalArgumentException e) {
             // Base index meta went away underneath us; treat as an ordinary split rather than throwing
             // from a scheduling decision.
+            return false;
+        }
+    }
+
+    /**
+     * Whether a tablet merge of this table is unsupported for now.
+     *
+     * <p>True for the same shape as {@link #splitRewritesEveryShard}: a range-distributed primary-key
+     * table whose ORDER BY key differs from the primary key. A merge has to decide, for every row of a
+     * segment its sources share, which source still owns it, and the BE answers that by turning a
+     * primary-key interval into a rowid window. On this shape there is no such window -- the tablet range
+     * is in primary-key space while the segments are laid out in sort-key order -- so the merge fails at
+     * publish, permanently, and takes every later transaction on the partition with it.
+     *
+     * <p>Not gated on file bundling, unlike {@code splitRewritesEveryShard}: that gate is about the cost
+     * of the UNSHARE rewrite the split knobs bound, while this is about a merge that cannot be made
+     * correct. CREATE TABLE requires file_bundling=true for this shape anyway, so the two agree in
+     * practice; where they could disagree, refusing the merge is the safe answer.
+     *
+     * <p>The read-only parent alias a split keeps alive is not affected: it reproduces the pre-split
+     * parent rather than deciding ownership per row. See {@code merge_tablet} on the BE.
+     */
+    public static boolean tabletMergeUnsupported(OlapTable table) {
+        if (table == null) {
+            return false;
+        }
+        try {
+            return MetaUtils.hasSeparateSortKey(table, table.getBaseIndexMetaId());
+        } catch (IllegalArgumentException e) {
+            // Base index meta went away underneath us; leave the decision to the BE backstop rather than
+            // throwing from a scheduling decision.
             return false;
         }
     }
@@ -458,5 +491,23 @@ public class TabletReshardUtils {
             sb.append(" (first ").append(shown).append(" of ").append(tablets.size()).append(')');
         }
         return sb.toString();
+    }
+
+    // Bounds are compared by value: a bound decoded from the compute node can carry a different scalar
+    // type than the FE tuple for the same value, which Tuple.equals would treat as different.
+    static boolean sameLowerBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMinimum() || b.isMinimum()) {
+            return a.isMinimum() && b.isMinimum();
+        }
+        return a.getLowerBound().compareTo(b.getLowerBound()) == 0
+                && a.isLowerBoundIncluded() == b.isLowerBoundIncluded();
+    }
+
+    static boolean sameUpperBound(Range<Tuple> a, Range<Tuple> b) {
+        if (a.isMaximum() || b.isMaximum()) {
+            return a.isMaximum() && b.isMaximum();
+        }
+        return a.getUpperBound().compareTo(b.getUpperBound()) == 0
+                && a.isUpperBoundIncluded() == b.isUpperBoundIncluded();
     }
 }

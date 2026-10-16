@@ -16,6 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include <optional>
+
+#include "base/metrics.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
 #include "common/statusor.h"
@@ -43,6 +46,8 @@ TWorkGroupOp make_twg_op(const TWorkGroup& twg, const TWorkGroupOpType::type op_
     return op;
 }
 
+// In an anonymous namespace, since other test files linked into the same binary define their own FakeDriverQueue.
+namespace {
 class FakeDriverQueue final : public pipeline::DriverQueue {
 public:
     FakeDriverQueue() : DriverQueue(nullptr) {}
@@ -58,7 +63,11 @@ public:
     bool should_yield(const pipeline::DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override {
         return false;
     }
+    std::vector<pipeline::DriverQueueLevelStats> level_stats() const override { return stats; }
+
+    std::vector<pipeline::DriverQueueLevelStats> stats;
 };
+} // namespace
 
 WorkGroupManager::DriverQueueFactory make_fake_driver_queue_factory(int* create_count = nullptr) {
     return [create_count](pipeline::DriverQueueMetrics*) {
@@ -100,6 +109,36 @@ PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_wo
     manager.apply({make_twg_op(stale, TWorkGroupOpType::WORKGROUP_OP_CREATE)});
 
     EXPECT_EQ(1, create_count);
+
+    manager.destroy();
+}
+
+PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_metrics) {
+    MetricRegistry registry("test");
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    auto driver_queue_factory = [](pipeline::DriverQueueMetrics*) {
+        auto queue = std::make_unique<FakeDriverQueue>();
+        queue->stats = {{}, {.accu_time_ns = 300, .wait_time_ns = 200, .schedule_count = 2}};
+        return queue;
+    };
+    WorkGroupManager manager(config, &registry, driver_queue_factory, unused_driver_executor_factory());
+
+    auto wg = std::make_shared<WorkGroup>(create_twg(130, 1, "wg130", WorkGroup::DEFAULT_MEM_POOL, 0.5));
+    manager.add_workgroup(wg);
+    manager.update_metrics();
+
+    auto get_value = [&registry](const std::string& name, const std::string& level) -> std::optional<int64_t> {
+        auto* metric = registry.get_metric(name, MetricLabels().add("name", "wg130").add("level", level));
+        if (metric == nullptr) {
+            return std::nullopt;
+        }
+        return std::stoll(metric->to_string());
+    };
+    EXPECT_EQ(0, get_value("resource_group_driver_queue_level_accu_time_ns", "0"));
+    EXPECT_EQ(300, get_value("resource_group_driver_queue_level_accu_time_ns", "1"));
+    EXPECT_EQ(200, get_value("resource_group_driver_queue_level_wait_time_ns", "1"));
+    EXPECT_EQ(2, get_value("resource_group_driver_queue_level_schedule_count", "1"));
+    EXPECT_EQ(std::nullopt, get_value("resource_group_driver_queue_level_accu_time_ns", "2"));
 
     manager.destroy();
 }

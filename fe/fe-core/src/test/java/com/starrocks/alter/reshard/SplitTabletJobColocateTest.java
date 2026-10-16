@@ -37,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -72,10 +73,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Exercises the post-split colocate-range classification path on a range-colocate table.
@@ -103,12 +102,7 @@ public class SplitTabletJobColocateTest {
         starRocksAssert.withDatabase("p3_split_test").useDatabase("p3_split_test");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("p3_split_test");
 
-        new MockUp<ThreadPoolExecutor>() {
-            @Mock
-            public <T> Future<T> submit(Callable<T> task) throws Exception {
-                return CompletableFuture.completedFuture(task.call());
-            }
-        };
+        LockTestUtils.fakeSynchronousExecutorOffTheCallersThread();
 
         // The TabletReshardJobMgr daemon ticks every 10ms and runs ColocateChecker.runOneCycle,
         // which re-marks an unstable colocate group stable as soon as every peer is range-aligned.
@@ -383,7 +377,7 @@ public class SplitTabletJobColocateTest {
             // First child range non-canonically straddles the existing boundary at 100.
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
-                    new TabletRange(Range.gelt(makeTwoColTuple(50, 0), makeTwoColTuple(150, 0))).toProto());
+                    new TabletRange(Range.lt(makeTwoColTuple(150, 0))).toProto());
             result.put(newTabletIds.get(1),
                     new TabletRange(Range.ge(makeTwoColTuple(150, 0))).toProto());
             return result;
@@ -533,12 +527,12 @@ public class SplitTabletJobColocateTest {
 
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             // Return ONLY the first child's range → the missing second range triggers BE identical
-            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). The concrete range
-            // is contained in the single owning ColocateRange so the reconcile can place it; the
-            // identical flag itself is size-based (newTabletIds.size() == 1), not range-based.
+            // fallback (fallbackToIdenticalTablet keeps a single replacement tablet). An identical
+            // replacement has the old tablet's own range, which is contained in the single owning
+            // ColocateRange so the reconcile can place it; the identical flag itself is size-based
+            // (newTabletIds.size() == 1), not range-based.
             Map<Long, TabletRangePB> result = new HashMap<>();
-            result.put(newTabletIds.get(0),
-                    new TabletRange(Range.lt(makeTwoColTuple(100, 50))).toProto());
+            result.put(newTabletIds.get(0), new TabletRange().toProto());
             return result;
         });
         Map<Long, List<Long>> reassignedAdd = new HashMap<>();
@@ -713,15 +707,15 @@ public class SplitTabletJobColocateTest {
                 new ColocateRange(Range.lt(boundary), packLow),
                 new ColocateRange(Range.ge(boundary), packHigh)));
 
-        // Legacy/mismatched BE: a child [(50,0),(150,0)) straddling the boundary at 100, plus a
+        // Legacy/mismatched BE: a child (-inf,(150,0)) straddling the boundary at 100, plus a
         // contained high child [(150,0),+inf). Both are reported in packHigh by the mock:
-        //   - crossing child is NOT contained -> the filter must skip it (its lower prefix 50 maps to
-        //     packLow, so an UNFILTERED reconcile would wrongly reassign it packHigh -> packLow);
+        //   - crossing child is NOT contained -> the filter must skip it (its lower end is -inf, which maps
+        //     to packLow, so an UNFILTERED reconcile would wrongly reassign it packHigh -> packLow);
         //   - high child is contained in packHigh and already there -> correctly placed.
         installLakeServiceMockReturning((oldTabletId, newTabletIds) -> {
             Map<Long, TabletRangePB> result = new HashMap<>();
             result.put(newTabletIds.get(0),
-                    new TabletRange(Range.gelt(makeTwoColTuple(50, 0), makeTwoColTuple(150, 0))).toProto());
+                    new TabletRange(Range.lt(makeTwoColTuple(150, 0))).toProto());
             result.put(newTabletIds.get(1),
                     new TabletRange(Range.ge(makeTwoColTuple(150, 0))).toProto());
             return result;

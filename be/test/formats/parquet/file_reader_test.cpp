@@ -27,11 +27,13 @@
 #include "cache/disk_cache/test_cache_utils.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/array_column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "column/variant_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/logging.h"
@@ -45,12 +47,12 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/in_const_predicate.hpp"
+#include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/column_materializer.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_block_split_bloom_filter.h"
-#include "formats/parquet/parquet_test_util/handmade_file.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
@@ -2306,7 +2308,13 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
-// Illegal parquet files, not support it anymore
+// Legacy two-level nested list written by Hudi (parquet-avro):
+//   optional group c (LIST) {
+//     repeated group array (LIST) {
+//       repeated int32 array;
+//     }
+//   }
+// The single repeated child makes it a nested list, not a list of struct<array>.
 TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     // format:
     // b: varchar
@@ -2325,7 +2333,6 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     Status status = file_reader->init(&ctx->format_scan_context);
 
-    // Illegal parquet files, will treat illegal column as null
     ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->row_group_size(), 1);
@@ -2339,8 +2346,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
 
     chunk->check_or_die();
 
-    EXPECT_EQ("['hello', NULL]", chunk->debug_row(0));
-    EXPECT_EQ("[NULL, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("['hello', [[10,20,30],[40,50,60,70]]]", chunk->debug_row(0));
+    EXPECT_EQ("[NULL, [[30,40],[10,20,30]]]", chunk->debug_row(1));
     EXPECT_EQ("['hello', NULL]", chunk->debug_row(2));
 }
 
@@ -2877,7 +2884,7 @@ TEST_F(FileReaderTest, TestStructSubfieldDictFilter) {
             ASSERT_EQ("{c0:'55',c_struct:{c0:'55',c1:'46'}}", chunk->get_column_by_slot_id(3)->debug_item(0));
             const auto& c_struct_struct = chunk->get_column_by_slot_id(3);
             expect_string_data_column(get_struct_field_column(c_struct_struct, "c0"));
-            const auto& c_struct = get_struct_field_column(c_struct_struct, "c_struct");
+            ColumnPtr c_struct = get_struct_field_column(c_struct_struct, "c_struct");
             expect_string_data_column(get_struct_field_column(c_struct, "c0"));
             expect_string_data_column(get_struct_field_column(c_struct, "c1"));
         }
@@ -3708,17 +3715,37 @@ TEST_F(FileReaderTest, TestIsNullStatistics) {
     EXPECT_EQ(file_reader->row_group_size(), 0);
 }
 
+// c3 is list<map<struct<c3_1 int, c3_2 boolean>, list<struct<c3_3_1 date>>>>. A group map key no longer makes the
+// whole file unreadable: the schema resolves (key subtree, then value subtree) and the other columns read normally.
 TEST_F(FileReaderTest, TestMapKeyIsStruct) {
     const std::string filename = "./be/test/formats/parquet/test_data/map_key_is_struct.parquet";
 
     auto file_reader = _create_file_reader(filename);
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_VARCHAR_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""},
+            {"c1", TYPE_INT_DESC},
+            {""},
     };
     auto ctx = _create_file_random_read_context(filename, slot_descs);
-    Status status = file_reader->init(&ctx->format_scan_context);
-    ASSERT_FALSE(status.ok());
-    ASSERT_EQ("Map keys must be primitive type.", status.message());
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    const auto& schema = file_reader->get_file_metadata()->schema();
+    const ParquetField* c3 = schema.get_stored_column_by_field_idx(schema.get_field_idx_by_column_name("c3"));
+    ASSERT_EQ(ColumnType::ARRAY, c3->type);
+    const ParquetField& map = c3->children[0];
+    ASSERT_EQ(ColumnType::MAP, map.type);
+    ASSERT_EQ(2, map.children.size());
+    ASSERT_EQ(ColumnType::STRUCT, map.children[0].type);
+    ASSERT_EQ(2, map.children[0].children.size());
+    // the value follows the whole key subtree
+    ASSERT_EQ("value", map.children[1].name);
+    ASSERT_EQ(ColumnType::ARRAY, map.children[1].type);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    chunk->check_or_die();
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_EQ("[3]", chunk->debug_row(0));
 }
 
 TEST_F(FileReaderTest, TestInFilterStatitics) {
@@ -4753,6 +4780,37 @@ TEST_F(FileReaderTest, test_read_variant) {
     ASSERT_EQ(total_rows, 24) << "Should have read all 24 rows from the variant parquet file";
 }
 
+// Reads `path` from row `row` of a VariantColumn through VariantPathReader, as JSON ("<missing>" when absent).
+static std::string read_variant_path_json(const VariantColumn* column, size_t row, const std::string& path) {
+    auto parsed = VariantPathParser::parse(path);
+    if (!parsed.ok()) {
+        return "<bad path>";
+    }
+    VariantPathReader reader;
+    reader.prepare(column, &parsed.value());
+    auto read = reader.read_row(row);
+    if (read.state != VariantReadState::kValue) {
+        return "<missing>";
+    }
+    auto json = read.value.to_json();
+    return json.ok() ? json.value() : "<bad value>";
+}
+
+// The element VariantColumn of the ARRAY<VARIANT> typed path `path`, or nullptr.
+static const VariantColumn* variant_array_element_column(const VariantColumn* column, const std::string& path) {
+    const int idx = column->find_shredded_path(path);
+    if (idx < 0) {
+        return nullptr;
+    }
+    const Column* typed = ColumnHelper::get_data_column(column->typed_column_by_index(idx));
+    if (!typed->is_array()) {
+        return nullptr;
+    }
+    const Column* elements =
+            ColumnHelper::get_data_column(down_cast<const ArrayColumn*>(typed)->elements_column().get());
+    return elements->is_variant() ? down_cast<const VariantColumn*>(elements) : nullptr;
+}
+
 TEST_F(FileReaderTest, test_read_variant_shredding) {
     const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
     auto file_reader = _create_file_reader(variant_file_path);
@@ -4786,6 +4844,35 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     ASSERT_NE(-1, variant_col->find_shredded_path("numbers"));
     ASSERT_NE(-1, variant_col->find_shredded_path("groups"));
 
+    // "score" mixes INT32 typed values and string fallback values in this batch: the path keeps its INT type and
+    // the strings are carried in its fallback column.
+    const int score_idx = variant_col->find_shredded_path("score");
+    EXPECT_EQ(TYPE_INT, variant_col->shredded_types()[score_idx].type);
+    EXPECT_TRUE(variant_col->has_any_fallback_value(score_idx));
+    EXPECT_FALSE(variant_col->has_fallback_value(score_idx, 0));
+    EXPECT_TRUE(variant_col->has_fallback_value(score_idx, 1));
+    auto score_fallback = variant_col->fallback_value(score_idx, 1);
+    ASSERT_TRUE(score_fallback.ok()) << score_fallback.status().to_string();
+    EXPECT_EQ(R"("S81")", score_fallback->to_json().value());
+
+    // Shredded arrays are kept as ARRAY<VARIANT>, with the element children as typed paths of the element column.
+    const TypeDescriptor array_of_variant = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+    for (const char* array_path : {"events", "numbers", "groups"}) {
+        EXPECT_EQ(array_of_variant, variant_col->shredded_types()[variant_col->find_shredded_path(array_path)])
+                << array_path;
+    }
+    const VariantColumn* event_elements = variant_array_element_column(variant_col, "events");
+    ASSERT_NE(nullptr, event_elements);
+    EXPECT_EQ(10, event_elements->size()); // 5 rows x 2 events
+    EXPECT_NE(-1, event_elements->find_shredded_path("type"));
+    EXPECT_NE(-1, event_elements->find_shredded_path("count"));
+    EXPECT_EQ("2", read_variant_path_json(variant_col, 0, "$.events[1].count"));
+    EXPECT_EQ(R"("click")", read_variant_path_json(variant_col, 0, "$.events[1].type"));
+    EXPECT_EQ(R"("detail_view_0")", read_variant_path_json(variant_col, 0, "$.events[0].detail"));
+    EXPECT_EQ("41", read_variant_path_json(variant_col, 1, "$.groups[1].scores[0]"));
+    EXPECT_EQ(R"("note_1_1")", read_variant_path_json(variant_col, 1, "$.groups[1].note"));
+    EXPECT_EQ("4", read_variant_path_json(variant_col, 1, "$.numbers[2]"));
+
     VariantRowValue row0;
     ASSERT_NE(variant_col->get_row_value(0, &row0), nullptr);
     auto row0_json = row0.to_json();
@@ -4808,6 +4895,52 @@ TEST_F(FileReaderTest, test_read_variant_shredding) {
     ASSERT_TRUE(row1_json.value().find("\"score\":\"S81\"") != std::string::npos);
     ASSERT_TRUE(row1_json.value().find("\"rank\":\"L2\"") != std::string::npos);
     ASSERT_TRUE(row1_json.value().find("\"numbers\":[2,3,4]") != std::string::npos);
+}
+
+// A shredded array requested through an access path keeps its shredded element fields: the element children have
+// element-relative paths and must be read even though they do not match the row-level requested path.
+TEST_F(FileReaderTest, test_read_variant_shredding_with_array_access_path) {
+    const std::string variant_file_path = "./be/test/formats/parquet/test_data/variant_shredding.parquet";
+    auto file_reader = _create_file_reader(variant_file_path);
+
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, variant_file_path);
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    auto root_or = ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0);
+    ASSERT_TRUE(root_or.ok()) << root_or.status().to_string();
+    auto root = std::move(root_or).value();
+    for (const char* field : {"events", "groups"}) {
+        auto field_or = ColumnAccessPath::create(TAccessPathType::FIELD, field, 0, root->absolute_path());
+        ASSERT_TRUE(field_or.ok()) << field_or.status().to_string();
+        root->children().emplace_back(std::move(field_or).value());
+    }
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+
+    Status status = file_reader->init(&ctx->format_scan_context);
+    ASSERT_TRUE(status.ok()) << status.message();
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok()) << status.message();
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    for (size_t row = 0; row < 5; ++row) {
+        EXPECT_EQ(std::to_string(row + 1), read_variant_path_json(variant_col, row, "$.events[0].count"));
+        EXPECT_EQ(std::to_string((row + 1) * 2), read_variant_path_json(variant_col, row, "$.events[1].count"));
+        EXPECT_EQ(R"("view")", read_variant_path_json(variant_col, row, "$.events[0].type"));
+        EXPECT_EQ(std::to_string(40 + row), read_variant_path_json(variant_col, row, "$.groups[1].scores[0]"));
+    }
+    VariantRowValue row0;
+    ASSERT_NE(nullptr, variant_col->get_row_value(0, &row0));
+    auto row0_json = row0.to_json();
+    ASSERT_TRUE(row0_json.ok());
+    EXPECT_NE(std::string::npos, row0_json.value().find(R"("count":1)")) << row0_json.value();
+    EXPECT_NE(std::string::npos, row0_json.value().find(R"("scores":[40,50,60])")) << row0_json.value();
 }
 
 TEST_F(FileReaderTest, test_read_variant_shredding_with_access_paths) {
@@ -5063,231 +5196,136 @@ TEST_F(FileReaderTest, test_read_variant_shredding_with_whole_column_access_path
     ASSERT_NE(-1, variant_col->find_shredded_path("events"));
 }
 
-// A Parquet `null_count` statistic is a hint, not a fact: files written by old parquet-mr
-// under-report it, and StarRocks used to take it at face value. When the statistic claims
-// "no NULLs" but the definition levels disagree, the reader asked the value decoder for one
-// physical value per row while the page only stores the non-NULL ones, and the read walked
-// off the end of the page:
-//   going to read out-of-bounds data, offset=1050424,count=187,size=1050424
-// The definition levels have already been decoded by the time the decoder is picked, so the
-// true NULL count is available for free and must win over the statistic.
-class HandmadeNullCountTest : public FileReaderTest {
-protected:
-    // Writes `values` into a scratch file whose statistics are whatever `options` says.
-    std::string _write_handmade_file(const std::vector<std::optional<std::string>>& values,
-                                     const HandmadeParquetFile::Options& options, const std::string& tag) {
-        std::string content = HandmadeParquetFile::build(values, options);
-        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
-        auto file = *FileSystem::Default()->new_writable_file(path);
-        CHECK_OK(file->append(Slice(content)));
-        CHECK_OK(file->close());
-        _scratch_files.emplace_back(path);
-        return path;
-    }
+// variant_shredding_nested_residual.parquet (see gen_variant_shredding_nested_residual.py) shreds
+// `commit.collection` and keeps the other fields of `commit` in the residual `typed_value.commit.value`.
+static const char* kNestedResidualVariantFile =
+        "./be/test/formats/parquet/test_data/variant_shredding_nested_residual.parquet";
 
-    // Reads the single "c0" column out in one chunk.
-    StatusOr<ColumnPtr> _read_c0(const std::string& path, size_t expected_rows) {
-        auto file_reader = _create_file_reader(path);
-        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_VARCHAR_DESC}, {""}};
-        auto* ctx = _create_scan_context(slot_descs, path);
-        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
-
-        auto chunk = std::make_shared<Chunk>();
-        chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
-        RETURN_IF_ERROR(file_reader->get_next(&chunk));
-        EXPECT_EQ(expected_rows, chunk->num_rows());
-        return chunk->get_column_by_index(0);
-    }
-
-    void TearDown() override {
-        for (const auto& path : _scratch_files) {
-            std::filesystem::remove(path);
-        }
-        _scratch_files.clear();
-        FileReaderTest::TearDown();
-    }
-
-    // "a", NULL, "bbb", NULL, "c" — three physical values behind five rows.
-    static std::vector<std::optional<std::string>> _values_with_nulls() {
-        return {std::string("a"), std::nullopt, std::string("bbb"), std::nullopt, std::string("c")};
-    }
-
-    static void _expect_values_with_nulls(const ColumnPtr& column) {
-        ASSERT_EQ("['a', NULL, 'bbb', NULL, 'c']", column->debug_string());
-    }
-
-private:
-    std::vector<std::string> _scratch_files;
-};
-
-// The shape seen in the field: the row group counts its NULLs correctly, but the page header
-// claims the page has none. Only the page statistic lies. Before the fix this failed with
-// "going to read out-of-bounds data".
-TEST_F(HandmadeNullCountTest, reads_a_page_that_under_reports_nulls) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = 2;
-    options.page_null_count = 0;
-    auto path = _write_handmade_file(_values_with_nulls(), options, "page_stat");
-
-    auto column = _read_c0(path, 5);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    _expect_values_with_nulls(column.value());
+static std::string variant_row_json(const VariantColumn* variant_col, size_t row) {
+    VariantRowValue value;
+    EXPECT_NE(variant_col->get_row_value(row, &value), nullptr);
+    auto json = value.to_json();
+    EXPECT_TRUE(json.ok()) << json.status().to_string();
+    return json.ok() ? json.value() : std::string();
 }
 
-// The same lie one level up: the row group claims no NULLs and the page carries no statistics.
-TEST_F(HandmadeNullCountTest, reads_a_row_group_that_under_reports_nulls) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = 0;
-    options.page_null_count = std::nullopt;
-    auto path = _write_handmade_file(_values_with_nulls(), options, "row_group_stat");
+TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
 
-    auto column = _read_c0(path, 5);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    _expect_values_with_nulls(column.value());
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    // The residual of `commit` is the fallback of path `commit` (its typed column stays null), and the shredded
+    // child `commit.collection` keeps its own typed path; rows are rebuilt from the residual plus the children.
+    const int commit_idx = variant_col->find_shredded_path("commit");
+    ASSERT_NE(-1, commit_idx);
+    EXPECT_EQ(TYPE_VARIANT, variant_col->shredded_types()[commit_idx].type);
+    EXPECT_TRUE(variant_col->has_any_fallback_value(commit_idx));
+    ASSERT_NE(-1, variant_col->find_shredded_path("commit.collection"));
+    // A residual field is read from the residual, a shredded child from its typed column, and the object itself
+    // merges both.
+    EXPECT_EQ(R"({"text":"hello"})", read_variant_path_json(variant_col, 0, "$.commit.record"));
+    EXPECT_EQ(R"("post")", read_variant_path_json(variant_col, 0, "$.commit.collection"));
+    EXPECT_EQ(R"({"collection":"post","record":{"text":"hello"}})", read_variant_path_json(variant_col, 0, "$.commit"));
+    EXPECT_EQ("<missing>", read_variant_path_json(variant_col, 1, "$.commit.record"));
+
+    ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
+              variant_row_json(variant_col, 0));
+    ASSERT_EQ(R"({"commit":{"collection":"like"},"kind":"commit"})", variant_row_json(variant_col, 1));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
+    ASSERT_TRUE(nullable->is_null(3));
+    // A row whose only payload is the residual of `commit` is not null.
+    ASSERT_FALSE(nullable->is_null(4));
+    ASSERT_EQ(R"({"commit":{"rev":"r1"}})", variant_row_json(variant_col, 4));
 }
 
-// Both statistics lie at once.
-TEST_F(HandmadeNullCountTest, reads_when_both_statistics_lie) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = 0;
-    options.page_null_count = 0;
-    auto path = _write_handmade_file(_values_with_nulls(), options, "both_stat");
+TEST_F(FileReaderTest, test_read_variant_shredding_nested_residual_with_access_path) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
 
-    auto column = _read_c0(path, 5);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    _expect_values_with_nulls(column.value());
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
+
+    // data.commit.record is not shredded: it lives in the residual of the shredded `commit`.
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    ASSIGN_OR_ABORT(auto commit, ColumnAccessPath::create(TAccessPathType::FIELD, "commit", 0, root->absolute_path()));
+    ASSIGN_OR_ABORT(auto record,
+                    ColumnAccessPath::create(TAccessPathType::FIELD, "record", 0, commit->absolute_path()));
+    commit->children().emplace_back(std::move(record));
+    root->children().emplace_back(std::move(commit));
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
+
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    int record_idx = variant_col->find_shredded_path("commit.record");
+    ASSERT_NE(-1, record_idx);
+    const Column* record_col = variant_col->typed_column_by_index(record_idx);
+    ASSERT_FALSE(record_col->is_null(0));
+    const auto* record_variant =
+            down_cast<const VariantColumn*>(down_cast<const NullableColumn*>(record_col)->data_column().get());
+    ASSERT_EQ(R"({"text":"hello"})", variant_row_json(record_variant, 0));
+    ASSERT_TRUE(record_col->is_null(1));
+    ASSERT_TRUE(record_col->is_null(2));
+    ASSERT_TRUE(nullable->is_null(3));
 }
 
-// The control group: files whose statistics are honest, or that carry none. These read correctly
-// both before and after the fix -- that is what proves the hand-built files above are valid
-// parquet rather than mis-assembled bytes.
-TEST_F(HandmadeNullCountTest, honest_statistics_without_nulls) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = 0;
-    options.page_null_count = 0;
-    std::vector<std::optional<std::string>> values = {std::string("a"), std::string("bb"), std::string("ccc")};
+TEST_F(FileReaderTest, test_read_variant_shredding_full_column_ignores_extended_access_path) {
+    auto file_reader = _create_file_reader(kNestedResidualVariantFile);
 
-    auto path = _write_handmade_file(values, options, "honest_no_null");
-    auto column = _read_c0(path, 3);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    ASSERT_EQ("['a', 'bb', 'ccc']", column.value()->debug_string());
-}
+    TypeDescriptor variant_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT);
+    Utils::SlotDesc slot_descs[] = {{"data", variant_type}, {""}};
+    auto ctx = _create_scan_context(slot_descs, kNestedResidualVariantFile);
 
-TEST_F(HandmadeNullCountTest, honest_statistics_with_nulls) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = 2;
-    options.page_null_count = 2;
+    // The extended access path the FE emits for a virtual column of get_variant_string(data, '$.commit.collection')
+    // describes that virtual column, not `data`: the full `data` column must not be narrowed to it.
+    TColumnAccessPath tleaf;
+    tleaf.__set_type(TAccessPathType::FIELD);
+    tleaf.__set_type_desc(TypeDescriptor::create_varchar_type(1048576).to_thrift());
+    TColumnAccessPath tcommit;
+    tcommit.__set_type(TAccessPathType::FIELD);
+    tcommit.__set_children({tleaf});
+    TColumnAccessPath troot;
+    troot.__set_type(TAccessPathType::ROOT);
+    troot.__set_extended(true);
+    troot.__set_children({tcommit});
+    std::vector<std::string> resolved = {"data", "commit", "collection"};
+    size_t resolve_index = 0;
+    auto resolver = [&](const TColumnAccessPath&) -> StatusOr<std::string> { return resolved[resolve_index++]; };
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(troot, resolver));
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    column_access_paths.emplace_back(std::move(root));
+    ctx->format_scan_context.column_access_paths = std::move(column_access_paths);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
 
-    auto path = _write_handmade_file(_values_with_nulls(), options, "honest_with_null");
-    auto column = _read_c0(path, 5);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    _expect_values_with_nulls(column.value());
-}
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(variant_type, true), chunk->num_columns());
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(5, chunk->num_rows());
 
-TEST_F(HandmadeNullCountTest, no_statistics_at_all) {
-    HandmadeParquetFile::Options options;
-    options.row_group_null_count = std::nullopt;
-    options.page_null_count = std::nullopt;
-
-    auto path = _write_handmade_file(_values_with_nulls(), options, "no_stat");
-    auto column = _read_c0(path, 5);
-    ASSERT_TRUE(column.ok()) << column.status().message();
-    _expect_values_with_nulls(column.value());
-}
-
-// `null_count` also drives pruning, where -- unlike decoding -- there are no definition levels to
-// cross-check against, so an under-reported count silently drops the rows `IS NULL` asks for.
-// StarRocks already refuses min/max from writers known to compute statistics incorrectly
-// (`ApplicationVersion::HasCorrectStatistics`, PARQUET-251); the fix asks the same writer-version
-// question about `null_count`.
-//
-// The column is INT32 on purpose. For BYTE_ARRAY from a legacy writer the min/max gate already
-// drops the statistics, so no zone map is built and the bug cannot be reached; for INT32 the gate
-// lets min/max through (`col_type != BYTE_ARRAY` returns early) and the bug is reachable.
-class LegacyNullCountPruningTest : public HandmadeNullCountTest {
-protected:
-    static constexpr const char* kLegacyWriter = "parquet-mr version 1.9.0-cdh6.3.2 (build handmade)";
-    static constexpr const char* kModernWriter = "parquet-mr version 1.13.1 (build handmade)";
-
-    // Statistics claim no NULLs. `with_nulls` decides whether that claim is a lie.
-    std::string _write_int_file(const std::string& created_by, bool with_nulls, const std::string& tag) {
-        HandmadeParquetFile::Options options;
-        options.row_group_null_count = 0;
-        options.page_null_count = 0;
-        options.row_group_min = HandmadeParquetFile::plain_int32(1);
-        options.row_group_max = HandmadeParquetFile::plain_int32(3);
-        options.created_by = created_by;
-
-        std::vector<std::optional<int32_t>> values = {1, 2, 3};
-        if (with_nulls) {
-            values = {1, std::nullopt, 3};
-        }
-        std::string content = HandmadeParquetFile::build_int32(values, options);
-        std::string path = (std::filesystem::temp_directory_path() / ("sr_handmade_" + tag + ".parquet")).string();
-        auto file = *FileSystem::Default()->new_writable_file(path);
-        CHECK_OK(file->append(Slice(content)));
-        CHECK_OK(file->close());
-        _int_scratch_files.emplace_back(path);
-        return path;
-    }
-
-    // Returns how many row groups survived `WHERE c0 IS NULL`. 0 means the group was pruned.
-    StatusOr<size_t> _row_groups_surviving_is_null(const std::string& path) {
-        Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {""}};
-        std::vector<TExpr> t_conjuncts;
-        ParquetUTBase::is_null_pred(0, true, &t_conjuncts);
-        std::vector<ExprContext*> expr_ctxs;
-        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
-
-        auto* ctx = _create_scan_context(slot_descs, path);
-        ctx->format_scan_context.conjunct_ctxs_by_slot.insert({0, expr_ctxs});
-        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        ParquetUTBase::setup_conjuncts_manager(ctx->format_scan_context.conjunct_ctxs_by_slot[0], nullptr, tuple_desc,
-                                               _runtime_state, ctx);
-
-        auto file_reader = _create_file_reader(path);
-        RETURN_IF_ERROR(file_reader->init(&ctx->format_scan_context));
-        return file_reader->row_group_size();
-    }
-
-    void TearDown() override {
-        for (const auto& path : _int_scratch_files) {
-            std::filesystem::remove(path);
-        }
-        _int_scratch_files.clear();
-        HandmadeNullCountTest::TearDown();
-    }
-
-private:
-    std::vector<std::string> _int_scratch_files;
-};
-
-// CONTROL. A modern writer's statistics are still trusted, so an honest file with no NULLs is
-// still pruned away by `IS NULL`. This is also what proves the hand-built file reaches the zone
-// map at all -- without it the cases below would pass for the wrong reason.
-TEST_F(LegacyNullCountPruningTest, still_prunes_a_modern_writer) {
-    auto path = _write_int_file(kModernWriter, /*with_nulls=*/false, "modern_honest");
-    auto surviving = _row_groups_surviving_is_null(path);
-    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
-    EXPECT_EQ(0, surviving.value()) << "zone-map pruning never ran, so the cases below are inconclusive";
-}
-
-// A legacy writer under-reporting its `null_count` no longer drops the rows `IS NULL` asks for.
-TEST_F(LegacyNullCountPruningTest, stops_trusting_a_legacy_writer) {
-    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/true, "legacy_lying");
-    auto surviving = _row_groups_surviving_is_null(path);
-    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
-    EXPECT_EQ(1, surviving.value()) << "row group pruned away although the file does contain NULLs";
-}
-
-// A legacy writer with an honest file: no longer pruned. That is a lost optimisation, not a
-// wrong answer -- the predicate still rejects the rows downstream. Stated so the trade-off is
-// visible rather than discovered later in a benchmark.
-TEST_F(LegacyNullCountPruningTest, gives_up_pruning_on_honest_legacy_files) {
-    auto path = _write_int_file(kLegacyWriter, /*with_nulls=*/false, "legacy_honest_kept");
-    auto surviving = _row_groups_surviving_is_null(path);
-    ASSERT_TRUE(surviving.ok()) << surviving.status().message();
-    EXPECT_EQ(1, surviving.value());
+    const auto* nullable = down_cast<const NullableColumn*>(chunk->get_column_by_index(0).get());
+    const auto* variant_col = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_EQ(R"({"commit":{"collection":"post","record":{"text":"hello"}},"kind":"commit"})",
+              variant_row_json(variant_col, 0));
+    // `note` lives only in its own fallback `value` column.
+    ASSERT_EQ(R"({"extra":1,"kind":"identity","note":"n1"})", variant_row_json(variant_col, 2));
 }
 
 } // namespace starrocks::parquet

@@ -88,6 +88,7 @@ class ParsedSchema:
     containers: dict[str, ContainerDecl]
     fields: dict[str, dict[int, FieldDecl]]
     unsupported: list[UnsupportedConstruct] = field(default_factory=list)
+    package: str | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +162,13 @@ def check_repo(
     for repo_path in sorted(selected_paths):
         violations.extend(compare_schema_path(repo_root, repo_path, base))
 
+    relocated = _find_relocated_proto_containers(repo_root, selected_paths, base)
+    violations = [
+        issue
+        for issue in violations
+        if not ((issue.path, issue.container) in relocated and issue.rule in RELOCATION_SUPPRESSED_RULES)
+    ]
+
     active_keys = {
         (issue.path, issue.container, issue.field_number, issue.field_name, issue.rule, issue.base_signature): issue
         for issue in violations
@@ -203,6 +211,67 @@ def check_repo(
         )
 
     return sorted(filtered, key=lambda item: (item.path, item.container, item.field_number or -1, item.rule, item.field_name))
+
+
+# A proto message that disappears from one file and reappears, byte-identical, under the same
+# package-qualified name in another file is a relocation: the wire format, generated class names,
+# and field numbers are unchanged. Comparing each file in isolation would report it as deleted
+# (source) and newly added (destination), so these rules are dropped for relocated containers.
+RELOCATION_SUPPRESSED_RULES = frozenset(
+    {"field_deleted", "new_field_must_be_optional", "proto3_field_must_be_explicit_optional"}
+)
+
+
+def _find_relocated_proto_containers(
+    repo_root: Path, selected_paths: set[str], base: str | None
+) -> set[tuple[str, str]]:
+    if base is None:
+        return set()
+
+    removed: dict[tuple[str | None, str], list[tuple[str, ContainerDecl, dict[int, FieldDecl]]]] = defaultdict(list)
+    added: dict[tuple[str | None, str], list[tuple[str, ContainerDecl, dict[int, FieldDecl]]]] = defaultdict(list)
+    for repo_path in sorted(path for path in selected_paths if path.endswith(".proto")):
+        base_text = _git_read_text(repo_root, base, repo_path)
+        head_path = repo_root / repo_path
+        head_text = head_path.read_text() if head_path.exists() else None
+        try:
+            base_schema = parse_proto_schema(repo_path, base_text) if base_text is not None else None
+            head_schema = parse_proto_schema(repo_path, head_text) if head_text is not None else None
+        except UnsupportedSyntaxError:
+            continue
+        base_names = set(base_schema.containers) if base_schema else set()
+        head_names = set(head_schema.containers) if head_schema else set()
+        for name in base_names - head_names:
+            removed[(base_schema.package, name)].append(
+                (repo_path, base_schema.containers[name], dict(base_schema.fields.get(name, {})))
+            )
+        for name in head_names - base_names:
+            added[(head_schema.package, name)].append(
+                (repo_path, head_schema.containers[name], dict(head_schema.fields.get(name, {})))
+            )
+
+    relocated: set[tuple[str, str]] = set()
+    for key, sources in removed.items():
+        destinations = added.get(key, [])
+        # Only an unambiguous one-to-one move counts; anything else keeps the per-file verdict.
+        if len(sources) != 1 or len(destinations) != 1:
+            continue
+        (src_path, src_decl, src_fields), (dst_path, dst_decl, dst_fields) = sources[0], destinations[0]
+        if src_path == dst_path:
+            continue
+        if (src_decl.kind, src_decl.syntax) != (dst_decl.kind, dst_decl.syntax):
+            continue
+        if _field_shapes(src_fields) != _field_shapes(dst_fields):
+            continue
+        relocated.add((src_path, src_decl.name))
+        relocated.add((dst_path, dst_decl.name))
+    return relocated
+
+
+def _field_shapes(fields: dict[int, FieldDecl]) -> dict[int, tuple[str, str, str]]:
+    return {
+        number: (decl.name, _normalize_type_repr(decl.type_repr), decl.cardinality) for number, decl in fields.items()
+    }
 
 
 def select_schema_paths(repo_root: Path, mode: str, base: str | None) -> set[str]:
@@ -262,10 +331,8 @@ def compare_schema_path(repo_root: Path, repo_path: str, base: str | None) -> li
         ]
 
     unsupported_issues = _compare_unsupported_constructs(repo_path, base_schema, head_schema)
-    if unsupported_issues:
-        return unsupported_issues
-
-    return compare_schemas(repo_path, base_schema, head_schema)
+    # Unsupported constructs must not hide violations in independently parsed structs.
+    return unsupported_issues + compare_schemas(repo_path, base_schema, head_schema)
 
 
 def _compare_unsupported_constructs(
@@ -291,6 +358,17 @@ def _compare_unsupported_constructs(
         head_constructs = Counter(item.construct for item in head_items)
         if base_constructs == head_constructs:
             continue
+
+        # Narrow upstream exception, not general union parsing: only append these two
+        # exact alternatives to Parquet's existing LogicalType. All other edits fail closed.
+        if (repo_path == "gensrc/thrift/parquet.thrift" and key == ("thrift_union", "LogicalType")
+                and len(base_items) == len(head_items) == 1):
+            before = [" ".join(line.split()) for line in base_items[0].construct.splitlines()]
+            after = [" ".join(line.split()) for line in head_items[0].construct.splitlines()]
+            additions = ["17: GeometryType GEOMETRY", "18: GeographyType GEOGRAPHY"]
+            if (before and before[-1] == "}" and after == before[:-1] + additions + ["}"]
+                    and not any(re.match(r"(?:17|18)\s*:", line) for line in before)):
+                continue
 
         changed_items = _select_unsupported_constructs(head_items, head_constructs - base_constructs)
         if not changed_items:
@@ -584,6 +662,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
     oneof_capture_stack: list[tuple[str, list[str]]] = []
     message_stack: list[str] = []
     aggregate_option_depth = 0
+    package = None
 
     for line_number, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
@@ -600,6 +679,12 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
             syntax_match = re.match(r'syntax\s*=\s*"(proto[23])"\s*;', line)
             if syntax_match:
                 syntax = syntax_match.group(1)
+                continue
+
+        if not block_stack:
+            package_match = re.match(r"package\s+([A-Za-z_][\w.]*)\s*;", line)
+            if package_match:
+                package = package_match.group(1)
                 continue
 
         message_match = re.match(r"message\s+([A-Za-z_]\w*)\s*\{", line)
@@ -655,7 +740,7 @@ def parse_proto_schema(path: str, text: str) -> ParsedSchema:
                 if kind == "message" and message_stack:
                     message_stack.pop()
 
-    return ParsedSchema(path=path, containers=containers, fields=fields, unsupported=unsupported)
+    return ParsedSchema(path=path, containers=containers, fields=fields, unsupported=unsupported, package=package)
 
 
 def _parse_thrift_field_line(path: str, container: str, container_kind: str, raw_line: str, line_number: int) -> FieldDecl | None:

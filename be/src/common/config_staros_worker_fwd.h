@@ -36,16 +36,37 @@ CONF_Alias(be_http_port, webserver_port);
 
 CONF_Int64(object_storage_max_connection, "102400");
 
-// Request timeout for object storage
-// Default is -1, indicate to use the default value in sdk.
-// For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be
-// below "lowSpeedLimit" for the library to consider it too slow and abort.
-// Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the
-// value is greater than 0 and less than 1000.
-// When it's 0, low speed limit check will be disabled.
-CONF_mInt64(object_storage_request_timeout_ms, "-1");
+// Request timeout for object storage.
+//
+// 10 s by default. It is not a deadline on the request: for Curl it is the low speed time, the
+// number of milliseconds the transfer may stay below "lowSpeedLimit" (1 byte/s) before the library
+// gives up, and for the Poco client it is the socket send/receive timeout. Either way a transfer
+// that keeps making progress is never cut off, however long it runs -- only one that has stopped
+// moving entirely. Curl rounds the value down to whole seconds; 0 disables the check, and a
+// negative value leaves the client on its own default.
+//
+// Leaving it unset is what made a stalled read wait out the HTTP client's built-in default:
+// measured on shared-data cold scans, 1.3% of queries hung for ~59 s each.
+CONF_mInt64(object_storage_request_timeout_ms, "10000");
 
 CONF_mBool(s3_use_list_objects_v1, "false");
+
+// Some S3-compatible stores (e.g. Cloudflare R2) reject a multipart upload whose non-trailing parts
+// differ in length. When enabled, every part of an S3 multipart upload except the last one is
+// exactly the configured part size, and only the last part may be shorter. The default, false,
+// keeps the current behavior, which cuts a part whenever the buffer reaches the part size.
+//
+// One switch for both S3 writers: starlet in a shared-data cluster, forwarded to the starlet gflag
+// `fslib_s3_multipart_equal_part_size` and cutting parts of `starlet_fslib_s3_min_upload_part_size`,
+// and the BE S3 filesystem, cutting parts of `experimental_s3_min_upload_part_size`.
+//
+// Mutable. The value is snapshotted once per output stream, so a change applies to the uploads
+// started afterwards. S3 allows at most 10,000 parts per upload, so an object is limited to
+// 10,000 times the part size; raise the part size for larger objects.
+CONF_mBool(s3_multipart_equal_part_size, "false");
+
+// use poco client to replace default curl client
+CONF_Bool(enable_poco_client_for_aws_sdk, "false");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
@@ -62,6 +83,16 @@ CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 
 CONF_Bool(starlet_star_cache_async_init, "true");
+
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
 
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 
@@ -94,6 +125,33 @@ CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 
+// Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
+// `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
+// with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
+// multipart part size. GCS has no part-size knob: above its threshold starlet switches to a
+// streaming upload. Defaults equal starlet's own gflag defaults, so leaving these alone changes
+// nothing.
+//
+// Memory: starlet buffers in memory up to `*_max_single_part_size` before switching to multipart,
+// then up to `*_min_upload_part_size` between part flushes, so the per-output-stream high-water
+// mark is roughly the larger of the two, multiplied by the number of concurrent output streams on
+// the node. Raising either value raises memory usage.
+//
+// Values must be greater than 0. A dynamic update to a non-positive value is rejected and nothing
+// changes. At startup a non-positive value is not applied and a warning is logged, leaving the
+// previously effective value in force: a valid value here overrides a `--fslib_*` gflag passed on
+// the BE command line, but a rejected one leaves that command-line value active while this config
+// still reports the rejected number.
+CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
+
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
+
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
@@ -104,6 +162,23 @@ CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 
+// Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
+// tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
+// "zstd" compresses the payload on the heartbeat thread, inside the same
+// starmgr_client_rpc_timeout_ms budget, and the FE decompresses it. "none", the default, sends the
+// heartbeat uncompressed as before.
+//
+// The FE must be able to decompress before any node is switched: an FE that predates this
+// mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this on
+// the compute nodes. An unrecognized value is reported and falls back to "none" rather than
+// keeping the node from starting.
+CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
+
 #endif
+// Shared-data only. When true, a node that writes txn logs for the load coordinator returns the
+// shard info of one tablet it owns per partition along with them, and the coordinator uses it to
+// write the partition's combined txn log. Without it, a coordinator that owns no tablet of a
+// partition asks starmgr for the shard info (GetShard RPC) once per partition per load.
+CONF_mBool(lake_enable_tablet_location_handoff, "true");
 
 } // namespace starrocks::config

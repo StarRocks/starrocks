@@ -348,8 +348,10 @@ Status BinaryPlainPageDecoder<Type>::next_batch_with_filter(
         Range<> r = iter.next(to_read);
         size_t length = r.span_size();
         size_t end = _cur_idx + length;
+        // null_data is indexed by the in-page ordinal (see PageDecoder::next_batch_with_filter), while selection and
+        // selected_idx are packed by the rows read so far. A sparse range makes the two offsets differ.
         RETURN_IF_ERROR(next_range_with_filter(_cur_idx, end, column, compound_and_predicates,
-                                               null_data != nullptr ? null_data + index : nullptr, selection + index,
+                                               null_data != nullptr ? null_data + _cur_idx : nullptr, selection + index,
                                                selected_idx + index));
         index += length;
         to_read -= length;

@@ -116,6 +116,21 @@ public class IndexAnalyzer {
     }
 
     /**
+     * Checks that a column of the given type can carry a BITMAP index.
+     *
+     * @throws SemanticException if the type is not supported
+     */
+    public static void checkBitmapColumnType(String columnName, PrimitiveType colType) {
+        // The BE writes the bitmap dictionary with a value-seek encoding, which 256-bit decimals do not have.
+        if (!(colType.isDateType() ||
+                colType.isFixedPointType() || (colType.isDecimalV3Type() && colType != PrimitiveType.DECIMAL256) ||
+                colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
+            throw new SemanticException(colType + " is not supported in bitmap index. "
+                    + "invalid column: " + columnName);
+        }
+    }
+
+    /**
      * Checks if a column is compatible with the specified index type and table keys type.
      *
      * @param column     the column to check
@@ -128,13 +143,8 @@ public class IndexAnalyzer {
                                    Map<String, String> properties, KeysType keysType) {
         if (indexType == IndexDef.IndexType.BITMAP) {
             String indexColName = column.getName();
-            PrimitiveType colType = column.getPrimitiveType();
-            if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isDecimalV3Type() ||
-                    colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new SemanticException(colType + " is not supported in bitmap index. "
-                        + "invalid column: " + indexColName);
-            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
+            checkBitmapColumnType(indexColName, column.getPrimitiveType());
+            if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
                 throw new SemanticException(
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);

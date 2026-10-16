@@ -204,8 +204,14 @@ void OrderedMemTable::reset() {
     _permutation.shrink_to_fit();
 }
 
+Status OrderedMemTable::check_chunk_before_sort(const Chunk& chunk) {
+    // BinaryColumn holds more than 4GB with 64-bit offsets, and every slice cut from it is a BinaryColumn again, so
+    // there is nothing to upgrade.
+    return chunk.capacity_limit_reached();
+}
+
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
-    RETURN_IF_ERROR(chunk->upgrade_if_overflow());
+    RETURN_IF_ERROR(check_chunk_before_sort(*chunk));
     DataSegment segment(_sort_exprs, chunk);
     _permutation.resize(0);
 

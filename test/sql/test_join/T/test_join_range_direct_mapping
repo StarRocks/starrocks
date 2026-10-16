@@ -1,4 +1,4 @@
--- name: test_join_range_direct_mapping @sequential
+-- name: test_join_range_direct_mapping @sequential @slow
 
 CREATE TABLE __row_util_base (
   k1 bigint NULL

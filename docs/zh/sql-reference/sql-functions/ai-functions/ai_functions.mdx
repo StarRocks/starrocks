@@ -1,0 +1,70 @@
+---
+displayed_sidebar: docs
+description: "在 SQL 中使用 AI 函数，并通过 TopN 下推减少 AI 输入行数。"
+sidebar_position: 10
+---
+
+import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
+
+# AI 函数
+
+<Experimental />
+
+AI 函数支持在 SQL 中调用已配置的模型服务。文本生成函数参见 [ai_complete](ai_complete.md)。
+
+## AI 函数权限 {/* #ai-function-privileges */}
+
+执行 AI 函数需要 `USAGE ON AI FUNCTION <function_name>` 或 `USAGE ON ALL AI FUNCTIONS`。使用 Provider 的调用还需要所选 AI PROVIDER 上的 `USAGE`，函数和 Provider 两类授权不能互相替代。
+
+这些授权覆盖 `ai_complete`、`ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter`、`ai_embed`、`ai_custom_query` 和 `ai_custom_embedding`。同一函数族的所有重载共用授权。
+
+`ON ALL AI FUNCTIONS` 覆盖当前及未来的公开 AI 函数族。带有 `WITH GRANT OPTION` 时，可以转授单个函数族或全部函数族的使用权限。撤销单个函数族的授权不会抵消独立持有的全域授权；撤销全域授权也不会删除单独授予的函数族权限。
+
+`public` 角色不隐式获得 AI 权限。内置 `root` 和 `db_admin` 角色拥有全局 AI 函数使用权限及所有 Provider 的使用权限。原有表、列和视图权限仍然适用；视图读取权限不包含执行其中 AI 函数的权限。
+
+```sql
+GRANT USAGE ON AI FUNCTION ai_complete TO ROLE ai_user;
+GRANT USAGE ON ALL AI FUNCTIONS TO ROLE ai_user;
+GRANT USAGE ON AI PROVIDER support_chat TO ROLE ai_user;
+GRANT USAGE ON ALL AI PROVIDERS TO ROLE ai_admin;
+```
+
+Provider 名称精确匹配且区分大小写。授权绑定 Provider UUID：ALTER 保留授权，删除后同名重建不会继承旧授权。`ON ALL AI PROVIDERS` 也覆盖以后创建的 Provider。名称恰好为 `*` 的 Provider 不支持单独授权；需要全域授权时请使用显式 ALL 语法。
+
+SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CREATE、ALTER、DROP、SET DEFAULT、SHOW 和 DESC 仍要求 SYSTEM OPERATE，USAGE 不授予这些管理操作权限。
+
+撤销函数或 Provider 权限会影响后续执行和重新规划，包括预处理语句 EXECUTE，不会取消已经运行的查询。本功能接入原生授权；未实现 AI 检查的外部访问控制器将拒绝这些操作。
+
+启用这些授权前须升级所有 FE。旧 FE 不执行新对象的权限检查，也可能拒绝包含这些对象的权限元数据。不要通过忽略未知权限元数据来绕过不兼容的降级。升级后，现有非管理员用户需要显式补充 AI 授权。
+
+### 执行上下文和限制
+
+AI 函数和 Provider 权限与 UDF 权限一样，使用当前执行上下文进行检查。任务执行遵循现有任务框架的授权配置，包括 `mv_use_creator_based_authorization`（默认为 `true`）。按创建者或 root 执行的身份语义参见 [RUN_AS_USER](../../information_schema/materialized_view_refresh_jobs.md)。
+
+现有的 [SQL 使用位置限制](ai_complete.md#限制和安全)仍然适用。LOAD 表达式和同步物化视图表达式不支持 AI 调用，因为这些标量执行路径无法执行 AI 函数。
+
+## 减少 AI 输入行数 {/* #reducing-ai-input-rows */}
+
+对于 `LIMIT` 为正数且不含 `OFFSET` 的 `ORDER BY ... LIMIT` 查询，当排序列未经修改地穿过 AI 投影及其间的普通 Project 时，StarRocks 可以先筛选候选行，再执行 AI 投影。
+
+[`ai_topn_pushdown_max_global_limit`](../../System_variable.md#ai_topn_pushdown_max_global_limit) 根据 SQL 的 `LIMIT N` 选择策略：
+
+- `N` 小于或等于阈值（默认 `1000`）：使用全局候选 TopN，将改写后的 AI 投影的输入限制为全局最多 `N` 行。
+- `N` 大于阈值：使用局部候选 TopN，将该 AI 投影的输入限制为每个 fragment instance 最多 `N` 行，而非每个 BE 或 pipeline driver 最多 `N` 行。
+
+全局策略可能以跨实例的 AI 并行度换取全局行数上限。局部策略不会在 AI 执行前增加全局汇聚，但实例内的局部归并可能降低并行度。两种策略都会保留 AI 投影上方原有的 TopN，以保证输出顺序和行数限制。可以使用 `EXPLAIN` 检查执行计划。
+
+行数上限仅作用于被改写的 AI 投影，而非查询中的全部 AI 工作：嵌套调用中的内层 AI 仍可能处理更多行。它不是 HTTP 请求数或 Token 上限。被裁剪的行不会执行 AI 调用。
+
+该优化不会将 TopN 移至排序或过滤所依赖的 AI 调用下方，不会跨越已有的 Limit 或不安全的投影、谓词边界，也不适用于分区 TopN、`RANK` 或 `DENSE_RANK`。
+
+### 选择策略
+
+阈值支持 `SET`、对后续会话生效的 `SET GLOBAL` 和语句级 `SET_VAR` Hint，无需重启。该参数不影响不含 AI 投影的查询。设为 `0` 表示仅使用局部裁剪，而不是关闭裁剪。
+
+```sql
+-- LIMIT <= 1000 时使用全局裁剪，更大的 LIMIT 使用局部裁剪。
+SET ai_topn_pushdown_max_global_limit = 1000;
+-- 仅使用局部裁剪。
+SET ai_topn_pushdown_max_global_limit = 0;
+```

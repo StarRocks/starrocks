@@ -81,7 +81,8 @@ TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
 TEST(TypeToArrowConverterTest, RejectsInvalidStructShape) {
     TypeDescriptor type(TYPE_STRUCT);
     type.field_names = {"only_name"};
-    type.children = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT)};
+    type.children.emplace_back(TYPE_INT);
+    type.children.emplace_back(TYPE_BIGINT);
 
     std::shared_ptr<arrow::DataType> arrow_type;
     EXPECT_FALSE(convert_to_arrow_type(type, &arrow_type).ok());

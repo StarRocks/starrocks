@@ -18,6 +18,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -27,6 +28,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
+#include "common/object_pool.h"
 #include "exec/pipeline/ai/ai_chunk_buffer.h"
 #include "exec/pipeline/ai/ai_project_processor.h"
 #include "exec_primitive/pipeline/primitives/pipeline_observer.h"
@@ -109,13 +111,17 @@ public:
     size_t pending_count() const { return _pending.size(); }
     size_t submitted_count() const { return _submitted_count; }
 
-    void complete_all() {
+    void complete_all(int64_t prompt_tokens = 3) {
         std::vector<Pending> pending;
         pending.swap(_pending);
         for (Pending& task : pending) {
             auto success = AITaskSuccess::create("result-" + task.prompt, {});
             ASSERT_TRUE(success.ok()) << success.status();
-            task.callback(std::move(success).value());
+            task.callback(std::move(success).value(), {.task_count = 1,
+                                                       .request_count = 1,
+                                                       .http_time_ns = 17,
+                                                       .prompt_tokens = prompt_tokens,
+                                                       .prompt_usage_count = 1});
         }
     }
 
@@ -499,6 +505,79 @@ TEST(AIProjectOperatorTest, SourcePendingFinishBarrierCompletionWakesEventSchedu
     submitter->complete_all();
     EXPECT_FALSE(operators.source->pending_finish());
     EXPECT_GT(operators.source_observer->source_wakeups, wakeups_before_barrier_completion);
+
+    operators.source->update_metrics(&state);
+    auto* tasks = operators.source->unique_metrics()->get_counter("AITaskCount");
+    auto* requests = operators.source->unique_metrics()->get_counter("AIRequestCount");
+    auto* http_time = operators.source->unique_metrics()->get_counter("AIHttpTime");
+    auto* prompt_tokens = operators.source->unique_metrics()->get_counter("AIPromptTokens");
+    ASSERT_NE(nullptr, tasks);
+    ASSERT_NE(nullptr, requests);
+    ASSERT_NE(nullptr, http_time);
+    ASSERT_NE(nullptr, prompt_tokens);
+    EXPECT_EQ(1, tasks->value());
+    EXPECT_EQ(1, requests->value());
+    EXPECT_EQ(17, http_time->value());
+    EXPECT_EQ(TUnit::TIME_NS, http_time->type());
+    EXPECT_EQ(TCounterAggregateType::SUM, http_time->strategy().aggregate_type);
+    EXPECT_EQ(3, prompt_tokens->value());
+    operators.source->update_metrics(&state);
+    operators.source->close(&state);
+    EXPECT_EQ(1, tasks->value()) << "periodic refresh and close must SET, not add cumulative values";
+    EXPECT_EQ(17, http_time->value());
+}
+
+TEST(AIProjectOperatorTest, SourceProfileMergeSaturatesAcrossLanes) {
+    auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer.ok()) << buffer.status();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    AIRuntimeConfig config;
+    config.sub_chunk_size = 64;
+    config.on_error = "ignore";
+    auto processor_or = AIProjectProcessor::create(std::move(buffer).value(), std::make_shared<TestProjection>(true),
+                                                   submitter, std::move(config));
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    AISinkOperatorFactory sink_factory(1, 7, processor);
+    AISourceOperatorFactory source_factory(2, 7, processor);
+    RuntimeState state;
+    state.set_enable_event_scheduler(false);
+    std::vector<OperatorPtr> sinks;
+    std::vector<OperatorPtr> sources;
+    std::vector<RuntimeProfile*> profiles;
+    for (int lane = 0; lane < 2; ++lane) {
+        sinks.push_back(sink_factory.create(2, lane));
+        sources.push_back(source_factory.create(2, lane));
+        ASSERT_OK(sinks.back()->prepare(&state));
+        ASSERT_OK(sources.back()->prepare(&state));
+        ASSERT_OK(sinks.back()->push_chunk(&state, make_chunk(lane, 1)));
+        ASSERT_OK(sinks.back()->set_finishing(&state));
+        auto result = sources.back()->pull_chunk(&state);
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ(nullptr, result.value());
+        profiles.push_back(sources.back()->unique_metrics());
+    }
+    ASSERT_EQ(2, submitter->pending_count());
+    submitter->complete_all(std::numeric_limits<int64_t>::max());
+    for (auto& source : sources) {
+        source->update_metrics(&state);
+        EXPECT_EQ(std::numeric_limits<int64_t>::max(),
+                  source->unique_metrics()->get_counter("AIPromptTokens")->value());
+        EXPECT_TRUE(source->unique_metrics()->get_counter("AIPromptTokens")->strategy().saturating_sum);
+    }
+    ObjectPool pool;
+    auto* merged = RuntimeProfile::merge_isomorphic_profiles(&pool, profiles);
+    EXPECT_EQ(std::numeric_limits<int64_t>::max(), merged->get_counter("AIPromptTokens")->value());
+    EXPECT_EQ(2, merged->get_counter("AITaskCount")->value());
+    EXPECT_EQ(2, merged->get_counter("AIPromptUsageCount")->value());
+    EXPECT_EQ(34, merged->get_counter("AIHttpTime")->value());
+    for (auto& source : sources) {
+        ASSERT_OK(source->set_finished(&state));
+        source->close(&state);
+    }
+    for (auto& sink : sinks) {
+        sink->close(&state);
+    }
 }
 
 TEST(AIProjectOperatorTest, SinkPendingFinishDoesNotWaitForSourceCallbacks) {

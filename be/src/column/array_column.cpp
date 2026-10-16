@@ -175,6 +175,20 @@ void ArrayColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
+bool ArrayColumn::null_rows_are_empty(const uint8_t* nulls, size_t num_rows) const {
+    const auto& offs = offsets().immutable_data();
+    if (offs.size() != num_rows + 1) {
+        // Not a 1:1 row mapping; be conservative.
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (nulls[i] != 0 && offs[i + 1] != offs[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
@@ -610,26 +624,6 @@ std::string ArrayColumn::debug_string() const {
     }
     ss << "]";
     return ss.str();
-}
-
-StatusOr<MutableColumnPtr> ArrayColumn::upgrade_if_overflow() {
-    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
-        return Status::InternalError("Size of ArrayColumn exceed the limit");
-    }
-
-    auto ret = upgrade_helper_func(_elements->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _elements = std::move(ret.value());
-    }
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> ArrayColumn::downgrade() {
-    auto ret = downgrade_helper_func(_elements->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _elements = std::move(ret.value());
-    }
-    return ret;
 }
 
 Status ArrayColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
