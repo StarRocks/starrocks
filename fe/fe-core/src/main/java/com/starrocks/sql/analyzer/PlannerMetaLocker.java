@@ -176,7 +176,9 @@ public class PlannerMetaLocker implements AutoCloseable {
      */
     public PlannerMetaLocker forAllTablesOf(ConnectContext session, StatementBase analyzedStatement) {
         PlannerMetaLocker all = new PlannerMetaLocker(queryId, acquireTimeoutMs);
-        new TableCollector(session, all.dbs, all.tables).visit(analyzedStatement);
+        TableCollector collector = new TableCollector(session, all.dbs, all.tables);
+        collector.analyzed = true;
+        collector.visit(analyzedStatement);
         return all;
     }
 
@@ -451,6 +453,11 @@ public class PlannerMetaLocker implements AutoCloseable {
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
         // flags itself: everything in the body of a view so flagged (see QueryAnalyzer#inheritPolicyRewriteFlag).
         private boolean inBodyRewrittenByPolicy = false;
+        // Walking an analyzed statement: every policy the analyzer applied is in it already, as the subquery it was
+        // rewritten to (QueryAnalyzer clears the relation's policy flag then), and the tables it reads are walked as
+        // any other. A relation still flagged had no policy when analyzed, so looking its policies up again -- per
+        // column, through Ranger -- would only find what the statement does not read.
+        private boolean analyzed = false;
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
             this.session = session;
@@ -593,7 +600,7 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
             boolean rewrittenByPolicy = (inBodyRewrittenByPolicy || node.isNeedRewrittenByPolicy())
                     && !node.isSyncMVQuery();
-            if (rewrittenByPolicy) {
+            if (rewrittenByPolicy && !analyzed) {
                 visitPolicyBodies(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         dbAndTable.first.getFullName(), dbAndTable.second.getName()), dbAndTable.second);
             }

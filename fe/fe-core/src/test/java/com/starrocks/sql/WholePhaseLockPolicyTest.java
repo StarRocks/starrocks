@@ -17,6 +17,7 @@ package com.starrocks.sql;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 
@@ -167,5 +169,60 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
     @Test
     public void testRowAccessPolicyTableIsLockedForALocalInsert() throws Exception {
         assertPolicyTablePlannedUnderTheLock("INSERT INTO test.t0 SELECT k1, v1, v1 FROM " + GUARDED);
+    }
+
+    /**
+     * Off the copies, the statement is walked again under the lock once analyzed, for what analysis brought in. The
+     * policies it applied are in it by then, so the walk reaches the mapping table without asking the access
+     * controller again -- which, through Ranger, costs a lookup per column of every table.
+     */
+    @Test
+    public void testPoliciesAreLookedUpOnlyBeforeAnalysisAndByTheAnalyzer() throws Exception {
+        Thread planner = Thread.currentThread();
+        Map<String, Integer> lookups = new ConcurrentHashMap<>();
+        new MockUp<Authorizer>() {
+            @Mock
+            public Expr getRowAccessPolicy(Invocation invocation, ConnectContext session, TableName name) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("row:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name);
+            }
+
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicy(Invocation invocation, ConnectContext session,
+                                                            TableName name, List<Column> columns) {
+                if (Thread.currentThread() == planner) {
+                    lookups.merge("mask:" + name.getTbl(), 1, Integer::sum);
+                }
+                return invocation.proceed(session, name, columns);
+            }
+        };
+        Set<String> copied = new CopyOnWriteArraySet<>();
+        List<String> copiedWithoutLock = new CopyOnWriteArrayList<>();
+        LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
+        new MockUp<OlapTable>() {
+            @Mock
+            public void copyOnlyForQuery(Invocation invocation, OlapTable copy) {
+                OlapTable source = invocation.getInvokedInstance();
+                if (Thread.currentThread() == planner) {
+                    copied.add(source.getName());
+                    if (!lockManager.isOwnedByCurrentThread(source.getId(), LockType.READ)) {
+                        copiedWithoutLock.add(source.getName());
+                    }
+                }
+                invocation.proceed(copy);
+            }
+        };
+        connectContext.getSessionVariable().setCboUseDBLock(false);
+        planWithPolicies("SELECT * FROM " + VIEW + " v JOIN test.t0 ON v.k1 = t0.v1");
+
+        Assertions.assertTrue(copied.containsAll(Set.of("t_map", "t_policy_lock", "t0")),
+                "planning did not run off copies, so this is not testing it: " + copied);
+        Assertions.assertTrue(copiedWithoutLock.isEmpty(), "copied without its read lock: " + copiedWithoutLock);
+        for (String key : List.of("row:t_policy_lock", "mask:t_policy_lock", "row:t0", "mask:t0")) {
+            Assertions.assertEquals(2, lookups.getOrDefault(key, 0),
+                    "once for the lock set, once by the analyzer: " + key + " in " + lookups);
+        }
     }
 }
