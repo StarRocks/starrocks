@@ -135,7 +135,7 @@ public class MVVersionManager {
         }
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
-                mv.getName(), maxChangedTableRefreshTime);
+                mv.getName(), copiedScheme.getLastRefreshTime());
         persistRefreshScheme(copiedScheme);
 
         // trigger timeless info event since mv version changed
