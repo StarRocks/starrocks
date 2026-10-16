@@ -789,6 +789,12 @@ FROM test;
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_parallel_analyze_table_metadata
+
+* 描述：是否在语句分析前并行预取外部表的元数据。启用后，StarRocks 会并行预取语句引用的外部表的元数据。并发预取任务的最大数量由 `prepare_metadata_pool_size` 控制。不会预取内部 Catalog 中表的元数据。
+* 默认值：false
+* 引入版本：-
+
 ### enable_parallel_merge
 
 * 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。

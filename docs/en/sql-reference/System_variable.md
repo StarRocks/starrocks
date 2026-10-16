@@ -933,6 +933,12 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### enable_parallel_analyze_table_metadata
+
+* **Description**: Whether to prefetch external table metadata in parallel before statement analysis. When enabled, StarRocks concurrently prefetches metadata for the external tables referenced by a statement. The maximum number of concurrent prefetch tasks is controlled by `prepare_metadata_pool_size`. Metadata for tables in the internal catalog is not prefetched.
+* **Default**: false
+* **Introduced in**: -
+
 ### enable_parallel_merge
 
 * **Description**: Whether to enable parallel merge for sorting. When this feature is enabled, the merge phase of sorting will utilize multiple threads for merge operations.
