@@ -3029,6 +3029,461 @@ TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
     EXPECT_TRUE((*empty_result)->get(0).get_array().empty());
 }
 
+TEST_F(geographyFunctionsTest, h3ArraysAcrossNullableInputs) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 100;
+    std::array<H3Index, 12> pentagons{};
+    ASSERT_EQ(E_SUCCESS, getPentagons(3, pentagons.data()));
+    for (bool children : {false, true}) {
+        auto cells = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        auto parameters = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        for (size_t row = 0; row < size; ++row) {
+            if (row % 7 == 0)
+                cells->append_nulls(1);
+            else
+                cells->append_datum(Datum(row % 2 == 0 ? cell : static_cast<int64_t>(pentagons[0])));
+            if (row % 11 == 0)
+                parameters->append_nulls(1);
+            else
+                parameters->append_datum(Datum(static_cast<int32_t>((children ? 3 : 0) + row % 4)));
+        }
+        auto actual = children ? GeoFunctions::h3_to_children(nullptr, {cells, parameters})
+                               : GeoFunctions::h3_grid_disk(nullptr, {cells, parameters});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ASSERT_EQ(size, (*actual)->size());
+        EXPECT_FALSE((*actual)->is_constant());
+        for (size_t row = 0; row < size; ++row) {
+            SCOPED_TRACE(row);
+            const auto datum = (*actual)->get(row);
+            const bool is_null = row % 7 == 0 || row % 11 == 0;
+            ASSERT_EQ(is_null, datum.is_null());
+            if (is_null) continue;
+            const H3Index origin = row % 2 == 0 ? cell : pentagons[0];
+            const int parameter = (children ? 3 : 0) + row % 4;
+            int64_t count = 0;
+            ASSERT_EQ(E_SUCCESS,
+                      children ? cellToChildrenSize(origin, parameter, &count) : maxGridDiskSize(parameter, &count));
+            std::vector<H3Index> expected(count, 0);
+            ASSERT_EQ(E_SUCCESS, children ? cellToChildren(origin, parameter, expected.data())
+                                          : gridDisk(origin, parameter, expected.data()));
+            expected.erase(std::remove(expected.begin(), expected.end(), H3_NULL), expected.end());
+            const auto values = datum.get_array();
+            ASSERT_EQ(expected.size(), values.size());
+            for (size_t i = 0; i < expected.size(); ++i)
+                EXPECT_EQ(static_cast<int64_t>(expected[i]), values[i].get_int64());
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ArraysRetainConstantAndEmptyResults) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 3;
+    std::array<H3Index, 12> pentagons{};
+    ASSERT_EQ(E_SUCCESS, getPentagons(3, pentagons.data()));
+    for (bool children : {false, true}) {
+        for (H3Index origin : {static_cast<H3Index>(cell), pentagons[0]}) {
+            const int parameter = children ? 7 : 19;
+            auto cells = ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(origin), size);
+            auto parameters = ColumnHelper::create_const_column<TYPE_INT>(parameter, size);
+            auto actual = children ? GeoFunctions::h3_to_children(nullptr, {cells, parameters})
+                                   : GeoFunctions::h3_grid_disk(nullptr, {cells, parameters});
+            ASSERT_TRUE(actual.ok()) << actual.status();
+            ASSERT_EQ(size, (*actual)->size());
+            EXPECT_TRUE((*actual)->is_constant());
+            int64_t count = 0;
+            ASSERT_EQ(E_SUCCESS,
+                      children ? cellToChildrenSize(origin, parameter, &count) : maxGridDiskSize(parameter, &count));
+            std::vector<H3Index> expected(count, 0);
+            ASSERT_EQ(E_SUCCESS, children ? cellToChildren(origin, parameter, expected.data())
+                                          : gridDisk(origin, parameter, expected.data()));
+            expected.erase(std::remove(expected.begin(), expected.end(), H3_NULL), expected.end());
+            const auto values = (*actual)->get(0).get_array();
+            ASSERT_EQ(expected.size(), values.size());
+            for (size_t i = 0; i < expected.size(); ++i)
+                EXPECT_EQ(static_cast<int64_t>(expected[i]), values[i].get_int64());
+        }
+        auto empty = children ? GeoFunctions::h3_to_children(nullptr, {Int64Column::create(), Int32Column::create()})
+                              : GeoFunctions::h3_grid_disk(nullptr, {Int64Column::create(), Int32Column::create()});
+        ASSERT_TRUE(empty.ok());
+        EXPECT_EQ(0, (*empty)->size());
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ArraysRejectInvalidValues) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 16;
+    for (bool children : {false, true}) {
+        for (size_t invalid_row : {0, 7, 15}) {
+            SCOPED_TRACE(invalid_row);
+            auto cells = Int64Column::create();
+            auto parameters = Int32Column::create();
+            for (size_t row = 0; row < size; ++row) {
+                cells->append(row == invalid_row ? 0 : cell);
+                parameters->append(row == invalid_row ? -1 : (children ? 4 : 1));
+            }
+            auto invalid_cell =
+                    children ? GeoFunctions::h3_to_children(
+                                       nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(4, size)})
+                             : GeoFunctions::h3_grid_disk(
+                                       nullptr, {cells, ColumnHelper::create_const_column<TYPE_INT>(1, size)});
+            auto invalid_parameter =
+                    children
+                            ? GeoFunctions::h3_to_children(
+                                      nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size), parameters})
+                            : GeoFunctions::h3_grid_disk(
+                                      nullptr,
+                                      {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size), parameters});
+            ASSERT_FALSE(invalid_cell.ok());
+            ASSERT_FALSE(invalid_parameter.ok());
+            EXPECT_TRUE(invalid_cell.status().is_invalid_argument());
+            EXPECT_TRUE(invalid_parameter.status().is_invalid_argument());
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ArraysMatchLibraryOrderAcrossResolutions) {
+    for (bool children : {false, true}) {
+        auto cells = Int64Column::create();
+        auto parameters = Int32Column::create();
+        std::vector<std::vector<H3Index>> expected_rows;
+        for (int resolution = 0; resolution <= 15; ++resolution) {
+            std::array<H3Index, 13> origins{};
+            const LatLng coordinate{0.659296379611606, -2.136621598315946};
+            ASSERT_EQ(E_SUCCESS, latLngToCell(&coordinate, resolution, &origins[0]));
+            ASSERT_EQ(E_SUCCESS, getPentagons(resolution, origins.data() + 1));
+            for (H3Index origin : origins) {
+                for (int step : {0, 1, 2}) {
+                    if (children && resolution + step > 15) continue;
+                    const int parameter = children ? resolution + step : (step == 2 ? 3 : step);
+                    int64_t count = 0;
+                    ASSERT_EQ(E_SUCCESS, children ? cellToChildrenSize(origin, parameter, &count)
+                                                  : maxGridDiskSize(parameter, &count));
+                    std::vector<H3Index> expected(count, H3_NULL);
+                    ASSERT_EQ(E_SUCCESS, children ? cellToChildren(origin, parameter, expected.data())
+                                                  : gridDisk(origin, parameter, expected.data()));
+                    expected.erase(std::remove(expected.begin(), expected.end(), H3_NULL), expected.end());
+                    expected_rows.emplace_back(std::move(expected));
+                    cells->append(static_cast<int64_t>(origin));
+                    parameters->append(parameter);
+                }
+            }
+        }
+        auto actual = children ? GeoFunctions::h3_to_children(nullptr, {cells, parameters})
+                               : GeoFunctions::h3_grid_disk(nullptr, {cells, parameters});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ASSERT_EQ(expected_rows.size(), (*actual)->size());
+        for (size_t row = 0; row < expected_rows.size(); ++row) {
+            SCOPED_TRACE(row);
+            const auto datum = (*actual)->get(row);
+            ASSERT_FALSE(datum.is_null());
+            const auto values = datum.get_array();
+            ASSERT_EQ(expected_rows[row].size(), values.size());
+            for (size_t i = 0; i < values.size(); ++i) {
+                ASSERT_FALSE(values[i].is_null());
+                EXPECT_EQ(static_cast<int64_t>(expected_rows[row][i]), values[i].get_int64());
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ArraysRetainValuesAcrossGrowthCompactionAndNullRows) {
+    constexpr H3Index normal = 0x83754efffffffffULL;
+    std::array<H3Index, 12> pentagons{};
+    ASSERT_EQ(E_SUCCESS, getPentagons(3, pentagons.data()));
+    for (bool children : {false, true}) {
+        auto cells = Int64Column::create();
+        auto parameters = Int32Column::create();
+        auto cell_nulls = NullColumn::create();
+        auto parameter_nulls = NullColumn::create();
+        std::vector<std::vector<H3Index>> expected_rows;
+        std::vector<bool> expected_nulls;
+        // Shrinking a pentagon disk leaves capacity containing earlier cells. Later rows
+        // must overwrite that storage, including H3_NULL holes, without changing prior rows.
+        for (size_t cycle = 0; cycle < 4; ++cycle) {
+            for (size_t row = 0; row < 9; ++row) {
+                const bool null_cell = row == 3;
+                const bool null_parameter = row == 7;
+                const H3Index origin = row == 1 || row == 4 || row == 6 ? pentagons[cycle] : normal;
+                const int step = row == 0 || row == 1 || row == 2 || row == 8 ? 4 : (row == 4 ? 2 : (row == 5 ? 1 : 0));
+                const int parameter = children ? 3 + step : (step == 4 ? 19 : (step == 2 ? 3 : step));
+                // Invalid payloads in NULL rows must not be evaluated.
+                cells->append(null_parameter ? 0 : static_cast<int64_t>(origin));
+                parameters->append(null_cell ? -1 : parameter);
+                cell_nulls->append(null_cell);
+                parameter_nulls->append(null_parameter);
+                expected_nulls.push_back(null_cell || null_parameter);
+                expected_rows.emplace_back();
+                if (null_cell || null_parameter) continue;
+                int64_t count = 0;
+                ASSERT_EQ(E_SUCCESS, children ? cellToChildrenSize(origin, parameter, &count)
+                                              : maxGridDiskSize(parameter, &count));
+                auto& expected = expected_rows.back();
+                expected.resize(count, H3_NULL);
+                ASSERT_EQ(E_SUCCESS, children ? cellToChildren(origin, parameter, expected.data())
+                                              : gridDisk(origin, parameter, expected.data()));
+                if (!children && row == 1) {
+                    EXPECT_NE(expected.end(), std::find(expected.begin(), expected.end(), H3_NULL));
+                }
+                expected.erase(std::remove(expected.begin(), expected.end(), H3_NULL), expected.end());
+            }
+        }
+        Columns columns{NullableColumn::create(cells, cell_nulls), NullableColumn::create(parameters, parameter_nulls)};
+        auto actual = children ? GeoFunctions::h3_to_children(nullptr, columns)
+                               : GeoFunctions::h3_grid_disk(nullptr, columns);
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ASSERT_EQ(expected_rows.size(), (*actual)->size());
+        for (size_t row = 0; row < expected_rows.size(); ++row) {
+            SCOPED_TRACE(row);
+            const auto datum = (*actual)->get(row);
+            ASSERT_EQ(expected_nulls[row], datum.is_null());
+            if (expected_nulls[row]) continue;
+            const auto values = datum.get_array();
+            ASSERT_EQ(expected_rows[row].size(), values.size());
+            for (size_t i = 0; i < values.size(); ++i) {
+                ASSERT_FALSE(values[i].is_null());
+                EXPECT_EQ(static_cast<int64_t>(expected_rows[row][i]), values[i].get_int64());
+            }
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3ArraysRetainErrorPrecedenceAndEmptyBatches) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    for (bool children : {false, true}) {
+        for (bool invalid_cell : {false, true}) {
+            auto cells = Int64Column::create();
+            auto parameters = Int32Column::create();
+            cells->append(cell);
+            parameters->append(children ? 7 : 19);
+            cells->append(invalid_cell ? 0 : cell);
+            parameters->append(-1);
+            auto actual = children ? GeoFunctions::h3_to_children(nullptr, {cells, parameters})
+                                   : GeoFunctions::h3_grid_disk(nullptr, {cells, parameters});
+            ASSERT_FALSE(actual.ok());
+            EXPECT_TRUE(actual.status().is_invalid_argument());
+            EXPECT_EQ(invalid_cell ? "H3 requires a valid positive cell index"
+                                   : (children ? "H3 resolution must be between 0 and 15"
+                                               : "H3_GridDisk requires non-negative k"),
+                      actual.status().message());
+        }
+        for (bool constant_cell : {false, true}) {
+            Columns columns;
+            if (constant_cell) {
+                columns = {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 0), Int32Column::create()};
+            } else {
+                columns = {Int64Column::create(), ColumnHelper::create_const_column<TYPE_INT>(-1, 0)};
+            }
+            auto empty = children ? GeoFunctions::h3_to_children(nullptr, columns)
+                                  : GeoFunctions::h3_grid_disk(nullptr, columns);
+            ASSERT_TRUE(empty.ok()) << empty.status();
+            EXPECT_EQ(0, (*empty)->size());
+        }
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryBuffersMatchCanonicalWkbAcrossCells) {
+    constexpr size_t size = 400;
+    auto cells = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    std::vector<H3Index> origins;
+    origins.reserve(size);
+    for (size_t row = 0; row < size; ++row) {
+        const int resolution = row % 16;
+        H3Index cell = 0;
+        if (row % 19 == 0) {
+            std::array<H3Index, 12> pentagons{};
+            ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+            cell = pentagons[row % pentagons.size()];
+        } else {
+            const double latitude = row % 13 == 0 ? 89.9 : static_cast<double>(row % 161) - 80;
+            const double longitude = row % 17 == 0 ? 179.9 : static_cast<double>(row % 359) - 179;
+            const LatLng point{latitude * M_PI / 180, longitude * M_PI / 180};
+            ASSERT_EQ(E_SUCCESS, latLngToCell(&point, resolution, &cell));
+        }
+        origins.push_back(cell);
+        if (row % 7 == 0)
+            cells->append_nulls(1);
+        else
+            cells->append_datum(Datum(static_cast<int64_t>(cell)));
+    }
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    auto actual = GeoFunctions::h3_to_boundary(context.get(), {cells});
+    ASSERT_TRUE(actual.ok()) << actual.status();
+    ASSERT_EQ(size, (*actual)->size());
+    EXPECT_FALSE((*actual)->is_constant());
+    const auto* geo =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>((*actual).get())->data_column().get());
+    EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, geo->descriptor().storage.validation_state);
+    for (size_t row = 0; row < size; ++row) {
+        SCOPED_TRACE(row);
+        ASSERT_EQ(row % 7 == 0, (*actual)->get(row).is_null());
+        if (row % 7 == 0) continue;
+        CellBoundary boundary{};
+        ASSERT_EQ(E_SUCCESS, cellToBoundary(origins[row], &boundary));
+        WkbGeometry expected;
+        expected.type = WkbGeometryType::POLYGON;
+        auto& ring = expected.rings.emplace_back();
+        constexpr double degrees_per_radian = 1.0 / 0.017453292519943295769236907684886;
+        for (int i = 0; i < boundary.numVerts; ++i)
+            ring.push_back({boundary.verts[i].lng * degrees_per_radian, boundary.verts[i].lat * degrees_per_radian});
+        ring.push_back(ring.front());
+        std::string wkb;
+        ASSERT_TRUE(WkbCodec::to_wkb(expected, &wkb, WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        EXPECT_EQ(Slice(wkb), geo->get_wkb(row));
+    }
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryBuffersRetainConstantEmptyAndInvalidInputs) {
+    constexpr int64_t cell = 0x83754efffffffffLL;
+    constexpr size_t size = 16;
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    auto constant =
+            GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size)});
+    ASSERT_TRUE(constant.ok());
+    EXPECT_TRUE((*constant)->is_constant());
+    EXPECT_EQ(size, (*constant)->size());
+    auto empty = GeoFunctions::h3_to_boundary(context.get(), {Int64Column::create()});
+    ASSERT_TRUE(empty.ok());
+    EXPECT_EQ(0, (*empty)->size());
+    for (size_t invalid_row : {0, 7, 15}) {
+        auto varying = Int64Column::create();
+        for (size_t row = 0; row < size; ++row) varying->append(row == invalid_row ? 0 : cell);
+        auto invalid = GeoFunctions::h3_to_boundary(context.get(), {varying});
+        ASSERT_FALSE(invalid.ok());
+        EXPECT_TRUE(invalid.status().is_invalid_argument());
+    }
+    auto nulls = GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_null_column(size)});
+    ASSERT_TRUE(nulls.ok());
+    EXPECT_TRUE((*nulls)->only_null());
+    EXPECT_EQ(size, (*nulls)->size());
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbMatchesTopologyCorpus) {
+    std::array<H3Index, 122> base_cells{};
+    ASSERT_EQ(E_SUCCESS, getRes0Cells(base_cells.data()));
+    std::vector<H3Index> origins(base_cells.begin(), base_cells.end());
+    for (H3Index cell : base_cells) {
+        int64_t count = 0;
+        ASSERT_EQ(E_SUCCESS, cellToChildrenSize(cell, 1, &count));
+        std::vector<H3Index> children(count, H3_NULL);
+        ASSERT_EQ(E_SUCCESS, cellToChildren(cell, 1, children.data()));
+        origins.insert(origins.end(), children.begin(), children.end());
+    }
+    for (int resolution = 0; resolution <= 15; ++resolution) {
+        std::array<H3Index, 12> pentagons{};
+        ASSERT_EQ(E_SUCCESS, getPentagons(resolution, pentagons.data()));
+        for (H3Index pentagon : pentagons) {
+            std::array<H3Index, 7> disk{};
+            ASSERT_EQ(E_SUCCESS, gridDisk(pentagon, 1, disk.data()));
+            for (H3Index cell : disk) {
+                if (cell != H3_NULL) origins.push_back(cell);
+            }
+        }
+    }
+    std::sort(origins.begin(), origins.end());
+    origins.erase(std::unique(origins.begin(), origins.end()), origins.end());
+    ASSERT_EQ(1972, origins.size());
+    // Force maximum/shorter/maximum payload transitions before the exhaustive corpus.
+    constexpr H3Index max_boundary_cell = 0x8f0800000000000ULL;
+    origins.insert(origins.begin(), {max_boundary_cell, 0x8e0800000000007ULL, max_boundary_cell, 0x81023ffffffffffULL,
+                                     0x8e0800000000017ULL, max_boundary_cell});
+    std::vector<std::string> expected;
+    std::array<bool, MAX_CELL_BNDRY_VERTS + 1> observed_vertices{};
+    for (H3Index cell : origins) {
+        CellBoundary boundary{};
+        ASSERT_EQ(E_SUCCESS, cellToBoundary(cell, &boundary));
+        ASSERT_GE(boundary.numVerts, 3);
+        ASSERT_LE(boundary.numVerts, MAX_CELL_BNDRY_VERTS);
+        observed_vertices[boundary.numVerts] = true;
+        WkbGeometry polygon;
+        polygon.type = WkbGeometryType::POLYGON;
+        auto& ring = polygon.rings.emplace_back();
+        constexpr double degrees_per_radian = 1.0 / 0.017453292519943295769236907684886;
+        for (int i = 0; i < boundary.numVerts; ++i) {
+            ring.push_back({boundary.verts[i].lng * degrees_per_radian, boundary.verts[i].lat * degrees_per_radian});
+        }
+        ring.push_back(ring.front());
+        expected.emplace_back();
+        ASSERT_TRUE(WkbCodec::to_wkb(polygon, &expected.back(), WkbCoordinateSemantics::GEOGRAPHY_CRS84).ok());
+        ASSERT_EQ(13 + 16 * (boundary.numVerts + 1), expected.back().size());
+    }
+    for (int vertices : {5, 6, 7, 8, 10}) EXPECT_TRUE(observed_vertices[vertices]);
+    ASSERT_EQ(189, expected.front().size());
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    // Cover ordinary, all-valid nullable, and nullable input with invalid hidden payloads.
+    for (int mode : {0, 1, 2}) {
+        auto cells = Int64Column::create();
+        auto nulls = NullColumn::create();
+        for (size_t row = 0; row < origins.size(); ++row) {
+            const bool is_null = mode == 2 && row % 17 == 0;
+            cells->append(is_null ? 0 : static_cast<int64_t>(origins[row]));
+            nulls->append(is_null);
+        }
+        ColumnPtr input = cells;
+        if (mode != 0) input = NullableColumn::create(cells, nulls);
+        auto actual = GeoFunctions::h3_to_boundary(context.get(), {input});
+        ASSERT_TRUE(actual.ok()) << actual.status();
+        ASSERT_EQ(origins.size(), (*actual)->size());
+        const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(actual->get()));
+        EXPECT_EQ(geography_type().geo_type.value(), geo->descriptor().type);
+        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
+        EXPECT_EQ(GEO_DIMENSION_XY, geo->descriptor().storage.dimension);
+        EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, geo->descriptor().storage.validation_state);
+        for (size_t row = 0; row < origins.size(); ++row) {
+            SCOPED_TRACE(row);
+            const bool is_null = mode == 2 && row % 17 == 0;
+            ASSERT_EQ(is_null, (*actual)->is_null(row));
+            if (is_null) continue;
+            const Slice wkb = geo->get_wkb(row);
+            ASSERT_EQ(Slice(expected[row]), wkb);
+            EXPECT_EQ(1, static_cast<unsigned char>(wkb.data[0]));
+            EXPECT_EQ(Slice(wkb.data + 13, 16), Slice(wkb.data + wkb.size - 16, 16));
+        }
+    }
+    auto constant = GeoFunctions::h3_to_boundary(
+            context.get(), {ColumnHelper::create_const_column<TYPE_BIGINT>(max_boundary_cell, 3)});
+    ASSERT_TRUE(constant.ok()) << constant.status();
+    ASSERT_TRUE((*constant)->is_constant());
+    ASSERT_EQ(3, (*constant)->size());
+    const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(constant->get()));
+    EXPECT_EQ(Slice(expected.front()), geo->get_wkb(0));
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbRetainsDescriptorAndNullPrecedence) {
+    auto invalid_cell = ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1);
+    auto missing_context = GeoFunctions::h3_to_boundary(nullptr, {invalid_cell});
+    ASSERT_FALSE(missing_context.ok());
+    EXPECT_TRUE(missing_context.status().is_not_supported());
+    EXPECT_EQ("H3_ToBoundary requires GEOGRAPHY return descriptor", missing_context.status().message());
+    for (int variant = 0; variant < 6; ++variant) {
+        auto type = geography_type();
+        if (variant == 0) type = TypeDescriptor(TYPE_BIGINT);
+        if (variant == 1) type.geo_type.reset();
+        if (variant == 2) type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+        if (variant == 3) type.geo_type->coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
+        if (variant == 4) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
+        if (variant == 5) type.geo_type->crs = "EPSG:4326";
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, type));
+        auto actual = GeoFunctions::h3_to_boundary(context.get(), {invalid_cell});
+        ASSERT_FALSE(actual.ok());
+        EXPECT_TRUE(actual.status().is_not_supported());
+        EXPECT_EQ(variant < 2 ? "H3_ToBoundary requires GEOGRAPHY return descriptor"
+                              : "H3_ToBoundary requires CRS84 spherical GEOGRAPHY result",
+                  actual.status().message());
+        auto nulls = GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_null_column(17)});
+        ASSERT_TRUE(nulls.ok());
+        EXPECT_TRUE((*nulls)->only_null());
+        EXPECT_EQ(17, (*nulls)->size());
+    }
+    auto nulls = GeoFunctions::h3_to_boundary(nullptr, {ColumnHelper::create_const_null_column(17)});
+    ASSERT_TRUE(nulls.ok());
+    EXPECT_TRUE((*nulls)->only_null());
+    EXPECT_EQ(17, (*nulls)->size());
+}
+
 TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
     constexpr int64_t cell_value = 0x83754efffffffffLL;
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);

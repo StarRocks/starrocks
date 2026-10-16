@@ -147,12 +147,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - 单位：计数
-- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 累计数量。
+- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 累计数量。该 Counter 包含仍在执行的旧版本资源组，并在其清理后保留最终累计值。在同一 BE/CN 进程内，更新、删除或以同名重建资源组时，累计值保持连续。
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - 单位：纳秒
-- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 在就绪队列中累计等待的时间。用它的增量除以 `resource_group_driver_queue_level_schedule_count` 的增量，即为该层级的平均等待时间。
+- 描述：每个资源组的 Pipeline 执行队列中，从各层级取出的 Driver 在就绪队列中累计等待的时间。与调度次数 Counter 一样，该指标包含仍在执行的旧版本资源组，并在同一 BE/CN 进程内更新、删除或以同名重建资源组时保留累计值。用它的增量除以 `resource_group_driver_queue_level_schedule_count` 的增量，即为该层级的平均等待时间。
 
 ## `resource_group_inuse_cpu_cores`
 
