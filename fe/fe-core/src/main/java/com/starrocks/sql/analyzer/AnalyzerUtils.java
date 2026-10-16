@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
+import com.starrocks.sql.ast.GroupByClause;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -802,16 +803,23 @@ public class AnalyzerUtils {
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             if (!node.hasWithClause()) {
-                return super.visitSelect(node, context);
+                Void result = super.visitSelect(node, context);
+                visitParserOwnedExpressions(node, context);
+                return result;
             }
             cteNameScopes.push(new HashSet<>());
             recursiveCteScopes.push(node.isHasRecursiveCTE());
             try {
-                return super.visitSelect(node, context);
+                Void result = super.visitSelect(node, context);
+                visitParserOwnedExpressions(node, context);
+                return result;
             } finally {
                 recursiveCteScopes.pop();
                 cteNameScopes.pop();
             }
+        }
+
+        protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
         }
 
         @Override
@@ -978,7 +986,7 @@ public class AnalyzerUtils {
 
     public static List<TableRelation> collectNonCTETableRelations(StatementBase statementBase) {
         List<TableRelation> tableRelations = Lists.newArrayList();
-        new AnalyzerUtils.TableRelationsCollector(tableRelations, true).visit(statementBase);
+        new AnalyzerUtils.TableRelationsCollector(tableRelations, true, true).visit(statementBase);
         return tableRelations;
     }
 
@@ -1581,15 +1589,45 @@ public class AnalyzerUtils {
 
         private final List<TableRelation> tableRelations;
         private final boolean excludeUnresolvedCteReferences;
+        private final boolean collectParserOwnedExpressions;
 
         public TableRelationsCollector(List<TableRelation> tableRelations) {
-            this(tableRelations, false);
+            this(tableRelations, false, false);
         }
 
         public TableRelationsCollector(List<TableRelation> tableRelations, boolean excludeUnresolvedCteReferences) {
+            this(tableRelations, excludeUnresolvedCteReferences, false);
+        }
+
+        public TableRelationsCollector(List<TableRelation> tableRelations, boolean excludeUnresolvedCteReferences,
+                                       boolean collectParserOwnedExpressions) {
             super();
             this.tableRelations = tableRelations;
             this.excludeUnresolvedCteReferences = excludeUnresolvedCteReferences;
+            this.collectParserOwnedExpressions = collectParserOwnedExpressions;
+        }
+
+        @Override
+        protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
+            if (!collectParserOwnedExpressions) {
+                return;
+            }
+            if (node.getOutputExpression() == null && node.getSelectList() != null) {
+                for (SelectListItem item : node.getSelectList().getItems()) {
+                    if (!item.isStar()) {
+                        visit(item.getExpr(), context);
+                    }
+                }
+            }
+            if (node.getGroupBy() == null && node.getGroupByClause() != null) {
+                GroupByClause groupByClause = node.getGroupByClause();
+                if (groupByClause.getGroupingSetList() != null) {
+                    groupByClause.getGroupingSetList().forEach(groupingSet ->
+                            groupingSet.forEach(expr -> visit(expr, context)));
+                } else if (groupByClause.getOriGroupingExprs() != null) {
+                    groupByClause.getOriGroupingExprs().forEach(expr -> visit(expr, context));
+                }
+            }
         }
 
         @Override

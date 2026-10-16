@@ -77,6 +77,21 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
+    void testPrefetchesTablesInSelectListScalarSubqueries(@Injectable MetadataMgr metadataMgr) {
+        ConnectContext session = newSession("external", "db");
+        StatementBase statement = parse("select (select count(*) from external.db.t1), " +
+                "(select count(*) from external.db.t2)", session);
+
+        expectPrefetch(metadataMgr, session, "external", "db", "t1", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "t2", 1);
+
+        ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session, metadataMgr);
+
+        new FullVerifications(metadataMgr) {
+        };
+    }
+
+    @Test
     void testAcceptsUnanalyzedDmlParsedFromSql(@Injectable MetadataMgr metadataMgr) {
         ConnectContext session = newSession("external", "db");
         expectPrefetch(metadataMgr, session, "external", "db", "insert_source", 1);
