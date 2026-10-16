@@ -1931,6 +1931,11 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     const auto old_limit = tracker->limit();
     tracker->set_limit(fixture.minimum_bytes * 2 + 256 * 1024);
     DeferOp restore([&] { tracker->set_limit(old_limit); });
+    DeferOp finish_flushes([&] {
+        EXPECT_TRUE(
+                RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+        EXPECT_LE(tracker->peak_consumption(), tracker->limit());
+    });
     ASSERT_LT(fixture.minimum_bytes, tracker->limit() / 2);
     // Retain a real eagerly loaded PK column through the manager's update-state cache,
     // rather than treating the rowset input as free space when admitting a different owner.
@@ -1943,13 +1948,13 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     input_schema = std::make_shared<TabletSchema>(input_metadata->schema());
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*input_metadata));
     std::vector<std::string> input_keys;
-    constexpr int kInputRows = 16384;
+    constexpr int kInputRows = 1024;
     append_cold_rowset(input_metadata.get(), 0, kInputRows, 3, &input_keys, 256);
     TxnLogPB_OpWrite input_op;
     input_op.mutable_rowset()->CopyFrom(input_metadata->rowsets(0));
-    // PK_ENCODING_TYPE_V2 compacts these long strings. Force the real eager
-    // preload path and enough rows to retain a material input column, rather
-    // than assuming padded string bytes equal the encoded PK allocation.
+    // An explicit empty txn_meta selects eager loading. Measure both the raw
+    // chunk and its standalone encoded column instead of inferring their
+    // allocation from the padded key length.
     input_op.mutable_txn_meta();
     Tablet input_tablet(_tablet_mgr.get(), input_metadata->id());
     RssidFileInfoContainer input_container;
@@ -1965,10 +1970,22 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     ASSERT_OK(input.prepare(input_params));
     ASSERT_OK(input.load_segment(0, input_params, 1, false, false));
     ASSERT_NE(nullptr, input.upserts(0));
-    ASSERT_EQ(kInputRows, input.upserts(0)->current().chunk->num_rows());
-    const auto input_first_row = input.upserts(0)->current().chunk->debug_row(0);
+    // current() transfers ownership. Keep the returned chunk live throughout
+    // the test, alongside the cached encoded column and its original charge.
+    auto input_ref = input.upserts(0)->current();
+    ASSERT_NE(nullptr, input_ref.chunk);
+    ASSERT_EQ(kInputRows, input_ref.chunk->num_rows());
+    const auto input_first_row = input_ref.chunk->debug_row(0);
     const size_t input_bytes = input.memory_usage();
     ASSERT_GT(input_bytes, 256 * 1024);
+    const int64_t read_and_workspace_bytes = fixture.minimum_bytes + 65536;
+    ASSERT_GT(tracker->limit(), read_and_workspace_bytes);
+    ASSERT_LT(input_bytes, tracker->limit() - read_and_workspace_bytes);
+    const auto pending_target =
+            static_cast<size_t>(tracker->limit() - read_and_workspace_bytes - static_cast<int64_t>(input_bytes));
+    ASSERT_GT(pending_target, 65536);
+    LOG(INFO) << "four-tablet growth fixture root=" << tracker->limit() << " mandatory_read=" << fixture.minimum_bytes
+              << " input=" << input_bytes << " owner_memtable_target=" << pending_target;
     _primary_key_mgr->_update_state_cache.update_object_size(input_entry, input_bytes);
     // Three other cached tablets each retain a live MemTable. Their cache pins are idle,
     // allowing the pressure sweep to reclaim them, while the input above stays pinned.
@@ -2000,10 +2017,13 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     ASSERT_OK(index.lake_load(_tablet_mgr.get(), metadata, 1, nullptr));
     // Reproduce a warm owner with both inactive and active trees. A mutation alone fits;
     // the same mutation followed by opening this (less than half-budget) SST does not.
-    const size_t pending_target = tracker->limit() - fixture.minimum_bytes - input_bytes - 65536;
     size_t pending_rows = 0;
+    // Each distinct key retains at least its 256-byte padding. A broken fixture
+    // must fail a bounded assertion rather than keep allocating indefinitely.
+    const size_t max_pending_rows = (pending_target + 255) / 256 + 128;
     bool handed_off = false;
     while (index.memory_stats().memtable_bytes < pending_target) {
+        ASSERT_LT(pending_rows, max_pending_rows);
         std::vector<std::string> strings;
         std::vector<Slice> keys;
         std::vector<IndexValue> values;
@@ -2110,7 +2130,8 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     EXPECT_EQ(filename, after.sstables(0).filename());
     EXPECT_NE(nullptr, input.upserts(0));
     EXPECT_EQ(input_bytes, input.memory_usage());
-    EXPECT_EQ(input_first_row, input.upserts(0)->current().chunk->debug_row(0));
+    EXPECT_EQ(kInputRows, input_ref.chunk->num_rows());
+    EXPECT_EQ(input_first_row, input_ref.chunk->debug_row(0));
     EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->active_read_credits.load());
     EXPECT_LE(tracker->peak_consumption(), tracker->limit());
 }
