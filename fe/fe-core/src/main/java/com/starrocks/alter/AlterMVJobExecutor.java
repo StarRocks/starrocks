@@ -582,23 +582,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
-<<<<<<< HEAD
-    // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
-    // of another kind, or when this clause needs nothing resolved.
-    private Map<String, String> preResolvedPropClone;
-    private List<Runnable> preResolvedAppliers;
-    private ParseNode preResolvedDefineQueryAst;
-    private String preResolvedDefineSql;
-=======
-    /**
-     * SET PROPERTIES: the properties as written, cloned before the constraint analyzers consumed their keys; the
-     * appliers those analyzers produced; what those analyses were resolved against, null without a constraint; and
-     * the ref base tables of a retention condition, null without one.
-     */
-    private record PreResolvedProperties(Map<String, String> propClone, List<Runnable> appliers,
-                                         ConstraintBasis constraintBasis, PreResolvedBaseTables refBaseTables) {
-    }
-
     /**
      * What a constraint analysis of this MV is resolved against: the names it qualifies the constraint's columns
      * with, and the columns themselves. Each can only change under the MV's write lock -- RENAME, a database rename,
@@ -611,24 +594,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         }
     }
 
-    /**
-     * ADD/DROP COLUMN: the define-query AST, and the definition it was built from.
-     */
-    private record PreResolvedDefineQuery(String defineSql, ParseNode ast) {
-    }
-
-    /**
-     * ACTIVE: the definition the analysis was made from, and either the analysis with the base tables that the
-     * relationship rebuild resolves, or the failure the analysis ended with.
-     */
-    private record PreResolvedActivate(String defineSql, AlterJobMgr.AlterMaterializedViewStatusContext statusContext,
-                                       PreResolvedBaseTables baseTables, RuntimeException failure) {
-    }
-
-    // Resolved by resolveBeforeLock, consumed by the clause visitors below. One statement has one clause, so at
-    // most one of these is set; null when the clause is of another kind, or needs nothing resolved.
-    private PreResolvedProperties preResolvedProperties;
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
+    // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
+    // of another kind, or when this clause needs nothing resolved.
+    private Map<String, String> preResolvedPropClone;
+    private List<Runnable> preResolvedAppliers;
+    // What the SET PROPERTIES constraint analyses were resolved against, null without a constraint.
+    private ConstraintBasis preResolvedConstraintBasis;
+    private ParseNode preResolvedDefineQueryAst;
+    private String preResolvedDefineSql;
     private Boolean preResolvedHasNonNativeBaseTable;
     private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
     private AlterJobMgr.AlterMaterializedViewStatusContext preResolvedActivateContext;
@@ -655,16 +628,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // The clone has to be taken before the analyzers run, because they consume the keys they
             // handle -- whatever is left over at the end is treated as session variables -- while the
             // editlog has to carry the properties as written.
-<<<<<<< HEAD
             preResolvedPropClone = Maps.newHashMap(properties);
             preResolvedAppliers = new ArrayList<>();
-=======
-            Map<String, String> propClone = Maps.newHashMap(properties);
-            List<Runnable> appliers = new ArrayList<>();
-            ConstraintBasis constraintBasis = properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+            preResolvedConstraintBasis = properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     ? ConstraintBasis.of(db, mv) : null;
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 alterUniqueConstraint(properties, mv, preResolvedAppliers);
             }
@@ -678,10 +646,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // No "still current" check is owed: the lock never covers external tables.
                 preResolvedRefBaseTables = mv.preResolveRefBaseTables();
             }
-<<<<<<< HEAD
-=======
-            preResolvedProperties = new PreResolvedProperties(propClone, appliers, constraintBasis, refBaseTables);
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
         } else if (alterClause instanceof RefreshSchemeClause) {
             // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
             // would change behaviour rather than just its timing: getTableChecked throws when a base
@@ -777,9 +741,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         // A constraint analyzed before the lock names the MV and its columns as they were then; applied after a
         // RENAME or a column change that got in between, it would persist names that no longer resolve.
-        if (preResolvedProperties != null && preResolvedProperties.constraintBasis() != null
-                && !preResolvedProperties.constraintBasis().equals(ConstraintBasis.of(db, materializedView))) {
-            throw alteredConcurrently(materializedView);
+        if (preResolvedConstraintBasis != null
+                && !preResolvedConstraintBasis.equals(ConstraintBasis.of(db, materializedView))) {
+            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                    + "please retry the statement", materializedView.getName()));
         }
         // Both come from resolveBeforeLock: the clone was taken before the constraint analyzers
         // consumed their keys, and the appliers they produced are carried over. Constraint appliers

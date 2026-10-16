@@ -1734,6 +1734,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         onReload(false, true, false);
     }
 
+    /**
+     * This mv's active flag and status epoch, read together.
+     */
+    public record StatusSnapshot(boolean active, long epoch) {
+    }
+
+    public synchronized StatusSnapshot getStatusSnapshot() {
+        return new StatusSnapshot(active, statusEpoch);
+    }
+
     private boolean isInCatalog() {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         return db != null && db.getTable(id) == this;
@@ -2806,15 +2816,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return;
         }
 
-<<<<<<< HEAD
-        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns(false);
-=======
-        MVDefinitionAnalysis.derive(this, () -> analyzeRetentionCondition(connectContext, retentionCondition));
-    }
-
-    private void analyzeRetentionCondition(ConnectContext connectContext, String retentionCondition) {
         final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns();
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
         if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
             return;
         }
@@ -2853,14 +2855,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * <p>A failed lookup is kept, not thrown: refreshBaseTable rethrows it where the original lookup would
      * have thrown, so errors surface at the same point and in the same order as without pre-resolving.
      */
-<<<<<<< HEAD
     public PreResolvedRefBaseTables preResolveRefBaseTables() {
         Map<BaseTableInfo, RefreshedBaseTable> resolved = Maps.newHashMap();
-        List<Optional<? extends Map<Table, ?>>> refMaps =
-                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
-        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
-            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
-                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
+        RefBaseTablePartitionInfo info = refBaseTablePartitionInfo;
+        for (Map<Table, ?> refMap : List.of(info.exprs(), info.slots(), info.columns())) {
+            for (Table table : refMap.keySet()) {
+                BaseTableInfo baseTableInfo = info.tableToBaseTableInfo().get(table);
                 if (!isRefreshedPerQuery(table)
                         || baseTableInfo == null || resolved.containsKey(baseTableInfo)) {
                     continue;
@@ -2869,15 +2869,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     resolved.put(baseTableInfo, new RefreshedBaseTable(MvUtils.getTable(baseTableInfo), null));
                 } catch (RuntimeException e) {
                     resolved.put(baseTableInfo, new RefreshedBaseTable(null, e));
-=======
-    public PreResolvedBaseTables preResolveRefBaseTables() {
-        Set<BaseTableInfo> baseTableInfos = Sets.newLinkedHashSet();
-        RefBaseTablePartitionInfo info = refBaseTablePartitionInfo;
-        for (Map<Table, ?> refMap : List.of(info.exprs(), info.slots(), info.columns())) {
-            for (Table table : refMap.keySet()) {
-                if (isRefreshedPerQuery(table)) {
-                    baseTableInfos.add(info.tableToBaseTableInfo().get(table));
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
                 }
             }
         }
@@ -2936,14 +2927,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // the newest table info.
                 // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
                 // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
-<<<<<<< HEAD
-                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
+                BaseTableInfo baseTableInfo = tableToBaseTableInfo.get(table);
                 RefreshedBaseTable refreshed = preResolved == null ? null : preResolved.get(baseTableInfo);
                 Optional<Table> refreshedTableOpt = refreshed != null ? refreshed.get() : MvUtils.getTable(baseTableInfo);
-=======
-                // Answered from PreResolvedBaseTables when the caller pre-resolved it, see preResolveRefBaseTables.
-                Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfo.get(table));
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
                 // when meets a table that has been dropped, no throw exception here so that
                 if (refreshedTableOpt.isEmpty()) {
                     LOG.warn("The table {} is not found in metadata catalog", table.getName());

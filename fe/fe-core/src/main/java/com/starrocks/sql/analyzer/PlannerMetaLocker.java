@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -220,8 +221,7 @@ public class PlannerMetaLocker implements AutoCloseable {
      * acquisition.
      */
     public void addTablesReadByExternalTablePolicies(ConnectContext session, StatementBase statement) {
-        // Only walks policy bodies: no context table function of the statement is reached, nor authorized, here.
-        TableCollector collector = new TableCollector(session, dbs, tables, false);
+        TableCollector collector = new TableCollector(session, dbs, tables);
         collector.externalPoliciesOnly = true;
         collector.visit(statement);
     }
@@ -476,8 +476,6 @@ public class PlannerMetaLocker implements AutoCloseable {
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
-<<<<<<< HEAD
-=======
         private final List<WalkedView> walkedViews = new ArrayList<>();
         // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
         // flags itself: everything in the body of a view so flagged (see QueryAnalyzer#inheritPolicyRewriteFlag).
@@ -485,11 +483,6 @@ public class PlannerMetaLocker implements AutoCloseable {
         // Collect nothing but what the policies of already resolved external tables read.
         private boolean externalPoliciesOnly = false;
         private boolean mayReachExternalTablePolicy = false;
-        // Whether a context table function the session itself is authorized for is authorized before it runs: one the
-        // statement calls directly, or one in the body of a SECURITY INVOKER view it reads. One in any other view's
-        // body is not, since a view's reader reads it with the view's privilege (see AgentBaseRelations#resolve)
-        private final boolean authorizeStatementCalls;
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
             this.session = session;
@@ -649,24 +642,16 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-<<<<<<< HEAD
-            if (isCteReference(node.getName())) {
-=======
             if (externalPoliciesOnly) {
                 visitExternalTablePolicies(node);
                 return null;
             }
-            if (isCteReference(node.getName()) || visitResolved(node)) {
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
+            if (isCteReference(node.getName())) {
                 return null;
             }
             noteExternalTablePolicy(node);
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
-<<<<<<< HEAD
-            if (dbAndTable != null && dbAndTable.second instanceof View view) {
-                visitViewBody(view);
-=======
             if (dbAndTable == null) {
                 return null;
             }
@@ -678,8 +663,7 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
             if (dbAndTable.second instanceof View view) {
                 walkedViews.add(new WalkedView(node.getName(), view, view.getInlineViewDef(), view.getSqlMode()));
-                visitViewBody(node, view, rewrittenByPolicy);
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
+                visitViewBody(view, rewrittenByPolicy);
             }
             return null;
         }
@@ -688,42 +672,14 @@ public class PlannerMetaLocker implements AutoCloseable {
          * Before analysis a view is a name and nothing more, yet planning reads the tables behind it -- and copies
          * them, when it runs off copies. Lock those too, by walking the body here.
          */
-<<<<<<< HEAD
-        private void visitViewBody(View view) {
+        private void visitViewBody(View view, boolean rewrittenByPolicy) {
             if (!expandingViews.add(view.getId())) {
                 return;
             }
-            // A view body is its own name scope: a CTE of the enclosing statement does not shadow a table in it.
-            Deque<Set<String>> enclosingCtes = new ArrayDeque<>(cteNames);
-            cteNames.clear();
-            resolvedDepth++;
+            // The name scope and resolvedDepth are visitOutsideTheStatement's.
             try {
-                visit(view.getQueryStatement());
-            } catch (StarRocksPlannerException e) {
-                // A definition that does not parse is the analyzer's to report.
+                visitOutsideTheStatement(rewrittenByPolicy, () -> visit(view.getQueryStatement()));
             } finally {
-                resolvedDepth--;
-=======
-        private void visitViewBody(TableRelation reference, View view, boolean rewrittenByPolicy) {
-            if (!expandingViews.add(view.getId())) {
-                return;
-            }
-            // ColumnPrivilege.checkViewPrivilege authorizes a SECURITY INVOKER view's body as the reader. The name
-            // scope and resolvedDepth are visitOutsideTheStatement's.
-            boolean invoker = view.isSecurity();
-            if (invoker) {
-                invokerViewDepth++;
-            }
-            try {
-                QueryStatement body = parseViewBody(reference, view);
-                if (body != null) {
-                    visitOutsideTheStatement(rewrittenByPolicy, () -> visit(body));
-                }
-            } finally {
-                if (invoker) {
-                    invokerViewDepth--;
-                }
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
                 expandingViews.remove(view.getId());
             }
         }
@@ -817,11 +773,8 @@ public class PlannerMetaLocker implements AutoCloseable {
                 return;
             }
             try {
-                // The body parsed for this reference when the lock set was built, which the pre-pass walked in place
-                // (see #parseViewBody); else the ones the pre-pass parsed itself.
-                PreResolvedState state = session.getPreResolvedState();
-                QueryStatement parsed = state.parsedViewBody(node, view);
-                List<QueryStatement> bodies = parsed != null ? List.of(parsed) : state.viewBodies().peek(view);
+                // The bodies the pre-pass parsed for this view, which expansion will take.
+                List<QueryStatement> bodies = session.getPreResolvedState().viewBodies().peek(view);
                 visitOutsideTheStatement(rewrittenByPolicy, () -> bodies.forEach(this::visit));
             } finally {
                 expandingViews.remove(view.getId());
@@ -851,123 +804,6 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
         }
 
-<<<<<<< HEAD
-=======
-        /**
-         * The body the analyzer will expand this reference from: the calls resolved while walking it must be the ones
-         * it meets, or it resolves them again, under the lock. So the body is filed under the reference, with a copy of
-         * the definition it was parsed from -- the view is read without its lock, and ALTER VIEW rewrites the
-         * definition in place -- and the unlocked pre-pass and the analyzer take it (see
-         * {@link PreResolvedState#parsedViewBody}). The definition is parsed once, and walking the statement again
-         * walks the same body.
-         *
-         * @return null for a definition that will not parse, which is the analyzer's to report
-         */
-        private QueryStatement parseViewBody(TableRelation reference, View view) {
-            PreResolvedState state = PreResolvedState.of(session);
-            QueryStatement body = state == null ? null : state.parsedViewBody(reference, view);
-            if (body != null) {
-                return body;
-            }
-            View parsed = new View(view.getId(), view.getName(), view.getFullSchema());
-            parsed.setInlineViewDefWithSqlMode(view.getInlineViewDef(), view.getSqlMode());
-            try {
-                body = parsed.getQueryStatement();
-            } catch (StarRocksPlannerException e) {
-                return null;
-            }
-            if (state != null) {
-                state.putParsedViewBody(reference, parsed, body);
-            }
-            return body;
-        }
-
-        @Override
-        public Void visitTableFunction(TableFunctionRelation node, Void context) {
-            if (externalPoliciesOnly) {
-                return null;
-            }
-            visitResolved(node);
-            return null;
-        }
-
-        @Override
-        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
-            // The call on the right, or once analyzed the relation it became; the left side is the dual row.
-            return visit(node.getRight(), context);
-        }
-
-        /**
-         * An analyzed statement (SPM analyzes before planning does; re-planning analyzes again) carries what an
-         * AgentBase relation resolved to in place of the call. It is still not something the statement named.
-         */
-        @Override
-        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
-            PreResolvedState state = PreResolvedState.of(session);
-            if (state == null || !state.isAgentBaseResolution(node)) {
-                return super.visitSubqueryRelation(node, context);
-            }
-            resolvedDepth++;
-            try {
-                return super.visitSubqueryRelation(node, context);
-            } finally {
-                resolvedDepth--;
-            }
-        }
-
-        /**
-         * Resolve an AgentBase relation here, before the lock is taken (see {@link AgentBaseRelations}), and
-         * collect the tables it reads.
-         *
-         * <p>Inside a view body too: the analyzer expands the view from the body walked here (see
-         * {@link #parseViewBody}), so it finds the call answered and does not run it again under the lock.
-         *
-         * @return whether {@code node} was one
-         */
-        private boolean visitResolved(Relation node) {
-            Relation resolved = AgentBaseRelations.resolve(session, node, authorizeStatementCalls && isSessionCall());
-            if (resolved == null) {
-                return false;
-            }
-            resolvedDepth++;
-            try {
-                visit(resolved);
-            } finally {
-                resolvedDepth--;
-            }
-            return true;
-        }
-
-        /**
-         * Whether a call met here is one the statement's authorization checks as the session: every level that
-         * encloses it is the body of a SECURITY INVOKER view, or there is none.
-         */
-        private boolean isSessionCall() {
-            return resolvedDepth == invokerViewDepth;
-        }
-
-        /**
-         * CREATE VIEW's body is the statement's own query: it is analyzed with the statement, and authorized as the
-         * session that creates the view (AuthorizerStmtVisitor checks it), so it is walked like a query.
-         */
-        @Override
-        public Void visitCreateViewStatement(CreateViewStmt statement, Void context) {
-            if (statement.getQueryStatement() != null) {
-                visit(statement.getQueryStatement(), context);
-            }
-            return null;
-        }
-
-        /** The new body of an ALTER VIEW, which is analyzed and authorized like CREATE VIEW's. */
-        @Override
-        public Void visitAlterViewClause(AlterViewClause clause, Void context) {
-            if (clause.getQueryStatement() != null) {
-                visit(clause.getQueryStatement(), context);
-            }
-            return null;
-        }
-
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
         @Override
         public Void visitView(ViewRelation node, Void context) {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());

@@ -56,41 +56,25 @@ public class PrepareStmtContext {
         return isCached;
     }
 
-<<<<<<< HEAD
     public void updateLastSchemaUpdateTime(QueryStatement stmt, ConnectContext session) {
+        OlapTable table = resolveOlapTable(stmt, session);
+        this.lastSchemaUpdateTime = table.lastSchemaUpdateTime.get();
+        this.tableId = table.getId();
+    }
+
+    // true when the plan scans the live table itself rather than a private copy of it -- planning with the meta
+    // lock held for the whole phase (cbo_use_lock_db, or a copy-unsafe table) does -- such a plan must not be cached,
+    // since a hit prunes partitions and tablets on the table the plan scans without any lock, which on the live one
+    // races a concurrent INSERT OVERWRITE or partition change
+    public boolean isPlannedOnLiveTable(QueryStatement stmt, ConnectContext session, OlapTable plannedTable) {
+        return plannedTable == resolveOlapTable(stmt, session);
+    }
+
+    private static OlapTable resolveOlapTable(QueryStatement stmt, ConnectContext session) {
         SelectRelation selectRelation = (SelectRelation) (stmt.getQueryRelation());
         TableRelation tableRelation = (TableRelation) selectRelation.getRelation();
         QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
-        OlapTable table = (OlapTable) queryAnalyzer.resolveTable(tableRelation);
-        this.lastSchemaUpdateTime = table.lastSchemaUpdateTime.get();
-=======
-    // the schema time of the table the statement names, empty when the name does not lead to an olap table; read
-    // before planning, so a schema change that lands while the statement is planned replans the next EXECUTE
-    public OptionalLong schemaUpdateTimeBeforePlanning(QueryStatement stmt, ConnectContext session) {
-        try {
-            OlapTable table = resolveOlapTable(stmt, session);
-            return table == null ? OptionalLong.empty() : OptionalLong.of(table.lastSchemaUpdateTime.get());
-        } catch (RuntimeException e) {
-            // an unknown table: planning raises it from the path that can name the statement
-            return OptionalLong.empty();
-        }
-    }
-
-    // false when the name no longer leads to the table the plan scans, since a hit validates the plan by that name;
-    // false too when the plan scans the live table itself rather than a private copy of it -- planning with the meta
-    // lock held for the whole phase (cbo_use_lock_db, or a copy-unsafe table) does -- since a hit prunes partitions
-    // and tablets on the table the plan scans without any lock, which on the live one races a concurrent INSERT
-    // OVERWRITE or partition change
-    public boolean recordPlannedTable(QueryStatement stmt, ConnectContext session, OlapTable plannedTable,
-                                      OptionalLong schemaUpdateTimeBeforePlanning) {
-        OlapTable table = resolveOlapTable(stmt, session);
-        if (table == null || plannedTable == null || table.getId() != plannedTable.getId() || plannedTable == table
-                || schemaUpdateTimeBeforePlanning.isEmpty()) {
-            return false;
-        }
-        this.lastSchemaUpdateTime = schemaUpdateTimeBeforePlanning.getAsLong();
->>>>>>> 3d28e7f5daf... [BugFix][POST-1966] Close the remaining planner and MV metadata lock gaps (#65384)
-        this.tableId = table.getId();
+        return (OlapTable) queryAnalyzer.resolveTable(tableRelation);
     }
 
     public void cachePlan(ExecPlan execPlan) {

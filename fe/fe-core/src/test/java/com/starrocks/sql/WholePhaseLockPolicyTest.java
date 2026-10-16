@@ -14,26 +14,28 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -62,25 +65,33 @@ public class WholePhaseLockPolicyTest extends PlanTestBase {
     private boolean cboUseDBLock;
 
     @BeforeAll
-    public static void createPolicies() throws Exception {
+    public static void createTables() throws Exception {
         starRocksAssert.withDatabase(MAP_DB).withTable("CREATE TABLE " + MAP_DB + ".t_map (k BIGINT) "
                 + "DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE " + GUARDED + " (k1 BIGINT, v1 BIGINT) "
                 + "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
         starRocksAssert.withView("CREATE VIEW " + VIEW + " AS SELECT k1, v1 FROM " + GUARDED);
-        execute("CREATE ROW ACCESS POLICY test.rp_policy_lock AS (x BIGINT) RETURNS BOOLEAN -> "
-                + "EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = x)");
-        execute("ALTER TABLE " + GUARDED + " ADD ROW ACCESS POLICY test.rp_policy_lock ON (k1)");
     }
 
-    @AfterAll
-    public static void dropPolicies() throws Exception {
-        execute("ALTER TABLE " + GUARDED + " DROP ALL ROW ACCESS POLICIES");
-        execute("DROP ROW ACCESS POLICY test.rp_policy_lock");
-    }
+    @BeforeEach
+    public void installPolicy() {
+        // A row access policy on the guarded table that reads the mapping table, as an access controller returns it.
+        new MockUp<Authorizer>() {
+            @Mock
+            public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+                if (!"t_policy_lock".equalsIgnoreCase(tableName.getTbl())) {
+                    return null;
+                }
+                return SqlParser.parseSqlToExpr("EXISTS (SELECT 1 FROM " + MAP_DB + ".t_map m WHERE m.k = k1)",
+                        context.getSessionVariable().getSqlMode());
+            }
 
-    private static void execute(String sql) throws Exception {
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
+            @Mock
+            public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName,
+                                                                   List<Column> columns) {
+                return null;
+            }
+        };
     }
 
     @BeforeEach
