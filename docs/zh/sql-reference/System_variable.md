@@ -267,7 +267,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 ### broadcast_mem_exceeded_penalty_factor
 
-* **描述**: 当发送到每个 BE/CN 的构建侧估算数据量超过 `exec_mem_limit` 时，设置广播 CPU、内存和网络成本的乘数。估算值等于限制时不施加惩罚。默认值保留原有的 1000 倍成本惩罚。设置为 `1.0` 可移除此惩罚；优化器仍会比较其他执行计划的成本并检查广播候选计划是否符合条件。此变量不会改变运行时内存限制，也不会强制使用广播 Join。
+* **描述**: 设置广播 CPU、内存和网络成本的惩罚因子，在每个 BE/CN 的构建侧估算数据量超过广播内存阈值时生效。设置为 `1.0` 可禁用此惩罚。
 * **作用域**: Session, Global
 * **默认值**: `1000.0`
 * **数据类型**: Double

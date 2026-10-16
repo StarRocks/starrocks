@@ -276,7 +276,7 @@ Used for MySQL client compatibility. No practical usage.
 
 ### broadcast_mem_exceeded_penalty_factor
 
-* **Description**: Sets the multiplier applied to broadcast CPU, memory, and network costs when the estimated build-side size sent to each BE/CN exceeds `exec_mem_limit`. An estimate equal to the limit receives no penalty. The default preserves the existing 1000-fold penalty. Set this variable to `1.0` to remove the penalty; the optimizer still compares other plan costs and checks broadcast eligibility. This variable does not change runtime memory limits or force a broadcast join.
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
 * **Scope**: Session, Global
 * **Default**: `1000.0`
 * **Data Type**: Double
