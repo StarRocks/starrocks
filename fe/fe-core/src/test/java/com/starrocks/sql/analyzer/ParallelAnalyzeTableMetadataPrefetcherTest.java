@@ -134,6 +134,64 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
+    void testPrefetchesTablesInUnanalyzedDmlExpressions(@Injectable MetadataMgr metadataMgr) {
+        ConnectContext session = newSession("external", "db");
+        expectPrefetch(metadataMgr, session, "external", "db", "update_assignment_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "update_predicate_source1", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "update_predicate_source2", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "delete_predicate_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "merge_condition_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "merge_when_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "merge_assignment_source", 1);
+
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("update default_catalog.db.target set value = " +
+                        "(select value from external.db.update_assignment_source) " +
+                        "where a in (select a from external.db.update_predicate_source1) " +
+                        "and b in (select b from external.db.update_predicate_source2)", session),
+                session, metadataMgr));
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("delete from default_catalog.db.target where a in " +
+                        "(select a from external.db.delete_predicate_source)", session),
+                session, metadataMgr));
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("merge into default_catalog.db.target target using (select 1 as id) source " +
+                        "on target.id = source.id and target.id in " +
+                        "(select id from external.db.merge_condition_source) " +
+                        "when matched and target.id in (select id from external.db.merge_when_source) " +
+                        "then update set value = " +
+                        "(select max(value) from external.db.merge_assignment_source)", session),
+                session, metadataMgr));
+
+        new FullVerifications(metadataMgr) {
+        };
+    }
+
+    @Test
+    void testPrefetchesTablesInQueryBearingDdl(@Injectable MetadataMgr metadataMgr) {
+        ConnectContext session = newSession("external", "db");
+        expectPrefetch(metadataMgr, session, "external", "db", "create_view_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "create_mv_source1", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "create_mv_source2", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "alter_view_source", 1);
+
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("create view default_catalog.db.prefetch_view as " +
+                        "select * from external.db.create_view_source", session), session, metadataMgr));
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("create materialized view default_catalog.db.prefetch_mv refresh manual as " +
+                        "select * from external.db.create_mv_source1 join " +
+                        "external.db.create_mv_source2 on true", session),
+                session, metadataMgr));
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("alter view default_catalog.db.prefetch_view as " +
+                        "select * from external.db.alter_view_source", session), session, metadataMgr));
+
+        new FullVerifications(metadataMgr) {
+        };
+    }
+
+    @Test
     void testLogsAndDefersPrefetchFailuresToNormalAnalysis(@Injectable MetadataMgr metadataMgr) throws Exception {
         ConnectContext session = newSession("external", "db");
         StatementBase statement = parse("select * from external.db.failing_table " +

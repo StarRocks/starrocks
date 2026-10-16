@@ -64,10 +64,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -77,6 +81,9 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.MergeWhenClause;
+import com.starrocks.sql.ast.MergeWhenMatchedUpdateClause;
+import com.starrocks.sql.ast.MergeWhenNotMatchedInsertClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.OrderByElement;
@@ -822,17 +829,16 @@ public class AnalyzerUtils {
         protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
         }
 
-        protected boolean shouldVisitParserOwnedDmlRelations() {
+        protected boolean shouldVisitParserOwnedFields() {
             return false;
         }
 
-        private void visitParserOwnedDmlRelations(List<CTERelation> cteRelations, List<Relation> relations,
-                                                  Void context) {
-            if (!shouldVisitParserOwnedDmlRelations()) {
+        private void visitParserOwnedDmlClauses(List<CTERelation> cteRelations, Void context, Runnable clauses) {
+            if (!shouldVisitParserOwnedFields()) {
                 return;
             }
             if (cteRelations == null || cteRelations.isEmpty()) {
-                visitRelations(relations, context);
+                clauses.run();
                 return;
             }
             cteNameScopes.push(new HashSet<>());
@@ -841,7 +847,7 @@ public class AnalyzerUtils {
                 for (CTERelation cteRelation : cteRelations) {
                     visit(cteRelation, context);
                 }
-                visitRelations(relations, context);
+                clauses.run();
             } finally {
                 recursiveCteScopes.pop();
                 cteNameScopes.pop();
@@ -852,6 +858,34 @@ public class AnalyzerUtils {
             if (relations != null) {
                 for (Relation relation : relations) {
                     visit(relation, context);
+                }
+            }
+        }
+
+        private void visitIfPresent(ParseNode node, Void context) {
+            if (node != null) {
+                visit(node, context);
+            }
+        }
+
+        private void visitParserOwnedDdlQuery(QueryStatement queryStatement, Void context) {
+            if (shouldVisitParserOwnedFields()) {
+                visitIfPresent(queryStatement, context);
+            }
+        }
+
+        private void visitMergeWhenClauses(List<MergeWhenClause> whenClauses, Void context) {
+            if (whenClauses == null) {
+                return;
+            }
+            for (MergeWhenClause whenClause : whenClauses) {
+                visitIfPresent(whenClause.getOptionalCondition(), context);
+                if (whenClause instanceof MergeWhenMatchedUpdateClause updateClause
+                        && updateClause.getAssignments() != null) {
+                    updateClause.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr(), context));
+                } else if (whenClause instanceof MergeWhenNotMatchedInsertClause insertClause
+                        && insertClause.getValues() != null) {
+                    insertClause.getValues().forEach(expr -> visitIfPresent(expr, context));
                 }
             }
         }
@@ -887,7 +921,13 @@ public class AnalyzerUtils {
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
             if (node.getQueryStatement() == null) {
-                visitParserOwnedDmlRelations(node.getCommonTableExpressions(), node.getFromRelations(), context);
+                visitParserOwnedDmlClauses(node.getCommonTableExpressions(), context, () -> {
+                    visitRelations(node.getFromRelations(), context);
+                    visitIfPresent(node.getWherePredicate(), context);
+                    if (node.getAssignments() != null) {
+                        node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr(), context));
+                    }
+                });
             }
             return super.visitUpdateStatement(node, context);
         }
@@ -898,7 +938,10 @@ public class AnalyzerUtils {
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
             if (node.getQueryStatement() == null) {
-                visitParserOwnedDmlRelations(node.getCommonTableExpressions(), node.getUsingRelations(), context);
+                visitParserOwnedDmlClauses(node.getCommonTableExpressions(), context, () -> {
+                    visitRelations(node.getUsingRelations(), context);
+                    visitIfPresent(node.getWherePredicate(), context);
+                });
             }
             return super.visitDeleteStatement(node, context);
         }
@@ -908,11 +951,40 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
-            if (node.getQueryStatement() == null && shouldVisitParserOwnedDmlRelations()
-                    && node.getSourceRelation() != null) {
-                visit(node.getSourceRelation(), context);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlClauses(null, context, () -> {
+                    visitIfPresent(node.getSourceRelation(), context);
+                    visitIfPresent(node.getMergeCondition(), context);
+                    visitMergeWhenClauses(node.getWhenClauses(), context);
+                });
             }
             return super.visitMergeIntoStatement(node, context);
+        }
+
+        @Override
+        public Void visitCreateViewStatement(CreateViewStmt node, Void context) {
+            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
+            return super.visitCreateViewStatement(node, context);
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt node, Void context) {
+            if (node.getAlterClause() != null) {
+                visitParserOwnedDdlQuery(node.getAlterClause().getQueryStatement(), context);
+            }
+            return super.visitAlterViewStatement(node, context);
+        }
+
+        @Override
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement node, Void context) {
+            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
+            return super.visitCreateMaterializedViewStatement(node, context);
+        }
+
+        @Override
+        public Void visitCreateSyncMVStmt(CreateSyncMVStmt node, Void context) {
+            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
+            return super.visitCreateSyncMVStmt(node, context);
         }
 
         @Override
@@ -1675,7 +1747,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        protected boolean shouldVisitParserOwnedDmlRelations() {
+        protected boolean shouldVisitParserOwnedFields() {
             return collectParserOwnedExpressions;
         }
 
