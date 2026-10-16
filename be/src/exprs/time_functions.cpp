@@ -38,6 +38,7 @@ typedef unsigned long ulong;
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "util/tz_offset_cache.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -322,6 +323,14 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
+
+    // Call-private (no shared/atomic state, so no cross-core contention under a high degree
+    // of parallelism) cache of the currently-valid DST offset window for `from`/`to`. Real-world
+    // timestamp columns are almost always time-clustered within a scanned chunk, so most
+    // consecutive rows land in the same window and skip cctz's transition search entirely. See
+    // util/tz_offset_cache.h.
+    TzOffsetCache cache;
+
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row)) {
             result.append_null();
@@ -329,26 +338,20 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
         }
 
         auto datetime_value = time_viewer.value(row);
-
         int year, month, day, hour, minute, second, usec;
         datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-        DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
-        int64_t timestamp;
-        // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.unix_timestamp(&timestamp, from)) {
-            result.append_null();
-            continue;
-        }
-        DateTimeValue ts_value2;
-        // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, ts_value.microsecond(), to)) {
-            result.append_null();
-            continue;
-        }
+        // civil_as_utc_sec is StarRocks' own (non-cctz) calendar arithmetic reinterpreting these
+        // wall-clock fields as literal UTC seconds -- computed once here and handed to the cache
+        // so its hot/common path never has to build or do arithmetic on a cctz::civil_second
+        // (cctz's civil_second operators normalize through cctz::detail::impl::n_min, which
+        // dwarfs everything else in this loop once cache misses become rare).
+        int64_t civil_as_utc_sec = datetime_value.to_unix_second();
+        int64_t unix_sec = cache.unix_for_civil(civil_as_utc_sec, year, month, day, hour, minute, second, from);
+        int64_t offset = cache.offset_for_unix(unix_sec, to);
+
         TimestampValue ts;
-        ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), ts_value2.microsecond());
+        ts.from_unix_second(unix_sec + offset, usec);
         result.append(ts);
     }
 

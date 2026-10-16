@@ -14,8 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.hash.HashFunction;
-import com.google.common.hash.Hashing;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.type.Type;
@@ -23,7 +21,6 @@ import com.starrocks.type.Type;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCollectJob {
     private final int allPartitionSize;
@@ -37,8 +34,7 @@ public class ExternalSampleStatisticsCollectJob extends ExternalFullStatisticsCo
     }
 
     public Set<Long> getSampledPartitionsHashValue() {
-        HashFunction hashFunction = Hashing.murmur3_128();
-        return partitionNames.stream().map(s -> hashFunction.hashUnencodedChars(s).asLong()).collect(Collectors.toSet());
+        return hashPartitionNames(partitionNames);
     }
 
     public int getAllPartitionSize() {

@@ -211,7 +211,7 @@ set(EXEC_FILES
         ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
-        ./exprs/multi_unnest_core_test.cpp
+        ./exprs/table_function/multi_unnest_core_test.cpp
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
@@ -471,6 +471,7 @@ set(EXEC_FILES
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
         ./util/timezone_utils_test.cpp
+        ./util/tz_offset_cache_test.cpp
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
         ./util/download_util_test.cpp
