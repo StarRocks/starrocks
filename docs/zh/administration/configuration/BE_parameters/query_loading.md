@@ -288,6 +288,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为 Zonemap index 开启 Memory Cache。使用 Zonemap index 加速 Scan 时，可以考虑开启。
 - 引入版本：-
 
+### exchange_sink_buffer_flush_threshold_bytes
+
+- 默认值：67108864
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Exchange Sink 中每个 Driver 在 Shuffle 时用于缓存待发送数据的最大内存。Shuffle 时，Exchange Sink 会为每个目标 Pipeline Driver 保留一个未填满的 Chunk，Chunk 填满后才会发送。当这些 Chunk 的总大小超过该阈值时，会立即全部发送并清空；如果清空后仍占用超过阈值一半的内存，则会依次释放这些 Chunk，直到占用降至阈值的一半以下。设置为 `0` 或更小的值表示不限制。
+- 引入版本：-
+
 ### exchg_node_buffer_size_bytes
 
 - 默认值：10485760
