@@ -2188,7 +2188,7 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 
 // Evaluate each THEN branch of a searched CASE WHEN only on the rows that branch actually owns,
 // instead of evaluating it over the whole chunk and picking rows afterwards. Only applies when the
-// CASE result is a collection/variant type, where building a row is expensive enough to pay for
+// CASE result is a collection type, where building a row is expensive enough to pay for
 // compacting the branch's input rows into a sub-chunk.
 // A branch is compacted when `owned_rows * ratio < chunk_rows`, i.e. when its selectivity is below
 // 1/ratio; above that threshold copying the branch's input costs more than the skipped evaluation
