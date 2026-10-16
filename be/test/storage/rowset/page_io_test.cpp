@@ -731,7 +731,7 @@ TEST_F(PageIOTest, test_pages_from_local_disk_follows_each_read) {
 }
 
 TEST_F(PageIOTest, test_coalesced_read_does_not_count_neighbor_hits) {
-    // Two pages of the same size, one per cache block: page A misses, page B is cached.
+    // Page A fills cache block 0, which misses; page B sits in cached blocks 1 and 2.
     WritableFileOptions write_opts;
     write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
     ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_coalesced_pages"));
@@ -746,7 +746,8 @@ TEST_F(PageIOTest, test_coalesced_read_does_not_count_neighbor_hits) {
     ASSERT_OK(PageIO::write_page(write_file.get(), body_a, footer_a, &pp_a));
     ASSERT_OK(PageIO::write_page(write_file.get(), body_b, footer_b, &pp_b));
     ASSERT_OK(write_file->close());
-    ASSERT_EQ(pp_a.size, pp_b.size);
+    // The encoded pages can differ by a byte; B only has to be large enough for its hit to cover A.
+    ASSERT_GE(pp_b.size, pp_a.size);
     const int64_t file_size = write_file->size();
     ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_coalesced_pages"));
 
