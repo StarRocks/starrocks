@@ -17,11 +17,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterMVClauseAnalyzerVisitor.java
-=======
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.epack.sql.analyzer.AlterTableClauseAnalyzerEPack;
->>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708)):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/AlterMVClauseAnalyzer.java
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.DropMVColumnClause;

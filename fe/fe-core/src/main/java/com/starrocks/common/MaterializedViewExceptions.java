@@ -105,41 +105,16 @@ public class MaterializedViewExceptions {
 
     /**
      * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
-<<<<<<< HEAD
-     * refresh (vs. a transient error), so a single caller can inactivate the MV. Walks the cause chain
-     * since the marker may be wrapped by the refresh pipeline.
-=======
-     * refresh (as opposed to a transient error). Covers the FE-detected non-append-only change, a
-     * BE-detected non-trackable CHANGES failure, and a stored schema that no longer matches the
-     * maintenance query, so a single caller handles OLAP and external tables the same way. Walks the
-     * cause chain because the marker may be wrapped by the refresh pipeline.
->>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708))
+     * refresh (vs. a transient error). Covers the FE-detected non-append-only change and a stored schema
+     * that no longer matches the maintenance query, so a single caller can inactivate the MV. Walks the
+     * cause chain since the marker may be wrapped by the refresh pipeline.
      */
     public static boolean isIncrementalBreakingFailure(Throwable e) {
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
             String msg = t.getMessage();
-<<<<<<< HEAD
-            if (msg != null && msg.contains(FE_NON_APPEND_ONLY_MARKER)) {
-=======
             if (msg != null && (msg.contains(FE_NON_APPEND_ONLY_MARKER)
                     || msg.contains(MV_SCHEMA_COLUMN_CHANGED_MARKER)
-                    || msg.contains(MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER)
-                    || CdcErrorUtils.isChangeNotTrackable(msg))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether the backend rejected the CHANGES scan as non-trackable. Narrower than
-     * {@link #isIncrementalBreakingFailure}: it deliberately excludes the frontend-detected marker, because
-     * that one is already caught while the plan is built and never reaches execution.
-     */
-    public static boolean isChangeNotTrackableFailure(Throwable e) {
-        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
-            if (CdcErrorUtils.isChangeNotTrackable(t.getMessage())) {
->>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708))
+                    || msg.contains(MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER))) {
                 return true;
             }
         }

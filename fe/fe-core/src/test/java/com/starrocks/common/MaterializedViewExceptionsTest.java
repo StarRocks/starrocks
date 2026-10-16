@@ -43,31 +43,6 @@ public class MaterializedViewExceptionsTest {
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(new RuntimeException()));
         assertFalse(MaterializedViewExceptions.isIncrementalBreakingFailure(null));
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testIsChangeNotTrackableFailure() {
-        assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
-                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for DUP_KEYS does not support delete")));
-        assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
-                "CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): CDC for AGG_KEYS does not support delete")));
-        assertTrue(MaterializedViewExceptions.isChangeNotTrackableFailure(
-                new RuntimeException("refresh failed",
-                        new IllegalStateException(
-                                "query failed: CDC-ERROR-1 (CHANGE_NOT_TRACKABLE): history missing"))));
-
-        // The deliberate difference from isIncrementalBreakingFailure.
-        assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException(
-                "INCREMENTAL materialized views " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER)));
-
-        assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(
-                new RuntimeException("CDC-ERROR-2 (CHANGE_NOT_TRACKABLE): unknown code")));
-        assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(
-                new RuntimeException("get database write lock timeout")));
-        assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(new RuntimeException()));
-        assertFalse(MaterializedViewExceptions.isChangeNotTrackableFailure(null));
-    }
 
     /**
      * A column ALTER on an IVM MV knocks its stored schema out of position-alignment with the
@@ -102,5 +77,4 @@ public class MaterializedViewExceptionsTest {
                         new RuntimeException("x " + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER + " y"), "mv1")
                 .startsWith(MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING));
     }
->>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708))
 }
