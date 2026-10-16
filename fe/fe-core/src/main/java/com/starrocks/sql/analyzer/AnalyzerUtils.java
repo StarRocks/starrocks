@@ -822,6 +822,40 @@ public class AnalyzerUtils {
         protected void visitParserOwnedExpressions(SelectRelation node, Void context) {
         }
 
+        protected boolean shouldVisitParserOwnedDmlRelations() {
+            return false;
+        }
+
+        private void visitParserOwnedDmlRelations(List<CTERelation> cteRelations, List<Relation> relations,
+                                                  Void context) {
+            if (!shouldVisitParserOwnedDmlRelations()) {
+                return;
+            }
+            if (cteRelations == null || cteRelations.isEmpty()) {
+                visitRelations(relations, context);
+                return;
+            }
+            cteNameScopes.push(new HashSet<>());
+            recursiveCteScopes.push(false);
+            try {
+                for (CTERelation cteRelation : cteRelations) {
+                    visit(cteRelation, context);
+                }
+                visitRelations(relations, context);
+            } finally {
+                recursiveCteScopes.pop();
+                cteNameScopes.pop();
+            }
+        }
+
+        private void visitRelations(List<Relation> relations, Void context) {
+            if (relations != null) {
+                for (Relation relation : relations) {
+                    visit(relation, context);
+                }
+            }
+        }
+
         @Override
         public Void visitSetOp(SetOperationRelation node, Void context) {
             if (!node.hasWithClause()) {
@@ -852,6 +886,9 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlRelations(node.getCommonTableExpressions(), node.getFromRelations(), context);
+            }
             return super.visitUpdateStatement(node, context);
         }
 
@@ -860,6 +897,9 @@ public class AnalyzerUtils {
             Table table = node.getTable();
             TableName tableName = TableName.fromTableRef(node.getTableRef());
             tables.put(tableName, table);
+            if (node.getQueryStatement() == null) {
+                visitParserOwnedDmlRelations(node.getCommonTableExpressions(), node.getUsingRelations(), context);
+            }
             return super.visitDeleteStatement(node, context);
         }
 
@@ -1628,6 +1668,11 @@ public class AnalyzerUtils {
                     groupByClause.getOriGroupingExprs().forEach(expr -> visit(expr, context));
                 }
             }
+        }
+
+        @Override
+        protected boolean shouldVisitParserOwnedDmlRelations() {
+            return collectParserOwnedExpressions;
         }
 
         @Override

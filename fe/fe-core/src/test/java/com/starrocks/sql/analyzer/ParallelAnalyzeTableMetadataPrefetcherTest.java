@@ -92,9 +92,11 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
-    void testAcceptsUnanalyzedDmlParsedFromSql(@Injectable MetadataMgr metadataMgr) {
+    void testPrefetchesSourceTablesInUnanalyzedDmlParsedFromSql(@Injectable MetadataMgr metadataMgr) {
         ConnectContext session = newSession("external", "db");
         expectPrefetch(metadataMgr, session, "external", "db", "insert_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "update_source", 1);
+        expectPrefetch(metadataMgr, session, "external", "db", "delete_source", 1);
 
         Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
                 parse("insert into default_catalog.db.target select * from external.db.insert_source", session),
@@ -105,6 +107,21 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
                 session, metadataMgr));
         Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
                 parse("delete from default_catalog.db.target using external.db.delete_source source where true", session),
+                session, metadataMgr));
+
+        new FullVerifications(metadataMgr) {
+        };
+    }
+
+    @Test
+    void testPrefetchesDmlCteSourceWithoutPrefetchingCteReference(@Injectable MetadataMgr metadataMgr) {
+        ConnectContext session = newSession("external", "db");
+        expectPrefetch(metadataMgr, session, "external", "db", "update_cte_source", 1);
+
+        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
+                parse("with update_cte as (select * from external.db.update_cte_source) " +
+                        "update default_catalog.db.target set value = source.value " +
+                        "from update_cte source where true", session),
                 session, metadataMgr));
 
         new FullVerifications(metadataMgr) {
