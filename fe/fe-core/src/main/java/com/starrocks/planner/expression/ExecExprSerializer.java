@@ -121,7 +121,7 @@ public final class ExecExprSerializer {
 
         TExprNode node = new TExprNode();
 
-        node.type = TypeSerializer.toThrift(exprType);
+        node.type = TypeDescSharingScope.toThrift(exprType);
         node.num_children = expr.getNumChildren();
         node.setHas_nullable_child(expr.hasNullableChild());
         node.setIs_nullable(expr.isNullable());
