@@ -25,6 +25,7 @@
 #include "cache/datacache.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
@@ -727,6 +728,43 @@ TEST_F(PageIOTest, test_pages_from_local_disk_follows_each_read) {
         read_page(read_file.get());
         EXPECT_EQ(0, _stats.pages_from_local_disk);
     }
+}
+
+TEST_F(PageIOTest, test_coalesced_read_does_not_count_neighbor_hits) {
+    // Two pages of the same size, one per cache block: page A misses, page B is cached.
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_coalesced_pages"));
+    OwnedSlice page_a = _build_data_page({1, 2, 3});
+    OwnedSlice page_b = _build_data_page({4, 5, 6});
+    PageFooterPB footer_a = _build_page_footer(page_a.slice().size);
+    PageFooterPB footer_b = _build_page_footer(page_b.slice().size);
+    PagePointer pp_a;
+    PagePointer pp_b;
+    std::vector<Slice> body_a{page_a.slice()};
+    std::vector<Slice> body_b{page_b.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), body_a, footer_a, &pp_a));
+    ASSERT_OK(PageIO::write_page(write_file.get(), body_b, footer_b, &pp_b));
+    ASSERT_OK(write_file->close());
+    ASSERT_EQ(pp_a.size, pp_b.size);
+    const int64_t file_size = write_file->size();
+    ASSIGN_OR_ASSERT_FAIL(auto read_file, _fs->new_random_access_file("/test_coalesced_pages"));
+
+    auto cache_stream =
+            std::make_shared<BlockCacheAccountingStream>(read_file.get(), pp_b.offset, std::set<int64_t>{1, 2});
+    SharedBufferedInputStream coalesced(cache_stream, "/test_coalesced_pages", file_size);
+    ASSERT_OK(coalesced.set_io_ranges({SharedBufferedInputStream::IORange(pp_a.offset, pp_a.size),
+                                       SharedBufferedInputStream::IORange(pp_b.offset, pp_b.size)}));
+
+    // Reading page A fills the merged range, so the local delta (page B's hit) covers a whole page
+    // even though page A itself missed.
+    PageReadOptions ro = _build_read_options(&coalesced, pp_a.offset, pp_a.size, false);
+    PageHandle handle;
+    Slice body;
+    PageFooterPB read_footer;
+    ASSERT_OK(PageIO::read_and_decompress_page(ro, &handle, &body, &read_footer));
+    ASSERT_GE(cache_stream->get_io_stats_snapshot().bytes_read_local_disk, static_cast<int64_t>(pp_a.size));
+    EXPECT_EQ(0, _stats.pages_from_local_disk);
 }
 
 } // namespace starrocks
