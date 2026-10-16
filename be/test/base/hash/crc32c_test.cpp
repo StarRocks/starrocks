@@ -286,19 +286,24 @@ TEST(Crc32cTest, ActiveImplementationReported) {
     const char* impl = starrocks::crc32c::ActiveImplementationName();
     ASSERT_NE(impl, nullptr);
 #if defined(__ARM_NEON) && defined(__aarch64__)
+#if defined(__ARM_FEATURE_CRC32)
+    const char* expected_fallback = "arm_crc32c_scalar";
+#else
+    const char* expected_fallback = "software";
+#endif
 #if defined(USE_ARM_PMULL)
     if (starrocks::crc32c::HasArmPmull()) {
         EXPECT_STREQ(impl, "pmull");
         {
             ScopedPmullOverride override_disable(true);
-            EXPECT_STREQ(starrocks::crc32c::ActiveImplementationName(), "arm_crc32c_scalar");
+            EXPECT_STREQ(starrocks::crc32c::ActiveImplementationName(), expected_fallback);
         }
         EXPECT_STREQ(starrocks::crc32c::ActiveImplementationName(), "pmull");
     } else {
-        EXPECT_STREQ(impl, "arm_crc32c_scalar");
+        EXPECT_STREQ(impl, expected_fallback);
     }
 #else
-    EXPECT_STREQ(impl, "arm_crc32c_scalar");
+    EXPECT_STREQ(impl, expected_fallback);
 #endif
 #elif defined(__SSE4_2__)
     EXPECT_STREQ(impl, "sse42_simd");
