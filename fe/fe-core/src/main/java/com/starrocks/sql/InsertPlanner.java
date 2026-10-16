@@ -44,6 +44,7 @@ import com.starrocks.load.Load;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
@@ -656,7 +657,11 @@ public class InsertPlanner {
 
                 if (targetTable instanceof OlapTable) {
                     sinkFragment.setHasOlapTableSink();
-                    sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                    boolean hasFileScanNode = sinkFragment.collectScanNodes().values().stream()
+                            .anyMatch(scanNode -> scanNode instanceof FileScanNode);
+                    if (!hasFileScanNode) {
+                        sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                    }
                 } else if (targetTable.isHiveTable()) {
                     sinkFragment.setHasHiveTableSink();
                 } else if (targetTable.isIcebergTable()) {
