@@ -686,21 +686,6 @@ public class StatisticExecutor {
                 }
             } else {
                 // for external table
-                ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
-                        statsJob.getCatalogName(), db.getFullName(), table.getName());
-                if (externalBasicStatsMeta == null) {
-                    externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
-                            table.getName(), Lists.newArrayList(statsJob.getColumnNames()), statsJob.getAnalyzeType(),
-                            analyzeStatus.getEndTime(), statsJob.getProperties());
-                } else {
-                    externalBasicStatsMeta = externalBasicStatsMeta.clone();
-                    externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
-                    externalBasicStatsMeta.setProperties(statsJob.getProperties());
-                    externalBasicStatsMeta.setAnalyzeType(statsJob.getAnalyzeType());
-                    // set columns to the latest collect job's columns
-                    externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
-                }
-
                 Set<Long> sampledPartitions = new HashSet<>();
                 int allPartitionSize = -1;
                 if (statsJob.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE) {
@@ -708,32 +693,6 @@ public class StatisticExecutor {
                     sampledPartitions = sampleStatsJob.getSampledPartitionsHashValue();
                     allPartitionSize = sampleStatsJob.getAllPartitionSize();
                 }
-<<<<<<< HEAD
-                for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
-                    // merge sampled partitions
-                    if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
-                        sampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
-                                getSampledPartitionsHashValue());
-                    }
-                    ColumnStatsMeta meta =
-                            new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime(),
-                                    sampledPartitions, allPartitionSize);
-                    externalBasicStatsMeta.addColumnStatsMeta(meta);
-                }
-                // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
-                // during journal replay without resolving external table metadata. If the UUID can't be
-                // resolved, leave it null and replay will fall back to the metadata-based path.
-                try {
-                    externalBasicStatsMeta.setTableUUID(table.getUUID());
-                } catch (Exception e) {
-                    LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
-                            statsJob.getCatalogName(), db.getFullName(), table.getName(), e);
-                }
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
-                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                        .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
-                                db.getFullName(), table.getName(), statsJob.getColumnNames(), refreshAsync);
-=======
 
                 StatsConstants.AnalyzeType commitAnalyzeType = statsJob.getAnalyzeType();
                 List<String> columnsToCommit = statsJob.getColumnNames();
@@ -759,10 +718,10 @@ public class StatisticExecutor {
                         // FULL metadata means "these rows are the whole table" and carries no partition set at
                         // all, so it cannot describe a run that covered only part of it. Record this run as
                         // SAMPLE over the partitions it did collect - except for columns that are already
-                        // recorded as FULL, which commitExternalColumnStatsMeta leaves alone: their previous
-                        // run's rows still cover the partitions this one missed, so the table is still fully
-                        // covered for them and a partial partition set would become a denominator far smaller
-                        // than the rows it is dividing.
+                        // recorded as FULL, which are left alone below: their previous run's rows still cover
+                        // the partitions this one missed, so the table is still fully covered for them and a
+                        // partial partition set would become a denominator far smaller than the rows it is
+                        // dividing.
                         commitAnalyzeType = StatsConstants.AnalyzeType.SAMPLE;
                         allPartitionSize = externalJob.getRequestedPartitionCount();
                     }
@@ -773,132 +732,71 @@ public class StatisticExecutor {
                             ListUtils.emptyIfNull(statsJob.getColumnNames()).size());
                 }
 
-                commitExternalColumnStatsMeta(db, table, statsJob.getCatalogName(), statsJob.getColumnNames(),
-                        columnsToCommit, commitAnalyzeType, analyzeStatus.getEndTime(),
-                        statsJob.getProperties(), sampledPartitions, fullCoveragePartitions, allPartitionSize,
-                        collectedPartitionsByColumn, refreshAsync);
->>>>>>> 508ba4f ([BugFix] Keep collected external statistics when a single collection query fails (#79518))
+                ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
+                        statsJob.getCatalogName(), db.getFullName(), table.getName());
+                if (externalBasicStatsMeta == null) {
+                    externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(), db.getFullName(),
+                            table.getName(), Lists.newArrayList(statsJob.getColumnNames()), commitAnalyzeType,
+                            analyzeStatus.getEndTime(), statsJob.getProperties());
+                } else {
+                    externalBasicStatsMeta = externalBasicStatsMeta.clone();
+                    externalBasicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
+                    externalBasicStatsMeta.setProperties(statsJob.getProperties());
+                    externalBasicStatsMeta.setAnalyzeType(commitAnalyzeType);
+                    // set columns to the latest collect job's columns
+                    externalBasicStatsMeta.setColumns(Lists.newArrayList(statsJob.getColumnNames()));
+                }
+
+                for (String column : ListUtils.emptyIfNull(columnsToCommit)) {
+                    ColumnStatsMeta existing = externalBasicStatsMeta.getColumnStatsMetaMap().get(column);
+                    if (collectedPartitionsByColumn.containsKey(column) && existing != null
+                            && existing.getType() == StatsConstants.AnalyzeType.FULL) {
+                        // This run covered only part of the table for this column, but the column is already
+                        // recorded as fully collected - and it still is: the rows an earlier complete run wrote
+                        // for the partitions this run missed are still there, so the whole table is covered, just
+                        // at mixed freshness. Replacing that with this run's partition set would hand the read
+                        // path a denominator counting a handful of partitions while the rows it divides span all
+                        // of them. The job's failure budget does not prevent this: it counts queries across the
+                        // whole job, while coverage is per column, so a wide table can lose nearly every
+                        // partition of one column group and still be well inside the budget.
+                        LOG.info("Keeping FULL statistics metadata for column {} of table {}.{}.{}: this run " +
+                                        "collected {} of its partitions and the rest are still covered by the " +
+                                        "previous run", column, statsJob.getCatalogName(), db.getFullName(),
+                                table.getName(), collectedPartitionsByColumn.get(column).size());
+                        continue;
+                    }
+
+                    // `collectedPartitionsByColumn` overrides the job-wide `sampledPartitions` for the columns it
+                    // names (the coverage a job with tolerated failures actually achieved); then merge the
+                    // partitions earlier runs already recorded for this column.
+                    Set<Long> columnSampledPartitions = new HashSet<>(
+                            collectedPartitionsByColumn.getOrDefault(column, sampledPartitions));
+                    if (existing != null) {
+                        columnSampledPartitions.addAll(existing.getSampledPartitionsHashValue());
+                    }
+                    ColumnStatsMeta meta =
+                            new ColumnStatsMeta(column, commitAnalyzeType, analyzeStatus.getEndTime(),
+                                    columnSampledPartitions, allPartitionSize);
+                    externalBasicStatsMeta.addColumnStatsMeta(meta);
+                }
+                // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
+                // during journal replay without resolving external table metadata. If the UUID can't be
+                // resolved, leave it null and replay will fall back to the metadata-based path.
+                try {
+                    externalBasicStatsMeta.setTableUUID(table.getUUID());
+                } catch (Exception e) {
+                    LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
+                            statsJob.getCatalogName(), db.getFullName(), table.getName(), e);
+                }
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                        .refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
+                                db.getFullName(), table.getName(), columnsToCommit, refreshAsync);
             }
         }
         return analyzeStatus;
     }
 
-<<<<<<< HEAD
-=======
-    // Durably records ColumnStatsMeta for `columnNamesToCommit` and refreshes the connector stats cache.
-    // Normally called once, for every column in the job, only after the whole job finishes successfully
-    // (see the call site above). ExternalSampleStatisticsCollectJob also calls this directly, right after
-    // its direct-value-column phase (see StatisticUtils#isDirectValuePartitionColumn) completes, so a
-    // later failure in the sampled-column phase can't retroactively erase an already-successful
-    // full-partition scan's metadata. Safe to call twice for the same columns: addColumnStatsMeta
-    // overwrites by column name, so the final post-job call is a harmless re-write for columns already
-    // committed early.
-    //
-    // Direct-value columns are recorded with `fullCoveragePartitions` (honestly "every partition was
-    // sampled for this column") instead of the job's own `sampledPartitions` subset, and with AnalyzeType
-    // FULL - unless `collectedPartitionsByColumn` shows this run did not actually reach every partition. This makes the standard SAMPLE row-count extrapolation formula in
-    // connector.statistics.StatisticsUtils#estimateColumnStatistics a 1x no-op for them if it's ever
-    // reached, and lets FULL's early-return handle the common case - without any special-cased read-time
-    // bypass. Legacy metadata written before this distinction existed keeps its own (genuinely partial)
-    // sampledPartitions and is extrapolated normally, so it is never silently treated as already-complete.
-    //
-    // `allJobColumnNames` is the job's full declared column set (used for ExternalBasicStatsMeta's own
-    // bookkeeping, e.g. setColumns); `columnNamesToCommit` is the (possibly smaller) subset to actually
-    // build/store a ColumnStatsMeta entry for in this call.
-    void commitExternalColumnStatsMeta(Database db, Table table, String catalogName, List<String> allJobColumnNames,
-                                       List<String> columnNamesToCommit, StatsConstants.AnalyzeType jobAnalyzeType,
-                                       LocalDateTime updateTime, Map<String, String> properties,
-                                       Set<Long> sampledPartitions, Set<Long> fullCoveragePartitions,
-                                       int allPartitionSize, boolean refreshAsync) {
-        commitExternalColumnStatsMeta(db, table, catalogName, allJobColumnNames, columnNamesToCommit, jobAnalyzeType,
-                updateTime, properties, sampledPartitions, fullCoveragePartitions, allPartitionSize,
-                Collections.emptyMap(), refreshAsync);
-    }
-
-    // `collectedPartitionsByColumn` overrides `sampledPartitions` for the columns it names. It is how a job
-    // that tolerated a failed collection query reports the coverage it actually achieved, which differs per
-    // column because one partition is read by several independently-failing column-group queries. Empty for
-    // a job that collected everything it set out to, where the job-wide `sampledPartitions` applies to every
-    // column.
-    void commitExternalColumnStatsMeta(Database db, Table table, String catalogName, List<String> allJobColumnNames,
-                                       List<String> columnNamesToCommit, StatsConstants.AnalyzeType jobAnalyzeType,
-                                       LocalDateTime updateTime, Map<String, String> properties,
-                                       Set<Long> sampledPartitions, Set<Long> fullCoveragePartitions,
-                                       int allPartitionSize, Map<String, Set<Long>> collectedPartitionsByColumn,
-                                       boolean refreshAsync) {
-        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
-        ExternalBasicStatsMeta externalBasicStatsMeta = analyzeMgr.getExternalTableBasicStatsMeta(
-                catalogName, db.getFullName(), table.getName());
-        if (externalBasicStatsMeta == null) {
-            externalBasicStatsMeta = new ExternalBasicStatsMeta(catalogName, db.getFullName(),
-                    table.getName(), Lists.newArrayList(allJobColumnNames), jobAnalyzeType, updateTime, properties);
-        } else {
-            externalBasicStatsMeta = externalBasicStatsMeta.clone();
-            externalBasicStatsMeta.setUpdateTime(updateTime);
-            externalBasicStatsMeta.setProperties(properties);
-            externalBasicStatsMeta.setAnalyzeType(jobAnalyzeType);
-            // set columns to the latest collect job's columns
-            externalBasicStatsMeta.setColumns(Lists.newArrayList(allJobColumnNames));
-        }
-
-        for (String column : ListUtils.emptyIfNull(columnNamesToCommit)) {
-            ColumnStatsMeta existing = externalBasicStatsMeta.getColumnStatsMetaMap().get(column);
-            if (collectedPartitionsByColumn.containsKey(column) && existing != null
-                    && existing.getType() == StatsConstants.AnalyzeType.FULL) {
-                // This run covered only part of the table for this column, but the column is already recorded
-                // as fully collected - and it still is: the rows an earlier complete run wrote for the
-                // partitions this run missed are still there, so the whole table is covered, just at mixed
-                // freshness. Replacing that with this run's partition set would hand the read path a
-                // denominator counting a handful of partitions while the rows it divides span all of them.
-                // The job's failure budget does not prevent this: it counts queries across the whole job,
-                // while coverage is per column, so a wide table can lose nearly every partition of one column
-                // group and still be well inside the budget.
-                LOG.info("Keeping FULL statistics metadata for column {} of table {}.{}.{}: this run collected " +
-                                "{} of its partitions and the rest are still covered by the previous run",
-                        column, catalogName, db.getFullName(), table.getName(),
-                        collectedPartitionsByColumn.get(column).size());
-                continue;
-            }
-
-            // A direct-value column is normally recorded as covering every partition, because that is what its
-            // scan does. An entry in collectedPartitionsByColumn says this run did not manage that, and then
-            // the measured coverage wins: claiming full coverage for a column that lost partitions would tell
-            // the read path to use its row count and NDV as complete, with nothing to correct them.
-            boolean isDirectValue = StatisticUtils.isDirectValuePartitionColumn(table, column)
-                    && !collectedPartitionsByColumn.containsKey(column);
-            Set<Long> columnSampledPartitions;
-            if (isDirectValue) {
-                // Full coverage should always just be full coverage - no merging with whatever
-                // (necessarily smaller) sampled-partition set a prior, non-eligible-era run recorded.
-                columnSampledPartitions = fullCoveragePartitions;
-            } else {
-                columnSampledPartitions = new HashSet<>(
-                        collectedPartitionsByColumn.getOrDefault(column, sampledPartitions));
-                if (externalBasicStatsMeta.getColumnStatsMetaMap().containsKey(column)) {
-                    columnSampledPartitions.addAll(externalBasicStatsMeta.getColumnStatsMeta(column).
-                            getSampledPartitionsHashValue());
-                }
-            }
-            StatsConstants.AnalyzeType columnAnalyzeType = isDirectValue ? StatsConstants.AnalyzeType.FULL : jobAnalyzeType;
-            ColumnStatsMeta meta =
-                    new ColumnStatsMeta(column, columnAnalyzeType, updateTime, columnSampledPartitions, allPartitionSize);
-            externalBasicStatsMeta.addColumnStatsMeta(meta);
-        }
-        // Persist the table UUID (best-effort) so followers can invalidate the connector stats cache
-        // during journal replay without resolving external table metadata. If the UUID can't be
-        // resolved, leave it null and replay will fall back to the metadata-based path.
-        try {
-            externalBasicStatsMeta.setTableUUID(table.getUUID());
-        } catch (Exception e) {
-            LOG.warn("Failed to resolve table UUID for external basic stats meta, table: {}.{}.{}",
-                    catalogName, db.getFullName(), table.getName(), e);
-        }
-        analyzeMgr.addExternalBasicStatsMeta(externalBasicStatsMeta);
-        analyzeMgr.refreshConnectorTableBasicStatisticsCache(catalogName, db.getFullName(), table.getName(),
-                columnNamesToCommit, refreshAsync);
-    }
-
->>>>>>> 508ba4f ([BugFix] Keep collected external statistics when a single collection query fails (#79518))
     public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
         List<TResultBatch> sqlResult = executeDQL(context, sql);
         try {

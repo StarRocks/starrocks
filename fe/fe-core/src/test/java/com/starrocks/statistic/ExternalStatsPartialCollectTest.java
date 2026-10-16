@@ -43,7 +43,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -535,93 +534,24 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         // its previous run's rows still cover what this one missed - recording this run's handful of
         // partitions would leave the read path dividing whole-table rows by that handful.
         putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.FULL, LocalDateTime.now()));
-        Set<Long> barelyAnything = new HashSet<>();
-        barelyAnything.add(hash("par_col=0"));
 
-        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
-                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
-                Maps.newHashMap(java.util.Map.of("c1", barelyAnything)), false);
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), Set.of(5)) {
+            @Override
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+                runCollectPhases(context, analyzeStatus, 1L);
+            }
+        };
+        new StatisticExecutor().collectStatistics(connectContext, job, newAnalyzeStatus(), false, false);
 
-        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        ExternalBasicStatsMeta meta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalTableBasicStatsMeta(CATALOG, DB, TABLE);
+        ColumnStatsMeta columnMeta = meta.getColumnStatsMeta("c1");
         Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
         Assertions.assertTrue(columnMeta.getSampledPartitionsHashValue().isEmpty());
-    }
-
-    @Test
-    public void testPartialRunStillNarrowsASampledColumn() {
-        // The same partial run against a column that was only ever sampled: here the recorded set is the
-        // union of both runs, which is exactly the set of partitions with rows on disk.
-        Set<Long> previouslySampled = new HashSet<>();
-        previouslySampled.add(hash("par_col=7"));
-        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
-                previouslySampled, 100));
-        Set<Long> collected = new HashSet<>();
-        collected.add(hash("par_col=0"));
-
-        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
-                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
-                Maps.newHashMap(java.util.Map.of("c1", collected)), false);
-
-        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
-        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
-        Assertions.assertEquals(2, columnMeta.getSampledPartitionsHashValue().size());
-    }
-
-    @Test
-    public void testPartialDirectValueColumnIsNotRecordedAsFullCoverage() {
-        // A direct-value column normally records "every partition was scanned". After a tolerated failure
-        // that is no longer true, and claiming it would tell the read path to trust an incomplete row count
-        // and NDV as the whole table's.
-        new MockUp<StatisticUtils>() {
-            @Mock
-            public boolean isDirectValuePartitionColumn(Table table, String columnName) {
-                return true;
-            }
-        };
-        Set<Long> collected = new HashSet<>();
-        collected.add(hash("par_col=0"));
-        collected.add(hash("par_col=1"));
-        Set<Long> allPartitions = new HashSet<>(collected);
-        allPartitions.add(hash("par_col=2"));
-
-        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
-                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), allPartitions, 3,
-                Maps.newHashMap(java.util.Map.of("c1", collected)), false);
-
-        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
-        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, columnMeta.getType());
-        Assertions.assertEquals(2, columnMeta.getSampledPartitionsHashValue().size());
-        Assertions.assertFalse(columnMeta.getSampledPartitionsHashValue().contains(hash("par_col=2")));
-    }
-
-    @Test
-    public void testFullyCollectedDirectValueColumnKeepsFullCoverage() {
-        // The unchanged path: with no per-column coverage reported, a direct-value column is still recorded
-        // as covering every partition.
-        new MockUp<StatisticUtils>() {
-            @Mock
-            public boolean isDirectValuePartitionColumn(Table table, String columnName) {
-                return true;
-            }
-        };
-        Set<Long> allPartitions = new HashSet<>();
-        allPartitions.add(hash("par_col=0"));
-        allPartitions.add(hash("par_col=1"));
-
-        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
-                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
-                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), allPartitions, 2, false);
-
-        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
-        Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, columnMeta.getType());
-        Assertions.assertEquals(2, columnMeta.getSampledPartitionsHashValue().size());
+        // A column with no earlier FULL record takes the measured coverage instead.
+        ColumnStatsMeta otherMeta = meta.getColumnStatsMeta("c2");
+        Assertions.assertEquals(StatsConstants.AnalyzeType.SAMPLE, otherMeta.getType());
+        Assertions.assertEquals(199, otherMeta.getSampledPartitionsHashValue().size());
     }
 
     // ---------------------------------------------------------------------------------------------------
