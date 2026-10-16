@@ -184,6 +184,14 @@ public class AnalyzerUtilsTest {
     }
 
     @Test
+    public void testCollectAllTableVisitsParserExpressionHook() throws Exception {
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("select * from relation_src",
+                starRocksAssert.getCtx());
+
+        Assertions.assertEquals(1, AnalyzerUtils.collectAllTable(statement).size());
+    }
+
+    @Test
     public void testCollectAllTableAndViewRelationNames() throws Exception {
         StatementBase insertStmt = UtFrameUtils.parseStmtWithNewParser(
                 "insert into relation_target " + "select src.k1 from relation_view rv " +
