@@ -21,7 +21,12 @@
 #define BOOST_CSTDFLOAT_NO_LIBQUADMATH_SUPPORT
 // Boost 1.80's default is no rescaling. Keep the precision contract explicit.
 #define BOOST_GEOMETRY_NO_ROBUSTNESS
+// Boost 1.80's sort_by_side.hpp reads a point that copy_segment_points() leaves unset only when it
+// fails, which cannot happen for overlay inputs; GCC 14 still reports -Wmaybe-uninitialized there.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #include <boost/geometry.hpp>
+#pragma GCC diagnostic pop
 
 #include "geo/geo_planar.h"
 

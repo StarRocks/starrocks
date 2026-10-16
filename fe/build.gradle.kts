@@ -81,10 +81,10 @@ subprojects {
         set("protobuf-java.version", "3.25.9")
         set("puppycrawl.version", "10.21.1")
         set("spark.version", "3.5.7")
-        set("staros.version", "4.2-rc5")
+        set("staros.version", "4.2-rc6")
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
-        set("lz4-java.version", "1.10.1")
+        set("lz4-java.version", "1.11.4")
         // var sync end
     }
 
@@ -109,7 +109,6 @@ subprojects {
             implementation("com.aliyun:datalake20200710:2.0.12")
             implementation("com.baidu:jprotobuf-precompile-plugin:2.2.12")
             implementation("com.baidu:jprotobuf-rpc-common:1.9")
-            implementation("com.baidu:jprotobuf-rpc-core:4.2.1")
             implementation("com.clickhouse:clickhouse-jdbc:0.4.6")
             implementation("com.esotericsoftware:kryo-shaded:4.0.2")
             implementation("com.fasterxml.jackson.core:jackson-annotations:${project.ext["jackson-annotations.version"]}")
@@ -147,6 +146,7 @@ subprojects {
             implementation("com.tencentcloudapi:tencentcloud-sdk-java-kms:3.1.1471")
             implementation("com.starrocks:fe-testing:${project.version}")
             implementation("com.starrocks:hive-udf:${project.version}")
+            implementation("com.starrocks:jprotobuf-rpc-core:1.0.0")
             implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
             implementation("com.starrocks:fe-utils:${project.version}")
             implementation("com.starrocks:spark-dpp:${project.version}")

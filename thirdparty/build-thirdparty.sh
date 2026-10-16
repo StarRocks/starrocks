@@ -1094,7 +1094,6 @@ build_h3() {
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF \
-        -DH3_ALLOC_PREFIX=starrocks_h3_ \
         -DBUILD_TESTING=OFF \
         -DBUILD_BENCHMARKS=OFF \
         -DBUILD_FUZZERS=OFF \
@@ -1960,6 +1959,12 @@ build_libnl() {
 build_nsjail() {
     check_if_source_exist $NSJAIL_SOURCE
     cd $TP_SOURCE_DIR/$NSJAIL_SOURCE
+
+    # Kafel's Makefile gives parser.c/parser.h and lexer.c/lexer.h separate
+    # recipes that write the same files. Parallel make can run bison or flex
+    # twice and compile an incomplete generated header. Build Kafel serially
+    # before the parallel nsjail build.
+    LDFLAGS="" CFLAGS=-fPIE make -j1 -C kafel
 
     # nsjail resolves protobuf and libnl through pkg-config, which here would find a
     # host protobuf or nothing at all. Hand it the ones built above instead: PKG_CONFIG

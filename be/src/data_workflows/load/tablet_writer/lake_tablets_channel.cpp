@@ -48,6 +48,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 #include "storage/lake/lake_proto_normalizer.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
@@ -169,6 +170,32 @@ private:
                 } else {
                     update_status(st);
                 }
+            }
+        }
+
+        // NOT thread-safe
+        // Hands the load coordinator shard infos so it writes each partition's combined txn log without
+        // a starmgr RPC, even when it owns no tablet of the partition. See TabletManager::borrow_shard_info.
+        //
+        // Groups |logs| by partition and adds ONE shard info per partition: that of the first tablet in
+        // the partition this node owns. One is enough only because all tablets of a partition share the
+        // same storage location and access info (the partition directory and its storage volume). The
+        // combined txn log already depends on that: it is one file for the whole partition, written under
+        // the directory of one of its tablets (the coordinator anchors on the tablet handed over here)
+        // and read by publish under the directory of each tablet it publishes.
+        void add_shard_infos(lake::TabletManager* tablet_mgr, const std::vector<TxnLogPtr>& logs) {
+            std::unordered_set<int64_t> partitions;
+            for (const auto& log : logs) {
+                if (partitions.count(log->partition_id()) > 0) {
+                    continue;
+                }
+                // Empty when this node only helped write the tablet (multi-node write) without owning it.
+                auto info = tablet_mgr->export_shard_info(log->tablet_id());
+                if (info.empty()) {
+                    continue;
+                }
+                partitions.insert(log->partition_id());
+                _response->mutable_lake_tablet_data()->add_shard_infos(std::move(info));
             }
         }
 
@@ -842,9 +869,15 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         RuntimeMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
+                    if (config::lake_enable_tablet_location_handoff) {
+                        context->add_shard_infos(_tablet_manager, my_logs);
+                    }
                 } else {
                     // Legacy path: sender 0 takes every log.
                     context->add_txn_logs(all_logs);
+                    if (config::lake_enable_tablet_location_handoff) {
+                        context->add_shard_infos(_tablet_manager, all_logs);
+                    }
                 }
             }
             // else: woke up but post-snap shows I'm not the coordinator;

@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Optional;
 
 public interface IDictManager {
-    boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
+    // Takes the scanned table rather than its id so the table's database can be resolved from the table
+    // itself: a view's base tables may live in a database the statement never names.
+    boolean hasGlobalDict(OlapTable table, ColumnId columnName, long versionTime);
 
     void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
 

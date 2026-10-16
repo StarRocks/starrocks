@@ -107,8 +107,8 @@ public class CreateTableAnalyzer {
 
         // A CTAS into an external catalog had both answers fetched before the meta lock; see
         // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
-        PreResolvedWriteTargets.CreateTarget preResolved = context.getPreResolvedWriteTargets()
-                .takeCreateTarget(com.starrocks.catalog.TableName.fromTableRef(tableRef));
+        PreResolvedState.CreateTarget preResolved = context.getPreResolvedState().take(
+                PreResolvedState.CREATE_TARGET, com.starrocks.catalog.TableName.fromTableRef(tableRef));
         Database dbObj = preResolved != null ? preResolved.db()
                 : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
         if (dbObj == null) {

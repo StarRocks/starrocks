@@ -40,47 +40,6 @@ This topic introduces the following types of BE configurations:
 
 ## Query
 
-### H3 resource limits
-
-These mutable positive BE settings limit one H3 function row. Exceeding a setting returns an error, not a partial result. See [H3 functions](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) for signatures and the center-fill model.
-
-#### h3_max_cells_per_row
-
-- Default: 100000
-- Is mutable: Yes
-- Limit: cells / pre-deduplication expansion slots.
-
-#### h3_max_grid_disk_k
-
-- Default: 128
-- Is mutable: Yes
-- Limit: grid steps.
-
-#### h3_max_polygon_vertices
-
-- Default: 10000
-- Is mutable: Yes
-- Limit: coordinate positions including ring closure.
-
-#### h3_max_polygon_components
-
-- Default: 256
-- Is mutable: Yes
-- Limit: polygon components including empty components.
-
-#### h3_max_working_bytes
-
-- Default: 67108864
-- Is mutable: Yes
-- Limit: bytes of per-worker preparation and temporary buffers.
-
-#### h3_max_estimated_work_per_row
-
-- Default: 10000000
-- Is mutable: Yes
-- Limit: sum of estimated slots times (component positions + 1).
-
-
 ### ai_function_request_timeout_ms
 
 - Default: 600000
@@ -109,6 +68,16 @@ These mutable positive BE settings limit one H3 function row. Exceeding a settin
 - Valid values: Positive integers
 - Is mutable: Yes
 - Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
+- Introduced in: -
+
+### ai_function_max_input_file_bytes
+
+- Default: 10485760
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum raw byte size of each inline FILE passed to `ai_complete` or `ai_embed`, checked before AI-owned payload copying and Base64 encoding. The default is 10 MiB. Increase it only when the selected provider and model accept larger inputs. This limit does not control scan or chunk materialization; query memory tracking still applies to those allocations and to AI payloads. Invalid or oversized inline inputs follow `ai_function_on_error`. A newly opened AI fragment/operator captures this value in its immutable runtime snapshot; an already-open fragment retains its snapshot. Changes require no BE restart.
 - Introduced in: -
 
 ### ai_function_worker_thread_num
@@ -1133,6 +1102,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Unit: Hours
 - Is mutable: Yes
 - Description: The time for which data loading logs are reserved.
+- Introduced in: -
+
+### load_sink_close_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
 - Introduced in: -
 
 ### enable_rejected_record_sync

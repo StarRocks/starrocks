@@ -69,6 +69,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -79,7 +80,6 @@
 #include "storage/lake/tablet_virtual_merge.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
 #include "storage/rowset/segment.h"
@@ -166,13 +166,13 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
         // PK index major compaction always runs on the parallel manager, so wire in the process-wide
         // one and point it at this fixture's tablet manager, the same way TestBase does.
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {
-            _update_manager->set_parallel_compact_mgr(parallel_compact_mgr);
+            _primary_key_manager->set_parallel_compact_mgr(parallel_compact_mgr);
             parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_manager.get());
         }
 
@@ -2212,16 +2212,16 @@ protected:
                                             const std::vector<int32_t>& deleted_keys) {
         auto target = std::make_shared<TabletMetadataPB>(result.published.at(result.target_tablet_id));
         ASSERT_EQ(0, target->sstable_meta().sstables_size()) << "fallback must enter native index rebuild";
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         expect_lifecycle_oracle(target, initial_rows, {});
 
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         ASSIGN_OR_ABORT(auto after_dml, publish_followup_upsert_delete(result.target_tablet_id, result.target_version,
                                                                        /*upsert_key=*/10, /*upsert_value=*/1010,
                                                                        /*delete_key=*/60));
         expect_lifecycle_oracle(after_dml, rows_after_dml, deleted_keys);
 
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         ASSIGN_OR_ABORT(auto reopened_after_dml,
                         _tablet_manager->get_tablet_metadata(result.target_tablet_id, after_dml->version()));
         expect_lifecycle_oracle(reopened_after_dml, rows_after_dml, deleted_keys);
@@ -2231,14 +2231,14 @@ protected:
         EXPECT_EQ(reopened_after_dml->version() + 1, compacted->version());
         expect_lifecycle_oracle(compacted, rows_after_dml, deleted_keys);
 
-        _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
+        _primary_key_manager->unload_and_remove_primary_index(result.target_tablet_id);
         ASSIGN_OR_ABORT(auto reopened_compacted,
                         _tablet_manager->get_tablet_metadata(result.target_tablet_id, compacted->version()));
         expect_lifecycle_oracle(reopened_compacted, rows_after_dml, deleted_keys);
     }
 
     void assert_published_sstables_reopen(const TabletMetadataPtr& metadata) {
-        auto* block_cache = _update_manager->block_cache();
+        auto* block_cache = _primary_key_manager->block_cache();
         ASSERT_NE(nullptr, block_cache);
         for (const auto& sstable : metadata->sstable_meta().sstables()) {
             auto opened = lake::PersistentIndexSstable::new_sstable(
@@ -2904,7 +2904,7 @@ protected:
         MutableColumns columns;
         columns.push_back(Int32Column::create());
         columns.push_back(Int32Column::create());
-        RETURN_IF_ERROR(_update_manager->get_column_values(params, {0, 1}, false, rowids_by_rssid, &columns));
+        RETURN_IF_ERROR(_primary_key_manager->get_column_values(params, {0, 1}, false, rowids_by_rssid, &columns));
         if (columns[0]->size() != expected.size() || columns[1]->size() != expected.size()) {
             return Status::Corruption("cold PK physical row resolution has the wrong cardinality");
         }
@@ -2927,7 +2927,7 @@ protected:
     // Segment filenames and bundle offsets remain physical identity; generated sidecar
     // names, projected RSSIDs and the SST representation deliberately do not.
     StatusOr<std::string> semantic_reshard_signature(const TabletMetadataPtr& metadata) {
-        _update_manager->unload_and_remove_primary_index(metadata->id());
+        _primary_key_manager->unload_and_remove_primary_index(metadata->id());
         _tablet_manager->prune_metacache();
         ASSIGN_OR_RETURN(auto cold, _tablet_manager->get_tablet_metadata(metadata->id(), metadata->version()));
         std::vector<std::string> records;
@@ -2983,8 +2983,8 @@ protected:
                 record += fmt::format("segment={};", original_idx);
                 if (cold->delvec_meta().delvecs().contains(rssid)) {
                     DelVector delvec;
-                    RETURN_IF_ERROR(_update_manager->get_del_vec_in_meta(TabletSegmentId(cold->id(), rssid),
-                                                                         cold->version(), false, &delvec));
+                    RETURN_IF_ERROR(_primary_key_manager->get_del_vec_in_meta(TabletSegmentId(cold->id(), rssid),
+                                                                              cold->version(), false, &delvec));
                     record += "delvec={";
                     if (delvec.roaring() != nullptr) {
                         for (uint32_t rowid : *delvec.roaring()) record += fmt::format("{},", rowid);
@@ -3263,7 +3263,7 @@ protected:
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::PrimaryKeyManager> _primary_key_manager;
 };
 
 inline TxnLogPtr make_op_compaction_log(int64_t source_tablet_id) {

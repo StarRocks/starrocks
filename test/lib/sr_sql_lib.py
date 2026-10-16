@@ -155,6 +155,25 @@ def should_resubmit_alter(last_alter, status, msg, table_name, rollup_index_name
     return actual is not None and str(actual) == name
 
 
+# `install plugin from "http..."` downloads the plugin from an external URL. When that URL cannot be
+# reached the failure says nothing about StarRocks, so the case is skipped instead of failed.
+INSTALL_PLUGIN_URL_RE = re.compile(r'^\s*install\s+plugin\s+from\s+"(https?://([^/":]+)[^"]*)"', re.IGNORECASE)
+NETWORK_ERROR_RE = re.compile(r"timed out|Connection refused|Connection reset|No route to host", re.IGNORECASE)
+
+
+def skip_if_plugin_download_failed(sql, act):
+    """Raise SkipTest if `sql` installs a plugin from a URL and `act` is a network error reaching it."""
+    m = INSTALL_PLUGIN_URL_RE.match(sql)
+    if not m or not str(act).startswith("E: "):
+        return
+    url, host = m.group(1), m.group(2)
+    # UnknownHostException carries only the host name as its message. A 404 carries the full URL
+    # instead; that is not matched, because a removed plugin file is not a transient network issue.
+    if NETWORK_ERROR_RE.search(str(act)) or str(act).endswith("'%s')" % host):
+        log.warning("[plugin download] cannot reach %s, skip case: %s" % (url, act))
+        raise SkipTest("plugin download failed (network): %s" % act)
+
+
 class Filter(logging.Filter):
     """
     Msg filters by log levels
@@ -1492,6 +1511,7 @@ class StarrocksSQLApiLib(object):
     @staticmethod
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
+        skip_if_plugin_download_failed(sql, act)
         # judge if it needs to check
         if exp == "":
             if sql.startswith(SHELL_FLAG):
@@ -3572,13 +3592,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         scan_table_sql = (
             f"SELECT /*+SET_VAR(enable_profile=true,enable_async_profile=false,enable_rewrite_simple_agg_to_meta_scan=false)*/ COUNT(1) FROM {table_name}"
         )
+        # PhySegmentsCount counts each segment once; SegmentsReadCount counts it once per split that reads
+        # it, and is the only one a shared-nothing or older build reports.
         fetch_segments_sql = r"""
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
             )
-            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
-            from profile 
-            where line like "%- SegmentsReadCount%"
+            select coalesce(
+                max(if(line like "%- PhySegmentsCount%",
+                       regexp_extract(line, ".*- PhySegmentsCount: (?:.*\\()?(\\d+)\\)?", 1), null)),
+                max(if(line like "%- SegmentsReadCount%",
+                       regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1), null))) as value
+            from profile
+            where line like "%- PhySegmentsCount%" or line like "%- SegmentsReadCount%"
         """
 
         while timeout > 0:
@@ -3950,6 +3976,24 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             tools.assert_true(
                 str(res["result"]).find(expect) > 0,
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
+            )
+
+    def assert_explain_matches(self, query, *expects):
+        """
+        assert explain result matches every expect pattern
+
+        The contains form covers almost every case. This one is for an expectation that is
+        only meaningful with a wildcard in the middle of it -- a residual predicate on some
+        column of a table, say, where the plan's slot numbering is not what is being
+        asserted and pinning it would make the case brittle.
+        """
+        sql = "explain %s" % query
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            tools.assert_regex(
+                str(res["result"]),
+                expect,
+                "assert expect {} does not match plan {}".format(expect, res["result"]),
             )
 
     def assert_explain_not_contains(self, query, *expects):

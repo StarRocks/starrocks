@@ -591,9 +591,8 @@ void decode_pk_fixed_value(Slice* s, Column& column) {
     }
 }
 
-template <class T>
-Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest,
-                       std::vector<uint8_t>* value_encode_flags) {
+static Status decode_internal(const Schema& schema, const BinaryColumn& bkeys, size_t offset, size_t len, Chunk* dest,
+                              std::vector<uint8_t>* value_encode_flags) {
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);

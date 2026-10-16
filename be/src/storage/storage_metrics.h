@@ -86,6 +86,17 @@ public:
     METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_read_error_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_write_error_total, MetricUnit::REQUESTS);
+    // Shared-data primary key index cache, by component. The memtable, index block and filter gauges add up
+    // to what the cache charges; delvec bytes are held by cached indexes but not charged.
+    METRIC_DEFINE_INT_GAUGE(lake_pk_index_cache_memtable_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(lake_pk_index_cache_index_block_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(lake_pk_index_cache_filter_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(lake_pk_index_cache_delvec_bytes, MetricUnit::BYTES);
+    // A publish or compaction apply that found its tablet's index already loaded counts as a hit; one that had
+    // to load the whole index counts as a load.
+    METRIC_DEFINE_INT_COUNTER(lake_pk_index_cache_hit_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_pk_index_load_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(lake_pk_index_load_duration_us, MetricUnit::MICROSECONDS);
 
     METRIC_DEFINE_INT_COUNTER(readable_blocks_total, MetricUnit::BLOCKS);
     METRIC_DEFINE_INT_COUNTER(writable_blocks_total, MetricUnit::BLOCKS);

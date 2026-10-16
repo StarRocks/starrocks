@@ -14,6 +14,7 @@
 
 package com.starrocks.http;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -44,5 +45,27 @@ public class LogActionTest extends StarRocksHttpTestCase {
     public void testGetSystemInfo() throws IOException {
         Log4jConfig.initLogging();
         sendHttp();
+    }
+
+    @Test
+    public void testLogPathIsHtmlEncoded() throws IOException {
+        String originalLogDir = Config.sys_log_dir;
+        Config.sys_log_dir = "/nonexistent/<b>log_dir</b>";
+        try {
+            Request request = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url("http://localhost:" + HTTP_PORT + QUERY_PLAN_URI)
+                    .build();
+            Response response = networkClient.newCall(request).execute();
+            String body = response.body().string();
+            assertTrue(response.isSuccessful(), body);
+            Assertions.assertFalse(body.contains("<b>log_dir</b>"), body);
+            Assertions.assertTrue(body.contains("Log path is: /nonexistent/&lt;b&gt;log_dir&lt;/b&gt;/fe.warn.log"), body);
+            Assertions.assertTrue(body.contains("Couldn't open log file: /nonexistent/&lt;b&gt;log_dir&lt;/b&gt;/fe.warn.log"),
+                    body);
+        } finally {
+            Config.sys_log_dir = originalLogDir;
+        }
     }
 }

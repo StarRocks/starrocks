@@ -62,7 +62,9 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
                         "    \"database\" = \"mysql_db_test\",\n" +
                         "    \"table\" = \"mysql_table_test\"\n" +
                         ");")
-                .withView("CREATE VIEW lock_scope_view AS SELECT v1, v2 FROM test.t0");
+                .withView("CREATE VIEW lock_scope_view AS SELECT v1, v2 FROM test.t0")
+                .withView("CREATE VIEW lock_scope_cte_view AS WITH t1 AS (SELECT v1, v2 FROM test.t0) "
+                        + "SELECT v1, v2 FROM t1");
     }
 
     private static boolean isCopySafe(String sql) throws Exception {
@@ -117,20 +119,43 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
     /**
      * An internal view is neither native nor an FE transaction participant, but AlterJobMgr.alterView rewrites
      * its definition, schema, comment and security in place under this table's WRITE lock, so it must stay in
-     * the lock set. It still abstains from voting, so the lock is released after analysis as before.
+     * the lock set. It still abstains from voting, so the lock is released after analysis as before. The tables
+     * its body reads are locked with it: planning reads them, before analysis has expanded the view.
      */
     @Test
     public void testInternalViewIsLockableAndAbstains() throws Exception {
         Assertions.assertTrue(
                 GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "lock_scope_view")
                         .isMetaLockTarget());
-        Assertions.assertEquals(Set.of(tableId("test", "lock_scope_view")),
+        Assertions.assertEquals(Set.of(tableId("test", "lock_scope_view"), tableId("test", "t0")),
                 lockedTableIds("select * from test.lock_scope_view"));
         Assertions.assertEquals(Set.of(tableId("test", "lock_scope_view"), tableId("test", "t0")),
                 lockedTableIds("select * from test.lock_scope_view v join test.t0 on v.v1 = test.t0.v1"));
         // Views never reach the collector -- AstTraverser.visitView descends into the expanded query -- so a
         // statement over one stays copy-safe and the lock is released after analysis.
         Assertions.assertTrue(isCopySafe("select * from test.lock_scope_view"));
+    }
+
+    /**
+     * A name a with clause in scope declares is the CTE, not a table of that name: it stays out of the lock set,
+     * in the statement and in a view body. But only where the analyzer reads the CTE -- in its own definition the
+     * name is still the table, and leaving that out would leave a table planning reads unlocked.
+     */
+    @Test
+    public void testACteIsNotLockedAsATable() throws Exception {
+        Assertions.assertEquals(Set.of(tableId("test", "t0")),
+                lockedTableIds("with t1 as (select * from test.t0) select * from t1"));
+        Assertions.assertEquals(Set.of(tableId("test", "t0")),
+                lockedTableIds("select * from (with t1 as (select * from test.t0) select * from t1) s"));
+        Assertions.assertEquals(Set.of(tableId("test", "t1")),
+                lockedTableIds("with t1 as (select * from t1) select * from t1"));
+        Assertions.assertEquals(Set.of(tableId("test", "t0"), tableId("test", "t1")),
+                lockedTableIds("with c as (select * from test.t0) select * from t1"));
+        Assertions.assertEquals(Set.of(tableId("test", "lock_scope_cte_view"), tableId("test", "t0")),
+                lockedTableIds("select * from test.lock_scope_cte_view"));
+        Assertions.assertEquals(Set.of(tableId("test", "tprimary"), tableId("test", "t0")),
+                lockedTableIds("with t1 as (select * from test.t0) "
+                        + "delete from test.tprimary using t1 where tprimary.pk = t1.v1"));
     }
 
     /**

@@ -33,6 +33,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -40,7 +41,6 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -188,7 +188,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // preload primary key table's compaction state
         SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
         Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
     if (config::enable_tablet_write_log) {
@@ -457,13 +457,13 @@ Status VerticalCompactionTask::compact_column_group(
             source_masks->clear();
         }
 
+        const auto& read_stats = reader.compaction_stats();
         if (_total_num_rows > 0 && column_group_size > 0) {
-            _context->progress.update(
-                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                    column_group_size);
+            _context->progress.update((100 * column_group_index + 100 * read_stats.raw_rows_read / _total_num_rows) /
+                                      column_group_size);
         }
         CompactionTaskStats temp_stats;
-        temp_stats.collect(reader.stats());
+        temp_stats.collect(read_stats);
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
         *_context->stats = *_context->stats + diff_stats;
         prev_stats = temp_stats;

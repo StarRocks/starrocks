@@ -23,11 +23,18 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.CredentialMask;
 import com.starrocks.common.util.PropertyAnalyzer;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.Logger;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +42,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class ConfigTest {
     private final Config config = new Config();
@@ -257,6 +265,145 @@ public class ConfigTest {
 
         // Only what is reported is masked; the config itself keeps the real value.
         Assertions.assertEquals("wJalrXUtnFEMI/K7MDENG", ConfigForSensitive.prop_secret);
+    }
+
+    // Collects the messages logged to the loggers it is added to.
+    private static class MessageCollector extends AbstractAppender {
+        private final List<String> messages = new CopyOnWriteArrayList<>();
+
+        MessageCollector() {
+            super("config-test-message-collector", null, null);
+        }
+
+        @Override
+        public void append(LogEvent event) {
+            messages.add(event.getMessage().getFormattedMessage());
+        }
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
+    // The messages ConfigBase logs at INFO while running body.
+    private static List<String> captureConfigBaseLogs(ThrowingRunnable body) throws Exception {
+        MessageCollector collector = new MessageCollector();
+        Logger logger = (Logger) LogManager.getLogger(ConfigBase.class);
+        Level level = logger.getLevel();
+        collector.start();
+        logger.addAppender(collector);
+        logger.setLevel(Level.INFO);
+        try {
+            body.run();
+        } finally {
+            logger.setLevel(level);
+            logger.removeAppender(collector);
+            collector.stop();
+        }
+        return collector.messages;
+    }
+
+    @Test
+    public void testSetSensitiveConfigKeepsValueOutOfLog() throws Exception {
+        String key = "authentication_ldap_simple_bind_root_pwd";
+        int threshold = Config.adaptive_choose_instances_threshold;
+        List<String> messages;
+        try {
+            messages = captureConfigBaseLogs(() -> {
+                Config.setMutableConfig(key, "FakeLdapPwd1", false, "");
+                Assertions.assertEquals("FakeLdapPwd1", Config.authentication_ldap_simple_bind_root_pwd);
+                // A blank value sets an empty credential, so it is logged as empty rather than masked.
+                Config.setMutableConfig(key, "   ", false, "");
+                Assertions.assertEquals("", Config.authentication_ldap_simple_bind_root_pwd);
+                Config.setMutableConfig("adaptive_choose_instances_threshold", " 97 ", false, "");
+            });
+        } finally {
+            Config.authentication_ldap_simple_bind_root_pwd = "";
+            Config.adaptive_choose_instances_threshold = threshold;
+        }
+
+        List<String> setConfigMessages = messages.stream().filter(m -> m.startsWith("set config ")).toList();
+        Assertions.assertEquals(List.of("set config " + key + " to " + CredentialMask.LONG,
+                "set config " + key + " to ",
+                "set config adaptive_choose_instances_threshold to 97"), setConfigMessages);
+    }
+
+    @Test
+    public void testSetSensitiveConfigKeepsValueOutOfPersistedComments(@TempDir Path tempDir) throws Exception {
+        URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        assert resource != null;
+        Path confFile = tempDir.resolve("fe.conf");
+        Files.copy(Paths.get(resource.toURI()), confFile);
+
+        // Persist into the temp copy, also where persisting is off (in a container, as in CI), and restore both
+        // statics afterwards: init() never turns isPersisted off again.
+        Field configPathField = ConfigBase.class.getDeclaredField("configPath");
+        Field isPersistedField = ConfigBase.class.getDeclaredField("isPersisted");
+        configPathField.setAccessible(true);
+        isPersistedField.setAccessible(true);
+        String oldConfigPath = (String) configPathField.get(null);
+        boolean oldIsPersisted = isPersistedField.getBoolean(null);
+        int threshold = Config.adaptive_choose_instances_threshold;
+
+        String key = "authentication_ldap_simple_bind_root_pwd";
+        List<String> messages;
+        try {
+            configPathField.set(null, confFile.toString());
+            isPersistedField.setBoolean(null, true);
+            messages = captureConfigBaseLogs(() -> {
+                Config.setMutableConfig(key, "FakeLdapPwd1", true, "root");
+                Config.setMutableConfig(key, "FakeLdapPwd2", true, "root");
+                Config.setMutableConfig("adaptive_choose_instances_threshold", "97", true, "root");
+            });
+        } finally {
+            configPathField.set(null, oldConfigPath);
+            isPersistedField.setBoolean(null, oldIsPersisted);
+            Config.authentication_ldap_simple_bind_root_pwd = "";
+            Config.adaptive_choose_instances_threshold = threshold;
+        }
+        Assertions.assertTrue(messages.stream().noneMatch(m -> m.contains("FakeLdapPwd")), messages.toString());
+
+        // The comments are masked, the value itself is kept so that it is loaded on restart.
+        List<String> lines = Files.readAllLines(confFile);
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith(
+                "# The user root added " + key + "=" + CredentialMask.LONG + " at ")), lines.toString());
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith(
+                "# The user root changed " + CredentialMask.LONG + " to " + CredentialMask.LONG + " at ")),
+                lines.toString());
+        Assertions.assertTrue(lines.contains(key + " = FakeLdapPwd2"), lines.toString());
+        Assertions.assertEquals(1, lines.stream().filter(l -> l.contains("FakeLdapPwd")).count(), lines.toString());
+        // Other values are still written as is.
+        Assertions.assertTrue(lines.stream().anyMatch(l -> l.startsWith("# The user root changed ")
+                && l.contains(" to 97 at ")), lines.toString());
+    }
+
+    @Test
+    public void testMaskIfSensitiveByKey() throws Exception {
+        Assertions.assertEquals(CredentialMask.LONG,
+                ConfigBase.maskIfSensitive("authentication_ldap_simple_bind_root_pwd", "FakeLdapPwd"));
+        // Any credential config is masked, mutable or not.
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("aws_s3_secret_key", "FakeS3Secret"));
+        Assertions.assertEquals("", ConfigBase.maskIfSensitive("aws_s3_secret_key", ""));
+        Assertions.assertEquals("97", ConfigBase.maskIfSensitive("adaptive_choose_instances_threshold", "97"));
+        Assertions.assertEquals("v", ConfigBase.maskIfSensitive("no_such_config", "v"));
+    }
+
+    private static class ConfigForSensitiveAlias extends ConfigBase {
+        @ConfField(sensitive = true, aliases = {"old_prop_secret"})
+        public static String prop_secret = "";
+    }
+
+    @Test
+    public void testMaskIfSensitiveByAlias() throws Exception {
+        ConfigForSensitiveAlias configForSensitiveAlias = new ConfigForSensitiveAlias();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
+        configForSensitiveAlias.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+
+        // A credential config is found by its alias as well as by its name.
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("old_prop_secret", "FakeSecret"));
+        Assertions.assertEquals(CredentialMask.LONG, ConfigBase.maskIfSensitive("prop_secret", "FakeSecret"));
+        Assertions.assertEquals("", ConfigBase.maskIfSensitive("old_prop_secret", ""));
     }
 
     @Test

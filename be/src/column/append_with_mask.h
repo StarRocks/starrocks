@@ -54,10 +54,7 @@ private:
     template <typename T>
     Status append_fixed_length(FixedLengthColumnBase<T>* column);
 
-    template <typename T>
-    Status append_binary_impl(BinaryColumnBase<T>* column);
-
-    Status append_binary(BinaryColumn* column) { return append_binary_impl(column); }
+    Status append_binary(BinaryColumn* column);
 
     Status apply(Column* dst, const Column* src);
 

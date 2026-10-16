@@ -129,13 +129,10 @@ public class MVVersionManager {
         if (isFinalBatchRun && freshnessBaseline > copiedScheme.getLastFreshnessConfirmedAt()) {
             copiedScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
         logger.info("Update materialized view {} refresh scheme, " +
                         "last refresh time: {}, version meta changed",
                 mv.getName(), maxChangedTableRefreshTime);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                wal -> mv.setRefreshScheme(copiedScheme));
+        persistRefreshScheme(copiedScheme);
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -162,13 +159,42 @@ public class MVVersionManager {
                 return;
             }
             copiedScheme.setLastFreshnessConfirmedAt(confirmTime);
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
-                    wal -> mv.setRefreshScheme(copiedScheme));
+            persistRefreshScheme(copiedScheme);
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
         }
+    }
+
+    // Every refresh scheme this run publishes goes through here.
+    // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
+    // this run started means its version entries and freshness may describe data computed from a definition
+    // that no longer holds, and the caller's copy may predate the reset: publish neither then. A reset racing the
+    // publish below cleared only the scheme this one replaces, so check again after it and journal the clear.
+    // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
+    private void persistRefreshScheme(MaterializedView.MvRefreshScheme copiedScheme) {
+        long runEpoch = mvTaskRunContext == null ? -1 : mvTaskRunContext.getVersionMapResetEpoch();
+        boolean resetBeforePublish = runEpoch >= 0
+                && (runEpoch % 2 != 0 || mv.getVersionMapResetEpoch() != runEpoch);
+        if (resetBeforePublish) {
+            logger.warn("The version map of materialized view {} was reset during this refresh, " +
+                    "publishing no version entries", mv.getName());
+            copiedScheme.clearVersionState();
+        }
+        logRefreshScheme(copiedScheme);
+        if (!resetBeforePublish && runEpoch >= 0 && mv.getVersionMapResetEpoch() != runEpoch) {
+            logger.warn("The version map of materialized view {} was reset while this refresh published it, " +
+                    "clearing it again", mv.getName());
+            MaterializedView.MvRefreshScheme clearedScheme = mv.getRefreshScheme().copy();
+            clearedScheme.clearVersionState();
+            logRefreshScheme(clearedScheme);
+        }
+    }
+
+    private void logRefreshScheme(MaterializedView.MvRefreshScheme scheme) {
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, scheme);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(scheme));
     }
 
     // The batch's first-run start time, propagated across batch runs via MV_FRESHNESS_BASELINE_TIME. A single-run

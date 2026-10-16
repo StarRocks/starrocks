@@ -41,47 +41,6 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
-### H3 リソース制限
-
-以下の変更可能な正の BE 設定は H3 関数の 1 行を制限します。超過時は部分結果ではなくエラーになります。関数と中心フィルについては [H3 関数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) を参照してください。
-
-#### h3_max_cells_per_row
-
-- Default: 100000
-- Is mutable: Yes
-- Limit: cells / pre-deduplication expansion slots.
-
-#### h3_max_grid_disk_k
-
-- Default: 128
-- Is mutable: Yes
-- Limit: grid steps.
-
-#### h3_max_polygon_vertices
-
-- Default: 10000
-- Is mutable: Yes
-- Limit: coordinate positions including ring closure.
-
-#### h3_max_polygon_components
-
-- Default: 256
-- Is mutable: Yes
-- Limit: polygon components including empty components.
-
-#### h3_max_working_bytes
-
-- Default: 67108864
-- Is mutable: Yes
-- Limit: bytes of per-worker preparation and temporary buffers.
-
-#### h3_max_estimated_work_per_row
-
-- Default: 10000000
-- Is mutable: Yes
-- Limit: sum of estimated slots times (component positions + 1).
-
-
 ### ai_function_request_timeout_ms
 
 - デフォルト: 600000
@@ -110,6 +69,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 有効な値: 正の整数
 - 変更可能: はい
 - 説明: 1 回の AI HTTP attempt から受け付ける response body の最大サイズです。この上限を超えたレスポンスは Provider による解析前に拒否され、BE のメモリ消費を制限します。モデルが正当に大きなレスポンスを返す場合にのみ値を増やしてください。新しく開かれた AI fragment/operator は、この値を完全な immutable runtime snapshot の一部として取得し、すでに開かれている fragment は既存の snapshot を使い続けます。変更に BE の再起動は不要です。
+- 導入バージョン: -
+
+### ai_function_max_input_file_bytes
+
+- デフォルト: 10485760
+- タイプ: Int
+- 単位: バイト
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: `ai_complete` または `ai_embed` に渡す各 inline FILE の生バイト数の上限です。AI が保持するペイロードのコピーと Base64 エンコードの前に検査します。デフォルトは 10 MiB です。選択したプロバイダーとモデルが大きな入力に対応する場合にのみ増やしてください。この上限はスキャンや Chunk の実体化を制御しません。これらのメモリ割り当てと AI ペイロードには、引き続きクエリのメモリ追跡が適用されます。不正または上限超過の inline 入力は `ai_function_on_error` に従います。新しく開かれた AI fragment/operator は不可変のランタイムスナップショットにこの値を取り込み、すでに開かれた fragment は既存のスナップショットを保持します。変更に BE の再起動は不要です。
 - 導入バージョン: -
 
 ### ai_function_worker_thread_num
@@ -1126,6 +1095,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: 時間
 - 変更可能: はい
 - 説明: データロードログが予約される時間。
+- 導入バージョン: -
+
+### load_sink_close_thread_pool_num_max
+
+- デフォルト: 64
+- 型: Int
+- 単位: -
+- 変更可能: はい
+- 説明: ロード Sink の最終クローズ処理を実行するスレッドの最大数。共有データクラスタでは、このクローズ処理で結合トランザクションログをオブジェクトストレージに書き込みます。このスレッドプールで実行することで、遅い書き込みがパイプラインのポーラースレッドや実行スレッドをブロックしないようにします。すべてのスレッドが使用中の場合、後続のクローズ処理はスレッドプールのキューで待機します。キューの長さに上限はなく、クローズ処理が破棄されることはありません。値は 0 より大きい必要があります。BE または CN を再起動せずに実行時に変更できます。上限を下げても、実行中のクローズ処理は中断されません。初期化時に 1 つのワーカーを起動し、アイドル時も保持します。追加のワーカーは 500 ms アイドル状態が続くと終了できます。
 - 導入バージョン: -
 
 ### load_process_max_memory_limit_bytes

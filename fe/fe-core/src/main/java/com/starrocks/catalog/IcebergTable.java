@@ -98,6 +98,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.getBucketSourceIdWithBucketNum;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -489,6 +490,16 @@ public class IcebergTable extends Table {
         table.setUniqueConstraints(getUniqueConstraints());
         table.setForeignKeyConstraints(getForeignKeyConstraints());
         return table;
+    }
+
+    /**
+     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
+     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
+     * resolved per query already.
+     */
+    @Override
+    public Table forQueryPlanning() {
+        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
     }
 
     // Read-spec partition fields whose source column exists in the read schema. Time travel uses the

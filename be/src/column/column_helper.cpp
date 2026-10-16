@@ -109,6 +109,10 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
 }
 
 void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type) {
+    // A const-null column carries no binary data (its data column may not be a BinaryColumn).
+    if (column->only_null()) {
+        return;
+    }
     const Column* data_column = get_data_column(column);
 
     switch (type.type) {
@@ -308,10 +312,7 @@ public:
     Status do_visit(FixedLengthColumnBase<T>* column) {
         return Status::OK();
     }
-    template <typename T>
-    Status do_visit(BinaryColumnBase<T>* column) {
-        return Status::OK();
-    }
+    Status do_visit(BinaryColumn* column) { return Status::OK(); }
 };
 
 Status ColumnHelper::update_nested_has_null(Column* column) {

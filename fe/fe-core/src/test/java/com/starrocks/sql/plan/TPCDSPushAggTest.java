@@ -93,6 +93,61 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
                 "  |       - filter_id = 3, probe_expr = (191: d_date)");
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("testColumnlessPredicateProvider")
+    public void testJoinReorderKeepsColumnlessPredicate(String name, String sql) throws Exception {
+        // logicalJoinReorder runs before aggregate push-down (mode != -1), and the memo reorder runs in every mode.
+        // A predicate that uses no column must survive both, exactly once.
+        int oldMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        try {
+            for (int mode : new int[] {-1, 0, 1}) {
+                connectContext.getSessionVariable().setCboPushDownAggregateMode(mode);
+                String plan = getFragmentPlan(sql);
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand()"),
+                        "mode: " + mode + "\n" + plan);
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(oldMode);
+        }
+    }
+
+    @Test
+    public void testJoinReorderKeepsNestedColumnlessOnPredicate() throws Exception {
+        // rand() > 0.5 is evaluated once per (item, store) row. Moving it above the join with store_sales would
+        // evaluate it once per store_sales match instead, so the item-store join must not be reordered.
+        String sql = "select i_brand_id, s_store_name, sum(ss_quantity) from item join store on rand() > 0.5 " +
+                "join store_sales on ss_item_sk = i_item_sk and ss_store_sk = s_store_sk " +
+                "group by i_brand_id, s_store_name";
+        int oldMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        try {
+            for (int mode : new int[] {-1, 0, 1}) {
+                connectContext.getSessionVariable().setCboPushDownAggregateMode(mode);
+                String plan = getLogicalFragmentPlan(sql);
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "rand("), "mode: " + mode + "\n" + plan);
+                // Alone on its join: pulled up, it would be AND-ed with the store_sales join keys.
+                assertContains(plan, "INNER JOIN (join-predicate [rand(1) > 0.5] post-join-predicate [null])");
+            }
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(oldMode);
+        }
+    }
+
+    private static Stream<Arguments> testColumnlessPredicateProvider() {
+        return Stream.of(
+                Arguments.of("two tables",
+                        "select i_brand_id, sum(ss_quantity) from store_sales join item on ss_item_sk = i_item_sk " +
+                                "where rand() > 0.5 group by i_brand_id"),
+                Arguments.of("four tables",
+                        "select i_brand_id, s_store_name, sum(ss_quantity) from store_sales " +
+                                "join item on ss_item_sk = i_item_sk " +
+                                "join date_dim on ss_sold_date_sk = d_date_sk " +
+                                "join store on ss_store_sk = s_store_sk " +
+                                "where d_year = 2000 and rand() > 0.5 group by i_brand_id, s_store_name"),
+                Arguments.of("cross join",
+                        "select i_brand_id, s_store_name, count(*) from item, store " +
+                                "where rand() > 0.5 group by i_brand_id, s_store_name"));
+    }
+
     //    @ParameterizedTest(name = "{0}")
     //    @MethodSource("testPushDownProvider")
     public void debugTPCDSPushDownAgg(String sql, int orig, int auto, boolean autoChange, int force, boolean forceChange, int mid,

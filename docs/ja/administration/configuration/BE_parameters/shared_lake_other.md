@@ -149,6 +149,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタの Tablet メタデータおよびトランザクションログファイルを、Adler-32 チェックサム付きで書き込むかどうか。これにより、これらのファイルの破損を読み取り時に検出できます。この項目の設定にかかわらず、読み取り側はチェックサムが存在する場合は常に自動的に検出して検証します。この項目は書き込み形式のみを制御します。クラスタが、チェックサム形式に対応していないバージョンへダウングレードされる可能性がある場合にのみ、この項目を `false` に設定してください。ローリングアップグレードまたはダウングレードの期間中、古い BE または CN は旧来のリーダーを使用するため、新形式で書き込まれたファイルを解析できません。
 - 導入バージョン: v4.2
 
+### lake_enable_tablet_location_handoff
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、ロードのデータを書き込むノードが、所有する tablet のストレージロケーションをそのロードを調整するノードに引き渡すかどうか。`file_bundling` が有効なテーブルでは、調整ノードがパーティションごとに 1 つの combined txn log を書き込みますが、通常は大部分のパーティションの tablet を所有していません。`true` の場合、tablet を所有するノードはトランザクションログと一緒にパーティションごとに 1 つの tablet のストレージロケーションを返し、調整ノードは StarMgr に問い合わせることなく combined txn log を書き込みます。省かれた問い合わせは `lake_tablet_location_handoff_hits_total` に計上されます。`false` の場合、調整ノードはロードごとに、tablet を所有していないパーティションごとに StarMgr へロケーションを問い合わせ、その回数は `starrocks_be_staros_shard_info_fallback_total` に計上されます。返されるロケーションにはストレージボリュームの認証情報が含まれます。
+- 導入バージョン: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - デフォルト: 500
@@ -158,13 +167,22 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: 共有データクラスタでの主キーテーブルコンパクションタスクで許可される最大入力 rowset 数。このパラメータのデフォルト値は v3.2.4 および v3.1.10 以降 `5` から `1000` に、v3.3.1 および v3.2.9 以降 `500` に変更されました。主キーテーブルのためのサイズ階層型コンパクションポリシーが有効になった後 (`enable_pk_size_tiered_compaction_strategy` を `true` に設定することで)、StarRocks は各コンパクションの rowset 数を制限して書き込み増幅を減らす必要がなくなります。したがって、このパラメータのデフォルト値は増加しました。
 - 導入バージョン: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、主キーテーブルの tablet の削除量が `lake_pk_compaction_base_delete_ratio_threshold` または `lake_pk_compaction_base_delete_rows_threshold` に達したときに、累積コンパクションからベースコンパクションへ自動的に切り替えるかどうか。`lake_pk_compaction_base_delete_rows_threshold` は絶対行数であるため、デフォルトでは無効です。既存の行が継続的に更新または削除される大きなテーブルでは、tablet はベースコンパクションのたびにすぐ再びこの値に達し、各ベースコンパクションは tablet のデータのうち最大 `update_compaction_ratio_threshold` (デフォルト 0.5) の割合を書き換えます。手動の `ALTER TABLE ... COMPACT` は、この項目の設定に関係なくベースコンパクションを実行します。
+- 導入バージョン: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - デフォルト: 0.5
 - タイプ: Double
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したとき、または手動の `ALTER TABLE ... COMPACT` がベースコンパクションを強制したときに実行されます。両方のしきい値を十分大きく設定すると自動トリガーを無効化できます。
+- 説明: 共有データクラスタで、主キーテーブルの tablet を累積コンパクション (サイズ階層型の小ファイルマージ) からベースコンパクションに切り替える 2 つのトリガーの 1 つ。ベースコンパクションは削除を含む rowset を (削除行数の多いものから優先して) 書き換え、削除された行を物理的に除去して delete vector を縮小します。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の集約削除率 (各 rowset の `sum(num_dels) / sum(num_rows)`) がこの値に達したとき、または絶対削除行数が `lake_pk_compaction_base_delete_rows_threshold` に達したときに実行されます。手動の `ALTER TABLE ... COMPACT` は、これらの設定に関係なくベースコンパクションを強制します。
 - 導入バージョン: v4.2
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -173,7 +191,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
+- 説明: 共有データクラスタでの主キーテーブルのベースコンパクションの 2 つのトリガーの 1 つ (`lake_pk_compaction_base_delete_ratio_threshold` を参照)。`lake_pk_compaction_base_enable_delete_trigger` が `true` の場合、tablet の絶対削除行数 (各 rowset の `sum(num_dels)`) がこの値に達したときにベースコンパクションが実行されます。この絶対数トリガーは比率トリガーを補完します。高頻度の更新/削除テーブルでは、delete vector が肥大化して領域が無駄になる一方、集約削除率は多数のほぼ生存している rowset によって希釈されて低いままになるため、比率トリガーだけでは発火しません。この値を大きくするとベースコンパクションの頻度が下がり、小さくすると delete vector をより早く回収できます。
 - 導入バージョン: v4.2
 
 ### enable_lake_pk_compaction_score_gate
@@ -305,6 +323,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: Bytes
 - 変更可能: Yes
 - 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
+- 導入バージョン: -
+
+### s3_multipart_equal_part_size
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: はい
+- 説明: S3 または S3 互換オブジェクトストレージへのマルチパートアップロードで、最後のパートを除くすべてのパートをまったく同じサイズにするかどうか。Cloudflare R2 など一部の S3 互換オブジェクトストレージは、最後以外のパートのサイズが揃っていないマルチパートアップロードを `InvalidPart: All non-trailing parts must have the same length` エラーで拒否します。このようなストレージを使用する場合はこの項目を有効にしてください。有効にすると、最後のパートを除く各パートは設定されたパートサイズと正確に一致します。共有データクラスタの starlet アップロードでは `starlet_fslib_s3_min_upload_part_size`、BE のその他のバッファ付き S3 アップロードでは `experimental_s3_min_upload_part_size` がパートサイズになります。デフォルトの `false` は従来の動作を維持し、バッファがパートサイズに達するたびにバッファ全体を 1 つのパートとしてアップロードするため、パートサイズはばらつきます。Parquet、ORC、CSV のファイルライターが書き込むファイル（`INSERT INTO FILES` や Hive、Iceberg Sink によるファイルなど）は、生成されるたびにパート単位でアップロードされるため、この項目の影響を受けません。変更はその後に開始されたアップロードに反映されます。S3 では 1 回のアップロードあたり最大 10,000 パートまでのため、同じサイズのパートでアップロードするオブジェクトはパートサイズの 10,000 倍を超えられません。starlet のデフォルトの 5 MiB パートでは約 48.8 GiB です。より大きなオブジェクトを書き込む場合はパートサイズを大きくしてください。
 - 導入バージョン: -
 
 ### starlet_filesystem_instance_cache_capacity

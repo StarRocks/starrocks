@@ -68,8 +68,7 @@ class FixedLengthColumnBase;
 template <typename T>
 class DecimalV3Column;
 
-template <typename T>
-class BinaryColumnBase;
+class BinaryColumn;
 
 using Int8Column = FixedLengthColumn<int8_t>;
 using UInt8Column = FixedLengthColumn<uint8_t>;
@@ -91,7 +90,6 @@ using Decimal32Column = DecimalV3Column<int32_t>;
 using Decimal64Column = DecimalV3Column<int64_t>;
 using Decimal128Column = DecimalV3Column<int128_t>;
 using Decimal256Column = DecimalV3Column<int256_t>;
-using BinaryColumn = BinaryColumnBase<uint32_t>;
 
 class ColumnVisitor;
 class ColumnVisitorMutable;
