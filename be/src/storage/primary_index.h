@@ -25,6 +25,7 @@
 
 namespace starrocks {
 
+enum class PrimaryKeyEncodingType;
 class Tablet;
 class HashIndex;
 class ParallelPublishContext;
@@ -41,7 +42,8 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const Schema& pk_schema);
+    // |encoding_type| is the encoding of every key passed to this index.
+    PrimaryIndex(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
     virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -191,7 +193,7 @@ public:
     bool need_rebuild() const;
 
 protected:
-    void _set_schema(const Schema& pk_schema);
+    void _set_schema(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
 
 private:
     Status _do_load(Tablet* tablet);
