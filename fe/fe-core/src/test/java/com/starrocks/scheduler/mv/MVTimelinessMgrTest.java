@@ -30,11 +30,9 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
-
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class MVTimelinessMgrTest {
     private final MaterializedView mv = forceMv();
@@ -43,12 +41,15 @@ public class MVTimelinessMgrTest {
     // What the timeliness check returns, given the number of the call (from 1).
     private Function<Integer, MvUpdateInfo> arbiter;
 
+    private static final AtomicLong NEXT_MV_ID = new AtomicLong(1);
+
     private static MaterializedView forceMv() {
-        MaterializedView mv = mock(MaterializedView.class);
-        TableProperty tableProperty = mock(TableProperty.class);
-        when(tableProperty.getQueryRewriteConsistencyMode())
-                .thenReturn(TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
-        when(mv.getTableProperty()).thenReturn(tableProperty);
+        MaterializedView mv = new MaterializedView();
+        // Tables are keyed by id, so each MV of the test needs its own.
+        mv.setId(NEXT_MV_ID.getAndIncrement());
+        TableProperty tableProperty = new TableProperty();
+        tableProperty.setQueryRewriteConsistencyMode(TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
+        mv.setTableProperty(tableProperty);
         return mv;
     }
 
@@ -92,8 +93,8 @@ public class MVTimelinessMgrTest {
             }
             return MvUpdateInfo.noRefresh(mv);
         };
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, lookup().getMVToRefreshType());
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMVToRefreshType(),
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, lookup().getMvToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMvToRefreshType(),
                 "the result computed across the refresh was cached");
         Assertions.assertEquals(2, computeCount.get());
     }
@@ -102,8 +103,8 @@ public class MVTimelinessMgrTest {
     public void testDoesNotCacheAFailedCheck() {
         // A failed check would otherwise keep the MV out of rewrite until the next refresh.
         arbiter = call -> call == 1 ? MvUpdateInfo.unknown(mv) : MvUpdateInfo.noRefresh(mv);
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.UNKNOWN, lookup().getMVToRefreshType());
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMVToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.UNKNOWN, lookup().getMvToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMvToRefreshType());
         Assertions.assertSame(lookup(), lookup());
         Assertions.assertEquals(2, computeCount.get());
     }
@@ -117,7 +118,7 @@ public class MVTimelinessMgrTest {
             return MvUpdateInfo.noRefresh(mv);
         };
         Assertions.assertThrows(IllegalStateException.class, this::lookup);
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMVToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMvToRefreshType());
         Assertions.assertEquals(2, computeCount.get());
     }
 
@@ -200,11 +201,11 @@ public class MVTimelinessMgrTest {
         release.countDown();
         after.join();
         Assertions.assertFalse(blocked, "a lookup after the refresh waited on the check computed before it");
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, afterRefresh.get().getMVToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, afterRefresh.get().getMvToRefreshType());
 
         computing.join();
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, beforeRefresh.get().getMVToRefreshType());
-        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMVToRefreshType(),
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.FULL, beforeRefresh.get().getMvToRefreshType());
+        Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, lookup().getMvToRefreshType(),
                 "the check computed before the refresh replaced the one computed after it");
         Assertions.assertEquals(2, computeCount.get());
     }
@@ -260,7 +261,7 @@ public class MVTimelinessMgrTest {
 
         Assertions.assertInstanceOf(IllegalStateException.class, failure.get());
         for (AtomicReference<MvUpdateInfo> result : results) {
-            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, result.get().getMVToRefreshType());
+            Assertions.assertEquals(MvUpdateInfo.MvToRefreshType.NO_REFRESH, result.get().getMvToRefreshType());
         }
         Assertions.assertEquals(2, computeCount.get(), "each waiter of the failed check computed it again");
         Assertions.assertSame(results.get(0).get(), lookup(), "the retried check was not cached");

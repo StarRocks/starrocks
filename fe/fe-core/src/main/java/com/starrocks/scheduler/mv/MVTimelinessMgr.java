@@ -78,7 +78,7 @@ public class MVTimelinessMgr implements MemoryTrackable {
         }
         // UNKNOWN is a failed check, not a timeliness: caching it would keep the MV out of rewrite until the next
         // invalidation. The lookups already waiting get it all the same.
-        if (computed == null || computed.getMVToRefreshType() == MvUpdateInfo.MvToRefreshType.UNKNOWN) {
+        if (computed == null || computed.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.UNKNOWN) {
             mvTimelinessMap.remove(mv, mine);
         }
         mine.complete(computed);

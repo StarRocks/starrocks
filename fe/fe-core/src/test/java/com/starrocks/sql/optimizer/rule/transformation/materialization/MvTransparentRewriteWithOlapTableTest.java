@@ -384,7 +384,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
             // an equivalent in a transparent plan.
             starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW mv0 PARTITION START ('1') END ('9')");
             long tabletId = getMv("test", "mv0").getPartition("p1").getDefaultPhysicalPartition()
-                    .getLatestBaseIndex().getTablets().get(0).getId();
+                    .getBaseIndex().getTablets().get(0).getId();
             String[] sqls = {
                     "SELECT * from mv0 PARTITION(p1) where k1<6",
                     "SELECT * from mv0 TABLET(" + tabletId + ") where k1<6",
@@ -418,7 +418,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         MaterializedView mv = getMv("test", "mv_np");
                         mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                         long tabletId = mv.getPartitions().iterator().next().getDefaultPhysicalPartition()
-                                .getLatestBaseIndex().getTablets().get(0).getId();
+                                .getBaseIndex().getTablets().get(0).getId();
                         String plan = getFragmentPlan("SELECT * from mv_np TABLET(" + tabletId + ") where k1<6");
                         PlanTestBase.assertContains(plan, ": m1");
                     });

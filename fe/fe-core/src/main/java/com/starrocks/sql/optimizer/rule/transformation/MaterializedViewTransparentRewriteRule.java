@@ -23,13 +23,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
-import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.PCellSortedSet;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor.MvCopyFailurePolicy;
@@ -111,7 +110,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
             return false;
         }
-        PCellSortedSet stalePartitions = mvUpdateInfo.getMVToRefreshPCells();
+        Set<String> stalePartitions = mvUpdateInfo.getMvToRefreshPartitionNames();
         if (stalePartitions == null || stalePartitions.isEmpty()) {
             return true;
         }
@@ -122,7 +121,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         if (!narrowedByPartitionsOnly) {
             return false;
         }
-        Set<String> stale = stalePartitions.getPartitionNames().stream()
+        Set<String> stale = stalePartitions.stream()
                 .map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
         return partitionNames.getPartitionNames().stream()
                 .noneMatch(name -> stale.contains(name.toLowerCase(Locale.ROOT)));
