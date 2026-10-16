@@ -14,15 +14,44 @@
 
 #include "common/brpc/lake_service_recoverable_stub.h"
 
+#include <memory>
 #include <utility>
 
 #include "common/config_rpc_client_fwd.h"
 
 namespace starrocks {
 
+namespace {
+
+template <typename Request, typename Response>
+void call_with_accounting(LakeService_RecoverableStub* owner, const std::shared_ptr<BrpcConnectionLoad>& load,
+                          void (LakeService_Stub::*method)(google::protobuf::RpcController*, const Request*, Response*,
+                                                           google::protobuf::Closure*),
+                          google::protobuf::RpcController* controller, const Request* request, Response* response,
+                          google::protobuf::Closure* done) {
+    BrpcConnectionLoadGuard reservation;
+    google::protobuf::Closure* closure = done;
+    if (config::brpc_connection_type == "single") {
+        reservation = load->reserve(brpc_request_payload_bytes(request, controller));
+        if (done != nullptr) {
+            closure = new BrpcInFlightClosure(std::move(reservation), done);
+        }
+    }
+    if (done != nullptr) {
+        using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
+        closure = new RecoverableClosureType(owner->shared_from_this(), controller, closure);
+    }
+    (owner->stub().get()->*method)(controller, request, response, closure);
+}
+
+} // namespace
+
 LakeService_RecoverableStub::LakeService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol,
                                                          int64_t connection_group_seed)
-        : _endpoint(endpoint), _connection_group_seed(connection_group_seed), _protocol(std::move(protocol)) {}
+        : _connection_load(get_brpc_connection_load(endpoint, protocol, connection_group_seed)),
+          _endpoint(endpoint),
+          _connection_group_seed(connection_group_seed),
+          _protocol(std::move(protocol)) {}
 
 LakeService_RecoverableStub::~LakeService_RecoverableStub() = default;
 
@@ -67,17 +96,14 @@ void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcControl
                                                   const ::starrocks::PublishVersionRequest* request,
                                                   ::starrocks::PublishVersionResponse* response,
                                                   ::google::protobuf::Closure* done) {
-    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->publish_version(controller, request, response, closure);
+    call_with_accounting(this, _connection_load, &LakeService_Stub::publish_version, controller, request, response,
+                         done);
 }
 
 void LakeService_RecoverableStub::compact(::google::protobuf::RpcController* controller,
                                           const ::starrocks::CompactRequest* request,
                                           ::starrocks::CompactResponse* response, ::google::protobuf::Closure* done) {
-    using RecoverableClosureType = RecoverableClosure<LakeService_RecoverableStub>;
-    auto closure = new RecoverableClosureType(shared_from_this(), controller, done);
-    stub()->compact(controller, request, response, closure);
+    call_with_accounting(this, _connection_load, &LakeService_Stub::compact, controller, request, response, done);
 }
 
 } // namespace starrocks

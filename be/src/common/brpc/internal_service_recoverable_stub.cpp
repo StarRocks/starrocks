@@ -30,10 +30,18 @@ public:
     void CallMethod(const google::protobuf::MethodDescriptor* method, google::protobuf::RpcController* controller,
                     const google::protobuf::Message* request, google::protobuf::Message* response,
                     google::protobuf::Closure* done) override {
+        PInternalService_RecoverableStub::RpcInFlightGuard reservation;
         google::protobuf::Closure* closure = done;
+        if (config::brpc_connection_type == "single") {
+            reservation = _owner->reserve_rpc(brpc_request_payload_bytes(request, controller));
+            if (done != nullptr) {
+                closure = new BrpcInFlightClosure(std::move(reservation), done);
+            }
+        }
+
         if (done != nullptr) {
             closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
-                                                                                   controller, done);
+                                                                                   controller, closure);
         }
         _owner->stub()->CallMethod(method, controller, request, response, closure);
     }
@@ -45,11 +53,63 @@ private:
 PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint,
                                                                    std::string protocol, int64_t connection_group_seed)
         : PInternalService_Stub(new RecoverableChannel(this), google::protobuf::Service::STUB_OWNS_CHANNEL),
+          _connection_load(get_brpc_connection_load(endpoint, protocol, connection_group_seed)),
           _endpoint(endpoint),
           _connection_group_seed(connection_group_seed),
           _protocol(std::move(protocol)) {}
 
 PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
+
+PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(
+        std::shared_ptr<PInternalService_RecoverableStub> stub, int64_t payload_bytes)
+        : _stub(std::move(stub)), _load_guard(_stub->_connection_load->reserve(payload_bytes)) {}
+
+PInternalService_RecoverableStub::RpcInFlightGuard::~RpcInFlightGuard() {
+    reset();
+}
+
+PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(RpcInFlightGuard&& other) noexcept
+        : _stub(std::move(other._stub)), _load_guard(std::move(other._load_guard)) {}
+
+PInternalService_RecoverableStub::RpcInFlightGuard& PInternalService_RecoverableStub::RpcInFlightGuard::operator=(
+        RpcInFlightGuard&& other) noexcept {
+    if (this != &other) {
+        reset();
+        _stub = std::move(other._stub);
+        _load_guard = std::move(other._load_guard);
+    }
+    return *this;
+}
+
+void PInternalService_RecoverableStub::RpcInFlightGuard::reset() {
+    if (_stub != nullptr) {
+        _load_guard.reset();
+        _stub.reset();
+    }
+}
+
+int64_t PInternalService_RecoverableStub::num_in_flight_rpcs() const {
+    return _connection_load->num_in_flight_rpcs();
+}
+
+int64_t PInternalService_RecoverableStub::num_in_flight_payload_bytes() const {
+    return _connection_load->num_in_flight_payload_bytes();
+}
+
+PInternalService_RecoverableStub::RpcInFlightGuard PInternalService_RecoverableStub::reserve_rpc(
+        int64_t payload_bytes) {
+    return RpcInFlightGuard(shared_from_this(), payload_bytes);
+}
+
+void PInternalService_RecoverableStub::transmit_chunk(RpcInFlightGuard reservation,
+                                                      google::protobuf::RpcController* controller,
+                                                      const PTransmitChunkParams* request,
+                                                      PTransmitChunkResult* response, google::protobuf::Closure* done) {
+    DCHECK_EQ(reservation.stub(), this);
+    auto* accounting = new BrpcInFlightClosure(std::move(reservation), done);
+    auto* closure = new RecoverableClosureType(shared_from_this(), controller, accounting);
+    stub()->transmit_chunk(controller, request, response, closure);
+}
 
 Status PInternalService_RecoverableStub::reset_channel(int64_t next_connection_group) {
     if (next_connection_group == 0) {

@@ -282,7 +282,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: The maximum number of persistent bRPC connections the client keeps for each remote server endpoint. For each endpoint `BrpcStubCache` creates a `StubPool` whose `_stubs` vector is reserved to this size. On first accesses, new stubs are created until the limit is reached. After that, existing stubs are returned in a round‑robin fashion. Increasing this value raises per‑endpoint concurrency (reduces contention on a single channel) at the cost of more file descriptors, memory, and channels.
+- Description: The maximum number of persistent bRPC connections the client keeps for each remote server endpoint. In `single` connection mode, pipeline exchange RPCs select an idle or least-loaded connection and create another connection when existing connections are busy, up to this limit. Once the limit is reached, the least-loaded connection is reused. Other RPC paths create connections on initial accesses until the limit is reached, then reuse them in round-robin order. Increasing this value raises per-endpoint concurrency at the cost of additional file descriptors, memory, and channels.
 - Introduced in: v3.2.0
 
 ### brpc_num_threads
