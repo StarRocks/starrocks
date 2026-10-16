@@ -78,14 +78,15 @@ public class MultiJoinNode {
         List<ScalarOperator> predicates = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> proMap = new HashMap<>();
 
-        flattenJoinNode(node, atoms, predicates, proMap);
+        flattenJoinNode(node, atoms, predicates, proMap, true);
 
         return new MultiJoinNode(atoms, predicates, proMap);
     }
 
     private static void flattenJoinNode(OptExpression node, LinkedHashSet<OptExpression> atoms,
                                         List<ScalarOperator> predicates,
-                                        Map<ColumnRefOperator, ScalarOperator> expressionMap) {
+                                        Map<ColumnRefOperator, ScalarOperator> expressionMap,
+                                        boolean isMultiJoinRoot) {
         Operator operator = node.getOp();
         if (!(operator instanceof LogicalJoinOperator)) {
             atoms.add(node);
@@ -110,6 +111,14 @@ public class MultiJoinNode {
             return;
         }
 
+        // A non-deterministic predicate must stay on its join (see JoinReorderHelper#hasNonDeterministicPredicate).
+        // JoinOrder keeps a column-less predicate of the multi-join root on the new root, so only that one is safe.
+        if (isMultiJoinRoot ? hasNonDeterministicConjunctUsingColumns(joinOperator)
+                : JoinReorderHelper.hasNonDeterministicPredicate(joinOperator)) {
+            atoms.add(node);
+            return;
+        }
+
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
             boolean fromTwoChildren = projection.getColumnRefMap().values().stream().anyMatch(v -> {
@@ -128,10 +137,15 @@ public class MultiJoinNode {
             });
         }
 
-        flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap);
-        flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap);
+        flattenJoinNode(node.inputAt(0), atoms, predicates, expressionMap, false);
+        flattenJoinNode(node.inputAt(1), atoms, predicates, expressionMap, false);
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         Preconditions.checkState(!Utils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
+    }
+
+    private static boolean hasNonDeterministicConjunctUsingColumns(LogicalJoinOperator joinOperator) {
+        return JoinReorderHelper.hasNonDeterministicConjunct(joinOperator.getOnPredicate(), false) ||
+                JoinReorderHelper.hasNonDeterministicConjunct(joinOperator.getPredicate(), false);
     }
 }
