@@ -22,6 +22,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -36,11 +37,11 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
 #include "types/type_descriptor.h"
 
@@ -71,8 +72,9 @@ public:
 
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1638400000);
+        _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -248,7 +250,7 @@ protected:
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
 };
 
 TEST_F(MetaFileTest, test_meta_rw) {
@@ -475,6 +477,36 @@ TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycl
     expect_compacted_delvec_rejected({a}, RejectionStatus::kInvalidArgument,
                                      "compacted delvec resolved source size does not contain page", 1, 1,
                                      configure_resolved_size(0));
+}
+
+TEST_F(MetaFileTest, test_compacted_delvec_absent_size_preflight_is_traced) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "absent-size-traced.delvec";
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), "a");
+    const auto raw = raw_output_page(source_tablet, source_name, 0, 1);
+
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [](void* arg) {
+        *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = Status::InternalError("injected size failure");
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    scoped_refptr<Trace> trace(new Trace);
+    Status status;
+    {
+        ADOPT_TRACE(trace.get());
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        status = write_compacted_delvec_pages(_tablet_manager.get(), {raw}, next_id(), next_id(), &output, &offsets);
+    }
+    EXPECT_EQ("injected size failure", status.message()) << status;
+    EXPECT_NE(std::string::npos, trace->MetricsAsJSON().find("delvec_file_read_latency_us"));
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_reader_lifecycle_resets_across_serialized_page) {
@@ -708,6 +740,98 @@ TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
                                            &output, &offsets));
     EXPECT_TRUE(output.encryption_meta().empty());
     EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
+}
+
+// A page copied byte for byte never reaches get_del_vec, so the checksum verification there never sees
+// these bytes. The copy verifies them itself, under the same condition -- a checksum is live only while
+// its gen version is the page's own version -- and under the same enable_strict_delvec_crc_check knob.
+TEST_F(MetaFileTest, test_compacted_delvec_verifies_copied_page_crc32c) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "copied-crc-source.delvec";
+    // More than one copy chunk, and its tail differs, so a check that folded in only the first chunk
+    // would still accept first_chunk_crc below.
+    std::string source_bytes((1UL << 20) + 17, 'c');
+    source_bytes.back() = 'z';
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), source_bytes);
+    const uint32_t whole_page_crc = crc32c::Value(source_bytes.data(), source_bytes.size());
+    const uint32_t first_chunk_crc = crc32c::Value(source_bytes.data(), 1UL << 20);
+
+    auto page_claiming = [&](uint32_t crc, int64_t gen_version) {
+        auto page = raw_output_page(source_tablet, source_name, 0, source_bytes.size(), source_bytes.size());
+        page.raw_page->page.set_crc32c(crc32c::Mask(crc));
+        page.raw_page->page.set_crc32c_gen_version(gen_version);
+        return page;
+    };
+    auto copy = [&](const DelvecOutputPage& page) -> std::pair<Status, std::string> {
+        const int64_t target_tablet = next_id();
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        auto status = write_compacted_delvec_pages(_tablet_manager.get(), {page}, target_tablet, next_id(), &output,
+                                                   &offsets);
+        if (!status.ok()) return {status, ""};
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+        ASSIGN_OR_ABORT(auto copied, reader->read_all());
+        return {Status::OK(), copied};
+    };
+
+    int drop_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("lake::drop_corrupted_delvec_file_cache", [&](void* arg) {
+        ++drop_calls;
+        *static_cast<Status*>(arg) = Status::OK();
+    });
+    sync->EnableProcessing();
+    const bool old_strict = config::enable_strict_delvec_crc_check;
+    DeferOp cleanup([&] {
+        config::enable_strict_delvec_crc_check = old_strict;
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    config::enable_strict_delvec_crc_check = true;
+
+    // The page the source actually holds goes through untouched, and nothing is reported corrupt.
+    {
+        auto [status, copied] = copy(page_claiming(whole_page_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(0, drop_calls);
+    }
+
+    // A page whose bytes do not match its live checksum fails the copy, and the source's local cache is
+    // dropped first so the caller's retry reads through to remote storage.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        EXPECT_TRUE(status.is_corruption()) << status;
+        EXPECT_EQ(fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}", first_chunk_crc,
+                              whole_page_crc),
+                  status.message())
+                << status;
+        EXPECT_TRUE(copied.empty());
+        EXPECT_EQ(1, drop_calls);
+    }
+
+    // Without strict checking the copy goes through, exactly as get_del_vec tolerates a mismatch it
+    // decodes. The output keeps the source's own crc32c, so the mismatch stays visible to its reader.
+    {
+        config::enable_strict_delvec_crc_check = false;
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls) << "a tolerated mismatch must not drop the source's cache";
+        config::enable_strict_delvec_crc_check = true;
+    }
+
+    // A checksum whose gen version is not the page's version is no checksum at all -- meta_file reads it
+    // that way everywhere else, and there is nothing here to verify against.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/2));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls);
+    }
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
@@ -1575,6 +1699,85 @@ TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
     EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 111, *metadata, &builder));
 }
 
+// A compaction whose input segment was rewritten by a newer partial column update is published as a no-op,
+// after which the tablet metadata references none of the files it wrote. Each of them must become an orphan,
+// or only a full vacuum could reclaim it -- except an output sstable that reuses an input sstable's file,
+// which the primary index still holds.
+TEST_F(MetaFileTest, test_compaction_conflict_orphans_output_files) {
+    const int64_t tablet_id = 32021;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    // Publishes |op_compaction| to a tablet whose input segment a partial column update rewrote at
+    // version 19, after the compaction read version 18, and returns the orphan files by name.
+    auto publish_with_conflict = [&](const TxnLogPB_OpCompaction& op_compaction) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(20);
+        metadata->set_next_rowset_id(300);
+        auto* input_rowset = metadata->add_rowsets();
+        input_rowset->set_id(210);
+        input_rowset->add_segment_metas()->set_filename("a.dat");
+        DeltaColumnGroupVerPB dcg;
+        dcg.add_versions(19);
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[210] = dcg;
+
+        MetaFileBuilder builder(*tablet, metadata);
+        EXPECT_TRUE(CompactionUpdateConflictChecker::conflict_check(op_compaction, 999, *metadata, &builder));
+        std::map<std::string, FileMetaPB> orphans;
+        for (const auto& file : metadata->orphan_files()) {
+            EXPECT_EQ(20, file.version()) << file.name();
+            EXPECT_TRUE(orphans.emplace(file.name(), file).second) << "duplicate orphan " << file.name();
+        }
+        return orphans;
+    };
+    auto names = [](const std::map<std::string, FileMetaPB>& files) {
+        std::set<std::string> result;
+        for (const auto& [name, file] : files) {
+            result.insert(name);
+        }
+        return result;
+    };
+
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(210);
+    op_compaction.set_compact_version(18);
+    op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("out.dat");
+    op_compaction.mutable_lcrm_file()->set_name("out.lcrm");
+    op_compaction.mutable_lcrm_file()->set_size(80);
+    auto* sst = op_compaction.add_ssts();
+    sst->set_name("out.sst");
+    sst->set_size(100);
+    sst->set_shared(true);
+    // The primary index compaction merged "in.sst" into "merged.sst" and kept "moved.sst" as is.
+    op_compaction.add_input_sstables()->set_filename("in.sst");
+    op_compaction.add_input_sstables()->set_filename("moved.sst");
+    auto* merged = op_compaction.add_output_sstables();
+    merged->set_filename("merged.sst");
+    merged->set_filesize(200);
+    op_compaction.add_output_sstables()->set_filename("moved.sst");
+    auto orphans = publish_with_conflict(op_compaction);
+    EXPECT_EQ((std::set<std::string>{"out.dat", "out.lcrm", "out.sst", "merged.sst"}), names(orphans));
+    EXPECT_EQ(80, orphans["out.lcrm"].size());
+    EXPECT_EQ(100, orphans["out.sst"].size());
+    EXPECT_TRUE(orphans["out.sst"].shared());
+    EXPECT_EQ(200, orphans["merged.sst"].size());
+    EXPECT_FALSE(orphans["merged.sst"].shared());
+
+    // A log written by an older BE carries the primary index compaction output in output_sstable.
+    TxnLogPB_OpCompaction legacy_op_compaction;
+    legacy_op_compaction.add_input_rowsets(210);
+    legacy_op_compaction.set_compact_version(18);
+    legacy_op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("legacy.dat");
+    legacy_op_compaction.add_input_sstables()->set_filename("in.sst");
+    auto* legacy = legacy_op_compaction.mutable_output_sstable();
+    legacy->set_filename("legacy.sst");
+    legacy->set_filesize(300);
+    legacy->set_shared(true);
+    orphans = publish_with_conflict(legacy_op_compaction);
+    EXPECT_EQ((std::set<std::string>{"legacy.dat", "legacy.sst"}), names(orphans));
+    EXPECT_EQ(300, orphans["legacy.sst"].size());
+    EXPECT_TRUE(orphans["legacy.sst"].shared());
+}
+
 TEST_F(MetaFileTest, test_trim_partial_compaction_last_input_rowset) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(9);
@@ -2379,7 +2582,8 @@ TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
     EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
 }
 
-// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+// Test that remove_compacted_sst also handles output_sstable (singular), which only appears in
+// txn logs written before index compaction moved to the plural output_sstables field.
 TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
     const int64_t tablet_id = 10011;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);

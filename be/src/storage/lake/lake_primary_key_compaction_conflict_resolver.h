@@ -24,7 +24,7 @@
 namespace starrocks::lake {
 
 class Rowset;
-class UpdateManager;
+class PrimaryKeyManager;
 class MetaFileBuilder;
 class LakePersistentIndex;
 

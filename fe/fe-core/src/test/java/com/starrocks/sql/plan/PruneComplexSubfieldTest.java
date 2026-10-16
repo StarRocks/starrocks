@@ -1192,6 +1192,16 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "get_json_int(2: j1, 'a')");
 
+        sql = "select cast(j1->'a' as char(5)) from js0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(get_json_string(2: j1, 'a') AS CHAR(5))");
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a(varchar)]");
+
+        sql = "select v1 from js0 where cast(j1->'a' as char(5)) = 'hello'";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(get_json_string(2: j1, 'a') AS CHAR(5))");
+
         sql = "select 1 from js0 where CAST(PARSE_JSON('')  AS STRING) = 'asdf'";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(parse_json('') AS VARCHAR(65533)) = 'asdf'");

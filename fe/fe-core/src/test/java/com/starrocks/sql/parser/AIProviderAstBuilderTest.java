@@ -63,6 +63,17 @@ public class AIProviderAstBuilderTest {
     }
 
     @Test
+    public void testCreateChatWithProtocol() {
+        CreateAIProviderStmt stmt = (CreateAIProviderStmt) parse(
+                "CREATE AI PROVIDER c TYPE chat PROPERTIES("
+                        + "\"protocol\"=\"anthropic\","
+                        + "\"endpoint\"=\"https://api.anthropic.com/v1/messages\",\"model\"=\"m\")");
+        Assertions.assertEquals("c", stmt.getName());
+        Assertions.assertEquals("chat", stmt.getType());
+        Assertions.assertEquals("anthropic", stmt.getProperties().get("protocol"));
+    }
+
+    @Test
     public void testAlter() {
         AlterAIProviderStmt stmt = (AlterAIProviderStmt) parse(
                 "ALTER AI PROVIDER r SET (\"api_key\"=\"sk-new\")");
@@ -83,6 +94,8 @@ public class AIProviderAstBuilderTest {
         Assertions.assertEquals("", all.getTypeFilter());
         ShowAIProvidersStmt byType = (ShowAIProvidersStmt) parse("SHOW AI PROVIDERS TYPE rerank");
         Assertions.assertEquals("rerank", byType.getTypeFilter());
+        ShowAIProvidersStmt chat = (ShowAIProvidersStmt) parse("SHOW AI PROVIDERS TYPE chat");
+        Assertions.assertEquals("chat", chat.getTypeFilter());
     }
 
     @Test

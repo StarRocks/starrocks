@@ -53,6 +53,17 @@ namespace starrocks {
 
 class TNetworkAddress;
 class ThriftServer;
+class TPlanNode;
+class TPlanFragment;
+class TExecPlanFragmentParams;
+class TQueryPlanInfo;
+
+// Render diagnostic copies with plan credentials masked before Thrift escapes/encodes them.
+// Never use these copies for execution or transmission.
+std::string thrift_plan_debug_string(const TPlanNode& node);
+std::string thrift_plan_debug_string(const TPlanFragment& fragment);
+std::string thrift_plan_debug_string(const TExecPlanFragmentParams& request);
+std::string thrift_plan_debug_string(const TQueryPlanInfo& info);
 
 // Utility class to serialize thrift objects to a binary format.  This object
 // should be reused if possible to reuse the underlying memory.

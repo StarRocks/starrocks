@@ -81,10 +81,6 @@ dependencies {
         exclude(group = "junit", module = "junit")
     }
     implementation("com.baidu:jprotobuf-rpc-common")
-    implementation("com.baidu:jprotobuf-rpc-core") {
-        exclude(group = "com.baidu", module = "jprotobuf")
-        exclude(group = "junit", module = "junit")
-    }
     implementation("com.clickhouse:clickhouse-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     implementation("com.fasterxml.jackson.core:jackson-core")
@@ -113,6 +109,9 @@ dependencies {
     implementation("com.qcloud:chdfs_hadoop_plugin_network")
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okio:okio")
+    implementation("com.starrocks:jprotobuf-rpc-core") {
+        exclude(group = "junit", module = "junit")
+    }
     implementation("com.starrocks:spark-dpp")
     implementation("com.starrocks:starclient")
     implementation("com.starrocks:starmanager")
@@ -249,6 +248,8 @@ dependencies {
         exclude(group = "org.elasticsearch.client", module = "*")
         exclude(group = "com.nimbusds", module = "nimbus-jose-jwt")
         exclude(group = "com.sun.jersey", module = "jersey-bundle")
+        // Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows jakarta.ws.rs-api 2.1.6
+        exclude(group = "javax.ws.rs", module = "jsr311-api")
     }
     compileOnly("org.apache.spark:spark-catalyst_2.12")
     implementation("org.apache.spark:spark-core_2.12") {
@@ -349,8 +350,11 @@ tasks.register<Task>("generateProtoSources") {
         "encryption.proto"
     )
 
-    // Declare inputs (proto files)
-    inputs.files(protoFiles.map { file("$protoDir/$it") })
+    // Declare inputs (proto files). The generator follows imports (e.g. internal_service.proto ->
+    // status.proto, data.proto), so track every proto in the directory rather than only the root
+    // files above; otherwise editing an imported proto leaves the generated Java stale while
+    // Gradle reports this task up to date.
+    inputs.files(fileTree(protoDir) { include("*.proto") })
 
     // Declare output directory
     outputs.dir(outputDir)

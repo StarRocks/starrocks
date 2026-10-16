@@ -40,13 +40,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -649,22 +651,23 @@ public class SystemInfoServiceTest {
         Assertions.assertTrue(beIP == null);
     }
 
-    @Mocked
-    InetAddress addr;
+    private MockedStatic<InetAddress> mockedInetAddress;
 
+    @AfterEach
+    public void closeMockedInetAddress() {
+        if (mockedInetAddress != null) {
+            mockedInetAddress.close();
+            mockedInetAddress = null;
+        }
+    }
+
+    // Resolve every host name to 127.0.0.1. Mockito is used instead of a JMockit MockUp because
+    // JDK 19+ makes java.net.InetAddress a sealed class, which JMockit 1.x cannot redefine.
     private void mockNet() {
-        new MockUp<InetAddress>() {
-            @Mock
-            public InetAddress getByName(String host) throws UnknownHostException {
-                return addr;
-            }
-        };
-        new Expectations() {
-            {
-                addr.getHostAddress();
-                result = "127.0.0.1";
-            }
-        };
+        InetAddress addr = Mockito.mock(InetAddress.class);
+        Mockito.when(addr.getHostAddress()).thenReturn("127.0.0.1");
+        mockedInetAddress = Mockito.mockStatic(InetAddress.class, Mockito.CALLS_REAL_METHODS);
+        mockedInetAddress.when(() -> InetAddress.getByName(Mockito.anyString())).thenReturn(addr);
     }
 
     @Test

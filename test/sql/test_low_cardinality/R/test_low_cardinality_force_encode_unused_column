@@ -1,4 +1,4 @@
--- name: test_low_cardinality_force_encode_unused_column
+-- name: test_low_cardinality_force_encode_unused_column @sequential
 admin set frontend config ("dict_thrash_guard_threshold" = "1000000");
 -- result:
 -- !result

@@ -83,6 +83,12 @@ TypeDescriptor variant_typed_desc_from_parquet_field(const ParquetField* field);
 // statistics sort order so signed-ordered legacy footer stats are not trusted.
 bool is_unsigned_integer(const tparquet::SchemaElement& schema_element);
 
+// GEO values have undefined sort order, even when read through an ordinary binary/string slot.
+inline bool has_geo_annotation(const tparquet::SchemaElement& schema_element) {
+    return schema_element.__isset.logicalType &&
+           (schema_element.logicalType.__isset.GEOMETRY || schema_element.logicalType.__isset.GEOGRAPHY);
+}
+
 struct NullInfos {
     // The number of nulls contained in the null vector.
     size_t num_nulls{};

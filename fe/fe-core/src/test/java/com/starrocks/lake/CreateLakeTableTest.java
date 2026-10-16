@@ -46,6 +46,9 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.thrift.TBatchGetTabletMetadataRequest;
 import com.starrocks.thrift.TBatchGetTabletMetadataResponse;
 import com.starrocks.thrift.TGetTabletMetadataRequest;
@@ -70,6 +73,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class CreateLakeTableTest {
     private static ConnectContext connectContext;
@@ -467,6 +472,46 @@ public class CreateLakeTableTest {
                     .getDefaultPhysicalPartition().getLatestMaterializedIndices(MaterializedIndex.IndexExtState.ALL)
                     .size());
 
+        }
+    }
+
+    @Test
+    public void testConcurrentCreateWithRollupWaitsForEveryTablet() throws Exception {
+        int savedMaxSerialReplicas = Config.create_table_max_serial_replicas;
+        int savedTabletCreateTimeout = Config.tablet_create_timeout_second;
+        int savedMaxCreateTableTimeout = Config.max_create_table_timeout_second;
+        // The first create task never finishes; every other one finishes as soon as it is sent.
+        AtomicInteger sentTasks = new AtomicInteger();
+        new MockUp<TabletTaskExecutor>() {
+            @Mock
+            CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
+                for (AgentTask task : agentBatchTask) {
+                    if (sentTasks.incrementAndGet() > 1) {
+                        ((CreateReplicaTask) task).countDownLatch(task.getBackendId(), task.getTabletId());
+                    }
+                }
+                return CompletableFuture.completedFuture(true);
+            }
+        };
+        try {
+            Config.create_table_max_serial_replicas = 1;
+            Config.tablet_create_timeout_second = 1;
+            Config.max_create_table_timeout_second = 1;
+            // file_bundling turns the tablet creation optimization on, and the rollup turns it off again, so
+            // every tablet of both indexes gets its own task.
+            DdlException e = Assertions.assertThrows(DdlException.class, () -> createTable(
+                    "create table lake_test.concurrent_create_with_rollup\n" +
+                            "(c0 int, c1 string, c2 int)\n" +
+                            "DUPLICATE KEY(c0)\n" +
+                            "distributed by hash(c0) buckets 4\n" +
+                            "ROLLUP (mv1 (c0, c1))\n" +
+                            "properties('file_bundling' = 'true')"));
+            Assertions.assertTrue(e.getMessage().contains("Table creation timed out"), e.getMessage());
+            Assertions.assertEquals(8, sentTasks.get());
+        } finally {
+            Config.create_table_max_serial_replicas = savedMaxSerialReplicas;
+            Config.tablet_create_timeout_second = savedTabletCreateTimeout;
+            Config.max_create_table_timeout_second = savedMaxCreateTableTimeout;
         }
     }
 

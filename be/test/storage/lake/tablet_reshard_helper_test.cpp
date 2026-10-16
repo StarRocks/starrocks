@@ -23,7 +23,10 @@
 #include <random>
 #include <roaring/roaring.hh>
 
+#include "base/testutil/assert.h"
 #include "storage/datum_variant.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/types.h"
 #include "storage/variant_tuple.h"
 
@@ -549,6 +552,115 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_skips_when_num_del
     EXPECT_FALSE(rowset.has_num_dels());
 }
 
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_basic) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    // Split into 3, index 0: gets remainder
+    update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(34, rowset.num_rows());   // 100/3=33, 100%3=1, index 0 < 1 => +1
+    EXPECT_EQ(334, rowset.data_size()); // 1000/3=333, 1000%3=1, index 0 < 1 => +1
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_remainder_distribution) {
+    // Verify that splitting 10 rows into 3 tablets gives 4+3+3 = 10
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int32_t i = 0; i < 3; i++) {
+        RowsetMetadataPB rowset;
+        rowset.set_num_rows(10);
+        rowset.set_data_size(100);
+        update_rowset_data_stats(&rowset, 3, i);
+        total_rows += rowset.num_rows();
+        total_size += rowset.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(100, total_size);
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_exact_division) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(9);
+    rowset.set_data_size(300);
+
+    update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(3, rowset.num_rows());
+    EXPECT_EQ(100, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_split_count_one) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    update_rowset_data_stats(&rowset, 1, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_split_count_zero) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    update_rowset_data_stats(&rowset, 0, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_txn_log_data_stats_all_op_types) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(1);
+    txn_log.set_txn_id(1000);
+
+    // op_write
+    auto* op_write_rowset = txn_log.mutable_op_write()->mutable_rowset();
+    op_write_rowset->set_num_rows(10);
+    op_write_rowset->set_data_size(100);
+
+    // op_compaction
+    auto* op_compaction_rowset = txn_log.mutable_op_compaction()->mutable_output_rowset();
+    op_compaction_rowset->set_num_rows(20);
+    op_compaction_rowset->set_data_size(200);
+
+    // op_schema_change
+    auto* schema_change_rowset = txn_log.mutable_op_schema_change()->add_rowsets();
+    schema_change_rowset->set_num_rows(30);
+    schema_change_rowset->set_data_size(300);
+
+    // op_replication
+    auto* repl_rowset = txn_log.mutable_op_replication()->add_op_writes()->mutable_rowset();
+    repl_rowset->set_num_rows(40);
+    repl_rowset->set_data_size(400);
+
+    // op_parallel_compaction
+    auto* parallel_rowset =
+            txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset();
+    parallel_rowset->set_num_rows(50);
+    parallel_rowset->set_data_size(500);
+
+    // split_count=3, split_index=0 (gets extra remainder)
+    update_txn_log_data_stats(&txn_log, 3, 0);
+
+    EXPECT_EQ(4, txn_log.op_write().rowset().num_rows());               // 10/3=3 + (0<1?1:0) = 4
+    EXPECT_EQ(34, txn_log.op_write().rowset().data_size());             // 100/3=33 + (0<1?1:0) = 34
+    EXPECT_EQ(7, txn_log.op_compaction().output_rowset().num_rows());   // 20/3=6 + (0<2?1:0) = 7
+    EXPECT_EQ(67, txn_log.op_compaction().output_rowset().data_size()); // 200/3=66 + (0<2?1:0) = 67
+    EXPECT_EQ(10, txn_log.op_schema_change().rowsets(0).num_rows());
+    EXPECT_EQ(100, txn_log.op_schema_change().rowsets(0).data_size());
+    EXPECT_EQ(14, txn_log.op_replication().op_writes(0).rowset().num_rows());   // 40/3=13 + (0<1?1:0) = 14
+    EXPECT_EQ(134, txn_log.op_replication().op_writes(0).rowset().data_size()); // 400/3=133 + (0<1?1:0) = 134
+    EXPECT_EQ(17, txn_log.op_parallel_compaction()
+                          .subtask_compactions(0)
+                          .output_rowset()
+                          .num_rows()); // 50/3=16 + (0<2?1:0) = 17
+    EXPECT_EQ(167, txn_log.op_parallel_compaction()
+                           .subtask_compactions(0)
+                           .output_rowset()
+                           .data_size()); // 500/3=166 + (0<2?1:0) = 167
+}
+
 // ---------------------------------------------------------------------------
 // Range-helper tests (PR-1).
 // ---------------------------------------------------------------------------
@@ -803,6 +915,67 @@ TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_both_absen
     EXPECT_FALSE(result.has_upper_bound());
 }
 
+// union_range -----------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_union_range_equal_bound_included_excluded) {
+    const auto a = make_range(10, /*lower_included=*/true, 20, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/false, 20, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: equal values, included = true || false = true
+    EXPECT_TRUE(result.lower_bound_included());
+    // Upper: equal values, included = false || true = true
+    EXPECT_TRUE(result.upper_bound_included());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_one_side_unbounded) {
+    // a has no lower_bound (unbounded)
+    const auto a = make_range(std::nullopt, /*lower_included=*/false, 20, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/true, 30, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: a is unbounded -> result lower is unbounded
+    EXPECT_FALSE(result.has_lower_bound());
+    // Upper: a=20 exclusive, b=30 inclusive -> take larger = 30 inclusive
+    ASSERT_TRUE(result.has_upper_bound());
+    EXPECT_TRUE(result.upper_bound_included());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_both_unbounded) {
+    TabletRangePB a; // fully unbounded
+    TabletRangePB b; // fully unbounded
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    EXPECT_FALSE(result.has_lower_bound());
+    EXPECT_FALSE(result.has_upper_bound());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_unequal_bounds) {
+    const auto a = make_range(5, /*lower_included=*/true, 15, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/true, 25, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: take smaller = 5, included from a = true
+    ASSERT_TRUE(result.has_lower_bound());
+    EXPECT_TRUE(result.lower_bound_included());
+    // Upper: take larger = 25, included from b = true
+    ASSERT_TRUE(result.has_upper_bound());
+    EXPECT_TRUE(result.upper_bound_included());
+
+    // Verify the values
+    VariantTuple lower;
+    ASSERT_OK(lower.from_proto(result.lower_bound()));
+    VariantTuple expected_lower;
+    ASSERT_OK(expected_lower.from_proto(a.lower_bound()));
+    EXPECT_EQ(0, lower.compare(expected_lower));
+
+    VariantTuple upper;
+    ASSERT_OK(upper.from_proto(result.upper_bound()));
+    VariantTuple expected_upper;
+    ASSERT_OK(expected_upper.from_proto(b.upper_bound()));
+    EXPECT_EQ(0, upper.compare(expected_upper));
+}
+
 // -----------------------------------------------------------------------------
 // Per-segment shared refactor: set_non_segment_files_shared / rowset uid helpers /
 // the segment+non-segment wrapper.
@@ -1009,6 +1182,246 @@ TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
     set_all_data_files_shared(&txn_log);
     ASSERT_EQ(1, txn_log.op_add_index().segment_entries_size());
     EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_all_private) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("seg0.dat");
+    segment->set_shared(false);
+    auto* del = rowset->add_del_files();
+    del->set_name("del0.del");
+    del->set_shared(false);
+    auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
+    sstable->set_filename("index0.sst");
+    sstable->set_shared(false);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_segment) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_segment_metas()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_del_file) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_del_files()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_sstable) {
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.mutable_sstable_meta()->add_sstables()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_shared_delvec) {
+    // A merge rewrites delvec pages into a new file, so a shared source delvec never blocks it.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& version_to_file = *metadata.mutable_delvec_meta()->mutable_version_to_file();
+    version_to_file[3].set_name("v3.delvec");
+    version_to_file[3].set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_dcg) {
+    // A shared .cols is checked directly, independent of its segment's own shared flag.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& dcgs = *metadata.mutable_dcg_meta()->mutable_dcgs();
+    auto* dcg = &dcgs[0];
+    dcg->add_column_files("c0.cols");
+    dcg->add_shared_files(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_idg) {
+    // A cross-published OpAddIndex can mark an IDG entry shared without touching its segment's own
+    // shared flag, so the segment here stays private while the IDG entry alone must block the merge.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& idgs = *metadata.mutable_idg_meta()->mutable_idgs();
+    idgs[0].add_entries()->set_shared_file(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_garbage_records) {
+    // compaction_inputs is itself a repeated RowsetMetadataPB, so an implementation that walked every
+    // RowsetMetadataPB in the message instead of the live rowsets would wrongly block here.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.add_compaction_inputs()->add_segment_metas()->set_shared(true);
+    metadata.add_orphan_files()->set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_empty_metadata) {
+    TabletMetadataPB metadata;
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+// -----------------------------------------------------------------------------
+// collect_compaction_output_files: the compaction outputs a cross-publish drops.
+// -----------------------------------------------------------------------------
+
+// Regression: op_parallel_compaction subtasks synthesized by
+// tablet_parallel_compaction_manager do not set new_segment_count — their
+// output_rowset carries only newly written segments, so the helper should
+// treat all of them as new rather than silently skipping them (which would
+// leak segment files).
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_parallel_without_new_segment_count) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+    auto* op_parallel_compaction = log.mutable_op_parallel_compaction();
+    auto* subtask = op_parallel_compaction->add_subtask_compactions();
+    auto* output_rowset = subtask->mutable_output_rowset();
+    output_rowset->add_segment_metas()->set_filename("parallel_new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("parallel_new_1.dat");
+    // Intentionally NOT setting new_segment_offset/new_segment_count to
+    // reproduce the shape produced by the parallel-compaction manager.
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "parallel_new_0.dat"),
+                                                tablet_manager.segment_location(tablet_id, "parallel_new_1.dat")));
+}
+
+// Regression: partial compaction's output_rowset.segment_metas() concatenates
+// reused input segments with newly written ones; only the new window
+// (new_segment_offset / new_segment_count) should be queued for deletion.
+// Deleting reused segments would corrupt the merged tablet because those
+// segments are still live as input rowsets absorbed by the merge.
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_partial_compaction) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+    auto* op_compaction = log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    // [reused_0, reused_1, new_0, new_1] — only new_0/new_1 are newly written.
+    output_rowset->add_segment_metas()->set_filename("reused_0.dat");
+    output_rowset->add_segment_metas()->set_filename("reused_1.dat");
+    output_rowset->add_segment_metas()->set_filename("new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("new_1.dat");
+    op_compaction->set_new_segment_offset(2);
+    op_compaction->set_new_segment_count(2);
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "new_0.dat"),
+                                                       tablet_manager.segment_location(tablet_id, "new_1.dat")));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.segment_location(tablet_id, "reused_0.dat"))));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.segment_location(tablet_id, "reused_1.dat"))));
+}
+
+// Verifies that collect_compaction_output_files() collects files of every
+// kind — segments (via output_rowset), ssts (compaction-ingested), output_sstable,
+// output_sstables, lcrm_file, plus op_parallel_compaction.output_sstable /
+// output_sstables / orphan_lcrm_files — so regressions don't silently reintroduce
+// leaks by dropping any one category.
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_covers_all_kinds) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // Top-level op_compaction with every output-file kind populated.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->mutable_output_rowset()->add_segment_metas()->set_filename("out_seg.dat");
+    op_compaction->set_new_segment_offset(0);
+    op_compaction->set_new_segment_count(1);
+    op_compaction->add_ssts()->set_name("compact_ingest.sst");
+    op_compaction->mutable_output_sstable()->set_filename("compact_out.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_out_multi.sst");
+    op_compaction->mutable_lcrm_file()->set_name("compact.crm");
+
+    // op_parallel_compaction top-level output sstables and orphan lcrms.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->mutable_output_sstable()->set_filename("parallel_out.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_out_multi.sst");
+    op_parallel->add_orphan_lcrm_files()->set_name("parallel_orphan.crm");
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "out_seg.dat"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_ingest.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_out.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_out_multi.sst"),
+                                                       tablet_manager.lcrm_location(tablet_id, "compact.crm"),
+                                                       tablet_manager.sst_location(tablet_id, "parallel_out.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "parallel_out_multi.sst"),
+                                                       tablet_manager.lcrm_location(tablet_id, "parallel_orphan.crm")));
+}
+
+// Regression: the persistent-index compaction "full contain / only do move"
+// optimization re-emits an input sstable as its own output verbatim (same
+// filename, only the fileset_id changes). Such a file is still referenced by the
+// base metadata and every sibling tablet, so when a pending compaction is dropped
+// during a split/merge cross-publish it must NOT be queued for deletion. Deleting
+// it removed shared PK-index sstables in production and stalled publishes with
+// "load primary index failed: ... .sst does not exist".
+//
+// Covers both message shapes (op_compaction and op_parallel_compaction) and both
+// output fields. Production emits reused files into the plural output_sstables,
+// so each op reuses via output_sstables; the singular output_sstable is exercised
+// too (reused on op_compaction, genuinely new on op_parallel_compaction).
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_skips_passthrough_reused_sstables) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // op_compaction: "reused.sst" (plural) and "reused_single.sst" (singular) are
+    // pass-through outputs that alias inputs; "compact_new.sst" is genuinely new.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->add_input_sstables()->set_filename("reused.sst");
+    op_compaction->add_input_sstables()->set_filename("reused_single.sst");
+    op_compaction->mutable_output_sstable()->set_filename("reused_single.sst");
+    op_compaction->add_output_sstables()->set_filename("reused.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_new.sst");
+
+    // op_parallel_compaction: "parallel_reused.sst" is reused via the plural
+    // output_sstables (the shape production actually emits); the singular
+    // output_sstable and the other plural entry are genuinely new.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->add_input_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->mutable_output_sstable()->set_filename("parallel_single_new.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_new.sst");
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    // Only the genuinely new outputs are collected for deletion.
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(tablet_manager.sst_location(tablet_id, "compact_new.sst"),
+                                                tablet_manager.sst_location(tablet_id, "parallel_single_new.sst"),
+                                                tablet_manager.sst_location(tablet_id, "parallel_new.sst")));
+    // The pass-through reused (still-live) sstables are never queued for deletion,
+    // whether they came through the singular output_sstable or the plural list.
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "reused.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "reused_single.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "parallel_reused.sst"))));
 }
 
 } // namespace starrocks::lake

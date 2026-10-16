@@ -38,6 +38,7 @@ public final class ProfileKeyDictionary {
 
     // --- Summary info-string keys ---
     public static final String QUERY_ID = "Query ID";
+    public static final String CUSTOM_QUERY_ID = "Custom Query ID";
     public static final String START_TIME = "Start Time";
     public static final String END_TIME = "End Time";
     public static final String TOTAL_TIME = "Total";
@@ -269,6 +270,7 @@ public final class ProfileKeyDictionary {
 
             // --- Summary info-string keys ---
             QUERY_ID,
+            CUSTOM_QUERY_ID,
             START_TIME,
             END_TIME,
             TOTAL_TIME,

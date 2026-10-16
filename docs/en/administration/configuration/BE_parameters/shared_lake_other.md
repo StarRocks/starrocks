@@ -77,6 +77,15 @@ This topic introduces the following types of BE configurations:
 - Description: Determines whether to await at least one frontend heartbeat response indicating SHUTDOWN status before completing graceful exit. When enabled, the graceful shutdown process remains active until a SHUTDOWN confirmation is responded via heartbeat RPC, ensuring the frontend has sufficient time to detect the termination state between two regular heartbeat intervals.
 - Introduced in: v3.4.5
 
+### lake_compaction_hold_input_segments
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a compaction task in a shared-data cluster holds its input Segment objects on its own Rowset instances for the whole task, so that the per-column-group passes of vertical compaction reuse them instead of reloading them through the metadata cache. Without holding, whenever the metadata cache cannot hold all input segments (a small `lake_metadata_cache_limit`, or a node crowded with many tablets), every pass reloads and re-parses every input segment; that cost is CPU-bound and proportional to the column count, and can slow a wide-table compaction by an order of magnitude or make it fail with repeated memory-limit retries. While holding, the task does not fill the shared metadata cache with its input segments or delete vectors, because the inputs are deleted right after compaction and caching them only evicts other tablets' entries. The memory cost is one set of input segment metadata per running task, accounted on the compaction task's memory tracker and released with the task. Set this item to `false` to restore the previous behavior, in which compaction reuses segments through the shared metadata cache and fills that cache with its inputs.
+- Introduced in: v4.2
+
 ### lake_compaction_stream_buffer_size_bytes
 
 - Default: 1048576
@@ -140,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_enable_tablet_location_handoff
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the nodes that write a load's data hand the storage location of their tablets over to the node that coordinates the load, in a shared-data cluster. For a table with `file_bundling` enabled, the coordinating node writes one combined transaction log per partition, and it usually owns no tablet of most partitions. When this item is `true`, the nodes that own the tablets return the storage location of one tablet per partition together with their transaction logs, and the coordinating node writes the combined transaction log without requesting the location from StarMgr; the requests avoided are counted in `lake_tablet_location_handoff_hits_total`. When it is `false`, the coordinating node requests the location from StarMgr once per such partition per load, which is counted in `starrocks_be_staros_shard_info_fallback_total`. The returned location includes the credentials of the storage volume.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
@@ -149,13 +167,22 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_pk_compaction_base_enable_delete_trigger
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether a Primary Key tablet in a shared-data cluster switches from cumulative compaction to base compaction on its own when its deletes reach `lake_pk_compaction_base_delete_ratio_threshold` or `lake_pk_compaction_base_delete_rows_threshold`. It is disabled by default because `lake_pk_compaction_base_delete_rows_threshold` is an absolute count: on a large table whose existing rows keep being updated or deleted, a tablet reaches it again soon after each base compaction, and each base compaction rewrites up to `update_compaction_ratio_threshold` (0.5 by default) of the tablet's data. A manual `ALTER TABLE ... COMPACT` runs base compaction regardless of this item.
+- Introduced in: v4.1.6, v26.2.1
+
 ### lake_pk_compaction_base_delete_ratio_threshold
 
 - Default: 0.5
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. Base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value, when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`, or when a manual `ALTER TABLE ... COMPACT` forces a base compaction. Set both thresholds high enough to disable the automatic triggers.
+- Description: One of two triggers that switch a Primary Key tablet in a shared-data cluster from cumulative compaction (size-tiered small-file merges) to base compaction, which rewrites the delete-bearing rowsets (the ones with the most deleted rows first) to drop deleted rows and shrink their delete vectors. When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when the tablet's aggregate delete ratio (`sum(num_dels) / sum(num_rows)` across rowsets) reaches this value or when its absolute delete-row count reaches `lake_pk_compaction_base_delete_rows_threshold`. A manual `ALTER TABLE ... COMPACT` forces a base compaction regardless of these items.
 - Introduced in: v4.2
 
 ### lake_pk_compaction_base_delete_rows_threshold
@@ -164,7 +191,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). Base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
+- Description: One of two triggers for Primary Key base compaction in a shared-data cluster (see `lake_pk_compaction_base_delete_ratio_threshold`). When `lake_pk_compaction_base_enable_delete_trigger` is `true`, base compaction runs when a tablet's absolute delete-row count (`sum(num_dels)` across rowsets) reaches this value. This absolute-count trigger complements the ratio trigger: on hot update/delete tables the delete vectors bloat and space is wasted while the aggregate delete ratio stays low (diluted by many mostly-live rowsets), so the ratio trigger alone would not fire. Raise it to make base compaction less frequent, or lower it to reclaim delete vectors sooner.
 - Introduced in: v4.2
 
 ### enable_lake_pk_compaction_score_gate
@@ -298,6 +325,24 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of cached client instances retained for each remote host by BE-wide client caches. This single setting is used when creating BackendServiceClientCache, FrontendServiceClientCache, and BrokerServiceClientCache during ExecEnv initialization, so it limits the number of client stubs/connections kept per host across those caches. Raising this value reduces reconnects and stub creation overhead at the cost of increased memory and file-descriptor usage; lowering it saves resources but may increase connection churn. The value is read at startup and cannot be changed at runtime. Currently one shared setting controls all client cache types; separate per-cache configuration may be introduced later.
 - Introduced in: v3.2.0
 
+### paimon_native_parquet_cache_hole_size_limit
+
+- Default: 1048576
+- Type: Long
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The largest gap between two required Parquet ranges that the Paimon native reader still merges into one read. A larger value trades read amplification for fewer requests. The default matches `io_coalesce_read_max_distance_size` used by the StarRocks native Parquet reader; paimon-cpp's own default is far smaller and produces many small requests on object storage.
+- Introduced in: -
+
+### s3_multipart_equal_part_size
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether every part of a multipart upload to S3 or an S3-compatible object store, except the last one, has exactly the same size. Some S3-compatible object stores, such as Cloudflare R2, reject a multipart upload whose non-trailing parts differ in length with the error `InvalidPart: All non-trailing parts must have the same length`. Enable this item when you use such a store. When it is enabled, every part except the last one is exactly the configured part size: `starlet_fslib_s3_min_upload_part_size` for starlet uploads in a shared-data cluster, and `experimental_s3_min_upload_part_size` for other buffered S3 uploads from BE. The default `false` keeps the existing behavior, which uploads the whole buffer as one part whenever it reaches the part size, so part sizes vary. Files written by the Parquet, ORC, and CSV file writers, for example by `INSERT INTO FILES` or by Hive and Iceberg sinks, are uploaded part by part as they are produced and are not affected by this item. A change takes effect on uploads started afterwards. S3 allows at most 10,000 parts per upload, so an object uploaded in equal parts cannot exceed 10,000 times the part size, about 48.8 GiB with the default 5 MiB starlet part size. Raise the part size to write larger objects.
+- Introduced in: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - Default: 10000
@@ -378,6 +423,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: The percentage of disk capacity that Data Cache can use at most in a shared-data cluster. Only takes effect when `datacache_unified_instance_enable` is `false`.
 - Introduced in: v3.1
+
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: In a shared-data cluster, whether a Data Cache disk block that this CN process wrote and has not evicted since skips the first full-block checksum read when a later request touches it. That verification re-reads the whole block from disk to check data that the process has just written and still tracks in memory, which costs one extra disk read on the first access to every freshly cached block. Set this item to `false` to verify every block on first access, which is only worth its cost where the cache disk is suspected of corrupting data at rest. Blocks inherited from a previous run of the process are always verified regardless of this item, because nothing in the current process witnessed their write. This item is read once when Data Cache initializes.
+- Introduced in: v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- Default: none
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: In a shared-data cluster, the compression applied to the worker heartbeat that this CN sends to StarMgr. The heartbeat carries one entry per tablet on the CN, which makes it the largest recurring request in the cluster. Valid values: `none` and `zstd`. `zstd` compresses the payload on the heartbeat thread, within the same RPC timeout budget, and the FE decompresses it. `none` sends the heartbeat uncompressed. The FE must be able to decompress the payload before any CN is switched, because an FE that predates this mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this item on the CNs. An unrecognized value is reported and falls back to `none` instead of preventing the CN from starting.
+- Introduced in: v4.2.0
 
 ### starlet_use_star_cache
 
@@ -653,11 +716,29 @@ This topic introduces the following types of BE configurations:
 
 ### lake_replication_file_copy_threads
 
-- Default: 0
+- Default: 16
 - Type: Int
 - Unit: -
 - Is mutable: No
-- Description: Number of threads in the dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. `0` means `cpu_cores * 4` (the same default semantics as `replication_threads`); negative values mean `-value * cpu_cores`. This pool is intentionally separate from the agent-task `replicate_snapshot` pool so that per-file copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock guard. The pool is built once at startup and has no runtime resize hook, so CN restart is required to change its size.
+- Description: Number of threads in the CN-wide dedicated thread pool used by lake-to-lake (shared-data) cross-cluster replication for per-file copy. The default caps concurrent copy tasks and their read buffers independently of CPU count. `0` means `cpu_cores * 4`; negative values mean `-value * cpu_cores`. The pool is built once at startup, so CN restart is required to change its size.
+- Introduced in: v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of files copied concurrently for one tablet during lake-to-lake (shared-data) cross-cluster replication. All tablets share the CN-wide `lake_replication_file_copy_threads` pool, so this setting prevents one tablet from monopolizing the pool. Values less than or equal to `1` serialize file copy within each tablet.
+- Introduced in: v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Minimum number of files in a tablet required to copy that tablet's files concurrently during lake-to-lake (shared-data) cross-cluster replication. Set this parameter to `0` to disable the dedicated file copy pool and execute file copy in the calling replication task.
 - Introduced in: v4.1.2
 
 ### lake_service_max_concurrency

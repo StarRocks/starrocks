@@ -51,12 +51,14 @@ AIRuntimeConfig ai_runtime_config_from_globals() {
     config.request_timeout_ms = config::ai_function_request_timeout_ms;
     config.connect_timeout_ms = config::ai_function_connect_timeout_ms;
     config.max_response_bytes = config::ai_function_max_response_bytes;
+    config.max_input_file_bytes = config::ai_function_max_input_file_bytes;
     config.worker_thread_num = config::ai_function_worker_thread_num;
     config.sub_chunk_size = config::ai_function_sub_chunk_size;
     config.max_retries = config::ai_function_max_retries;
     config.max_retries_on_throttle = config::ai_function_max_retries_on_throttle;
     config.on_error = config::ai_function_on_error.value();
     config.rate_limit_qps_chat = config::ai_function_rate_limit_qps_chat;
+    config.rate_limit_qps_embedding = config::ai_function_rate_limit_qps_embedding;
     config.max_inflight = config::ai_function_max_inflight;
     return config;
 }

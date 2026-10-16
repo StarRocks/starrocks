@@ -302,7 +302,18 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // 1. add salt for skew child and other child
         OptExpression newLeftChild;
         OptExpression newRightChild;
-        if (leftOutputColumns.containsAll(skewColumn.getUsedColumns())) {
+        boolean skewSideIsLeft = leftOutputColumns.containsAll(skewColumn.getUsedColumns());
+        // addSaltForOtherChild replicates the non-skewed child once per salt value. For the
+        // null-supplying side of an outer join that is harmless: a copy that matches nothing simply
+        // drops out. For the PRESERVED side it is not -- each copy that matches nothing emits its own
+        // null-padded row, so one input row comes back up to skew_join_rand_range + 1 times and the
+        // count moves with rand() from run to run. Only a hint can ask for this orientation; the
+        // stats-driven path always derives the skew column from the left child, which is the
+        // preserved side, so it never lands here.
+        if (!skewSideIsLeft && oldJoinOperator.getJoinType() == JoinOperator.LEFT_OUTER_JOIN) {
+            return Lists.newArrayList();
+        }
+        if (skewSideIsLeft) {
             newLeftChild = addSaltForSkewChild(input.inputAt(0), skewColumn,
                     oldJoinOperator.getSkewValues(), context);
             newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, context);
@@ -452,11 +463,23 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         java.util.function.Function.identity()));
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
+        // These two pairs are the argument list of `generate_series(start, stop)`, which takes its
+        // arguments positionally. Collecting them out of a HashMap handed the BE (stop, start) instead:
+        // `generate_series(skewRandRange, 0)` walks upwards from a start that is already past its stop and
+        // emits nothing, so the salt table comes out empty. Every row on this side then keeps the default
+        // salt of 0 while the other side still salts the skewed keys at random, no skewed key finds a
+        // match, and its rows are dropped from the result without any error.
+        ColumnRefOperator seriesStart = columnRefFactory.create("0", IntegerType.BIGINT, false);
+        ColumnRefOperator seriesStop =
+                columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false);
+        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList(
+                Pair.create(seriesStart, (ScalarOperator) ConstantOperator.createBigint(0)),
+                Pair.create(seriesStop, (ScalarOperator) ConstantOperator.createBigint(skewRandRange)));
+
         Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();
-        generateSeriesChildProjectMap.put(columnRefFactory.create("0", IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(0));
-        generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(skewRandRange));
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : generateSeriesChildProjectPairs) {
+            generateSeriesChildProjectMap.put(pair.first, pair.second);
+        }
         unnestProjectMap.putAll(generateSeriesChildProjectMap);
         OptExpression unnestProjectOpt = OptExpression.create(new LogicalProjectOperator(unnestProjectMap),
                 unnestOpt);
@@ -466,10 +489,6 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 new Type[] {IntegerType.BIGINT, IntegerType.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<ColumnRefOperator> generateSeriesOutputColumns = Lists.newArrayList();
         generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", IntegerType.BIGINT, true));
-        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : generateSeriesChildProjectMap.entrySet()) {
-            generateSeriesChildProjectPairs.add(Pair.create(entry.getKey(), entry.getValue()));
-        }
         List<ColumnRefOperator> generateSeriesOuterColRefs = Lists.newArrayList();
         generateSeriesOuterColRefs.add(unnestColumnOperator);
 

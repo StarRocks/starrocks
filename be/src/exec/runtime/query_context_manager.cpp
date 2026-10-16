@@ -74,9 +74,20 @@ void QueryContextManager::_clean_query_contexts() {
 }
 
 void QueryContextManager::_clean_func(QueryContextManager* manager) {
+#ifdef BE_TEST
+    // The stop flag is only re-checked between sleeps and ~QueryContextManager joins this thread, so
+    // shutdown blocks for whatever remains of the current interval. Every unit-test process builds and
+    // destroys this manager exactly once, which made that wait the single largest item in test
+    // teardown at the production interval -- it lands anywhere in [0, interval) depending on where the
+    // run happens to be in the cycle (measured 17-77ms across filters). Shrink the interval under test
+    // so the wait is bounded by 10ms instead.
+    constexpr int64_t kCleanIntervalMs = 10;
+#else
+    constexpr int64_t kCleanIntervalMs = 100;
+#endif
     while (!manager->_is_stopped()) {
         manager->_clean_query_contexts();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(kCleanIntervalMs));
     }
 }
 

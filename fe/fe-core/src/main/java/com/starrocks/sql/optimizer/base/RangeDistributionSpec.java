@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
  * Distribution spec for lake tables that use range distribution with a
  * colocate group. Scan-local only: carries the colocate columns and an
  * {@link EquivalentDescriptor} so later optimizer phases can decide
- * whether a range-colocate join avoids a shuffle.
+ * whether a range-colocate join, aggregation or window avoids a shuffle.
  *
  * <h3>Satisfaction contract</h3>
  * <ul>
@@ -36,12 +36,19 @@ import java.util.stream.Collectors;
  * <li>Another {@code RangeDistributionSpec} — delegate to {@link #canColocate}
  *     (structural check: same group, both stable, non-empty partitions,
  *     equal colocate column count).
- * <li>{@link HashDistributionSpec} with {@code SourceType.SHUFFLE_JOIN} —
- *     satisfied when every colocate column is covered (set-based, via
- *     {@code EquivalentDescriptor.isConnected(required, existing)}) by
- *     some required shuffle column. {@code SHUFFLE_AGG},
- *     {@code SHUFFLE_ENFORCE}, and {@code LOCAL} hash specs are rejected,
- *     scoping cross-type satisfaction to hash-join contexts.
+ * <li>{@link HashDistributionSpec} with {@code SourceType.SHUFFLE_JOIN} or
+ *     {@code SourceType.SHUFFLE_AGG} — satisfied when every colocate column
+ *     is covered (set-based, via
+ *     {@code EquivalentDescriptor.isConnected(required, existing)}) by some
+ *     required shuffle column; for {@code SHUFFLE_AGG} the cover must be
+ *     null-strict (a NULL-padded key has NULL rows in every ColocateRange),
+ *     the spec's selected partitions non-empty and the table's colocate
+ *     group stable. Covering every colocate column keeps each join key / group
+ *     inside one ColocateRange, which a colocate-dispatched fragment reads
+ *     in one instance. A consumer whose fragment is not colocate-dispatched,
+ *     such as a table sink that requires {@code SHUFFLE_AGG}, gets no
+ *     one-instance-per-key guarantee from this, as with a hash-local spec.
+ *     {@code SHUFFLE_ENFORCE} and {@code LOCAL} hash specs are rejected.
  * <li>Anything else not satisfied.
  * </ul>
  *
@@ -66,9 +73,11 @@ import java.util.stream.Collectors;
  * source-type filter alone is not sufficient to restrict activation to
  * joins. The set-op guarantor in
  * {@code ChildOutputPropertyGuarantor.visitPhysicalSetOperation} runs a
- * top-of-method range-normalization pass that converts every range child
- * to hash {@code SHUFFLE_JOIN} before any {@code isShuffle()} precondition
- * or {@code HashDistributionSpec} cast runs.
+ * top-of-method range-normalization pass that puts every range child
+ * behind a hash {@code SHUFFLE_ENFORCE} exchange — a property no range
+ * spec satisfies, so the exchange cannot be dropped in favour of the
+ * bare range child — before any {@code isShuffle()} precondition or
+ * {@code HashDistributionSpec} cast runs.
  */
 public final class RangeDistributionSpec extends DistributionSpec {
     private final List<DistributionCol> colocateColumns;
@@ -97,18 +106,20 @@ public final class RangeDistributionSpec extends DistributionSpec {
      * <ul>
      * <li>ANY → always satisfied.
      * <li>Another RangeDistributionSpec → {@link #canColocate}.
-     * <li>HashDistributionSpec with source type {@code SHUFFLE_JOIN} and
-     *     every colocate column covered by some required column via
-     *     {@link EquivalentDescriptor#isConnected} → satisfied.
-     *     {@code SHUFFLE_AGG}, {@code SHUFFLE_ENFORCE}, and {@code LOCAL}
-     *     hash specs are rejected, staging P2 to join contexts only.
+     * <li>HashDistributionSpec with source type {@code SHUFFLE_JOIN} or
+     *     {@code SHUFFLE_AGG} and every colocate column covered by some
+     *     required column via {@link EquivalentDescriptor#isConnected} →
+     *     satisfied; for {@code SHUFFLE_AGG} the cover must be null-strict, the
+     *     selected partitions non-empty and the group stable. {@code SHUFFLE_ENFORCE}
+     *     and {@code LOCAL} hash specs are rejected.
      * <li>Anything else → not satisfied.
      * </ul>
      *
      * <p>Set operations also emit {@code SHUFFLE_JOIN}
      * ({@code PropertyDeriverBase.computeShuffleSetRequiredProperties}), so
-     * this method alone is not sufficient to restrict P2 to joins — the
-     * second defense is the top-of-method range-normalization pass in
+     * this method alone does not keep a range child of a set operation off
+     * the colocate path — the second defense is the top-of-method
+     * range-normalization pass in
      * {@code ChildOutputPropertyGuarantor.visitPhysicalSetOperation}.
      */
     @Override
@@ -162,28 +173,48 @@ public final class RangeDistributionSpec extends DistributionSpec {
     }
 
     /**
-     * Set-based cover check. Every colocate column must be equivalent to
-     * at least one required shuffle column; extras on the required side
-     * are fine. Order-independent. Matches hash precedent at
+     * Set-based cover check, serving both join ({@code SHUFFLE_JOIN}) and aggregation / window
+     * partitioning ({@code SHUFFLE_AGG}) callers. Every colocate column must be equivalent to
+     * at least one required shuffle column; extras on the required side are fine.
+     * Order-independent. Matches hash precedent at
      * {@code HashDistributionSpec.isJoinEqColumnsCompatible} with
      * {@code isConnected(requiredCol, existingCol)} argument order.
+     *
+     * <p>A join re-checks group stability and non-empty partitions itself in {@link #canColocate};
+     * nothing downstream re-checks them for an aggregation, so {@code SHUFFLE_AGG} requires both
+     * here.
      */
     private boolean isSatisfyHashShuffle(HashDistributionSpec hashSpec) {
         HashDistributionDesc.SourceType sourceType =
                 hashSpec.getHashDistributionDesc().getSourceType();
-        if (sourceType != HashDistributionDesc.SourceType.SHUFFLE_JOIN) {
+        if (sourceType != HashDistributionDesc.SourceType.SHUFFLE_JOIN
+                && sourceType != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
             return false;
         }
+        // NULL keys form a group, and a NULL-padded key has NULL rows in every ColocateRange. An aggregation over it
+        // needs a null-strict cover even when its requirement was relaxed (an anti join above relaxes it, yet keeps
+        // the NULL groups).
+        boolean nullStrictCover = sourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG;
         List<DistributionCol> requiredCols =
                 hashSpec.getHashDistributionDesc().getDistributionCols();
         for (DistributionCol colocateCol : colocateColumns) {
             boolean covered = requiredCols.stream()
+                    .map(req -> nullStrictCover ? req.getNullStrictCol() : req)
                     .anyMatch(req -> equivalentDescriptor.isConnected(req, colocateCol));
             if (!covered) {
                 return false;
             }
         }
+        if (sourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+            return !equivalentDescriptor.isEmptyPartition() && isGroupStable();
+        }
         return true;
+    }
+
+    private boolean isGroupStable() {
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = index.getGroup(equivalentDescriptor.getTableId());
+        return groupId != null && !index.isGroupUnstable(groupId);
     }
 
     /**

@@ -32,7 +32,17 @@ final class PreSplitMetrics {
      * which hook decided to skip.
      */
     static boolean shortCircuitOnSessionOptOut(SessionVariable sessionVariable) {
-        if (sessionVariable.isEnableTabletPreSplit()) {
+        return shortCircuitOnSessionOptOut(sessionVariable.isEnableTabletPreSplit());
+    }
+
+    /**
+     * Same contract for a caller that resolved the opt-out itself rather than reading it off a
+     * live {@link SessionVariable}. A Broker Load gates on the value its session held when
+     * {@code LOAD LABEL} was accepted, which is not necessarily what that session holds by the
+     * time the pending job fires its hook.
+     */
+    static boolean shortCircuitOnSessionOptOut(boolean preSplitEnabled) {
+        if (preSplitEnabled) {
             return false;
         }
         recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);
@@ -85,6 +95,23 @@ final class PreSplitMetrics {
     static void recordPartitionCounted() {
         if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_TABLET_PRE_SPLIT_PARTITIONS_TOTAL.increase(1L);
+        }
+    }
+
+    /**
+     * Record how a data-tier FILES sample chose the files it scans, under {@code mode}, and the share of
+     * the input's bytes it scans as a whole percentage, rounded down so that only a sample that scans every
+     * file records 100.
+     */
+    static void recordDataTierFileSelection(String mode, long scannedBytes, long totalBytes) {
+        if (!MetricRepo.hasInit) {
+            return;
+        }
+        MetricRepo.COUNTER_TABLET_PRE_SPLIT_DATA_TIER_FILE_SELECTION.getMetric(mode).increase(1L);
+        if (totalBytes > 0L) {
+            // Compared exactly: a double quotient of two huge byte counts can round up to 100.
+            MetricRepo.HISTO_TABLET_PRE_SPLIT_DATA_TIER_SCANNED_BYTES_PERCENT.update(scannedBytes >= totalBytes
+                    ? 100L : Math.min(99L, (long) Math.floor(100.0 * scannedBytes / totalBytes)));
         }
     }
 

@@ -84,6 +84,49 @@ class PlanTuningAnalyzerTest extends DistributedEnvPlanTestBase {
         Assertions.assertTrue(tuningGuides.getTuningGuides(2).get(0) instanceof StreamingAggTuningGuide);
     }
 
+    private OperatorTuningGuides analyzeAgg(String sql, NodeExecStats localAgg, NodeExecStats globalAgg)
+            throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        Map<Integer, NodeExecStats> map = Maps.newHashMap();
+        map.put(1, localAgg);
+        map.put(3, globalAgg);
+        Pair<SkeletonNode, Map<Integer, SkeletonNode>> pair =
+                new SkeletonBuilder(map).buildSkeleton(execPlan.getPhysicalPlan());
+        OperatorTuningGuides tuningGuides = new OperatorTuningGuides(UUID.randomUUID(), 50);
+        PlanTuningAnalyzer.getInstance().analyzePlan(execPlan.getPhysicalPlan(), pair.second, tuningGuides);
+        return tuningGuides;
+    }
+
+    // Post-filter count reads 200M/7 and would fire; the real 10M groups read 200M/10M = 20 and must not.
+    @Test
+    void testStreamingAnalyzerUsesGroupCountNotPostHavingRows() throws Exception {
+        String sql = "select count(*) as c from lineitem group by l_shipmode having count(*) > 315";
+        NodeExecStats localAgg = new NodeExecStats(1, 200000000L, 150000000L, 0, 0, 0);
+        NodeExecStats globalAgg = new NodeExecStats(3, 200000000L, 7, 9999993L, 0, 0);
+        Assertions.assertNull(analyzeAgg(sql, localAgg, globalAgg).getTuningGuides(2));
+    }
+
+    // The filter drops 5000000 of the 10000000 groups, HAVING then drops 4999993 of the 5000000 left
+    // and 7 survive, so the three counters telescope back to the cardinality. On pull rows alone
+    // 200M/7 would fire; on the real 10M groups it reads 20 and must not.
+    @Test
+    void testStreamingAnalyzerCountsRuntimeFilteredGroups() throws Exception {
+        String sql = "select count(*) as c from lineitem group by l_shipmode having count(*) > 315";
+        NodeExecStats localAgg = new NodeExecStats(1, 200000000L, 150000000L, 0, 0, 0);
+        NodeExecStats globalAgg = new NodeExecStats(3, 200000000L, 7, 4999993L, 0, 5000000L);
+        Assertions.assertNull(analyzeAgg(sql, localAgg, globalAgg).getTuningGuides(2));
+    }
+
+    // The predicate drops almost nothing, so the guide must still be produced.
+    @Test
+    void testStreamingAnalyzerStillFiresWhenHavingKeepsMostGroups() throws Exception {
+        String sql = "select count(*) as c from lineitem group by l_shipmode having count(*) > 315";
+        NodeExecStats localAgg = new NodeExecStats(1, 3000000000L, 2000000000L, 0, 0, 0);
+        NodeExecStats globalAgg = new NodeExecStats(3, 500000, 7, 3, 0, 0);
+        Assertions.assertTrue(analyzeAgg(sql, localAgg, globalAgg)
+                .getTuningGuides(2).get(0) instanceof StreamingAggTuningGuide);
+    }
+
     @Test
     void testPlanAdvisorGeneratedMetric() throws Exception {
         PlanTuningAdvisor.getInstance().clearAllAdvisor();

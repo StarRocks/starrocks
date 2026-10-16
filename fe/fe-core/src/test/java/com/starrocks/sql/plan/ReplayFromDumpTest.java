@@ -740,7 +740,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/reduce_transformation_2"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("38:HASH JOIN\n" +
+        // Do not pin the HASH JOIN plan-node id: partitioned row_number() NDV estimates
+        // can change costing enough to shift node numbering without changing this join.
+        Assertions.assertTrue(replayPair.second.contains("HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 398: substring = 361: date\n" +
@@ -1347,6 +1349,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         String dumpString = getDumpInfoFromFile("query_dump/iceberg_isnull_missing_stats");
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, null);
         Assertions.assertNotNull(replayPair.second);
+    }
+
+    @Test
+    public void testWindowSkewMergeSortWithHistogramJoinNulls() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/window_skew_merge_sort");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+
+        PlanTestBase.assertContains(plan, "ANALYTIC", "MERGING-EXCHANGE");
     }
 
     @Test

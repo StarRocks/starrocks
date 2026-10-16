@@ -80,8 +80,8 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     MutableColumnPtr pk_column;
-    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column,
-                                                     PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, true));
+    RETURN_IF_ERROR(
+            PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1));
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;

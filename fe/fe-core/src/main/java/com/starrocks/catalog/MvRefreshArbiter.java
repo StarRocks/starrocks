@@ -23,6 +23,7 @@ import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -252,22 +253,6 @@ public class MvRefreshArbiter {
         return dropped;
     }
 
-    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
-    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
-            MaterializedView mv, Table table) {
-        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
-        if (table.isNativeTableOrMaterializedView()) {
-            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
-        }
-        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
-        // hand back another table's version map.
-        return mv.getBaseTableInfos().stream()
-                .filter(info -> info.matchTable(table))
-                .findFirst()
-                .map(context::getBaseTableRefreshInfo)
-                .orElseGet(Maps::newHashMap);
-    }
-
     /**
      * The live mv partitions that may still hold rows from {@code droppedBaseNames}.
      * <p>
@@ -308,5 +293,26 @@ public class MvRefreshArbiter {
                     table.getName(), droppedBaseNames, affected));
         }
         return affected;
+    }
+
+    /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
+    public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
+        return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
+    }
+
+    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
+    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
+            MaterializedView mv, Table table) {
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (table.isNativeTableOrMaterializedView()) {
+            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
+        }
+        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
+        // hand back another table's version map.
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(context::getBaseTableRefreshInfo)
+                .orElseGet(Maps::newHashMap);
     }
 }

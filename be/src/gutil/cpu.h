@@ -47,6 +47,7 @@ namespace internal {
 std::tuple<int, int, int, int> ComputeX86FamilyAndModel(const std::string& vendor, int signature);
 } // namespace internal
 #endif // defined(ARCH_CPU_X86_FAMILY)
+// NOTE: For CPU feature detection, prefer starrocks::CpuInfo in common/system/cpu_info.h.
 // Query information about the processor.
 class CPU final {
 public:
