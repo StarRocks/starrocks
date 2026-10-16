@@ -41,8 +41,7 @@ public:
         auto clone = chunk->clone_unique();
         int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
         DCHECK_GE(physical_bytes, 0);
-        CurrentThread::current().mem_release(physical_bytes);
-        RuntimeEnv::GetInstance()->passthrough_mem_tracker()->consume(physical_bytes);
+        CurrentThread::current().mem_transfer_to(RuntimeEnv::GetInstance()->passthrough_mem_tracker(), physical_bytes);
 
         std::unique_lock lock(_mutex);
         _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));

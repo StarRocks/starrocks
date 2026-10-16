@@ -103,6 +103,75 @@ TEST_F(CurrentThreadCoreTest, exported_offsets_match_tls_layout) {
     EXPECT_EQ(CurrentThread::module_type_offset(), static_cast<size_t>(module_type - base));
 }
 
+TEST_F(CurrentThreadCoreTest, transfer_commits_debit_before_credit) {
+    constexpr int64_t kib = 1024;
+    MemTracker process_tracker(2176 * kib, "process");
+    MemTracker sender(-1, "sender", &process_tracker);
+    MemTracker receiver(-1, "receiver", &process_tracker);
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+    CurrentThreadMemTrackerSetter sender_scope(&sender);
+    auto& thread = CurrentThread::current();
+    const int64_t consumed_before = thread.get_consumed_bytes();
+    thread.mem_consume(1984 * kib);
+    DeferOp cleanup([&] {
+        thread.mem_release(1984 * kib);
+        receiver.release(receiver.consumption());
+        thread.mem_tracker_ctx_shift();
+    });
+    ASSERT_TRUE(thread.try_mem_consume(128 * kib));
+    EXPECT_EQ(2112 * kib, process_tracker.consumption());
+
+    thread.mem_transfer_to(&receiver, 128 * kib);
+    EXPECT_EQ(consumed_before + 1984 * kib, thread.get_consumed_bytes());
+    EXPECT_EQ(1984 * kib, sender.consumption());
+    EXPECT_EQ(128 * kib, receiver.consumption());
+    EXPECT_EQ(2112 * kib, process_tracker.consumption());
+    EXPECT_EQ(2112 * kib, process_tracker.peak_consumption());
+    EXPECT_EQ(nullptr, sender.find_limit_exceeded_tracker());
+    thread.mem_tracker_ctx_shift();
+    EXPECT_EQ(2112 * kib, process_tracker.consumption());
+    EXPECT_EQ(2112 * kib, process_tracker.peak_consumption());
+}
+
+TEST_F(CurrentThreadCoreTest, transfer_does_not_replenish_exhausted_reservation) {
+    constexpr int64_t kib = 1024;
+    constexpr int64_t reserved_bytes = 2048 * kib;
+    MemTracker process_tracker(-1, "process");
+    MemTracker sender(-1, "sender", &process_tracker);
+    MemTracker receiver(-1, "receiver", &process_tracker);
+    g_env_initialized = true;
+    g_process_mem_tracker = &process_tracker;
+    CurrentThread::set_mem_tracker_source(is_env_initialized_for_test, process_mem_tracker_for_test);
+    CurrentThreadMemTrackerSetter sender_scope(&sender);
+    auto& thread = CurrentThread::current();
+    ASSERT_TRUE(thread.try_mem_reserve(reserved_bytes, 0));
+    thread.mem_consume(reserved_bytes + 1984 * kib);
+    DeferOp cleanup([&] {
+        thread.release_reserved();
+        thread.mem_release(reserved_bytes + 1984 * kib);
+        receiver.release(receiver.consumption());
+        thread.mem_tracker_ctx_shift();
+    });
+    const int64_t before_clone = thread.get_consumed_bytes();
+    ASSERT_TRUE(thread.try_mem_consume(128 * kib));
+    thread.mem_transfer_to(&receiver, thread.get_consumed_bytes() - before_clone);
+    EXPECT_EQ(before_clone, thread.get_consumed_bytes());
+    EXPECT_EQ(reserved_bytes + 1984 * kib, sender.consumption());
+    EXPECT_EQ(128 * kib, receiver.consumption());
+    EXPECT_EQ(reserved_bytes + 2112 * kib, process_tracker.consumption());
+    EXPECT_EQ(reserved_bytes + 2112 * kib, process_tracker.peak_consumption());
+
+    // A transfer must not make the next allocation consume a recycled reservation.
+    thread.mem_consume(64 * kib);
+    EXPECT_EQ(before_clone + 64 * kib, thread.get_consumed_bytes());
+    thread.mem_release(64 * kib);
+    thread.release_reserved();
+    thread.mem_tracker_ctx_shift();
+    EXPECT_EQ(reserved_bytes + 2112 * kib, process_tracker.consumption());
+}
+
 } // namespace
 
 } // namespace starrocks
