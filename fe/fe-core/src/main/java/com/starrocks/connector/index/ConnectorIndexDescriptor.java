@@ -19,6 +19,8 @@ import com.google.common.collect.ImmutableSet;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 
 /** Snapshot-bound capability descriptor for one connector index. */
@@ -26,7 +28,8 @@ public final class ConnectorIndexDescriptor {
     /** Connector-neutral index capabilities understood by the optimizer. */
     public enum IndexType {
         BITMAP,
-        RANGE
+        RANGE,
+        VECTOR
     }
 
     /** SQL operations that a connector index descriptor can explicitly advertise. */
@@ -41,7 +44,8 @@ public final class ConnectorIndexDescriptor {
         NOT_IN,
         IS_NULL,
         IS_NOT_NULL,
-        STARTS_WITH
+        STARTS_WITH,
+        VECTOR_TOP_N
     }
 
     /** Coverage of a connector index at the snapshot recorded in {@link ConnectorIndexMetadata}. */
@@ -51,10 +55,15 @@ public final class ConnectorIndexDescriptor {
         FULL
     }
 
+    public static final String OPTION_METRIC = "metric";
+    public static final String OPTION_DIMENSION = "dimension";
+
     private final IndexType type;
     private final String provider;
     private final int fieldId;
     private final String columnName;
+    private final boolean columnNullable;
+    private final boolean elementNullable;
     private final Map<String, String> options;
     private final Set<Operation> supportedOperations;
     private final Coverage coverage;
@@ -63,10 +72,19 @@ public final class ConnectorIndexDescriptor {
                                     Map<String, String> options,
                                     Set<Operation> supportedOperations,
                                     Coverage coverage) {
+        this(type, provider, fieldId, columnName, true, true, options, supportedOperations, coverage);
+    }
+
+    public ConnectorIndexDescriptor(IndexType type, String provider, int fieldId, String columnName,
+                                    boolean columnNullable, boolean elementNullable, Map<String, String> options,
+                                    Set<Operation> supportedOperations,
+                                    Coverage coverage) {
         this.type = Objects.requireNonNull(type, "type is null");
         this.provider = Objects.requireNonNull(provider, "provider is null");
         this.fieldId = fieldId;
         this.columnName = Objects.requireNonNull(columnName, "columnName is null");
+        this.columnNullable = columnNullable;
+        this.elementNullable = elementNullable;
         this.options = ImmutableMap.copyOf(Objects.requireNonNull(options, "options is null"));
         this.supportedOperations = ImmutableSet.copyOf(
                 Objects.requireNonNull(supportedOperations, "supportedOperations is null"));
@@ -89,6 +107,19 @@ public final class ConnectorIndexDescriptor {
         return columnName;
     }
 
+    public boolean isColumnNullable() {
+        return columnNullable;
+    }
+
+    public boolean isElementNullable() {
+        return elementNullable;
+    }
+
+    /** Whether either the indexed value or, for arrays/vectors, its element can be null. */
+    public boolean isNullable() {
+        return columnNullable || elementNullable;
+    }
+
     public Map<String, String> getOptions() {
         return options;
     }
@@ -108,11 +139,28 @@ public final class ConnectorIndexDescriptor {
             return this;
         }
         return new ConnectorIndexDescriptor(type, provider, fieldId, currentColumnName,
-                options, supportedOperations, coverage);
+                columnNullable, elementNullable, options, supportedOperations, coverage);
     }
 
     public boolean supports(Operation operation) {
         return supportedOperations.contains(operation);
+    }
+
+    public Optional<VectorIndexMetric> getVectorMetric() {
+        return VectorIndexMetric.fromOption(options.get(OPTION_METRIC));
+    }
+
+    public OptionalInt getVectorDimension() {
+        String value = options.get(OPTION_DIMENSION);
+        if (value == null) {
+            return OptionalInt.empty();
+        }
+        try {
+            int dimension = Integer.parseInt(value);
+            return dimension > 0 ? OptionalInt.of(dimension) : OptionalInt.empty();
+        } catch (NumberFormatException e) {
+            return OptionalInt.empty();
+        }
     }
 
     @Override
@@ -124,7 +172,8 @@ public final class ConnectorIndexDescriptor {
             return false;
         }
         ConnectorIndexDescriptor that = (ConnectorIndexDescriptor) o;
-        return fieldId == that.fieldId
+        return fieldId == that.fieldId && columnNullable == that.columnNullable
+                && elementNullable == that.elementNullable
                 && type == that.type && Objects.equals(provider, that.provider)
                 && Objects.equals(columnName, that.columnName) && Objects.equals(options, that.options)
                 && Objects.equals(supportedOperations, that.supportedOperations) && coverage == that.coverage;
@@ -132,12 +181,14 @@ public final class ConnectorIndexDescriptor {
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, provider, fieldId, columnName, options, supportedOperations, coverage);
+        return Objects.hash(type, provider, fieldId, columnName, columnNullable, elementNullable,
+                options, supportedOperations, coverage);
     }
 
     @Override
     public String toString() {
         return "type=" + type + ", provider=" + provider + ", fieldId=" + fieldId
-                + ", column=" + columnName + ", coverage=" + coverage;
+                + ", column=" + columnName + ", columnNullable=" + columnNullable
+                + ", elementNullable=" + elementNullable + ", coverage=" + coverage;
     }
 }

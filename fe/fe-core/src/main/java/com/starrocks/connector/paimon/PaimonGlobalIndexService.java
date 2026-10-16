@@ -28,13 +28,17 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.GlobalIndexResultSerializer;
+import org.apache.paimon.globalindex.ScoredGlobalIndexResult;
 import org.apache.paimon.io.DataInputDeserializer;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Executes and aggregates the first, distributed stage of a Paimon Global Index scan.
@@ -69,6 +73,11 @@ public final class PaimonGlobalIndexService {
         int timeout = Math.max(1, SimpleExecutor.outerRemainingQueryTimeoutS());
         List<TResultBatch> batches = executor.execute(buildSql(request.toTransportString()), timeout);
 
+        if (request.isTopN()) {
+            return new PaimonGlobalIndexResult(request.getTablePath(), request.getBranch(), request.getSnapshotId(),
+                    collectScoredTopN(batches));
+        }
+
         GlobalIndexResult aggregate = null;
         GlobalIndexResultSerializer serializer = new GlobalIndexResultSerializer();
         for (TResultBatch batch : batches) {
@@ -94,6 +103,15 @@ public final class PaimonGlobalIndexService {
     }
 
     String buildSql(String requestTransport) {
+        if (request.isTopN()) {
+            return String.format("select `%s`, `%s` from `%s`.`%s`.`%s%s` where `%s`='%s' "
+                            + "order by `%s` %s limit %d",
+                    IndexTable.ROW_ID_COLUMN_NAME, IndexTable.SCORE_COLUMN_NAME,
+                    quoteIdentifier(table.getCatalogName()), quoteIdentifier(table.getCatalogDBName()),
+                    quoteIdentifier(table.getCatalogTableName()), IndexTable.INDEX_TABLE_SUFFIX,
+                    IndexTable.ARGS_COLUMN_NAME, requestTransport, IndexTable.SCORE_COLUMN_NAME,
+                    request.isAscending() ? "asc" : "desc", request.getLocalLimit());
+        }
         return String.format("select to_base64(`%s`) from `%s`.`%s`.`%s%s` where `%s`='%s'",
                 IndexTable.INDEX_RESULT_COLUMN_NAME,
                 quoteIdentifier(table.getCatalogName()),
@@ -102,6 +120,28 @@ public final class PaimonGlobalIndexService {
                 IndexTable.INDEX_TABLE_SUFFIX,
                 IndexTable.ARGS_COLUMN_NAME,
                 requestTransport);
+    }
+
+    private ScoredGlobalIndexResult collectScoredTopN(List<TResultBatch> batches) {
+        RoaringNavigableMap64 rows = new RoaringNavigableMap64();
+        Map<Long, Float> scores = new HashMap<>();
+        for (TResultBatch batch : batches) {
+            for (ByteBuffer row : batch.getRows()) {
+                JsonArray data = parseData(row);
+                if (data.size() != 2 || data.get(0).isJsonNull() || data.get(1).isJsonNull()) {
+                    throw new IllegalStateException("Malformed Paimon Vector TopN result row");
+                }
+                long rowId = data.get(0).getAsBigDecimal().longValueExact();
+                float score = data.get(1).getAsFloat();
+                if (rowId < 0 || !Float.isFinite(score) || scores.putIfAbsent(rowId, score) != null
+                        || scores.size() > request.getLocalLimit()) {
+                    throw new IllegalStateException("Invalid or duplicate Paimon Vector TopN result row");
+                }
+                rows.add(rowId);
+            }
+        }
+        rows.runOptimize();
+        return ScoredGlobalIndexResult.create(rows, scores::get);
     }
 
     private static String quoteIdentifier(String identifier) {

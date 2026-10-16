@@ -72,8 +72,7 @@ public class PaimonIndexMetadataTest {
     public void testPaimonProviderMapping() {
         Assertions.assertEquals(IndexType.BITMAP, PaimonIndexMetadataReader.toConnectorIndexType("bitmap"));
         Assertions.assertEquals(IndexType.RANGE, PaimonIndexMetadataReader.toConnectorIndexType("btree"));
-        for (String unsupported : List.of("lumina", "lumina-vector-ann", "ivf-flat", "ivf-pq", "ivf-sq",
-                "ivf-rq", "diskann", "full-text", "pk-vector", "pk-vector-ann", "pk-fulltext", "sorted",
+        for (String unsupported : List.of("full-text", "pk-vector", "pk-vector-ann", "pk-fulltext", "sorted",
                 "pk-sorted", "lucene", "lucene-fts", "tantivy-fts", "tantivy-fulltext", "es-index")) {
             Assertions.assertNull(PaimonIndexMetadataReader.toConnectorIndexType(unsupported));
         }

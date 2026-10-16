@@ -38,6 +38,8 @@ public:
     explicit PaimonGlobalIndexEvaluator(ReaderGetter reader_getter) : _reader_getter(std::move(reader_getter)) {}
 
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate(const rapidjson::Value& node) const;
+    StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> evaluate_top_n(const rapidjson::Value& score_expression,
+                                                                        int32_t limit) const;
 
 private:
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate_binary(const rapidjson::Value& node) const;

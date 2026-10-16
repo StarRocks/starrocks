@@ -1366,6 +1366,24 @@ public class PaimonMetadataTest {
             assertNotSame(regular, selectedSplits);
             assertTrue(selectedSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds(nativeTable, selectedSplits));
+            // Scored ANN results keep both row selection and scores in the native IndexedSplit.
+            // This tests SDK split integration, not native Lumina search or recall.
+            GetRemoteFilesParams scoredParams = params.copy();
+            scoredParams.setPredicate(null);
+            scoredParams.setConnectorIndexResult(new PaimonGlobalIndexResult(
+                    nativeTable.location().toString(), "main", indexedSnapshot,
+                    org.apache.paimon.globalindex.ScoredGlobalIndexResult.create(rowIds, rowId -> 0.75f)));
+            PaimonSplitsInfo scoredSplits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, scoredParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertTrue(scoredSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
+            assertEquals(List.of(1), readIds(nativeTable, scoredSplits));
+            List<Float> scores = new ArrayList<>();
+            scoredSplits.getPaimonSplits().stream().map(IndexedSplit.class::cast).forEach(split -> {
+                for (float score : split.scores()) {
+                    scores.add(score);
+                }
+            });
+            assertEquals(List.of(0.75f), scores);
             assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
                     selected, nativeTable, "other-branch", TvrTableSnapshot.of(indexedSnapshot)).isEmpty());
             assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(selected, nativeTable, "main",
@@ -1553,13 +1571,13 @@ public class PaimonMetadataTest {
             assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
             assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
 
-            // Discovery intentionally ignores vector providers. Coverage must still inspect the
+            // Discovery intentionally ignores full-text providers. Coverage must still inspect the
             // original manifest, including providers absent from the advertised descriptors.
             new MockUp<IndexFileMeta>() {
                 @Mock
                 public String indexType(Invocation invocation) {
                     String provider = invocation.proceed();
-                    return "bitmap".equals(provider) ? "lumina" : provider;
+                    return "bitmap".equals(provider) ? "full-text" : provider;
                 }
             };
             ConnectorIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));

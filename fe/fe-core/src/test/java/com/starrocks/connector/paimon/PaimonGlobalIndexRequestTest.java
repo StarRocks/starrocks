@@ -16,6 +16,8 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.index.TopNIndexCondition;
+import com.starrocks.connector.index.VectorIndexMetric;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -24,9 +26,56 @@ import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 public class PaimonGlobalIndexRequestTest {
+    static TopNIndexCondition vectorCondition() {
+        return new TopNIndexCondition(null, null, ConstantOperator.createFloat(1), 700, "embedding",
+                new float[] {1, 2}, VectorIndexMetric.L2, 12, 10, 2, true, false);
+    }
+
+    @Test
+    public void testVectorV4PreservesIdentityAndNormalizedCandidates() {
+        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(
+                "file:/tmp/orders", "main", 42L, 3L, 1000L, vectorCondition());
+        PaimonGlobalIndexRequest restored = PaimonGlobalIndexRequest.parseTransport(request.toTransportString());
+        Assertions.assertTrue(restored.isTopN());
+        Assertions.assertEquals(4, restored.getVersion());
+        Assertions.assertEquals(12, restored.getLocalLimit());
+        Assertions.assertTrue(restored.isAscending());
+        Assertions.assertEquals(Map.of(700, IndexType.VECTOR), restored.getRequiredIndexes());
+        Assertions.assertEquals(Map.of("embedding", 700), restored.getFieldBindings());
+        Assertions.assertTrue(restored.matchesSchema(3L, 1000L));
+        Assertions.assertEquals(request.toJson(), restored.toJson());
+        Assertions.assertTrue(restored.toJson().contains("approx_l2_distance"));
+    }
+
+    @Test
+    public void testVectorV4RejectsLegacyVersionsAndMalformedCandidates() {
+        String json = PaimonGlobalIndexRequest.create(
+                "file:/tmp/orders", "main", 42L, 3L, 1000L, vectorCondition()).toJson();
+        for (String invalid : List.of(
+                json.replace("\"version\":4", "\"version\":1"),
+                json.replace("\"version\":4", "\"version\":2"),
+                json.replace("\"version\":4", "\"version\":3"),
+                json.replace("\"unfiltered_top_n\"", "\"top_n\""),
+                json.replace("\"localLimit\":12", "\"localLimit\":0"),
+                json.replace("\"ascending\":true", "\"ascending\":false"),
+                json.replace("\"lumina\"", "\"btree\""),
+                json.replace("\"n\":\"embedding\"", "\"n\":\"other\""),
+                json.replace("\"v\":1.0", "\"v\":1e100"),
+                json.replace("\"schemaId\":3,", ""),
+                json.replace("\"kind\":", "\"predicate\":{},\"kind\":"))) {
+            Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.parse(invalid), invalid);
+        }
+        TopNIndexCondition filtered = new TopNIndexCondition(ConstantOperator.createBoolean(true), null,
+                ConstantOperator.createFloat(1), 700, "embedding", new float[] {1, 2}, VectorIndexMetric.L2,
+                12, 10, 2, true, false);
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonGlobalIndexRequest.create(
+                "file:/tmp/orders", "main", 42L, 3L, 1000L, filtered));
+    }
+
     @Test
     public void testJsonAndTransportRoundTrip() {
         ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.INT, "k", true);

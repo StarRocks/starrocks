@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include <paimon/global_index/bitmap_global_index_result.h>
+#include <paimon/global_index/bitmap_scored_global_index_result.h>
 #include <paimon/global_index/global_index_reader.h>
 #include <paimon/memory/memory_pool.h>
 #include <rapidjson/stringbuffer.h>
@@ -23,6 +24,7 @@
 
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -133,7 +135,14 @@ public:
     }
     paimon::Result<std::shared_ptr<paimon::ScoredGlobalIndexResult>> VisitVectorSearch(
             const std::shared_ptr<paimon::VectorSearch>&) override {
-        return paimon::Status::Invalid("unused vector search");
+        if (_on_vector) {
+            _on_vector();
+        }
+        auto scored = std::dynamic_pointer_cast<paimon::ScoredGlobalIndexResult>(_result);
+        if (scored == nullptr) {
+            return paimon::Status::Invalid("unused vector search");
+        }
+        return scored;
     }
     paimon::Result<std::shared_ptr<paimon::GlobalIndexResult>> VisitFullTextSearch(
             const std::shared_ptr<paimon::FullTextSearch>&) override {
@@ -142,11 +151,13 @@ public:
     bool IsThreadSafe() const override { return true; }
     // Match the wrapper returned by paimon-cpp's field-ID reader API.
     std::string GetIndexType() const override { return "union"; }
+    void on_vector(std::function<void()> callback) { _on_vector = std::move(callback); }
 
 private:
     paimon::Result<std::shared_ptr<paimon::GlobalIndexResult>> read() { return _result; }
 
     std::shared_ptr<paimon::GlobalIndexResult> _result;
+    std::function<void()> _on_vector;
 };
 
 class FakeGlobalIndexScan final : public paimon::GlobalIndexScan {
@@ -247,6 +258,14 @@ TPaimonGlobalIndexScanRange scan_range_with_request_change(const std::function<v
     return scan_range;
 }
 
+TPaimonGlobalIndexScanRange vector_scan_range() {
+    auto scan_range = valid_scan_range();
+    scan_range.__set_protocol_version(4);
+    scan_range.__set_query_json(
+            R"({"version":4,"snapshotId":7,"schemaId":0,"schemaTimeMillis":1000,"kind":"unfiltered_top_n","scoreExpression":{"o":"ca","f":"approx_cosine_similarity","a":[{"o":"cr","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1.25},{"o":"co","t":"float","v":2.5}]}]},"localLimit":12,"ascending":false,"indexes":{"embedding":{"fieldId":17,"provider":"lumina"}},"tablePath":"s3://warehouse/db/table","branch":"main"})");
+    return scan_range;
+}
+
 Status parse_request(const TPaimonGlobalIndexScanRange& scan_range) {
     rapidjson::Document request;
     return PaimonGlobalIndexScannerTestAccessor::parse_request(scan_range, &request);
@@ -286,10 +305,112 @@ TEST(PaimonGlobalIndexScannerTest, RejectsIncompleteAndUnsupportedProtocol) {
     EXPECT_TRUE(parse_request(incomplete).is_invalid_argument());
 
     auto unsupported = valid_scan_range();
-    unsupported.__set_protocol_version(4);
+    unsupported.__set_protocol_version(5);
     Status status = parse_request(unsupported);
     EXPECT_TRUE(status.is_invalid_argument());
-    EXPECT_NE(std::string::npos, status.message().find("protocol version 4"));
+    EXPECT_NE(std::string::npos, status.message().find("protocol version 5"));
+}
+
+TEST(PaimonGlobalIndexScannerTest, ValidatesVectorV4EnvelopeAndRejectsLegacyRequests) {
+    EXPECT_TRUE(parse_request(vector_scan_range()).ok());
+    for (int version : {1, 2, 3}) {
+        auto range = vector_scan_range();
+        range.__set_protocol_version(version);
+        rapidjson::Document request;
+        request.Parse(range.query_json.c_str());
+        request["version"].SetInt(version);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        request.Accept(writer);
+        range.__set_query_json(buffer.GetString());
+        EXPECT_TRUE(parse_request(range).is_invalid_argument());
+    }
+    const std::vector<std::function<void(rapidjson::Document&)>> mutations = {
+            [](auto& value) { value.RemoveMember("schemaTimeMillis"); },
+            [](auto& value) { value["indexes"]["embedding"].RemoveMember("fieldId"); },
+            [](auto& value) { value["indexes"]["embedding"]["provider"].SetString("btree"); },
+            [](auto& value) { value["localLimit"].SetInt(0); },
+            [](auto& value) { value["ascending"].SetBool(true); },
+            [](auto& value) { value["scoreExpression"]["a"][0]["n"].SetString("other"); },
+            [](auto& value) { value["scoreExpression"]["a"][1]["c"].SetArray(); },
+            [](auto& value) { value["scoreExpression"]["a"][1]["c"][0]["v"].SetDouble(1e100); },
+            [](auto& value) {
+                value.AddMember("predicate", rapidjson::Value(rapidjson::kObjectType), value.GetAllocator());
+            }};
+    for (const auto& mutate : mutations) {
+        auto range = vector_scan_range();
+        rapidjson::Document request;
+        request.Parse(range.query_json.c_str());
+        mutate(request);
+        rapidjson::StringBuffer buffer;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+        request.Accept(writer);
+        range.__set_query_json(buffer.GetString());
+        EXPECT_TRUE(parse_request(range).is_invalid_argument()) << range.query_json;
+    }
+}
+
+TEST(PaimonGlobalIndexScannerTest, EmitsVectorV4ScoresWithPinnedProviderAndCancellation) {
+    RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+    runtime_state.init_mem_trackers(TUniqueId());
+    ObjectPool pool;
+    parquet::Utils::SlotDesc slots[] = {{"row_id", TYPE_BIGINT_DESC, 1}, {"score", TYPE_FLOAT_DESC, 2}, {""}};
+    auto* tuple = parquet::Utils::create_tuple_descriptor(&runtime_state, &pool, slots);
+    MemoryFileSystem file_system;
+    HdfsScannerContext scanner_ctx;
+    scanner_ctx.materialize_slots = tuple->slots();
+    THdfsScanRange range;
+    range.__set_paimon_global_index_scan_range(vector_scan_range());
+    PaimonGlobalIndexScanner scanner;
+    ASSERT_TRUE(init_scanner(&scanner, &runtime_state, &scanner_ctx, &range, &file_system).ok());
+    ASSERT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse_request(&scanner).ok());
+    auto scored = std::make_shared<paimon::BitmapScoredGlobalIndexResult>(paimon::RoaringBitmap64::From({3, 7}),
+                                                                          std::vector<float>{0.25f, 0.75f});
+    auto reader = std::make_shared<FakeGlobalIndexReader>(scored);
+    auto fake_scan = std::make_unique<FakeGlobalIndexScan>(reader);
+    auto* raw_scan = fake_scan.get();
+    PaimonGlobalIndexScannerTestAccessor::set_scan(&scanner, std::move(fake_scan));
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    ASSERT_TRUE(scanner.do_get_next(&runtime_state, &chunk).ok());
+    ASSERT_EQ(2, chunk->num_rows());
+    EXPECT_EQ("embedding", raw_scan->last_field_name());
+    EXPECT_EQ("lumina", raw_scan->last_index_type());
+    EXPECT_TRUE(raw_scan->had_row_range());
+    EXPECT_FLOAT_EQ(0.75f, chunk->get_column_by_slot_id(2)->get(0).get_float());
+    EXPECT_FLOAT_EQ(0.25f, chunk->get_column_by_slot_id(2)->get(1).get_float());
+    EXPECT_TRUE(scanner.do_get_next(&runtime_state, &chunk).is_end_of_file());
+
+    PaimonGlobalIndexScanner cancelled;
+    HdfsScannerContext cancelled_ctx;
+    ASSERT_TRUE(init_scanner(&cancelled, &runtime_state, &cancelled_ctx, &range, &file_system).ok());
+    ASSERT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse_request(&cancelled).ok());
+    reader->on_vector([&] { runtime_state.set_is_cancelled(true); });
+    PaimonGlobalIndexScannerTestAccessor::set_scan(&cancelled, std::make_unique<FakeGlobalIndexScan>(reader));
+    ChunkPtr empty = std::make_shared<Chunk>();
+    EXPECT_TRUE(cancelled.do_get_next(&runtime_state, &empty).is_cancelled());
+    EXPECT_EQ(0, empty->num_rows());
+}
+
+TEST(PaimonGlobalIndexScannerTest, RejectsVectorRowsOutsideShardAndNonFiniteScores) {
+    for (bool out_of_range : {true, false}) {
+        RuntimeState runtime_state{TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)};
+        runtime_state.init_mem_trackers(TUniqueId());
+        MemoryFileSystem file_system;
+        HdfsScannerContext scanner_ctx;
+        THdfsScanRange range;
+        range.__set_paimon_global_index_scan_range(vector_scan_range());
+        PaimonGlobalIndexScanner scanner;
+        ASSERT_TRUE(init_scanner(&scanner, &runtime_state, &scanner_ctx, &range, &file_system).ok());
+        ASSERT_TRUE(PaimonGlobalIndexScannerTestAccessor::parse_request(&scanner).ok());
+        auto scored = std::make_shared<paimon::BitmapScoredGlobalIndexResult>(
+                paimon::RoaringBitmap64::From({out_of_range ? 10 : 3}),
+                std::vector<float>{out_of_range ? 0.5f : std::numeric_limits<float>::infinity()});
+        auto reader = std::make_shared<FakeGlobalIndexReader>(scored);
+        PaimonGlobalIndexScannerTestAccessor::set_scan(&scanner, std::make_unique<FakeGlobalIndexScan>(reader));
+        ChunkPtr chunk = std::make_shared<Chunk>();
+        EXPECT_TRUE(scanner.do_get_next(&runtime_state, &chunk).is_internal_error());
+        EXPECT_EQ(0, chunk->num_rows());
+    }
 }
 
 TEST(PaimonGlobalIndexScannerTest, RejectsInvalidShardAndJson) {

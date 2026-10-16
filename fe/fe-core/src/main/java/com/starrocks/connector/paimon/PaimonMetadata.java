@@ -51,6 +51,7 @@ import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -722,7 +723,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     public Optional<ConnectorIndexResult> evaluateIndex(
             Table table, IndexCondition condition, TvrVersionRange versionRange) {
         if (!(table instanceof PaimonTable) || condition == null
-                || condition.getFieldIds().isEmpty() || !isIndexSnapshot(versionRange)) {
+                || (!(condition instanceof TopNIndexCondition) && condition.getFieldIds().isEmpty())
+                || !isIndexSnapshot(versionRange)) {
             return Optional.empty();
         }
         PaimonTable paimonTable = (PaimonTable) table;
@@ -735,6 +737,29 @@ public class PaimonMetadata implements ConnectorMetadata {
         FileStoreTable fileStoreTable = (FileStoreTable) nativeTable;
         if (toConnectorIndexTableType(fileStoreTable.schema()) != TableType.DATA_EVOLUTION) {
             return Optional.empty();
+        }
+        if (condition instanceof TopNIndexCondition) {
+            TopNIndexCondition topN = (TopNIndexCondition) condition;
+            DataField currentField = fileStoreTable.schema().idToFieldMap().get(topN.getFieldId());
+            if (topN.getPredicate() != null || topN.getPartitionPredicate() != null || topN.hasResidual()
+                    || currentField == null || !currentField.name().equals(topN.getColumnName())
+                    || currentField.type().isNullable()
+                    || !(currentField.type() instanceof org.apache.paimon.types.ArrayType
+                    || currentField.type() instanceof org.apache.paimon.types.VectorType)
+                    || (currentField.type() instanceof org.apache.paimon.types.ArrayType
+                    && ((org.apache.paimon.types.ArrayType) currentField.type()).getElementType().isNullable())
+                    || (currentField.type() instanceof org.apache.paimon.types.VectorType
+                    && ((org.apache.paimon.types.VectorType) currentField.type()).getElementType().isNullable())) {
+                return Optional.empty();
+            }
+            boolean eligible = getIndexMetadata(table, versionRange).getDescriptors(topN.getFieldId()).stream()
+                    .anyMatch(descriptor -> descriptor.getType() == IndexType.VECTOR
+                            && "lumina".equals(descriptor.getProvider()) && !descriptor.isNullable()
+                            && descriptor.getVectorMetric().filter(topN.getMetric()::equals).isPresent()
+                            && descriptor.getVectorDimension().orElse(-1) == topN.getQueryVector().length);
+            if (!eligible) {
+                return Optional.empty();
+            }
         }
         PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.create(
                 fileStoreTable.location().toString(), DEFAULT_MAIN_BRANCH, versionRange.end().orElseThrow(),
@@ -772,7 +797,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     public List<ConnectorIndexShard> getIndexShards(
             Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
         if (!(table instanceof PaimonTable) || snapshotId < 0 || requiredIndexes.isEmpty()
-                || requiredIndexes.values().stream().anyMatch(type -> type != IndexType.RANGE)) {
+                || requiredIndexes.values().stream().anyMatch(type -> type != IndexType.RANGE && type != IndexType.VECTOR)
+                || (requiredIndexes.containsValue(IndexType.VECTOR) && requiredIndexes.size() != 1)) {
             return List.of();
         }
         PaimonTable paimonTable = (PaimonTable) table;
@@ -821,9 +847,11 @@ public class PaimonMetadata implements ConnectorMetadata {
                 if (globalIndex == null || !requiredIndexes.containsKey(globalIndex.indexFieldId())) {
                     continue;
                 }
-                // The native field-ID API wraps files in one "union" reader per provider.
-                // Restrict this first scalar executor to unambiguous BTree-only fields.
-                if (!"btree".equals(entry.indexFile().indexType())) {
+                // Each field must have exactly the validated provider; mixed providers cannot
+                // safely be selected by the native field-ID or provider-specific reader APIs.
+                String expectedProvider = requiredIndexes.get(globalIndex.indexFieldId()) == IndexType.VECTOR
+                        ? "lumina" : "btree";
+                if (!expectedProvider.equals(entry.indexFile().indexType())) {
                     Tracers.record(EXTERNAL, "PaimonGlobalIndex.Coverage", "mixed providers: use SDK planning");
                     return List.of();
                 }

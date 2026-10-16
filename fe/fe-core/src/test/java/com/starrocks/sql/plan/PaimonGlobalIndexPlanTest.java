@@ -398,7 +398,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testApproximateTopNUsesOrdinaryScanWithoutIndexDiscovery() throws Exception {
+    public void testApproximateTopNUsesOrdinaryScanWithoutVectorDescriptor() throws Exception {
         try {
             for (int stage : List.of(0, 1, 2)) {
                 connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(stage);
@@ -410,17 +410,23 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                     Assertions.assertFalse(plan.contains("index["), plan);
                     assertContains(getFragmentPlan(sql), score.getKey(), "TOP-N");
                 }
+                if (stage == 0) {
+                    verify(indexedMetadata, never()).getIndexMetadata(
+                            any(Table.class), any(TvrVersionRange.class));
+                    Assertions.assertEquals(0, indexMetadataLoads.get());
+                } else {
+                    verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
+                            any(Table.class), any(TvrVersionRange.class));
+                    Assertions.assertTrue(indexMetadataLoads.get() > 0);
+                }
             }
-            verify(indexedMetadata, never()).getIndexMetadata(
-                    any(Table.class), any(TvrVersionRange.class));
-            Assertions.assertEquals(0, indexMetadataLoads.get());
         } finally {
             connectContext.getSessionVariable().setPaimonGlobalIndexScanStage(1);
         }
     }
 
     @Test
-    public void testBoundVectorCastUsesOrdinaryScanWithoutIndexDiscovery() throws Exception {
+    public void testBoundVectorCastUsesOrdinaryScanWithoutVectorDescriptor() throws Exception {
         // This is the SQL expression shape after binding a prepared vector parameter.
         String sql = "SELECT pk, approx_l2_distance(CAST('[ 1e0, 2.0 ]' AS ARRAY<FLOAT>), embedding) AS score "
                 + "FROM vector_table ORDER BY score ASC LIMIT 10";
@@ -429,7 +435,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         assertContains(plan, "PAIMON SCAN", "TOP-N");
         Assertions.assertFalse(plan.contains("index["), plan);
         assertContains(getFragmentPlan(sql), "approx_l2_distance", "TOP-N");
-        verify(indexedMetadata, never()).getIndexMetadata(
+        verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
                 any(Table.class), any(TvrVersionRange.class));
     }
 

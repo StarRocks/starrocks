@@ -338,4 +338,44 @@ public class PruneHDFSScanColumnRuleTest {
         Assertions.assertEquals(transferMap.size(), 1);
         Assertions.assertEquals(transferMap.get(intColumnOperator).getName(), "id");
     }
+
+    @Test
+    public void transformIndexScanPreservesScanPredicates(@Mocked com.starrocks.catalog.Table innerTable,
+                                                          @Mocked OptimizerContext context,
+                                                          @Mocked TaskContext taskContext) {
+        ColumnRefOperator indexResult = new ColumnRefOperator(4, StringType.STRING, "index_result", true);
+        ColumnRefOperator args = new ColumnRefOperator(5, StringType.STRING, "args", true);
+        ColumnRefOperator rowId = new ColumnRefOperator(6, IntegerType.BIGINT, "row_id", true);
+        Column indexResultColumn = new Column("index_result", StringType.STRING);
+        Column argsColumn = new Column("args", StringType.STRING);
+        Column rowIdColumn = new Column("row_id", IntegerType.BIGINT);
+        LogicalIndexScanOperator indexScan = new LogicalIndexScanOperator(
+                new IndexTable(innerTable),
+                Map.of(indexResult, indexResultColumn, args, argsColumn, rowId, rowIdColumn),
+                Map.of(indexResultColumn, indexResult, argsColumn, args, rowIdColumn, rowId),
+                -1,
+                new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createVarchar("request")));
+
+        new Expectations() {
+            {
+                context.getTaskContext();
+                minTimes = 0;
+                result = taskContext;
+
+                taskContext.getRequiredColumns();
+                minTimes = 0;
+                result = new ColumnRefSet(Collections.singletonList(indexResult));
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
+            }
+        };
+
+        List<OptExpression> result = icebergRule.transform(OptExpression.create(indexScan), context);
+
+        Assertions.assertEquals(1, result.size());
+        LogicalIndexScanOperator pruned = (LogicalIndexScanOperator) result.get(0).getOp();
+        Assertions.assertEquals(2, pruned.getColRefToColumnMetaMap().size());
+        Assertions.assertSame(indexScan.getScanOperatorPredicates(), pruned.getScanOperatorPredicates());
+    }
 }

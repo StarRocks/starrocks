@@ -15,6 +15,7 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.index.ConnectorIndexShard;
@@ -76,10 +77,33 @@ public final class PaimonIndexScanNode extends ScanNode {
             throw new IllegalArgumentException("Paimon Global Index request targets a different schema");
         }
 
+        if (request.isTopN()) {
+            request.getFieldBindings().forEach((name, fieldId) -> {
+                var field = nativeTable.schema().idToFieldMap().get(fieldId);
+                if (field == null || !field.name().equals(name)
+                        || field.type().isNullable()
+                        || !(field.type() instanceof org.apache.paimon.types.ArrayType
+                        || field.type() instanceof org.apache.paimon.types.VectorType)
+                        || (field.type() instanceof org.apache.paimon.types.ArrayType
+                        && ((org.apache.paimon.types.ArrayType) field.type()).getElementType().isNullable())
+                        || (field.type() instanceof org.apache.paimon.types.VectorType
+                        && ((org.apache.paimon.types.VectorType) field.type()).getElementType().isNullable())) {
+                    throw new IllegalArgumentException("Paimon Vector TopN requires a matching non-nullable vector field");
+                }
+            });
+        }
+
         ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getOptionalMetadata(table.getCatalogName())
                 .orElseThrow(() -> new IllegalStateException("Missing connector metadata for "
                         + table.getCatalogName()));
+        if (request.isTopN()) {
+            var indexMetadata = metadata.getIndexMetadata(table, TvrTableSnapshot.of(snapshotId));
+            if (indexMetadata.getSnapshotId() != snapshotId
+                    || indexMetadata.getDescriptors().stream().noneMatch(request::matchesVectorIndex)) {
+                throw new IllegalArgumentException("Paimon Vector TopN does not match the pinned Lumina index");
+            }
+        }
         List<ConnectorIndexShard> shards = metadata.getIndexShards(
                 table, snapshotId, request.getRequiredIndexes());
         if (shards.isEmpty()) {
@@ -88,7 +112,7 @@ public final class PaimonIndexScanNode extends ScanNode {
 
         for (int shardId = 0; shardId < shards.size(); shardId++) {
             ConnectorIndexShard shard = shards.get(shardId);
-            scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId));
+            scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId, request.getVersion()));
         }
         // args is an input binding, not a filter over the raw JSON emitted by the scanner.
         // The specialized scanner does not evaluate conjuncts over its index_result output.
@@ -125,9 +149,9 @@ public final class PaimonIndexScanNode extends ScanNode {
     }
 
     private static TScanRangeLocations createScanRange(
-            int shardId, ConnectorIndexShard shard, String queryJson, String tablePath, long snapshotId) {
+            int shardId, ConnectorIndexShard shard, String queryJson, String tablePath, long snapshotId, int protocolVersion) {
         TPaimonGlobalIndexScanRange request = new TPaimonGlobalIndexScanRange();
-        request.setProtocol_version(PaimonGlobalIndexRequest.CURRENT_VERSION);
+        request.setProtocol_version(protocolVersion);
         request.setShard_id(shardId);
         request.setRange_from(shard.getFrom());
         request.setRange_to(shard.getTo());

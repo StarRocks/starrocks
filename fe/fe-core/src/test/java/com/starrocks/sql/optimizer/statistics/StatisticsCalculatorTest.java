@@ -28,6 +28,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.index.IndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -37,6 +38,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
@@ -47,11 +49,13 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -60,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
@@ -88,6 +93,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -1602,5 +1608,35 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(10, rowNumberStatistic.getMaxValue(), 0.001);
         Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testIndexScanDoesNotRecordVirtualPredicateColumns(@Mocked Table innerTable) {
+        AtomicInteger recordedPredicates = new AtomicInteger();
+        new MockUp<PredicateColumnsMgr>() {
+            @Mock
+            public void recordPredicateColumns(ScalarOperator predicate, ColumnRefFactory factory,
+                                               OptExpression optExpr) {
+                recordedPredicates.incrementAndGet();
+            }
+        };
+
+        ColumnRefOperator args = columnRefFactory.create("args", VarcharType.VARCHAR, true);
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, args,
+                ConstantOperator.createVarchar("request"));
+        LogicalIndexScanOperator logicalScan = new LogicalIndexScanOperator(
+                new IndexTable(innerTable), Maps.newHashMap(), Maps.newHashMap(), -1, predicate);
+
+        for (var operator : List.of(logicalScan, new PhysicalIndexScanOperator(logicalScan))) {
+            var expression = OptExpression.create(operator);
+            expression.setStatistics(Statistics.builder()
+                    .setOutputRowCount(1)
+                    .addColumnStatistic(args, ColumnStatistic.unknown())
+                    .build());
+            ExpressionContext context = new ExpressionContext(expression);
+            new StatisticsCalculator(context, columnRefFactory, optimizerContext).visitOperator(operator, context);
+        }
+
+        Assertions.assertEquals(0, recordedPredicates.get());
     }
 }
