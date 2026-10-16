@@ -168,30 +168,6 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
     }
 
     @Test
-    void testPrefetchesTablesInQueryBearingDdl(@Injectable MetadataMgr metadataMgr) {
-        ConnectContext session = newSession("external", "db");
-        expectPrefetch(metadataMgr, session, "external", "db", "create_view_source", 1);
-        expectPrefetch(metadataMgr, session, "external", "db", "create_mv_source1", 1);
-        expectPrefetch(metadataMgr, session, "external", "db", "create_mv_source2", 1);
-        expectPrefetch(metadataMgr, session, "external", "db", "alter_view_source", 1);
-
-        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
-                parse("create view default_catalog.db.prefetch_view as " +
-                        "select * from external.db.create_view_source", session), session, metadataMgr));
-        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
-                parse("create materialized view default_catalog.db.prefetch_mv refresh manual as " +
-                        "select * from external.db.create_mv_source1 join " +
-                        "external.db.create_mv_source2 on true", session),
-                session, metadataMgr));
-        Assertions.assertDoesNotThrow(() -> ParallelAnalyzeTableMetadataPrefetcher.prefetch(
-                parse("alter view default_catalog.db.prefetch_view as " +
-                        "select * from external.db.alter_view_source", session), session, metadataMgr));
-
-        new FullVerifications(metadataMgr) {
-        };
-    }
-
-    @Test
     void testLogsAndDefersPrefetchFailuresToNormalAnalysis(@Injectable MetadataMgr metadataMgr) throws Exception {
         ConnectContext session = newSession("external", "db");
         StatementBase statement = parse("select * from external.db.failing_table " +

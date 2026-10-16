@@ -64,14 +64,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.PartitionMeasure;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateSyncMVStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -868,12 +864,6 @@ public class AnalyzerUtils {
             }
         }
 
-        private void visitParserOwnedDdlQuery(QueryStatement queryStatement, Void context) {
-            if (shouldVisitParserOwnedFields()) {
-                visitIfPresent(queryStatement, context);
-            }
-        }
-
         private void visitMergeWhenClauses(List<MergeWhenClause> whenClauses, Void context) {
             if (whenClauses == null) {
                 return;
@@ -959,32 +949,6 @@ public class AnalyzerUtils {
                 });
             }
             return super.visitMergeIntoStatement(node, context);
-        }
-
-        @Override
-        public Void visitCreateViewStatement(CreateViewStmt node, Void context) {
-            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
-            return super.visitCreateViewStatement(node, context);
-        }
-
-        @Override
-        public Void visitAlterViewStatement(AlterViewStmt node, Void context) {
-            if (node.getAlterClause() != null) {
-                visitParserOwnedDdlQuery(node.getAlterClause().getQueryStatement(), context);
-            }
-            return super.visitAlterViewStatement(node, context);
-        }
-
-        @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement node, Void context) {
-            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
-            return super.visitCreateMaterializedViewStatement(node, context);
-        }
-
-        @Override
-        public Void visitCreateSyncMVStmt(CreateSyncMVStmt node, Void context) {
-            visitParserOwnedDdlQuery(node.getQueryStatement(), context);
-            return super.visitCreateSyncMVStmt(node, context);
         }
 
         @Override
