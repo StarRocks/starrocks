@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import mockit.Expectations;
+import mockit.FullVerifications;
 import mockit.Mocked;
 import org.junit.jupiter.api.Test;
 
