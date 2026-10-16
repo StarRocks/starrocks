@@ -16,6 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -29,6 +30,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -314,9 +317,52 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         // inactive mv when base table's schema changed
         Database db = starRocksAssert.getDb(connectContext.getDatabase());
         Table parTbl1 = starRocksAssert.getTable(connectContext.getDatabase(), "par_tbl1");
+        List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log) {
+                journaled.add(log);
+                invocation.proceed();
+            }
+        };
+        long resetEpochBefore = mv.getVersionMapResetEpoch();
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) parTbl1, Set.of("item_id"));
         baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(baseTableVisibleVersionMap.isEmpty());
+        // Bumped before the clear and again after the journal write, so a refresh run starting in between notices.
+        Assertions.assertEquals(resetEpochBefore + 2, mv.getVersionMapResetEpoch());
+
+        // The clear travels with the INACTIVE entry, so a follower replaying it clears its maps too.
+        AlterMaterializedViewStatusLog inactiveLog = journaled.stream()
+                .filter(log -> log.getTableId() == mv.getId())
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the inactivation was not journaled"));
+        Assertions.assertTrue(inactiveLog.isClearVersionMap());
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                .put(parTbl1.getId(), Maps.newHashMap());
+        mv.getRefreshScheme().setLastFreshnessConfirmedAt(1000L);
+        currentState.getAlterJobMgr().replayAlterMaterializedViewStatus(inactiveLog);
+        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
+        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
+
+        // The MV is inactive now. Clearing it again is journaled too, but without preparing a status transition:
+        // that takes the task run lock, and failing to take it must not fail the DDL that triggered the clear.
+        Assertions.assertFalse(mv.isActive());
+        new MockUp<AlterJobMgr>() {
+            @Mock
+            public AlterJobMgr.AlterMaterializedViewStatusContext prepareAlterMaterializedViewStatus(
+                    MaterializedView materializedView, String status, String reason, boolean isReplay) {
+                throw new SemanticException("Failed to acquire task run lock when altering mv status:"
+                        + materializedView.getName());
+            }
+        };
+        mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap()
+                .put(parTbl1.getId(), Maps.newHashMap());
+        journaled.clear();
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) parTbl1, Set.of("item_id"));
+        Assertions.assertTrue(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
+        Assertions.assertTrue(journaled.stream().anyMatch(log -> log.getTableId() == mv.getId() && log.isClearVersionMap()));
+        Assertions.assertEquals(0, mv.getVersionMapResetEpoch() % 2, "the reset epoch was left odd");
     }
 
     @Test

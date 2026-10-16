@@ -38,6 +38,10 @@ public class AlterMaterializedViewStatusLog implements Writable {
     // holding the MV lock. Null in entries written by older versions, which replay the old way.
     @SerializedName(value = "baseTableInfos")
     private List<BaseTableInfo> baseTableInfos;
+    // INACTIVE only: also clear the visible version maps and the confirmed freshness, because the MV's data no longer
+    // matches what its definition reads. False in entries written by older versions, which did not journal the clear.
+    @SerializedName(value = "clearVersionMap")
+    private boolean clearVersionMap;
 
     public AlterMaterializedViewStatusLog(long dbId, long tableId, String status, String reason) {
         this.dbId = dbId;
@@ -80,5 +84,13 @@ public class AlterMaterializedViewStatusLog implements Writable {
 
     public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
         this.baseTableInfos = baseTableInfos;
+    }
+
+    public boolean isClearVersionMap() {
+        return clearVersionMap;
+    }
+
+    public void setClearVersionMap(boolean clearVersionMap) {
+        this.clearVersionMap = clearVersionMap;
     }
 }

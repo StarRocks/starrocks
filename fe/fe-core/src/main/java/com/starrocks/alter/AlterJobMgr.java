@@ -498,6 +498,9 @@ public class AlterJobMgr {
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
+            if (log.isClearVersionMap()) {
+                mv.getRefreshScheme().clearVersionState();
+            }
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
@@ -750,13 +753,29 @@ public class AlterJobMgr {
         String comment = alterViewInfo.getComment();
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        View view = (View) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+        View view = db == null ? null : (View) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getId(), tableId);
+        if (view == null) {
+            if (isReplay) {
+                // Journals written before the alter path rechecked the view under its lock can carry a MODIFY
+                // after the DROP of the same view.
+                LOG.warn("skip replaying alter of view {} in db {}: it no longer exists", tableId, dbId);
+                return;
+            }
+            throw new AlterJobException(db == null ? "database " + dbId + " was dropped concurrently"
+                    : "view " + tableId + " was dropped concurrently");
+        }
         long sqlMode = alterViewInfo.getSqlMode();
         String originalViewDef = alterViewInfo.getOriginalViewDef();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
+            // The view was looked up before the lock: a DROP VIEW in between leaves it detached from the db, and
+            // altering it would write a MODIFY entry for a view that no longer exists.
+            if (!isReplay && (!db.isExist() || db.getTable(view.getId()) != view)) {
+                throw new AlterJobException("view " + view.getName() + " was dropped concurrently");
+            }
             String viewName = view.getName();
             view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
             try {

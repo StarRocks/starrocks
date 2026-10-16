@@ -107,7 +107,8 @@ public class MVVersionManager {
         if (isFinalBatchRun && freshnessBaseline > mvRefreshScheme.getLastFreshnessConfirmedAt()) {
             mvRefreshScheme.setLastFreshnessConfirmedAt(freshnessBaseline);
         }
-        updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        final long lastRefreshTime = maxChangedTableRefreshTime;
+        persistRefreshScheme(() -> updateEditLogAfterVersionMetaChanged(mv, lastRefreshTime));
 
         // trigger timeless info event since mv version changed
         GlobalStateMgr.getCurrentState().getMaterializedViewMgr().triggerTimelessInfoEvent(mv,
@@ -133,11 +134,38 @@ public class MVVersionManager {
                 return;
             }
             scheme.setLastFreshnessConfirmedAt(confirmTime);
-            ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
-                    new ChangeMaterializedViewRefreshSchemeLog(mv);
-            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+            persistRefreshScheme(() -> {
+                ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                        new ChangeMaterializedViewRefreshSchemeLog(mv);
+                GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+            });
         } finally {
             locker.unLockTableWithIntensiveDbLock(mv.getDbId(), mv.getId(), LockType.WRITE);
+        }
+    }
+
+    // Every refresh scheme change this run publishes goes through here, after the run updated the MV's scheme in
+    // place and before {@code journal} writes it.
+    // MaterializedView#resetVisibleVersionMap runs without the MV lock this method is called under. A reset since
+    // this run started means its version entries and freshness may describe data computed from a definition
+    // that no longer holds: publish neither then. A reset racing the journal write below may have cleared the
+    // maps before this run's entry was journaled, so check again after it and journal the clear.
+    // A run that started while a reset was in flight (odd epoch) may have read the maps before the clear.
+    private void persistRefreshScheme(Runnable journal) {
+        long runEpoch = mvTaskRunContext == null ? -1 : mvTaskRunContext.getVersionMapResetEpoch();
+        boolean resetBeforePublish = runEpoch >= 0
+                && (runEpoch % 2 != 0 || mv.getVersionMapResetEpoch() != runEpoch);
+        if (resetBeforePublish) {
+            logger.warn("The version map of materialized view {} was reset during this refresh, " +
+                    "publishing no version entries", mv.getName());
+            mv.getRefreshScheme().clearVersionState();
+        }
+        journal.run();
+        if (!resetBeforePublish && runEpoch >= 0 && mv.getVersionMapResetEpoch() != runEpoch) {
+            logger.warn("The version map of materialized view {} was reset while this refresh published it, " +
+                    "clearing it again", mv.getName());
+            mv.getRefreshScheme().clearVersionState();
+            journal.run();
         }
     }
 

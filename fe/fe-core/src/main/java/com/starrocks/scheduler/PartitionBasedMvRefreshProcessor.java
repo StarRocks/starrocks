@@ -1100,6 +1100,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         this.mv = (MaterializedView) table;
         // refresh mv until mv is reloaded.
         this.mv.waitForReloaded();
+        // Before the run reads the MV's definition or any base table: a reset after this point means the data
+        // this run writes may come from a definition that no longer holds.
+        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
         // reinit the logger
         this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
 
@@ -1133,6 +1136,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // prepare mv context
         mvContext = new MvTaskRunContext(context);
+        mvContext.setVersionMapResetEpoch(versionMapResetEpoch);
         // prepare partition ttl number
         int partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
