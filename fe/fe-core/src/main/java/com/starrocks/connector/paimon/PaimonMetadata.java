@@ -51,7 +51,6 @@ import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -722,7 +721,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public Optional<ConnectorIndexResult> evaluateIndex(
             Table table, IndexCondition condition, TvrVersionRange versionRange) {
-        if (!(table instanceof PaimonTable) || condition == null || condition instanceof TopNIndexCondition
+        if (!(table instanceof PaimonTable) || condition == null
                 || condition.getFieldIds().isEmpty() || !isIndexSnapshot(versionRange)) {
             return Optional.empty();
         }

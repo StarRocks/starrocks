@@ -18,7 +18,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorSerializer;
 
@@ -57,7 +56,7 @@ public final class PaimonGlobalIndexRequest {
     public static PaimonGlobalIndexRequest create(
             String tablePath, String branch, long snapshotId, long schemaId, long schemaTimeMillis,
             IndexCondition condition) {
-        if (condition == null || condition instanceof TopNIndexCondition || condition.getPredicate() == null) {
+        if (condition == null || condition.getPredicate() == null) {
             throw new IllegalArgumentException("Paimon distributed execution requires a scalar index condition");
         }
         PaimonGlobalIndexRequest request = new PaimonGlobalIndexRequest();

@@ -74,7 +74,6 @@ import com.starrocks.sql.optimizer.rule.ivm.IvmVersionJoinRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyPredicateIndexRule;
-import com.starrocks.sql.optimizer.rule.transformation.ApplyTopNIndexRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -270,7 +269,6 @@ public class RuleSet {
 
     public static final Rule APPLY_CONNECTOR_INDEX_RULES =
             new CombinationRule(RuleType.GP_APPLY_CONNECTOR_INDEX, ImmutableList.of(
-                    ApplyTopNIndexRule.PAIMON_SCAN,
                     ApplyPredicateIndexRule.PAIMON_SCAN
             ));
 

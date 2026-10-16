@@ -57,7 +57,8 @@ public final class PaimonIndexScanNode extends ScanNode {
         this.cloudConfiguration = connector == null ? null : connector.getMetadata().getCloudConfiguration();
     }
 
-    public void setupScanRangeLocations(ScalarOperator predicate) {
+    /** Builds request-bound ranges and returns result predicates for an upper SelectNode. */
+    public List<ScalarOperator> setupScanRangeLocations(ScalarOperator predicate) {
         PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.parseTransport(extractRequest(predicate));
         String queryJson = request.toJson();
         snapshotId = request.getSnapshotId();
@@ -89,6 +90,11 @@ public final class PaimonIndexScanNode extends ScanNode {
             ConnectorIndexShard shard = shards.get(shardId);
             scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId));
         }
+        // args is an input binding, not a filter over the raw JSON emitted by the scanner.
+        // The specialized scanner does not evaluate conjuncts over its index_result output.
+        List<ScalarOperator> residualPredicates = new ArrayList<>(Utils.extractConjuncts(predicate));
+        residualPredicates.removeIf(PaimonIndexScanNode::referencesArgs);
+        return residualPredicates;
     }
 
     public String getTablePath() {
@@ -148,26 +154,46 @@ public final class PaimonIndexScanNode extends ScanNode {
     }
 
     static String extractRequest(ScalarOperator predicate) {
+        String request = null;
         for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
-            if (!(conjunct instanceof BinaryPredicateOperator)
-                    || ((BinaryPredicateOperator) conjunct).getBinaryType() != BinaryType.EQ) {
+            if (!referencesArgs(conjunct)) {
                 continue;
+            }
+            if (request != null || !(conjunct instanceof BinaryPredicateOperator)
+                    || ((BinaryPredicateOperator) conjunct).getBinaryType() != BinaryType.EQ) {
+                throw invalidArgsPredicate();
             }
             ScalarOperator left = conjunct.getChild(0);
             ScalarOperator right = conjunct.getChild(1);
-            if (left instanceof ColumnRefOperator
-                    && IndexTable.ARGS_COLUMN_NAME.equalsIgnoreCase(((ColumnRefOperator) left).getName())
+            if (isArgsColumn(left)
                     && right instanceof ConstantOperator && !((ConstantOperator) right).isNull()
                     && right.getType().isStringType()) {
-                return String.valueOf(((ConstantOperator) right).getValue());
-            }
-            if (right instanceof ColumnRefOperator
-                    && IndexTable.ARGS_COLUMN_NAME.equalsIgnoreCase(((ColumnRefOperator) right).getName())
+                request = String.valueOf(((ConstantOperator) right).getValue());
+            } else if (isArgsColumn(right)
                     && left instanceof ConstantOperator && !((ConstantOperator) left).isNull()
                     && left.getType().isStringType()) {
-                return String.valueOf(((ConstantOperator) left).getValue());
+                request = String.valueOf(((ConstantOperator) left).getValue());
+            } else {
+                throw invalidArgsPredicate();
             }
         }
-        throw new IllegalArgumentException("Paimon Global Index scan requires args = '<versioned request>'");
+        if (request == null || request.isEmpty()) {
+            throw invalidArgsPredicate();
+        }
+        return request;
+    }
+
+    private static boolean referencesArgs(ScalarOperator predicate) {
+        return Utils.extractColumnRef(predicate).stream().anyMatch(PaimonIndexScanNode::isArgsColumn);
+    }
+
+    private static boolean isArgsColumn(ScalarOperator operator) {
+        return operator instanceof ColumnRefOperator
+                && IndexTable.ARGS_COLUMN_NAME.equalsIgnoreCase(((ColumnRefOperator) operator).getName());
+    }
+
+    private static IllegalArgumentException invalidArgsPredicate() {
+        return new IllegalArgumentException("Paimon Global Index scan requires exactly one non-empty string "
+                + "args = '<versioned request>' binding and no other predicates on args");
     }
 }
