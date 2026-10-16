@@ -91,15 +91,8 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
                 Tracers forked = ownerTracers.fork(true);
                 forks.add(forked);
                 futures.add(CompletableFuture.runAsync(() -> prefetchTable(metadataMgr, queryIdString, tableKey,
-                        session, forked), executorService).handle((ignoredResult, throwable) -> {
-                    if (throwable != null) {
-                        Throwable cause = throwable.getCause() == null ? throwable : throwable.getCause();
-                        LOG.warn("Failed to prefetch metadata for query [{}], table [{}.{}.{}]; " +
-                                        "analysis will retry the metadata lookup",
-                                queryIdString, tableKey.catalog, tableKey.database, tableKey.table, cause);
-                    }
-                    return null;
-                }));
+                        session, forked), executorService).handle((ignoredResult, throwable) ->
+                        logPrefetchFailure(queryIdString, tableKey, throwable)));
             }
             CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
             for (Tracers fork : forks) {
@@ -127,6 +120,16 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
             }
             Tracers.set(previousTracers);
         }
+    }
+
+    private static Void logPrefetchFailure(String queryId, TableKey tableKey, Throwable throwable) {
+        if (throwable != null) {
+            Throwable cause = throwable.getCause() == null ? throwable : throwable.getCause();
+            LOG.warn("Failed to prefetch metadata for query [{}], table [{}.{}.{}]; " +
+                            "analysis will retry the metadata lookup",
+                    queryId, tableKey.catalog, tableKey.database, tableKey.table, cause);
+        }
+        return null;
     }
 
     private static Set<TableKey> collectTableKeys(StatementBase statement, ConnectContext session) {
