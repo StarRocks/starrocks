@@ -80,6 +80,15 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PINNED_REFRESH_JOB_ID = "PINNED_REFRESH_JOB_ID";
     // Carries the batch's first-run start time so LAST_FRESHNESS_CONFIRMED_AT reflects the snapshot pinned at batch start.
     public static final String MV_FRESHNESS_BASELINE_TIME = "MV_FRESHNESS_BASELINE_TIME";
+<<<<<<< HEAD
+=======
+    // First task run's processStartTime, propagated across batch runs so the terminal run can record
+    // refresh-job duration without looking up task-run history. Written only when processStartTime > 0.
+    public static final String MV_REFRESH_JOB_PROCESS_START_TIME = "MV_REFRESH_JOB_PROCESS_START_TIME";
+    // The MV's version map reset epoch as the job's first run read it, propagated across batch runs so that a reset
+    // since the job started fences every later batch too, see MVVersionManager#publishRefreshScheme.
+    public static final String MV_VERSION_MAP_RESET_EPOCH = "MV_VERSION_MAP_RESET_EPOCH";
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
     public static final String SUBMIT_USER_SYSTEM = "system";
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
@@ -98,8 +107,11 @@ public class TaskRun implements Comparable<TaskRun> {
     // - `PROPERTIES_WAREHOUSE`/`START_TASK_RUN_ID` is no need to check equality of task runs because they will not affect
     //  the task run's result.
     // - `PINNED_REFRESH_JOB_ID` scopes merge isolation to pinned batches; pure PCT is unaffected.
+    // - `MV_VERSION_MAP_RESET_EPOCH` keeps a run started after a version map reset from merging into a batch of a job
+    //   started before it, whose versions the reset fences.
     public static final Set<String> MV_COMPARABLE_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID);
+            MV_ID, PARTITION_START, PARTITION_END, PARTITION_VALUES, FORCE, PINNED_REFRESH_JOB_ID,
+            MV_VERSION_MAP_RESET_EPOCH);
     // Properties that can be set in TaskRun which are used to distinguish other noisy properties from users' defined properties.
     // and will ignore other properties in the task run history.
     // This should be only used in the task run history table and should not used for checking task run's real properties
@@ -157,6 +169,34 @@ public class TaskRun implements Comparable<TaskRun> {
         this.properties = properties;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Seed the batch's first-run process start on the leader's spawn; later runs already carry it
+     * via the property copy. Only writes a real timestamp: the key is absent when processStartTime
+     * is unknown (0), so readers do not have to treat 0 as a sentinel.
+     */
+    public static void seedRefreshJobProcessStartTime(Map<String, String> newProperties, TaskRunStatus status) {
+        if (newProperties == null || status == null
+                || newProperties.containsKey(MV_REFRESH_JOB_PROCESS_START_TIME)) {
+            return;
+        }
+        long processStartTime = status.getProcessStartTime();
+        if (processStartTime > 0) {
+            newProperties.put(MV_REFRESH_JOB_PROCESS_START_TIME, String.valueOf(processStartTime));
+        }
+    }
+
+    /** Seeds {@link #MV_VERSION_MAP_RESET_EPOCH} on the first run's spawn; later runs carry it via the property copy. */
+    public static void seedVersionMapResetEpoch(Map<String, String> newProperties, long versionMapResetEpoch) {
+        if (newProperties == null || versionMapResetEpoch < 0
+                || newProperties.containsKey(MV_VERSION_MAP_RESET_EPOCH)) {
+            return;
+        }
+        newProperties.put(MV_VERSION_MAP_RESET_EPOCH, String.valueOf(versionMapResetEpoch));
+    }
+
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
     public CompletableFuture<Constants.TaskRunState> getFuture() {
         return future;
     }

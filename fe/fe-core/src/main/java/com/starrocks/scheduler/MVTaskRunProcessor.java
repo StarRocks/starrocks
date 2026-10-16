@@ -122,14 +122,29 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // refresh mv until mv is reloaded.
         mv.waitForReloaded();
         // Before the run reads the MV's definition or any base table: a reset after this point means the data
-        // this run writes may come from a definition that no longer holds.
-        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
+        // this run writes may come from a definition that no longer holds. A later batch of a refresh job takes the
+        // epoch its first run read instead, so that a reset since the job started fences it too: the job's partition
+        // range and freshness baseline were decided before that reset.
+        String inheritedEpoch = properties.get(TaskRun.MV_VERSION_MAP_RESET_EPOCH);
+        boolean laterBatch = inheritedEpoch != null;
+        long versionMapResetEpoch = laterBatch ? Long.parseLong(inheritedEpoch) : mv.getVersionMapResetEpoch();
         this.logger = MVTraceUtils.getLogger(mv, MVTaskRunProcessor.class);
 
         // NOTE: mvId is set in Task's properties when creating
         if (!mv.isActive()) {
             MVActiveChecker.tryToActivate(mv);
             logger.info("Activated the MV before refreshing: {}", mv.getName());
+<<<<<<< HEAD
+=======
+            // An activation attempt may change the epoch even when it fails; that change is this run's own.
+            observedStatusEpoch = OptionalLong.of(mv.getStatusSnapshot().epoch());
+            // So is the reset of a version map the activation clears: a job's first run has read nothing yet, so it
+            // starts after it rather than having its version entries dropped as if it had raced it. A later batch
+            // keeps its job's epoch, which the reset invalidated.
+            if (!laterBatch) {
+                versionMapResetEpoch = mv.getVersionMapResetEpoch();
+            }
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
         }
 
         // metrics entity

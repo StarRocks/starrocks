@@ -24,6 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -46,7 +47,10 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
@@ -56,6 +60,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.service.TableSchemaService;
+import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -79,6 +88,7 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -2164,4 +2174,325 @@ public class LakeTableSchemaChangeJobTest {
         Assertions.assertEquals(List.of(0, 0, 0, 0), tabletDataSizes(job));
         Assertions.assertEquals(0, job.schemaChangeBatchTask.getTaskNum());
     }
+<<<<<<< HEAD
+=======
+
+    private static final String VECTOR_INDEX_PROPS = "'index_type'='HNSW','metric_type'='l2_distance','dim'='4',"
+            + "'is_vector_normed'='false','M'='16','efconstruction'='40'";
+
+    private static List<String> indexNames(TTabletSchema schema) {
+        if (schema.getIndexes() == null) {
+            return List.of();
+        }
+        return schema.getIndexes().stream().map(TOlapTableIndex::getIndex_name).sorted().collect(Collectors.toList());
+    }
+
+    private static List<String> columnNames(TTabletSchema schema, Predicate<TColumn> predicate) {
+        return schema.getColumns().stream().filter(predicate).map(TColumn::getColumn_name).sorted()
+                .collect(Collectors.toList());
+    }
+
+    private record ShadowSchemaChange(LakeTableSchemaChangeJob job, TTabletSchema created) {
+        long txnId() {
+            return job.getWatershedTxnId() + 1;
+        }
+    }
+
+    /**
+     * Drives the ALTER into WAITING_TXN, with its shadow index in the catalog and the job not finished, and
+     * returns the job, registered with the schema change handler as the scheduler keeps it, together with the
+     * tablet schema its shadow tablets were created with.
+     */
+    private ShadowSchemaChange startShadowSchemaChange(OlapTable olapTable, String alterSql) throws Exception {
+        Map<Long, TTabletSchema> created = new HashMap<>();
+        new MockUp<CreateReplicaTask.Builder>() {
+            @Mock
+            public CreateReplicaTask build(Invocation inv) {
+                CreateReplicaTask task = inv.proceed();
+                if (task.getTableId() == olapTable.getId()) {
+                    TTabletSchema schema = task.toThrift().getTablet_schema();
+                    created.put(schema.getId(), schema);
+                }
+                return task;
+            }
+        };
+        alterTable(connectContext, alterSql);
+        LakeTableSchemaChangeJob job = getAlterJob(olapTable);
+        // getAlterJob unregisters the job, and TableSchemaService looks a running job up in the handler.
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler().addAlterJobV2(job);
+        drivePendingJob(job);
+        Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, job.getJobState());
+
+        Assertions.assertEquals(1, created.size(), "shadow schemas created: " + created.keySet());
+        TTabletSchema shadow = created.values().iterator().next();
+        Assertions.assertNotNull(olapTable.getIndexMetaByMetaId(shadow.getId()),
+                "shadow index meta " + shadow.getId() + " is not in the catalog");
+        return new ShadowSchemaChange(job, shadow);
+    }
+
+    /**
+     * The schema TableSchemaService hands a CN that misses {@code schemaId} locally, e.g. after a restart.
+     */
+    private static TGetTableSchemaResponse fetchSchema(OlapTable olapTable, long schemaId, long txnId) {
+        TTableSchemaKey key = new TTableSchemaKey();
+        key.setDb_id(db.getId());
+        key.setTable_id(olapTable.getId());
+        key.setSchema_id(schemaId);
+        TGetTableSchemaRequest request = new TGetTableSchemaRequest();
+        request.setSchema_key(key);
+        request.setSource(TTableSchemaRequestSource.LOAD);
+        request.setTxn_id(txnId);
+        return TableSchemaService.getTableSchema(request);
+    }
+
+    private static TTabletSchema servedSchema(OlapTable olapTable, long schemaId, long txnId) {
+        TGetTableSchemaResponse response = fetchSchema(olapTable, schemaId, txnId);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code(), response.getStatus().toString());
+        Assertions.assertEquals(schemaId, response.getSchema().getId());
+        return response.getSchema();
+    }
+
+    private static TTabletSchema servedSchemaOn(LocalMetastore metastore, OlapTable olapTable, long schemaId,
+                                                long txnId) {
+        LocalMetastore leaderMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(metastore);
+        try {
+            return servedSchema(olapTable, schemaId, txnId);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(leaderMetastore);
+        }
+    }
+
+    // The shadow schema must be served exactly as its tablets were created. The compression codec is the only
+    // field allowed to differ: CreateReplicaTask carries it on the request, not in the tablet schema.
+    private static void assertServedAsCreated(TTabletSchema created, TTabletSchema served) {
+        Assertions.assertEquals(indexNames(created), indexNames(served), () -> "shadow schema " + created.getId()
+                + " was created with " + indexNames(created) + " but TableSchemaService serves " + indexNames(served));
+        TTabletSchema expected = created.deepCopy();
+        TTabletSchema actual = served.deepCopy();
+        for (TTabletSchema schema : List.of(expected, actual)) {
+            schema.unsetCompression_type();
+            schema.unsetCompression_level();
+        }
+        Assertions.assertEquals(expected, actual,
+                () -> "shadow schema created as " + created + "\nbut served as " + served);
+    }
+
+    // While ADD INDEX is running, the shadow schema a CN fetches from FE must carry the new index, as the
+    // shadow tablets were created with it. Otherwise the loads it writes build no .vi for that index.
+    // Once the job finishes and the table takes the index, the same schema id is still served the same.
+    @Test
+    public void testSchemaServiceServesShadowSchemaWithAddedIndex() throws Exception {
+        completeTasksAndPublishOnSend();
+        LakeTable vectorTable = createTable(connectContext, "CREATE TABLE t_vi_add (id BIGINT NOT NULL, "
+                + "v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 "
+                + "PROPERTIES('replication_num'='1')");
+        ShadowSchemaChange change = startShadowSchemaChange(vectorTable,
+                "ALTER TABLE t_vi_add ADD INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")");
+        long schemaId = change.created().getId();
+        Assertions.assertEquals(List.of("idx_v"), indexNames(change.created()));
+        assertServedAsCreated(change.created(), servedSchema(vectorTable, schemaId, change.txnId()));
+
+        runToFinished(change.job());
+        Assertions.assertEquals(schemaId, vectorTable.getIndexMetaByMetaId(vectorTable.getBaseIndexMetaId())
+                .getSchemaId());
+        assertServedAsCreated(change.created(), servedSchema(vectorTable, schemaId, change.txnId()));
+    }
+
+    // A finished job stays in the handler, and a table may be renamed to the shadow name the job saved. Once the
+    // shadow index is the live base index, the job must not describe it: the table holds the current sets.
+    @Test
+    public void testFinishedJobDoesNotClaimLiveIndexRenamedToItsShadowName() throws Exception {
+        completeTasksAndPublishOnSend();
+        LakeTable vectorTable = createTable(connectContext, "CREATE TABLE t_vi_claim (id BIGINT NOT NULL, "
+                + "v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 "
+                + "PROPERTIES('replication_num'='1')");
+        ShadowSchemaChange change = startShadowSchemaChange(vectorTable,
+                "ALTER TABLE t_vi_claim ADD INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")");
+        runToFinished(change.job());
+        long liveIndexMetaId = vectorTable.getBaseIndexMetaId();
+        Assertions.assertEquals(change.created().getId(), vectorTable.getIndexMetaByMetaId(liveIndexMetaId).getSchemaId());
+
+        String shadowName = SchemaChangeHandler.SHADOW_NAME_PREFIX + "t_vi_claim";
+        alterTable(connectContext, "ALTER TABLE t_vi_claim RENAME " + shadowName);
+        Assertions.assertEquals(shadowName, vectorTable.getIndexNameByMetaId(liveIndexMetaId));
+        Assertions.assertTrue(change.job().getShadowSchema(vectorTable, liveIndexMetaId).isEmpty(),
+                "a finished job claimed the live index by its saved shadow name");
+    }
+
+    // Mirror of the above: while DROP INDEX is running, the served shadow schema must not carry the
+    // dropped index. Once the job is cancelled, the shadow schema is gone and the table keeps the index.
+    @Test
+    public void testSchemaServiceServesShadowSchemaWithoutDroppedIndex() throws Exception {
+        LakeTable vectorTable = createTable(connectContext, "CREATE TABLE t_vi_drop (id BIGINT NOT NULL, "
+                + "v ARRAY<FLOAT> NOT NULL, INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")) "
+                + "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        long originSchemaId = vectorTable.getIndexMetaByMetaId(vectorTable.getBaseIndexMetaId()).getSchemaId();
+        TTabletSchema originBefore = servedSchema(vectorTable, originSchemaId, -1);
+        Assertions.assertEquals(List.of("idx_v"), indexNames(originBefore));
+
+        ShadowSchemaChange change = startShadowSchemaChange(vectorTable, "ALTER TABLE t_vi_drop DROP INDEX idx_v");
+        Assertions.assertEquals(List.of(), indexNames(change.created()));
+        assertServedAsCreated(change.created(), servedSchema(vectorTable, change.created().getId(), change.txnId()));
+
+        Assertions.assertTrue(change.job().cancel("test"));
+        Assertions.assertNotEquals(TStatusCode.OK,
+                fetchSchema(vectorTable, change.created().getId(), change.txnId()).getStatus().getStatus_code());
+        Assertions.assertEquals(originBefore, servedSchema(vectorTable, originSchemaId, -1));
+    }
+
+    // Same for the other sets the table takes only when the job finishes: the bloom filter columns...
+    @Test
+    public void testSchemaServiceServesShadowSchemaWithNewBloomFilterColumns() throws Exception {
+        LakeTable bfTable = createTable(connectContext, "CREATE TABLE t_bf_served(c0 INT, c1 VARCHAR(64), "
+                + "c2 VARCHAR(64)) duplicate key(c0) distributed by hash(c0) buckets 1 "
+                + "properties('bloom_filter_columns' = 'c1')");
+        ShadowSchemaChange change = startShadowSchemaChange(bfTable,
+                "ALTER TABLE t_bf_served SET ('bloom_filter_columns' = 'c2')");
+        Assertions.assertEquals(List.of("c2"), columnNames(change.created(), TColumn::isIs_bloom_filter_column));
+        assertServedAsCreated(change.created(), servedSchema(bfTable, change.created().getId(), change.txnId()));
+    }
+
+    // ...and the ZSTD columns with their page sizes.
+    @Test
+    public void testSchemaServiceServesShadowSchemaWithNewZstdColumns() throws Exception {
+        LakeTable zstdTable = createTable(connectContext, "CREATE TABLE t_zstd_served(c0 INT, c1 VARCHAR(64), "
+                + "c2 VARCHAR(64)) duplicate key(c0) distributed by hash(c0) buckets 1 "
+                + "properties('zstd_compression_columns' = 'c1')");
+        ShadowSchemaChange change = startShadowSchemaChange(zstdTable,
+                "ALTER TABLE t_zstd_served SET ('zstd_compression_columns' = 'c2:256k')");
+        Assertions.assertEquals(List.of("c2"), columnNames(change.created(), TColumn::isUse_zstd_compression));
+        assertServedAsCreated(change.created(), servedSchema(zstdTable, change.created().getId(), change.txnId()));
+    }
+
+    // The served shadow schema comes from the job's post-change sets, so they must survive the journal and the
+    // image: a follower that replayed the job and a leader restarted mid-job serve it as created too.
+    @Test
+    public void testSchemaServiceServesShadowSchemaAfterReplayAndRestart() throws Exception {
+        LakeTable vectorTable = createTable(connectContext, "CREATE TABLE t_vi_replay (id BIGINT NOT NULL, "
+                + "v ARRAY<FLOAT> NOT NULL) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 "
+                + "PROPERTIES('replication_num'='1')");
+        UtFrameUtils.PseudoImage imageBeforeAlter = saveMetastore();
+        ShadowSchemaChange change = startShadowSchemaChange(vectorTable,
+                "ALTER TABLE t_vi_replay ADD INDEX idx_v (v) USING VECTOR (" + VECTOR_INDEX_PROPS + ")");
+        long schemaId = change.created().getId();
+        List<AlterJobV2> entries = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            entries.add((AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2));
+        }
+        Assertions.assertEquals(List.of(AlterJobV2.JobState.PENDING, AlterJobV2.JobState.WAITING_TXN),
+                entries.stream().map(AlterJobV2::getJobState).collect(Collectors.toList()));
+        UtFrameUtils.PseudoImage imageMidJob = saveMetastore();
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
+
+        // A follower: the catalog from before the ALTER, then the job's journal entries.
+        handler.clearJobs();
+        LocalMetastore followerMetastore = loadMetastore(imageBeforeAlter);
+        for (AlterJobV2 entry : entries) {
+            replayOn(followerMetastore, handler, entry);
+        }
+        assertServedAsCreated(change.created(),
+                servedSchemaOn(followerMetastore, vectorTable, schemaId, change.txnId()));
+
+        // A leader restarted mid-job: the catalog and the job both come from the image.
+        handler.clearJobs();
+        handler.addAlterJobV2(gsonCopy(change.job()));
+        assertServedAsCreated(change.created(),
+                servedSchemaOn(loadMetastore(imageMidJob), vectorTable, schemaId, change.txnId()));
+    }
+
+    /**
+     * A schema change of a lake table that modifies a column its MVs read inactivates every one of them, in any
+     * database, and the MVs above them, and journals each inactivation with the clear of the version map: a
+     * follower and the next leader see the MVs inactive too.
+     */
+    @Test
+    public void testFinishedJobInactivatesAndJournalsRelatedMvs() throws Exception {
+        String otherDb = DB_NAME + "_mv";
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(otherDb);
+        // The column change has to go through this job rather than a fast schema evolution.
+        boolean oldFastSchemaEvolution = Config.enable_fast_schema_evolution_in_share_data_mode;
+        Config.enable_fast_schema_evolution_in_share_data_mode = false;
+        try {
+            createTable(connectContext, "CREATE TABLE t_mv_base(c0 INT, c1 INT) duplicate key(c0) " +
+                    "distributed by hash(c0) buckets " + NUM_BUCKETS);
+            StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+            String mvProps = "DISTRIBUTED BY HASH(c0) BUCKETS 1 REFRESH DEFERRED MANUAL ";
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + DB_NAME + ".mv_same1 " + mvProps +
+                    "AS SELECT c0, c1 FROM " + DB_NAME + ".t_mv_base");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + DB_NAME + ".mv_same2 " + mvProps +
+                    "AS SELECT c0, c1 FROM " + DB_NAME + ".t_mv_base");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + otherDb + ".mv_other " + mvProps +
+                    "AS SELECT c0, c1 FROM " + DB_NAME + ".t_mv_base");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + otherDb + ".mv_above " + mvProps +
+                    "AS SELECT c0, c1 FROM " + DB_NAME + ".mv_same1");
+            List<MaterializedView> mvs = new ArrayList<>();
+            for (String name : List.of(DB_NAME + ".mv_same1", DB_NAME + ".mv_same2", otherDb + ".mv_other",
+                    otherDb + ".mv_above")) {
+                String[] parts = name.split("\\.");
+                MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(parts[0], parts[1]);
+                Assertions.assertTrue(mv.isActive());
+                mvs.add(mv);
+            }
+
+            LakeTable baseTable = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(DB_NAME, "t_mv_base");
+            alterTable(connectContext, "ALTER TABLE t_mv_base MODIFY COLUMN c1 BIGINT");
+            LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(baseTable);
+            new MockUp<LakeTableSchemaChangeJob>() {
+                @Mock
+                public void sendAgentTask(AgentBatchTask batchTask) {
+                    batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+                }
+            };
+            new MockUp<AlterJobV2>() {
+                @Mock
+                public boolean publishVersion() {
+                    return true;
+                }
+            };
+            List<AlterMaterializedViewStatusLog> journaled = new ArrayList<>();
+            new MockUp<EditLog>() {
+                @Mock
+                public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
+                                             WALApplier walApplier) {
+                    journaled.add(log);
+                    invocation.proceed();
+                }
+            };
+
+            drivePendingJob(schemaChangeJob);
+            schemaChangeJob.runWaitingTxnJob();
+            schemaChangeJob.runRunningJob();
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+            long deadlineMs = System.currentTimeMillis() + 60000;
+            while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+                Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "the schema change never finished");
+                schemaChangeJob.runFinishedRewritingJob();
+                Thread.sleep(10);
+            }
+
+            for (MaterializedView mv : mvs) {
+                Assertions.assertFalse(mv.isActive(), mv.getName() + " is still active");
+                Assertions.assertTrue(mv.isVersionMapResetPending(), mv.getName());
+                AlterMaterializedViewStatusLog log = journaled.stream()
+                        .filter(l -> l.getTableId() == mv.getId())
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("the inactivation of " + mv.getName()
+                                + " was not journaled"));
+                Assertions.assertEquals(AlterMaterializedViewStatusClause.INACTIVE, log.getStatus());
+                Assertions.assertTrue(log.isClearVersionMap());
+
+                // What a follower replays.
+                mv.setActive();
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+                Assertions.assertFalse(mv.isActive());
+            }
+        } finally {
+            Config.enable_fast_schema_evolution_in_share_data_mode = oldFastSchemaEvolution;
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, otherDb, true);
+        }
+    }
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
 }

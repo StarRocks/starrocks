@@ -24,6 +24,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -662,6 +663,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;
 
+<<<<<<< HEAD
+=======
+    // Set while the MV is inactive after an inactivation that cleared its version map, until the next activation
+    // clears it once more. A writer racing that inactivation can still have journaled entries back after it (see
+    // MVVersionManager#publishRefreshScheme); the activation is ordered after every such write, so its clear, which
+    // travels with the ACTIVE entry, leaves no entry computed from the old definition on any FE.
+    // Null only in an image written before the field existed, until gsonPostProcess derives it: GSON builds the MV
+    // through the no-arg constructor, so the field must not get an initial value there.
+    @SerializedName(value = "versionMapResetPending")
+    private Boolean versionMapResetPending;
+
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
     // This is a normalized view define SQL by AstToSQLBuilder#toSQL, which is used for show create mv, constructing a refresh job
     // (insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -782,6 +795,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+        this.versionMapResetPending = false;
 
         // Assign unique ids for columns
         initUniqueId();
@@ -855,6 +869,32 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * The clear of an inactivation, in its journal entry's applier and in its replay: the caller bumps the reset epoch
+     * around it on the leader, see {@link #markVersionMapReset}.
+     */
+    public void clearVersionStateForInactivation() {
+        refreshScheme.clearVersionState();
+        versionMapResetPending = true;
+    }
+
+    public boolean isVersionMapResetPending() {
+        return Boolean.TRUE.equals(versionMapResetPending);
+    }
+
+    public void setVersionMapResetPending(boolean versionMapResetPending) {
+        this.versionMapResetPending = versionMapResetPending;
+    }
+
+    /** The clear an activation journals with its ACTIVE entry when {@link #isVersionMapResetPending}. */
+    public void clearVersionStateForActivation() {
+        refreshScheme.clearVersionState();
+        versionMapResetPending = false;
+    }
+
+    /**
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
      * Bumps the reset epoch. {@link #resetVisibleVersionMap} does it on both sides of the clear; a caller that
      * clears the scheme in a journal write's applier must do the same, the second bump in a finally block so that the
      * epoch never stays odd.
@@ -1775,6 +1815,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         onReload(false, true, false);
     }
 
+<<<<<<< HEAD
     /**
      * This mv's active flag and status epoch, read together.
      */
@@ -1786,6 +1827,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     private boolean isInCatalog() {
+=======
+    public boolean isInCatalog() {
+>>>>>>> 553e6551af3... [BugFix][RB-374] Journal every MV inactivation and its version-map clear (#65618)
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         return db != null && db.getTable(id) == this;
     }
@@ -2686,6 +2730,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+        if (versionMapResetPending == null) {
+            // An image written before the field existed. Its leader cleared the version map in memory only, on every
+            // inactivation but a manual one (an empty reason is replayed as manual), so the image still holds the
+            // map: mark the clear pending, for the activation to do it.
+            versionMapResetPending = !active && !Strings.isNullOrEmpty(inactiveReason)
+                    && !AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equals(inactiveReason);
+        }
         List<Column> partitionCols = getPartitionColumns();
         if (CollectionUtils.isEmpty(partitionCols)) {
             return;
