@@ -109,6 +109,11 @@ public class InsertOverwriteJobRunnerTest {
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_live_number(k1 date, k2 int) " +
+                        "DUPLICATE KEY(k1) PARTITION BY RANGE(k1) "
+                        + "(PARTITION p20250101 VALUES [('2025-01-01'), ('2025-01-02')))"
+                        + " DISTRIBUTED BY HASH(`k2`) BUCKETS 1"
+                        + " PROPERTIES('replication_num'='1', 'partition_live_number'='3');")
                 .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
                         "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
                 .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
@@ -590,6 +595,47 @@ public class InsertOverwriteJobRunnerTest {
         } finally {
             olapTable.setState(OlapTable.OlapTableState.NORMAL);
         }
+    }
+
+    @Test
+    public void testDoCommitWhenSourcePartitionMissing() {
+        // A source partition recorded before the load can be dropped (e.g. by partition TTL) before the swap;
+        // doCommit() must report it with a hint instead of a NullPointerException.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable noTtlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t3");
+        OlapTable ttlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t_live_number");
+        String ttlHint = "also check whether the partition is still within the retention range";
+
+        // source partition resolved by name, table without partition TTL
+        InsertOverwriteJob byNameJob = new InsertOverwriteJob(305L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(noTtlTable.getPartition("p1").getId()), false);
+        byNameJob.setSourcePartitionNames(Lists.newArrayList("p_dropped"));
+        byNameJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        DmlException ex = Assertions.assertThrows(DmlException.class,
+                new InsertOverwriteJobRunner(byNameJob)::testDoCommit);
+        Assertions.assertEquals("replace partitions failed: partition 'p_dropped' of table 't3' no longer exists. " +
+                "Check whether it was dropped or renamed while the INSERT OVERWRITE was running", ex.getMessage());
+
+        // source partition resolved by name, table with partition TTL
+        InsertOverwriteJob ttlJob = new InsertOverwriteJob(306L, database.getId(), ttlTable.getId(),
+                Lists.newArrayList(ttlTable.getPartition("p20250101").getId()), false);
+        ttlJob.setSourcePartitionNames(Lists.newArrayList("p20241231"));
+        ttlJob.setTmpPartitionIds(Lists.newArrayList(ttlTable.getPartition("p20250101").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(ttlJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition 'p20241231' of table 't_live_number' no longer exists"),
+                ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains(ttlHint), ex.getMessage());
+
+        // source partition names not recorded, resolved by id
+        InsertOverwriteJob byIdJob = new InsertOverwriteJob(307L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(-1L), false);
+        byIdJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(byIdJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition id -1 of table 't3' no longer exists"),
+                ex.getMessage());
+        Assertions.assertFalse(ex.getMessage().contains(ttlHint), ex.getMessage());
     }
 
     @Test
