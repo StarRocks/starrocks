@@ -37,7 +37,6 @@ class SegmentPKIterator;
 class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
-    LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
     ~LakePrimaryIndex() override;
 
     // Fetch all primary keys from the tablet associated with this index into memory

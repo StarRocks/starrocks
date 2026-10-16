@@ -84,7 +84,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    _set_schema(pkey_schema);
+    _set_schema(pkey_schema, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
 
     // load persistent index if enable persistent index meta
 
