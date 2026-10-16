@@ -138,6 +138,10 @@ jobs:
               - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
               - 'build-support/test_build_parallelism.py'
+              - 'build-support/test_benchmark_build_parallelism.py'
+              - 'build-support/build_helpers.sh'
+              - 'build-support/benchmark_build_parallelism.sh'
+              - 'run-be-ut.sh'
 
       - uses: actions/checkout@v6
         if: steps.path-filter.outputs.handbook == 'true'
@@ -148,6 +152,7 @@ jobs:
           python3 -m unittest build-support/test_check_repo_handbook.py
           python3 -m unittest build-support/test_handbook_plan.py
           python3 -m unittest build-support/test_build_parallelism.py
+          python3 -m unittest build-support/test_benchmark_build_parallelism.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
