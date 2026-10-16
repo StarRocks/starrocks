@@ -18,9 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -41,6 +43,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -314,6 +318,110 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
             String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
             PlanTestBase.assertNotContains(plan, ":UNION");
             PlanTestBase.assertContains(plan, "mv0");
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteRedirectsToDefinedQueryWhenTimelinessCheckFails() {
+        withPartialScanMv(() -> {
+            // A metadata race (a base partition dropped mid-check, say) fails the timeliness check with an NPE or a
+            // CME. Only p1 of mv0 is fresh, so scanning mv0 as it is would miss the rows of p2.
+            new MockUp<MvRefreshArbiter>() {
+                @Mock
+                public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
+                                                              MVTimelinessArbiter.QueryRewriteParams params) {
+                    throw new NullPointerException("partition p2 was dropped mid-check");
+                }
+            };
+
+            String plan = getFragmentPlan("SELECT * from mv0 where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ": m1");
+            PlanTestBase.assertNotContains(plan, ": mv0");
+
+            // The defined query has no equivalent of PARTITION(p1): it would read p2 of m1 as well.
+            plan = getFragmentPlan("SELECT * from mv0 PARTITION(p1) where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ": mv0");
+            PlanTestBase.assertNotContains(plan, ": m1");
+
+            // Nor of BEFORE: it would read the current rows of m1 instead of the requested snapshot.
+            plan = getFragmentPlan("SELECT * from mv0 BEFORE '1234567' where k1<6 and k2 like 'a%'");
+            PlanTestBase.assertContains(plan, ": mv0");
+            PlanTestBase.assertNotContains(plan, ": m1");
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteKeepsNarrowedAndSnapshotScansAsWritten() {
+        withPartialScanMv(() -> {
+            // Only p1 of mv0 is fresh, so a transparent plan unions mv0 with p2 of m1. PARTITION(p1) reads only the
+            // fresh partition: scanned as written, it neither loses rows nor reads p2.
+            // The timeliness is computed on the MV in the catalog, never on the planner's copy of it: the result can
+            // be cached across queries, and the copy may predate a partition drop.
+            MaterializedView catalogMv = getMv("test", "mv0");
+            List<MaterializedView> checkedMvs = new ArrayList<>();
+            new MockUp<MvRefreshArbiter>() {
+                @Mock
+                public MvUpdateInfo getMVTimelinessUpdateInfo(Invocation invocation, MaterializedView checkedMv,
+                                                              MVTimelinessArbiter.QueryRewriteParams params) {
+                    checkedMvs.add(checkedMv);
+                    return invocation.proceed(checkedMv, params);
+                }
+            };
+            String plan = getFragmentPlan("SELECT * from mv0 PARTITION(p1) where k1<6");
+            Assertions.assertFalse(checkedMvs.isEmpty());
+            for (MaterializedView checkedMv : checkedMvs) {
+                Assertions.assertSame(catalogMv, checkedMv, "the timeliness was computed on a copy of the MV");
+            }
+            PlanTestBase.assertContains(plan, ": mv0");
+            PlanTestBase.assertNotContains(plan, ":UNION");
+            PlanTestBase.assertNotContains(plan, ": m1");
+
+            // Once p1 is stale too, scanning it as written would miss the new rows: it is still compensated.
+            cluster.runSql("test", "insert into m1 values (2,2,2,2,2);");
+            PlanTestBase.assertContains(getFragmentPlan("SELECT * from mv0 PARTITION(p1) where k1<6"), ": m1");
+
+            // With the whole MV fresh, no restriction loses anything when scanned as written, and none of them has
+            // an equivalent in a transparent plan.
+            starRocksAssert.refreshMvPartition("REFRESH MATERIALIZED VIEW mv0 PARTITION START ('1') END ('9')");
+            long tabletId = getMv("test", "mv0").getPartition("p1").getDefaultPhysicalPartition()
+                    .getLatestBaseIndex().getTablets().get(0).getId();
+            String[] sqls = {
+                    "SELECT * from mv0 PARTITION(p1) where k1<6",
+                    "SELECT * from mv0 TABLET(" + tabletId + ") where k1<6",
+                    "SELECT * from mv0 BEFORE '1234567' where k1<6",
+            };
+            for (String query : sqls) {
+                plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, ": mv0");
+                PlanTestBase.assertNotContains(plan, ":UNION");
+                PlanTestBase.assertNotContains(plan, ": m1");
+            }
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteDoesNotTrustAResetVersionMapForARestrictedScan() {
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1,1), (4,2,1,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_np " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES ('transparent_mv_rewrite_mode' = 'true') " +
+                            " AS SELECT k1, k2, v1, v2 from m1;",
+                    () -> {
+                        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv_np with sync mode");
+                        // The base table is emptied and the MV's version map reset, as an ALTER VIEW does: the
+                        // timeliness check ignores partitions never written to and finds nothing to refresh, but the
+                        // MV still holds the old rows. Without recorded versions nothing is known to be fresh, so the
+                        // restricted scan is not read as written.
+                        cluster.runSql("test", "truncate table m1;");
+                        MaterializedView mv = getMv("test", "mv_np");
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+                        long tabletId = mv.getPartitions().iterator().next().getDefaultPhysicalPartition()
+                                .getLatestBaseIndex().getTablets().get(0).getId();
+                        String plan = getFragmentPlan("SELECT * from mv_np TABLET(" + tabletId + ") where k1<6");
+                        PlanTestBase.assertContains(plan, ": m1");
+                    });
         });
     }
 
