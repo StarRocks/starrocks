@@ -435,6 +435,7 @@ public class ColumnFilterConverter {
         if (predicate instanceof InPredicateOperator inPredicate
                 && !(predicate instanceof LargeInPredicateOperator)
                 && !inPredicate.isNotIn()
+                && !partitionValueDependsOnEvaluatorZone(firstPartitionExpr)
                 && inPredicate.getChild(0) instanceof ColumnRefOperator columnRef) {
             List<ScalarOperator> mappedChildren = Lists.newArrayList();
             mappedChildren.add(columnRef);
@@ -478,6 +479,9 @@ public class ColumnFilterConverter {
     private static Optional<ConstantOperator> evaluatePartitionExpr(Expr partitionExpr, ColumnRefOperator columnRef,
                                                                     ConstantOperator constant,
                                                                     boolean requireMonotonic) {
+        if (!foldsTheWayTheBackendRouted(partitionExpr, constant)) {
+            return Optional.empty();
+        }
         Expr predicateExpr = partitionExpr.clone();
         if (!rewritePredicate(predicateExpr, columnRef, constant)) {
             return Optional.empty();
@@ -564,6 +568,63 @@ public class ColumnFilterConverter {
         }
         String name = call.getFunctionName().toLowerCase();
         return FunctionSet.FROM_UNIXTIME.equals(name) || FunctionSet.FROM_UNIXTIME_MS.equals(name) ? call : null;
+    }
+
+    /**
+     * Whether folding this constant on the FE reproduces the value the backend computed when it
+     * routed the row into its partition. A filter built from a value the backend never produced
+     * selects a partition the row is not in, which loses the row.
+     *
+     * <p>substr()/substring() counts differently on the two sides. This FE folds with
+     * {@code String.substring}, which indexes UTF-16 code units ({@code
+     * ScalarOperatorFunctions.substring}), while the backend walks UTF-8 characters ({@code
+     * skip_leading_utf8} in string_functions.cpp). The two agree on every character in the basic
+     * multilingual plane and part company once a literal carries a supplementary one, which Java
+     * holds as a surrogate pair: under {@code cast(substr(code, 3, 4) as bigint)} an emoji followed
+     * by '12345' folds to 1234 here and routes as 2345 there.
+     *
+     * <p>Reported by Codex review on #80730.
+     */
+    private static boolean foldsTheWayTheBackendRouted(Expr partitionExpr, ConstantOperator constant) {
+        Expr expr = partitionExpr;
+        while (expr instanceof CastExpr) {
+            expr = expr.getChild(0);
+        }
+        if (!(expr instanceof FunctionCallExpr call)) {
+            return true;
+        }
+        String name = call.getFunctionName().toLowerCase();
+        if (!FunctionSet.SUBSTR.equals(name) && !FunctionSet.SUBSTRING.equals(name)) {
+            return true;
+        }
+        if (constant.isNull() || !constant.getType().getPrimitiveType().isCharFamily()) {
+            return true;
+        }
+        String value = constant.getVarchar();
+        return value.codePointCount(0, value.length()) == value.length();
+    }
+
+    /**
+     * Whether the partition value this expression computes depends on which time zone evaluates it.
+     *
+     * <p>{@code from_unixtime(ts)} and {@code from_unixtime_ms(ts)} written without an explicit zone
+     * argument are evaluated against whatever zone the evaluator carries. The backend routes a row
+     * with the load's zone -- StreamLoadPlanner puts {@code streamLoadInfo.getTimezone()} into
+     * query_globals -- while this fold would use the querying session's. An epoch near midnight then
+     * sits in one partition and is looked for in its neighbour, and the row goes missing.
+     *
+     * <p>Equality is not exempt from this one. That exemption rests on `a = c` implying
+     * `f(a) = f(c)`, which holds for any f -- but only when both sides run the same f, and a
+     * zone-less from_unixtime is a different function at load time than at query time.
+     *
+     * <p>Reported by Codex review on #80730.
+     */
+    private static boolean partitionValueDependsOnEvaluatorZone(Expr partitionExpr) {
+        FunctionCallExpr call = unwrapPartitionCall(partitionExpr);
+        if (call == null) {
+            return false;
+        }
+        return call.getChildren().size() < 3 || !(call.getChild(2) instanceof StringLiteral);
     }
 
     /**

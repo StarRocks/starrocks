@@ -56,6 +56,20 @@ public class ExprRangePartitionPruneTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")");
+
+        // from_unixtime() written without a zone argument is evaluated against whatever zone the
+        // evaluator carries: the backend routed the row with the load's, a query would fold with the
+        // session's.
+        starRocksAssert.withTable("CREATE TABLE `test_unixtime` (\n" +
+                "  `ts` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`ts`)\n" +
+                "PARTITION BY RANGE(from_unixtime(ts))(\n" +
+                " START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(ts) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\")");
     }
 
     @Test
@@ -138,5 +152,41 @@ public class ExprRangePartitionPruneTest extends PlanTestBase {
                 "select * from test32 where busness_date in ('20260101')"), "partitions=1/2");
         assertCContains(getFragmentPlan(
                 "select * from test32 where busness_date in ('20260101', '20260301')"), "partitions=1/2");
+    }
+
+    /**
+     * The fold has to reproduce the value the backend routed the row with, and substr() is counted
+     * differently on the two sides: this FE indexes UTF-16 code units, the backend walks UTF-8
+     * characters. They agree until a literal carries a supplementary character, so such a literal
+     * gives up the rewrite rather than selecting a partition the row is not in.
+     */
+    @Test
+    public void testInListWithSupplementaryCharacterKeepsEveryPartition() throws Exception {
+        String emoji = new String(Character.toChars(0x1F600));
+        assertCContains(getFragmentPlan(
+                "select * from test_bill_code where code in ('" + emoji + "12345', 'AB3000x')"), "partitions=3/3");
+        // on its own, and through equality, which folds through the same path
+        assertCContains(getFragmentPlan(
+                "select * from test_bill_code where code in ('" + emoji + "12345')"), "partitions=3/3");
+        assertCContains(getFragmentPlan(
+                "select * from test_bill_code where code = '" + emoji + "12345'"), "partitions=3/3");
+        // two characters inside the basic multilingual plane occupy one unit on each side, so the
+        // fold still agrees and the list still prunes
+        assertCContains(getFragmentPlan(
+                "select * from test_bill_code where code in ('中文1000x', '中文3000x')"), "partitions=2/3");
+    }
+
+    /**
+     * A zone-less from_unixtime() computes a different partition value for the same epoch depending
+     * on who evaluates it, so an IN list over it must not be mapped.
+     */
+    @Test
+    public void testInListOnZonelessFromUnixtimeKeepsEveryPartition() throws Exception {
+        assertCContains(getFragmentPlan(
+                "select * from test_unixtime where ts in (1609689600, 1609776000)"), "partitions=9/9");
+        // the equality that PartitionPruneTest pins down is untouched by this change: narrowing it
+        // disables pruning for every zone-less from_unixtime table and is a decision of its own
+        assertCContains(getFragmentPlan(
+                "select * from test_unixtime where ts = 1609689600"), "partitions=1/9");
     }
 }
