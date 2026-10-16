@@ -43,6 +43,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
+<<<<<<< HEAD
+=======
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeastOnce;
+>>>>>>> 965e9c1 ([UT] Accept every INACTIVE journaled when a base table is dropped after the created MV links into it (#80939))
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -291,10 +296,22 @@ public class MVCreateLockTest extends MVTestBase {
             Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseName),
                     mv.getInactiveReason());
             // Followers replay the drop without inactivating anything, so only a journaled INACTIVE reaches them.
+            // A drop after the link finds the mv transiently inactive and still journals the clear of its version
+            // map; the recheck journals the inactivation after the verdict. Replay applies them in order, so the
+            // last one is what followers end with.
             ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
                     ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
+<<<<<<< HEAD
             verify(spyEditLog).logAlterMvStatus(captor.capture());
             Assertions.assertEquals(AlterMaterializedViewStatusClause.INACTIVE, captor.getValue().getStatus());
+=======
+            verify(spyEditLog, atLeastOnce()).logAlterMvStatus(captor.capture(), any());
+            for (AlterMaterializedViewStatusLog log : captor.getAllValues()) {
+                Assertions.assertEquals(AlterMaterializedViewStatusClause.INACTIVE, log.getStatus());
+            }
+            Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseName),
+                    captor.getValue().getReason());
+>>>>>>> 965e9c1 ([UT] Accept every INACTIVE journaled when a base table is dropped after the created MV links into it (#80939))
         } finally {
             starRocksAssert.dropMaterializedView("test." + mvName);
         }
