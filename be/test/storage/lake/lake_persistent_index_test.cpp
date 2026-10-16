@@ -2132,6 +2132,7 @@ TEST_F(LakePersistentIndexTest, manager_growth_keeps_resident_sst_when_read_head
     ASSERT_EQ(expected, old);
     ASSERT_OK(index.prepare_sstable_read_state(tracker->limit(), true,
                                                [&] { _primary_key_mgr->update_index_cache_size(entry); }));
+    _primary_key_mgr->update_index_cache_size(entry);
     const auto resident_bytes = index.cached_sst_bytes();
     ASSERT_GT(resident_bytes, 0);
     ASSERT_EQ(0, index.publish_workspace_budget());
