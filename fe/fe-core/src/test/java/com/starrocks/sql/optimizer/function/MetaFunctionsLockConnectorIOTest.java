@@ -22,12 +22,9 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-<<<<<<< HEAD
-import com.starrocks.connector.ConnectorMetadatRequestContext;
-=======
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.PartitionInfo;
@@ -37,13 +34,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-<<<<<<< HEAD
-=======
-import com.starrocks.utframe.LockProbe;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -51,10 +44,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
-<<<<<<< HEAD
-=======
 import java.util.concurrent.TimeUnit;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -205,22 +195,7 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
             BaseTableInfo hiveTable = mv.getBaseTableInfos().get(0);
 
             installProbe();
-<<<<<<< HEAD
-            MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
-            int undisturbedCalls = probe.getTableCalls.get();
-            Assertions.assertFalse(probe.underLock.get(),
-                    "connector metadata was fetched while an FE metadata lock was held");
-
-            // Now commit a refresh in the window: the probe swaps the MV's refresh scheme on the first
-            // connector call, which is where the gathering is in flight and the lock is not yet held.
-            installProbe();
-            // Swap on every call made outside the lock. The method resolves base tables in an earlier,
-            // already-hoisted block too, so "the first call" lands before the reference this branch
-            // compares is even captured; swapping on all of them guarantees one lands after it. The redo
-            // runs under the lock, where this does nothing, so exactly one redo happens and it terminates.
-=======
             AtomicInteger commits = new AtomicInteger();
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
             probe.onGetTable = () -> {
                 MaterializedView.MvRefreshScheme committed = mv.getRefreshScheme().copy();
                 committed.getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap()
@@ -233,18 +208,11 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
                     MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
 
             Assertions.assertNotNull(result);
-<<<<<<< HEAD
-            Assertions.assertTrue(probe.getTableCalls.get() > undisturbedCalls,
-                    "the refresh-scheme swap went unnoticed, so the report mixes two moments");
-            Assertions.assertTrue(probe.underLock.get(),
-                    "the redo is supposed to happen under the lock; if it did not, this test is not "
-                            + "exercising the branch it claims to");
-=======
             Assertions.assertTrue(commits.get() > 0, "no connector call was made");
             Assertions.assertFalse(result.getVarchar().contains("p_commit_" + commits.get() + "_"),
                     result.getVarchar());
-            probe.lock.assertNothingUnderTheLock("connector metadata was fetched while an FE metadata lock was held");
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
+            Assertions.assertFalse(probe.underLock.get(),
+                    "connector metadata was fetched while an FE metadata lock was held");
         } finally {
             starRocksAssert.dropMaterializedView("mv_raced");
         }

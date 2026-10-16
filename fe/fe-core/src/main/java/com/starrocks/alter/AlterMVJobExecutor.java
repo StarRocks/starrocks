@@ -1173,13 +1173,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv.isActive() || isClearVersionMap) {
             // log edit log
             String status = AlterMaterializedViewStatusClause.INACTIVE;
-<<<<<<< HEAD
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                    alterMaterializedViewStatus(mv, status, reason, false);
-            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
-                    mv.getId(), status, reason);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
-=======
             AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
             // Only an active MV has a refresh to kill and a task to pause; an inactive one is journaled just for the
             // clear below, without the task run lock that preparing the transition takes (and may fail to take).
@@ -1189,26 +1182,24 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                     mv.getId(), status, reason);
             // The clear of the version map, which makes the next refresh recompute everything, travels with the
-            // status so that a replay clears it too. The reset epoch is bumped before the journal write and again
-            // once the clear is done, so that it is odd while the reset is in flight: see
+            // status so that a replay clears it too. The reset epoch is bumped before the clear and again once the
+            // clear is journaled, so that it is odd while the reset is in flight: see
             // MaterializedView#resetVisibleVersionMap.
             log.setClearVersionMap(isClearVersionMap);
             if (isClearVersionMap) {
                 mv.markVersionMapReset();
             }
             try {
-                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal -> {
-                    alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false);
-                    if (isClearVersionMap) {
-                        mv.getRefreshScheme().clearVersionState();
-                    }
-                });
+                alterJobMgr.applyAlterMaterializedViewStatus(mv, statusContext, false);
+                if (isClearVersionMap) {
+                    mv.getRefreshScheme().clearVersionState();
+                }
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
             } finally {
                 if (isClearVersionMap) {
                     mv.markVersionMapReset();
                 }
             }
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
         } else {
             mv.setInactiveAndReason(reason);
         }

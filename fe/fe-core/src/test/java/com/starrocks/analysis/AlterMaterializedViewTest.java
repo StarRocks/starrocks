@@ -16,11 +16,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
-=======
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
@@ -33,13 +29,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-<<<<<<< HEAD
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-=======
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.WALApplier;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -328,8 +320,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         List<AlterMaterializedViewStatusLog> journaled = Lists.newArrayList();
         new MockUp<EditLog>() {
             @Mock
-            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log,
-                                         WALApplier walApplier) {
+            public void logAlterMvStatus(Invocation invocation, AlterMaterializedViewStatusLog log) {
                 journaled.add(log);
                 invocation.proceed();
             }
@@ -338,7 +329,7 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive((OlapTable) parTbl1, Set.of("item_id"));
         baseTableVisibleVersionMap = mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Assertions.assertTrue(baseTableVisibleVersionMap.isEmpty());
-        // Bumped before the journal write and again after the clear, so a refresh run starting in between notices.
+        // Bumped before the clear and again after the journal write, so a refresh run starting in between notices.
         Assertions.assertEquals(resetEpochBefore + 2, mv.getVersionMapResetEpoch());
 
         // The clear travels with the INACTIVE entry, so a follower replaying it clears its maps too.

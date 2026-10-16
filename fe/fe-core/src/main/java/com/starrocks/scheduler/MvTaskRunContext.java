@@ -60,10 +60,6 @@ public class MvTaskRunContext extends TaskRunContext {
         super(context);
     }
 
-<<<<<<< HEAD
-    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVIntersectedPartitions() {
-        return refBaseTableMVIntersectedPartitions;
-=======
     public long getVersionMapResetEpoch() {
         return versionMapResetEpoch;
     }
@@ -72,9 +68,8 @@ public class MvTaskRunContext extends TaskRunContext {
         this.versionMapResetEpoch = versionMapResetEpoch;
     }
 
-    public MVRefreshRuntimeState getRefreshRuntimeState() {
-        return refreshRuntimeState;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
+    public Map<Table, Map<String, Set<String>>> getRefBaseTableMVIntersectedPartitions() {
+        return refBaseTableMVIntersectedPartitions;
     }
 
     public void setRefBaseTableMVIntersectedPartitions(

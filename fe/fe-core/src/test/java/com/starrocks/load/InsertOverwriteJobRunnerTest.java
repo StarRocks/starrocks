@@ -23,14 +23,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.context.ai.AIProviderType;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -38,13 +33,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.DmlStmt;
->>>>>>> 433d9cf ([BugFix] Fix pre-existing metadata lock races in ALTER VIEW, INSERT OVERWRITE and MV refresh (#80891))
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.common.DmlException;
@@ -60,6 +49,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
+import java.util.List;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -373,7 +363,7 @@ public class InsertOverwriteJobRunnerTest {
                                       AddPartitionClause addPartitionClause) throws DdlException {
                 invocation.proceed();
                 OlapTable table = (OlapTable) db.getTable(tableName);
-                List<String> names = ((ListPartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+                List<String> names = ((ListPartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionColNames();
                 try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
                         Lists.newArrayList(table.getId()), LockType.WRITE)) {
                     for (String name : names) {
