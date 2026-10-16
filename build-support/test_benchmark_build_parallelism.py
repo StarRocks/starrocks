@@ -12,24 +12,48 @@ import subprocess
 import unittest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BENCHMARK_SCRIPT = os.path.join(REPO_ROOT, "build-support", "benchmark_build_parallelism.sh")
+BENCHMARK_SCRIPT = os.path.join(
+    REPO_ROOT, "build-support", "benchmark_build_parallelism.sh"
+)
+
 
 class TestBenchmarkBuildParallelism(unittest.TestCase):
     def test_benchmark_no_arguments(self):
-        res = subprocess.run(["bash", BENCHMARK_SCRIPT], cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        res = subprocess.run(
+            ["bash", BENCHMARK_SCRIPT],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         self.assertEqual(res.returncode, 0)
-        self.assertIn("STARROCKS BUILD PARALLELISM BEFORE / AFTER VALIDATION", res.stdout)
+        self.assertIn(
+            "STARROCKS BUILD PARALLELISM BEFORE / AFTER VALIDATION", res.stdout
+        )
         self.assertIn("Throughput Multiplier", res.stdout)
 
     def test_benchmark_dry_run_check(self):
-        res = subprocess.run(["bash", BENCHMARK_SCRIPT, "--dry-run-check"], cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        res = subprocess.run(
+            ["bash", BENCHMARK_SCRIPT, "--dry-run-check"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         self.assertEqual(res.returncode, 0)
         self.assertIn("[PASS] Validation succeeded.", res.stdout)
 
     def test_benchmark_invalid_option_fails(self):
-        res = subprocess.run(["bash", BENCHMARK_SCRIPT, "--invalid-flag"], cwd=REPO_ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        res = subprocess.run(
+            ["bash", BENCHMARK_SCRIPT, "--invalid-flag"],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
         self.assertEqual(res.returncode, 1)
         self.assertIn("Usage:", res.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

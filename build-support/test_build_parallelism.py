@@ -15,6 +15,7 @@ import unittest
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BUILD_HELPERS = os.path.join(REPO_ROOT, "build-support", "build_helpers.sh")
 
+
 class TestBuildParallelism(unittest.TestCase):
     def run_bash(self, cmd: str, env_overrides: dict = None) -> str:
         env = os.environ.copy()
@@ -28,7 +29,7 @@ class TestBuildParallelism(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            check=True
+            check=True,
         )
         return res.stdout.strip()
 
@@ -39,29 +40,25 @@ class TestBuildParallelism(unittest.TestCase):
 
     def test_detect_linker_type_lld(self):
         linker_type = self.run_bash(
-            "starrocks_detect_linker_type",
-            {"STARROCKS_LINKER": "lld"}
+            "starrocks_detect_linker_type", {"STARROCKS_LINKER": "lld"}
         )
         self.assertEqual(linker_type, "modern")
 
     def test_detect_linker_type_bfd(self):
         linker_type = self.run_bash(
-            "starrocks_detect_linker_type",
-            {"STARROCKS_LINKER": "bfd"}
+            "starrocks_detect_linker_type", {"STARROCKS_LINKER": "bfd"}
         )
         self.assertEqual(linker_type, "legacy")
 
     def test_detect_linker_type_gold(self):
         linker_type = self.run_bash(
-            "starrocks_detect_linker_type",
-            {"STARROCKS_LINKER": "gold"}
+            "starrocks_detect_linker_type", {"STARROCKS_LINKER": "gold"}
         )
         self.assertEqual(linker_type, "modern")
 
     def test_detect_linker_type_mold(self):
         linker_type = self.run_bash(
-            "starrocks_detect_linker_type",
-            {"STARROCKS_LINKER": "mold"}
+            "starrocks_detect_linker_type", {"STARROCKS_LINKER": "mold"}
         )
         self.assertEqual(linker_type, "modern")
 
@@ -164,10 +161,7 @@ class TestBuildParallelism(unittest.TestCase):
         self.assertEqual(p, "17")
 
     def test_parallelism_preserves_caller_env(self):
-        p = self.run_bash(
-            "starrocks_detect_ut_parallelism",
-            {"PARALLEL": "99"}
-        )
+        p = self.run_bash("starrocks_detect_ut_parallelism", {"PARALLEL": "99"})
         self.assertEqual(p, "99")
 
     def test_parallelism_ram_constrained_topology(self):
@@ -220,7 +214,7 @@ class TestBuildParallelism(unittest.TestCase):
             cwd=REPO_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
         )
         self.assertIn("-j", res.stdout)
         self.assertIn("build parallel", res.stdout)
@@ -229,10 +223,13 @@ class TestBuildParallelism(unittest.TestCase):
         run_be_ut_path = os.path.join(REPO_ROOT, "run-be-ut.sh")
         with open(run_be_ut_path, "r") as f:
             content = f.read()
-        self.assertIn('PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"', content)
+        self.assertIn(
+            'PARALLEL="$(starrocks_detect_ut_parallelism "${SR_LINKER_TYPE}" "${SR_RAM_GB}")"',
+            content,
+        )
         self.assertIn(
             'echo "[INFO] BE UT Build System: ${BUILD_SYSTEM}, Parallelism: -j${PARALLEL} (Linker: ${SR_LINKER_TYPE}, RAM: ${SR_RAM_GB} GiB)"',
-            content
+            content,
         )
 
         # 3. Verify preamble execution wires up starrocks_detect_ut_parallelism
@@ -262,9 +259,10 @@ class TestBuildParallelism(unittest.TestCase):
             cwd=REPO_ROOT,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
         )
         self.assertIn("FLAG_PARALLEL=11", res_flag.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
