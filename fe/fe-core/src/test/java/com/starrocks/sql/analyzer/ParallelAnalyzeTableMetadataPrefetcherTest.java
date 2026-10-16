@@ -115,11 +115,13 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
             }
         };
 
-        List<String> messages = capturePrefetcherLogs(() ->
+        MessageCollector logs = capturePrefetcherLogs(() ->
                 ParallelAnalyzeTableMetadataPrefetcher.prefetch(statement, session, metadataMgr));
 
-        Assertions.assertTrue(messages.stream().anyMatch(message ->
+        Assertions.assertTrue(logs.messages.stream().anyMatch(message ->
                 message.contains("query [" + session.getQueryId() + "], table [external.db.failing_table]")));
+        Assertions.assertTrue(logs.throwables.stream().anyMatch(throwable ->
+                throwable instanceof RuntimeException && "prefetch failed".equals(throwable.getMessage())));
 
         new FullVerifications(metadataMgr) {
         };
@@ -171,7 +173,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
         };
     }
 
-    private static List<String> capturePrefetcherLogs(ThrowingRunnable body) throws Exception {
+    private static MessageCollector capturePrefetcherLogs(ThrowingRunnable body) throws Exception {
         MessageCollector collector = new MessageCollector();
         Logger logger = (Logger) LogManager.getLogger(ParallelAnalyzeTableMetadataPrefetcher.class);
         Level level = logger.getLevel();
@@ -185,7 +187,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
             logger.removeAppender(collector);
             collector.stop();
         }
-        return collector.messages;
+        return collector;
     }
 
     private interface ThrowingRunnable {
@@ -194,6 +196,7 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
 
     private static class MessageCollector extends AbstractAppender {
         private final List<String> messages = new CopyOnWriteArrayList<>();
+        private final List<Throwable> throwables = new CopyOnWriteArrayList<>();
 
         MessageCollector() {
             super("parallel-analyze-table-metadata-prefetcher-message-collector", null, null);
@@ -202,6 +205,9 @@ class ParallelAnalyzeTableMetadataPrefetcherTest {
         @Override
         public void append(LogEvent event) {
             messages.add(event.getMessage().getFormattedMessage());
+            if (event.getThrown() != null) {
+                throwables.add(event.getThrown());
+            }
         }
     }
 }

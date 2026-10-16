@@ -93,9 +93,10 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
                 futures.add(CompletableFuture.runAsync(() -> prefetchTable(metadataMgr, queryIdString, tableKey,
                         session, forked), executorService).handle((ignoredResult, throwable) -> {
                     if (throwable != null) {
+                        Throwable cause = throwable.getCause() == null ? throwable : throwable.getCause();
                         LOG.warn("Failed to prefetch metadata for query [{}], table [{}.{}.{}]; " +
                                         "analysis will retry the metadata lookup",
-                                queryIdString, tableKey.catalog, tableKey.database, tableKey.table, throwable);
+                                queryIdString, tableKey.catalog, tableKey.database, tableKey.table, cause);
                     }
                     return null;
                 }));
