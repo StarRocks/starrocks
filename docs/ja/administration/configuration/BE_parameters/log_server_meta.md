@@ -413,7 +413,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: ミリ秒
 - 変更可能: はい
-- 説明: thrift クライアントがリトライする時間間隔。
+- 説明: BE の Thrift RPC における再試行間隔の基準値です。再試行前の待機時間には、ジッター付きの指数バックオフを使用します。待機時間は 0 から `min(1000, base * 2^retry_index)` ミリ秒までの範囲から一様な確率で選ばれます。`base` はこの設定値を [0, 1000] の範囲に収めた値で、`retry_index` は 0 から始まる再試行番号です。設定値は RPC ごとに一度だけ読み取られ、途中で変更しても実行中の RPC には反映されません。0 以下に設定すると待機しません。最後の試行が失敗した後も待機しません。
 - 導入バージョン: -
 
 ### thrift_connect_timeout_seconds

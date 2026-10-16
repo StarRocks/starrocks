@@ -516,7 +516,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The time interval at which a thrift client retries.
+- Description: The base retry interval for BE Thrift RPCs. Before each retry, the client waits a uniformly random duration from 0 to `min(1000, base * 2^retry_index)` milliseconds, where `base` is this value clamped to [0, 1000] and `retry_index` starts at 0. The value is read once per RPC. Zero or negative values disable the wait. No wait is added after the final failed attempt.
 - Introduced in: -
 
 ### thrift_connect_timeout_seconds

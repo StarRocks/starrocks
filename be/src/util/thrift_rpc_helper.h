@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "common/config.h"
 #include "common/status.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -56,6 +58,9 @@ public:
                            const TNetworkAddress& address) noexcept;
 
 private:
+    // retry_index is zero-based; the configured interval is the first jitter ceiling.
+    static int64_t retry_backoff_ceiling_ms(int64_t retry_interval_ms, int retry_index);
+
     static ExecEnv* _s_exec_env;
 };
 
