@@ -24,7 +24,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.gson.annotations.SerializedName;
-<<<<<<< HEAD
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
@@ -32,9 +32,6 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-=======
-import com.starrocks.alter.AlterMVJobExecutor;
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.Status;
@@ -2156,14 +2153,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return refreshBaseTable(info.columns(), info.tableToBaseTableInfo());
     }
 
-<<<<<<< HEAD
-    private Map<Table, List<Column>> getRefBaseTablePartitionColumns(boolean isRefreshBaseTable) {
-        if (!isRefreshBaseTable) {
-            return refBaseTablePartitionColumnsOpt.map(this::refreshBaseTable).orElse(Maps.newHashMap());
-        } else {
-            return refreshBaseTable(refBaseTablePartitionColumnsOpt.orElse(Maps.newHashMap()));
-        }
-    }
     /**
      * According base table and materialized view's partition range, we can define those mappings from base to mv:
      * <p>
@@ -2252,10 +2241,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return matched > 1;
     }
 
-    private Map<Table, List<Column>> getBaseTablePartitionColumnMapImpl() {
-=======
     private Map<Table, List<Column>> getBaseTablePartitionColumnMapImpl(Map<Table, List<SlotRef>> baseTablePartitionSlotMap) {
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
         Map<Table, List<Column>> result = Maps.newHashMap();
         if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
             return result;
@@ -2486,25 +2472,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // analyze partition exprs
         Map<Table, List<Expr>> refBaseTablePartitionExprs = refreshBaseTable(exprs, tableToBaseTableInfo);
         ConnectContext connectContext = ConnectContext.buildInner();
-<<<<<<< HEAD
-        if (refBaseTablePartitionExprs != null) {
-            for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
-                if (refBaseTableOpt.isEmpty()) {
-                    continue;
-                }
-                Table refBaseTable = refBaseTableOpt.get();
-                if (!refBaseTablePartitionExprs.containsKey(refBaseTable)) {
-                    continue;
-                }
-                List<Expr> partitionExprs = refBaseTablePartitionExprs.get(refBaseTable);
-                TableName tableName = new TableName(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableName());
-                for (Expr partitionExpr : partitionExprs) {
-                    analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
-                }
-=======
-        connectContext.setOnlyReadIcebergCache(true);
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
             if (refBaseTableOpt.isEmpty()) {
@@ -2519,34 +2486,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     baseTableInfo.getDbName(), baseTableInfo.getTableName());
             for (Expr partitionExpr : partitionExprs) {
                 analyzePartitionExpr(connectContext, refBaseTable, tableName, partitionExpr);
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
             }
         }
         // analyze partition slots for ref base tables
         Map<Table, List<SlotRef>> slots = analyzeRefBaseTablePartitionSlots(exprs, baseTableInfos);
         // analyze partition columns for ref base tables
-<<<<<<< HEAD
-        analyzeRefBaseTablePartitionColumns();
-        // analyze partition retention condition
-        analyzeMVRetentionCondition(connectContext);
-
-        // add a check for partition columns to ensure they are not empty if the table is partitioned.
-        // throw exception is ok which will make mv inactive to avoid using it in query rewrite.
-        if (partitionExprMaps != null && !partitionExprMaps.isEmpty()) {
-            Preconditions.checkArgument(refBaseTablePartitionColumnsOpt.isPresent() &&
-                    !refBaseTablePartitionColumnsOpt.get().isEmpty(), String.format("Ref base table " +
-                    "partition columns should not be empty:%s", refBaseTablePartitionColumnsOpt));
-            Preconditions.checkArgument(refBaseTablePartitionExprsOpt.isPresent() &&
-                    !refBaseTablePartitionExprsOpt.get().isEmpty(), String.format("Ref base table " +
-                    "partition exprs should not be empty:%s", refBaseTablePartitionExprsOpt));
-            Preconditions.checkArgument(refBaseTablePartitionSlotsOpt.isPresent() &&
-                    !refBaseTablePartitionSlotsOpt.get().isEmpty(), String.format("Ref base table " +
-                    "partition column slots should not be empty:%s", refBaseTablePartitionSlotsOpt));
-        }
-    }
-
-    public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
-=======
         Map<Table, List<Column>> columns = getBaseTablePartitionColumnMapImpl(slots);
 
         // add a check for partition columns to ensure they are not empty if the table is partitioned.
@@ -2573,62 +2517,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             refBaseTablePartitionInfo = new RefBaseTablePartitionInfo(exprs, slots, columns, tableToBaseTableInfo);
         }
         // analyze partition retention condition
-        analyzeAndSetMVRetentionCondition(connectContext);
-
-        if (isPartitioned) {
-            LOG.info("Materialized view {} ref base table partition summary: columns={}, exprs={}, slots={}",
-                    name, formatPartitionColumns(columns), formatPartitionExprs(exprs), formatPartitionSlots(slots));
-        } else {
-            LOG.info("Materialized view {} is un-partitioned", name);
-        }
+        analyzeMVRetentionCondition(connectContext);
     }
 
-    private static String formatPartitionColumns(Map<Table, List<Column>> columns) {
-        return columns.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "=[" +
-                        entry.getValue().stream().map(Column::getName).collect(Collectors.joining(", ")) + "]")
-                .collect(Collectors.joining("; "));
-    }
-
-    private static String formatPartitionExprs(Map<Table, List<Expr>> exprs) {
-        return exprs.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
-                .collect(Collectors.joining("; "));
-    }
-
-    private static String formatPartitionSlots(Map<Table, List<SlotRef>> slots) {
-        return slots.entrySet().stream()
-                .map(entry -> entry.getKey().getName() + "(" + entry.getValue().size() + ")")
-                .collect(Collectors.joining("; "));
-    }
-
-    public synchronized Pair<Optional<Expr>, Optional<ScalarOperator>> analyzeMVRetentionCondition(
-            ConnectContext connectContext, String retentionCondition) {
-        PartitionInfo partitionInfo = getPartitionInfo();
-        if (partitionInfo.isUnPartitioned()) {
-            return null;
-        }
-
-        final Map<Table, List<Column>> refBaseTablePartitionColumns = getRefBaseTablePartitionColumns();
-        if (refBaseTablePartitionColumns == null || refBaseTablePartitionColumns.size() != 1) {
-            return null;
-        }
-        Table refBaseTable = refBaseTablePartitionColumns.keySet().iterator().next();
-        Optional<Expr> retentionConditionExprOpt =
-                MaterializedViewAnalyzer.analyzeMVRetentionCondition(connectContext, this, refBaseTable, retentionCondition);
-        Optional<ScalarOperator> retentionConditionScalarOpOpt = MaterializedViewAnalyzer.analyzeMVRetentionConditionOperator(
-                connectContext, this, refBaseTable, retentionConditionExprOpt);
-        return Pair.create(retentionConditionExprOpt, retentionConditionScalarOpOpt);
-    }
-
-    public void setMVRetentionCondition(Optional<Expr> retentionConditionExprOpt,
-                                        Optional<ScalarOperator> retentionConditionScalarOpOpt) {
-        this.retentionConditionExprOpt = retentionConditionExprOpt;
-        this.retentionConditionScalarOpOpt = retentionConditionScalarOpOpt;
-    }
-
-    public synchronized void analyzeAndSetMVRetentionCondition(ConnectContext connectContext) {
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
+    public synchronized void analyzeMVRetentionCondition(ConnectContext connectContext) {
         PartitionInfo partitionInfo = getPartitionInfo();
         if (partitionInfo.isUnPartitioned()) {
             return;
@@ -2679,20 +2571,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      */
     public PreResolvedRefBaseTables preResolveRefBaseTables() {
         Map<BaseTableInfo, RefreshedBaseTable> resolved = Maps.newHashMap();
-<<<<<<< HEAD
-        List<Optional<? extends Map<Table, ?>>> refMaps =
-                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
-        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
-            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
-                BaseTableInfo baseTableInfo = tableToBaseTableInfoCache.get(table);
-                if (!(table instanceof IcebergTable || table instanceof DeltaLakeTable)
-=======
         RefBaseTablePartitionInfo info = refBaseTablePartitionInfo;
         for (Map<Table, ?> refMap : List.of(info.exprs(), info.slots(), info.columns())) {
             for (Table table : refMap.keySet()) {
                 BaseTableInfo baseTableInfo = info.tableToBaseTableInfo().get(table);
-                if (!isRefreshedPerQuery(table)
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
+                if (!(table instanceof IcebergTable || table instanceof DeltaLakeTable)
                         || baseTableInfo == null || resolved.containsKey(baseTableInfo)) {
                     continue;
                 }
@@ -2743,13 +2626,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Map<BaseTableInfo, RefreshedBaseTable> preResolved = PRE_RESOLVED_REF_BASE_TABLES.get();
         for (Map.Entry<Table, K> e : cached.entrySet()) {
             Table table = e.getKey();
-<<<<<<< HEAD
             if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
-                Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
-=======
-            if (isRefreshedPerQuery(table)) {
                 Preconditions.checkState(tableToBaseTableInfo.containsKey(table));
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.

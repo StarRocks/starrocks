@@ -24,6 +24,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -209,16 +210,6 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
         columnIdentifier.setDbId(dbId);
 
-<<<<<<< HEAD
-=======
-        // Column-level persisted forbid (survives FE restart / leader failover): the dictionary thrash
-        // guard records such columns as a table property, checked here so they stop being collected.
-        if (table instanceof OlapTable olapTable && olapTable.isNoDictColumn(columnName.getId())) {
-            LOG.debug("table {} column {} is a persisted no-dict column", tableId, columnName);
-            return false;
-        }
-
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
         CompletableFuture<Optional<ColumnDict>> result = dictStatistics.get(columnIdentifier);
         if (result.isDone()) {
             Optional<ColumnDict> realResult;

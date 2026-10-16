@@ -18,11 +18,6 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ExternalAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
@@ -47,12 +42,6 @@ import static java.util.Locale.ENGLISH;
 public abstract class RangerAccessController extends ExternalAccessController implements AccessTypeConverter {
     private static final Logger LOG = LoggerFactory.getLogger(RangerAccessController.class);
     protected final RangerBasePlugin rangerPlugin;
-
-    // Row filters and masks come from Ranger, per user and resource: any table may have one.
-    @Override
-    public boolean mayHavePolicy(ConnectContext context, TableName tableName) {
-        return true;
-    }
 
     public RangerAccessController(String serviceType, String serviceName) {
         RangerPluginConfig rangerPluginContext = buildRangerPluginContext(serviceType, serviceName);

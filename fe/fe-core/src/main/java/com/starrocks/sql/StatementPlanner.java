@@ -239,9 +239,6 @@ public class StatementPlanner {
                                               PlannerMetaLocker locker) {
         boolean deferredLock = false;
         Runnable takeLock = () -> {
-            // By now the pre-pass below has resolved the external tables, outside the lock; what their policies
-            // read can join the lock set before it is taken.
-            locker.addTablesReadByExternalTablePolicies(session, statement);
             try (Timer lockerTime = Tracers.watchScope("Lock")) {
                 lock(locker);
             }
@@ -314,17 +311,6 @@ public class StatementPlanner {
                 ExplicitTxnStatementValidator.validate(statement, session);
                 return true;
             } else {
-<<<<<<< HEAD
-=======
-                // Only pre-resolve external tables when there are internal tables to lock.
-                // This avoids holding meta lock while fetching external metadata.
-                // Check config first (cheapest), then locker state. A policy on an external table may read
-                // internal tables, which only resolving it tells; those have to be locked too.
-                if (insertStmt == null && Config.enable_experimental_external_table_preparse
-                        && locker != null && (!locker.isEmpty() || locker.mayReachExternalTablePolicy())) {
-                    new QueryAnalyzer(session).analyzeExternalTablesOnly(statement);
-                }
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
                 // An INSERT analyzed before planning (the one a CTAS carries, a replanned statement) has every
                 // relation bound already, so the pre-pass skipped its sources: refresh and reload them here, not
                 // under the lock. The refresh after analysis below then only rebinds them.

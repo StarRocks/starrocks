@@ -529,17 +529,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
     // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
     // of another kind, or when this clause needs nothing resolved.
-<<<<<<< HEAD
     private List<UniqueConstraint> preResolvedUniqueConstraints;
     private List<ForeignKeyConstraint> preResolvedForeignKeyConstraints;
-=======
-    private Map<String, String> preResolvedPropClone;
-    private List<Runnable> preResolvedAppliers;
     // What the SET PROPERTIES constraint analyses were resolved against, null without a constraint.
     private ConstraintBasis preResolvedConstraintBasis;
-    private ParseNode preResolvedDefineQueryAst;
-    private String preResolvedDefineSql;
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
     private Boolean preResolvedHasNonNativeBaseTable;
     private MaterializedView.PreResolvedRefBaseTables preResolvedRefBaseTables;
     private String preResolvedDefineSql;
@@ -564,17 +557,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // Analyze a copy: the analyzers consume the keys they handle, and the visitor still has to see
             // them to build the editlog entry exactly as before.
             Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
-<<<<<<< HEAD
-=======
-            // The clone has to be taken before the analyzers run, because they consume the keys they
-            // handle -- whatever is left over at the end is treated as session variables -- while the
-            // editlog has to carry the properties as written.
-            preResolvedPropClone = Maps.newHashMap(properties);
-            preResolvedAppliers = new ArrayList<>();
             preResolvedConstraintBasis = properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     ? ConstraintBasis.of(db, mv) : null;
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 preResolvedUniqueConstraints =
                         PropertyAnalyzer.analyzeUniqueConstraint(Maps.newHashMap(properties), db, mv);
@@ -653,11 +638,6 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         MaterializedView materializedView = (MaterializedView) table;
 
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
-<<<<<<< HEAD
-        Map<String, String> propClone = Maps.newHashMap();
-        propClone.putAll(properties);
-        int partitionTTL = INVALID;
-=======
         // A constraint analyzed before the lock names the MV and its columns as they were then; applied after a
         // RENAME or a column change that got in between, it would persist names that no longer resolve.
         if (preResolvedConstraintBasis != null
@@ -665,16 +645,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
                     + "please retry the statement", materializedView.getName()));
         }
-        // Both come from resolveBeforeLock: the clone was taken before the constraint analyzers
-        // consumed their keys, and the appliers they produced are carried over. Constraint appliers
-        // therefore run first rather than in property order, which is immaterial -- each applier
-        // writes a different property.
-        Map<String, String> propClone = preResolvedPropClone != null
-                ? preResolvedPropClone : Maps.newHashMap(properties);
-        List<Runnable> appliers = preResolvedAppliers != null
-                ? new ArrayList<>(preResolvedAppliers) : new ArrayList<>();
-        TableProperty tableProperty = materializedView.getTableProperty();
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
+        Map<String, String> propClone = Maps.newHashMap();
+        propClone.putAll(properties);
+        int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
         }
@@ -1134,29 +1107,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 // Journal the base tables the activation settled on, so replay can adopt them instead of
                 // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
                 log.setBaseTableInfos(Lists.newArrayList(statusContext.baseTableInfos()));
-<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
-=======
-                // The applier rebuilds the relationship, which resolves every base table again, several times
-                // each; the external ones are answered from what resolveBeforeLock resolved. The applier runs
-                // synchronously on this thread, inside the scope.
-                try (PreResolvedBaseTables.Scope ignored = preResolvedBaseTables.enter()) {
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
-                            alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
-                }
                 // The rebuild relinked the base tables holding this MV's lock only. A DROP of a base table in
                 // another database is not excluded by it, and if it ran before the link it found nothing to
                 // inactivate: recheck once the lock is released, base table lock first, and journal the
                 // inactivation the drop missed.
                 long activatedAtEpoch = materializedView.getStatusSnapshot().epoch();
                 postUnlockActions.add(() -> materializedView.inactivateIfBaseTableDroppedMeanwhile(activatedAtEpoch));
-                // for manual refresh type, do not refresh
-                if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
-                    GlobalStateMgr.getCurrentState().getLocalMetastore()
-                            .refreshMaterializedView(dbName, materializedView.getName(), false, null,
-                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
-                }
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;
@@ -1437,7 +1394,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (mv == null) {
             return;
         }
-        final String inactiveReason = MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName());
+        inactiveMvAndLog(mv, MaterializedViewExceptions.inactiveReasonForConsecutiveFailures(mv.getName()));
+    }
+
+    // Mark the MV inactive and journal the transition, so the inactive state survives a leader restart
+    // or failover instead of reverting to active until the next refresh re-detects the condition.
+    public static void inactiveMvAndLog(MaterializedView mv, String inactiveReason) {
         // inactive related mv
         mv.setInactiveAndReason(inactiveReason);
         // write edit log

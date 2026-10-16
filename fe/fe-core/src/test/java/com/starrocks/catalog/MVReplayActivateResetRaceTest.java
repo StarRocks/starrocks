@@ -15,10 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;

@@ -19,11 +19,9 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
-import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.jupiter.api.Assertions;
@@ -62,7 +60,7 @@ public class CacheDictManagerTest {
             context.setThreadLocalInfo();
             Database db = new Database(30001L, "dict_db");
             GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(db);
-            Column c1 = new Column("c1", VarcharType.VARCHAR);
+            Column c1 = new Column("c1", Type.VARCHAR);
             OlapTable table = new OlapTable(30002L, "dict_t", List.of(c1), KeysType.DUP_KEYS,
                     new SinglePartitionInfo(), new RandomDistributionInfo(1));
             db.registerTableUnlocked(table);

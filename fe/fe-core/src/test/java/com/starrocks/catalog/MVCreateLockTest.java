@@ -15,12 +15,9 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-<<<<<<< HEAD
 import com.google.common.collect.Maps;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
-=======
 import com.starrocks.common.MaterializedViewExceptions;
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
@@ -46,7 +43,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -297,7 +293,7 @@ public class MVCreateLockTest extends MVTestBase {
             // Followers replay the drop without inactivating anything, so only a journaled INACTIVE reaches them.
             ArgumentCaptor<AlterMaterializedViewStatusLog> captor =
                     ArgumentCaptor.forClass(AlterMaterializedViewStatusLog.class);
-            verify(spyEditLog).logAlterMvStatus(captor.capture(), any());
+            verify(spyEditLog).logAlterMvStatus(captor.capture());
             Assertions.assertEquals(AlterMaterializedViewStatusClause.INACTIVE, captor.getValue().getStatus());
         } finally {
             starRocksAssert.dropMaterializedView("test." + mvName);

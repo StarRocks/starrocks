@@ -14,9 +14,10 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -26,7 +27,6 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 import com.starrocks.sql.parser.SqlParser;

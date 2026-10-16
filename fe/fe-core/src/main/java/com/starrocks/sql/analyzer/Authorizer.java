@@ -449,19 +449,6 @@ public class Authorizer {
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
     }
 
-<<<<<<< HEAD
-=======
-    /** See {@link com.starrocks.authorization.AccessController#mayHavePolicy}; the name is fully qualified. */
-    public static boolean mayHavePolicy(ConnectContext context, TableName tableName) {
-        return getInstance().getAccessControlOrDefault(tableName.getCatalog()).mayHavePolicy(context, tableName);
-    }
-
-    /** See {@link com.starrocks.authorization.AccessController#preResolvePolicyTarget}; the name is fully qualified. */
-    public static void preResolvePolicyTarget(ConnectContext context, TableName tableName, Table table) {
-        getInstance().getAccessControlOrDefault(tableName.getCatalog()).preResolvePolicyTarget(context, tableName, table);
-    }
-
->>>>>>> 9cb7538 ([BugFix] Close the remaining planner and MV metadata lock gaps (#80892))
     /**
      * check privilege for `show tablet` statement
      * if current user has 'OPERATE' privilege, it will result all the result
