@@ -14,6 +14,7 @@
 
 package com.starrocks.sql;
 
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
@@ -96,6 +97,17 @@ public class PrepareStmtPlanner {
         ExecPlan execPlan = StatementPlanner.plan(stmt, session);
         if (execPlan == null) {
             return null;
+        }
+
+        // a cache hit prunes partitions and tablets on the scanned table without any lock, so a plan built on the
+        // live table itself (whole-phase lock) rather than a private copy must not be cached
+        OptExpression physicalPlan = execPlan.getPhysicalPlan();
+        if (physicalPlan != null && physicalPlan.getOp() instanceof PhysicalOlapScanOperator) {
+            OlapTable plannedTable = (OlapTable) ((PhysicalOlapScanOperator) physicalPlan.getOp()).getTable();
+            if (prepareStmtContext.isPlannedOnLiveTable((QueryStatement) stmt, session, plannedTable)) {
+                prepareStmtContext.reset();
+                return execPlan;
+            }
         }
 
         prepareStmtContext.setExecPlan(execPlan);

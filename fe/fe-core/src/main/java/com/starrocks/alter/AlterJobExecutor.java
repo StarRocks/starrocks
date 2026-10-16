@@ -366,6 +366,12 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             if (!db.isExist()) {
                 throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
             }
+            // The MV was looked up before the lock, and resolveBeforeLock ran unlocked too: a DROP MATERIALIZED
+            // VIEW in between leaves `table` detached from the db, and altering it would write an editlog
+            // entry for a table that no longer exists.
+            if (db.getTable(table.getId()) != table) {
+                throw new AlterJobException("Materialized view " + mvName + " was dropped concurrently");
+            }
             MaterializedView materializedView = (MaterializedView) table;
             // check materialized view state
             if (materializedView.getState() != OlapTable.OlapTableState.NORMAL) {
