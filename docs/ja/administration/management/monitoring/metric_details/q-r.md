@@ -105,12 +105,12 @@ description: "Alphabetical q - r"
 ## `resource_group_driver_queue_level_schedule_count`
 
 - 単位: カウント
-- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver の累積数。
+- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver の累積数。実行が残っている旧バージョンのリソースグループも含み、その削除後も最終的な累積値を保持します。同じ BE/CN プロセス内でリソースグループを更新、削除、または同じ名前で再作成しても、累積値は維持されます。
 
 ## `resource_group_driver_queue_level_wait_time_ns`
 
 - 単位: ナノ秒
-- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver がレディキューで待機した累積時間。この値の増分を `resource_group_driver_queue_level_schedule_count` の増分で割ると、そのレベルの平均待機時間になります。
+- 説明: 各リソースグループのパイプライン実行キューで、各レベルから取り出された Driver がレディキューで待機した累積時間。スケジュール回数のカウンターと同様に、実行が残っている旧バージョンも含み、同じ BE/CN プロセス内での更新、削除、同じ名前での再作成後も累積値を保持します。この値の増分を `resource_group_driver_queue_level_schedule_count` の増分で割ると、そのレベルの平均待機時間になります。
 
 ## `resource_group_inuse_cpu_cores`
 
