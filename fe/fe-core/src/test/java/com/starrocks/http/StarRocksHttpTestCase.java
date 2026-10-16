@@ -56,7 +56,11 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.common.Config;
+>>>>>>> 535f17f ([UT] Fix flaky HTTP tests by disabling the metric calculator in StarRocksHttpTestCase (#80935))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -121,6 +125,7 @@ public abstract class StarRocksHttpTestCase {
     public static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
     private static HttpServer httpServer;
+    private static boolean savedEnableMetricCalculator;
 
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
@@ -430,6 +435,11 @@ public abstract class StarRocksHttpTestCase {
 
     @BeforeAll
     public static void initHttpServer() throws IllegalArgException, InterruptedException {
+        // MetricRepo.init() would start MetricCalculator, which calls GlobalStateMgr#isSafeMode() every 15 seconds
+        // on a background thread. A call that lands while a test records new Expectations(globalStateMgr) is
+        // recorded as an expectation of its own, and the test then fails with a missing invocation.
+        savedEnableMetricCalculator = Config.enable_metric_calculator;
+        Config.enable_metric_calculator = false;
         try {
             httpServer = new HttpServer(0);
         } catch (Exception e) {
@@ -567,6 +577,7 @@ public abstract class StarRocksHttpTestCase {
     @AfterAll
     public static void closeHttpServer() {
         httpServer.shutDown();
+        Config.enable_metric_calculator = savedEnableMetricCalculator;
     }
 
     protected void doSetUp() throws Exception {
