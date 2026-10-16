@@ -250,6 +250,16 @@ Exchange Operator がクエリのボトルネックになる可能性のある�
 | BytesUnsent | 送信されなかったデータのサイズ。このメトリクスはショートサーキットロジックがある場合にゼロ以外になります。それ以外の場合はゼロです。 |
 | BytesPassThrough | 目的地のノードが現在のノードである場合、データはネットワークを介して送信されず、パススルーデータと呼ばれます。このメトリクスはそのようなパススルーデータのサイズを示します。パススルーは `enable_exchange_pass_through` によって制御されます。 |
 | PassThroughBufferPeakMemoryUsage | パススルーバッファのピークメモリ使用量。 |
+| ShuffleChunkBufferNum | PartType が HASH_PARTITIONED または BUCKET_SHUFFLE_HASH_PARTITIONED の場合に、Sink が宛先の Pipeline Driver ごとにデータをバッファリングするために割り当てた Partial Chunk の数。Partial Chunk が解放されて再割り当てされると、宛先 Driver の数を超えます。 |
+| ShuffleChunkBufferPeakMemoryUsage | これらの Partial Chunk が保持するメモリのピーク値。Partial Chunk はいっぱいになってから送信されるため、宛先が多く、DOP が高く、行が広い場合は Sink の入力全体に近づくことがあります。BE 設定項目 `exchange_sink_buffer_flush_threshold_bytes` によって制限されます。 |
+| ShuffleBufferFlushCount | Partial Chunk のメモリが `exchange_sink_buffer_flush_threshold_bytes` を超え、いっぱいになる前に送信された回数。 |
+| ShuffleBufferFlushRows | この早期送信で送信された行数。 |
+| ShuffleBufferReleasedChunks | 早期送信の後、残りのメモリが `exchange_sink_buffer_flush_threshold_bytes` の半分を超えていたために解放された Partial Chunk の数。 |
+| PeakSerializedChunkBytes | シリアライズ後（圧縮前）の Chunk サイズの最大値。 |
+| SinkBufferPeakMemoryUsage | Sink Buffer で送信待ちまたは送信中のリクエストが使用するメモリのピーク値。 |
+| SinkBufferMemoryLimit | Sink Buffer のメモリ上限。デフォルトは `sink_buffer_mem_limit_per_driver` × 宛先の数です。上限に達すると、リクエストが完了するまで Sink はデータの受け入れを停止します。 |
+| SinkBufferPeakInFlightRpcNum | 同時に実行中の RPC 数のピーク値。 |
+| SinkBufferPeakRequestNum | Sink Buffer で送信待ちまたは送信中のリクエスト数のピーク値。 |
 | CompressTime | 圧縮時間。 |
 | CompressedInputBytes | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。アダプティブ圧縮戦略によってスキップされた chunk は含まれません。`CompressedInputBytes / CompressedBytes` が圧縮率であり、`SerializedBytes - CompressedInputBytes` が圧縮されなかったデータのサイズです。 |
 | CompressedBytes | 圧縮データのサイズ。実際に圧縮された chunk のみが対象です。 |

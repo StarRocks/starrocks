@@ -152,6 +152,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
 - Introduced in: -
 
+### exchange_sink_buffer_flush_threshold_bytes
+
+- Default: 67108864
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum memory that each exchange sink driver can use to buffer rows for a shuffle before they are sent. During a shuffle, the exchange sink keeps one partial chunk for each destination pipeline driver and sends it only when the chunk is full. When the total size of these partial chunks exceeds this limit, all of them are sent immediately and cleared; if the memory they still hold exceeds half of the limit, partial chunks are released until it no longer does. A value of `0` or less disables the limit.
+- Introduced in: -
+
 ### exchg_node_buffer_size_bytes
 
 - Default: 10485760
