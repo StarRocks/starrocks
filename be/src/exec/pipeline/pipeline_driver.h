@@ -127,6 +127,9 @@ public:
     // get last elapsed time for process.
     int64_t get_last_time_spent() { return last_time_spent; }
 
+    void set_enter_ready_queue_timestamp(int64_t timestamp_ns) { this->enter_ready_queue_timestamp = timestamp_ns; }
+    int64_t get_enter_ready_queue_timestamp() const { return enter_ready_queue_timestamp; }
+
     void update_last_time_spent(int64_t time_spent) {
         this->last_time_spent = time_spent;
         this->accumulated_time_spent += time_spent;
@@ -175,6 +178,7 @@ private:
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
     int64_t enter_local_queue_timestamp{0};
+    int64_t enter_ready_queue_timestamp{0};
     int64_t accumulated_time_spent{0};
     int64_t accumulated_local_wait_time_spent{0};
     int64_t accumulated_chunks_moved{0};

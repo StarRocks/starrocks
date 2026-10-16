@@ -16,14 +16,11 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
->>>>>>> 5467453 ([BugFix] Keep pipeline driver queue levels from starving level 0 (#80760))
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
@@ -103,8 +100,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_level_catches_up_after_being_empt
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
     QueryContext query_context;
     auto new_driver = [&query_context](int level) {
-        auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                       nullptr, nullptr, nullptr, -1);
+        auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
         _set_driver_level(driver.get(), level);
         return driver;
     };
@@ -136,8 +132,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_level_of_driver_running_beyond_in
     PipelineExecutorMetrics metrics;
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
     QueryContext query_context;
-    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                   nullptr, nullptr, nullptr, -1);
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
     _set_driver_level(driver.get(), 4);
 
     // 3.5s is beyond INT32_MAX ns, and is in the time slice of level 5, which is [3.0s, 4.2s).
@@ -161,8 +156,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_catch_up_rebases_before_scaled_ti
     }
     QueryContext query_context;
     auto new_driver = [&query_context](int level) {
-        auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                       nullptr, nullptr, nullptr, -1);
+        auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
         _set_driver_level(driver.get(), level);
         return driver;
     };
@@ -197,8 +191,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_rebase_at_int64_limit) {
     PipelineExecutorMetrics metrics;
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
     QueryContext query_context;
-    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                   nullptr, nullptr, nullptr, -1);
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
     _set_driver_level(driver.get(), 7);
     queue._queues[7]._accu_consume_time = std::numeric_limits<int64_t>::max();
     // The metric scrape itself must not cast the rounded double value 2^63 to int64.
@@ -216,8 +209,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_rebase_keeps_concurrent_runtime) 
     queue.factor_for_normal = 128;
     queue._accu_consume_time = 128'000 + 1234;
     QueryContext query_context;
-    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                   nullptr, nullptr, nullptr, -1);
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
     driver->driver_acct().update_last_time_spent(1);
     std::thread updater([&] {
         for (int i = 0; i < 100'000; ++i) queue.update_accu_time(driver.get());
@@ -231,8 +223,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_level_stats) {
     PipelineExecutorMetrics metrics;
     QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
     QueryContext query_context;
-    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), _query_runtime_state(&query_context), nullptr,
-                                                   nullptr, nullptr, nullptr, -1);
+    auto driver = std::make_shared<PipelineDriver>(_gen_operators(), &query_context, nullptr, nullptr, -1);
     _set_driver_level(driver.get(), 2);
     driver->driver_acct().update_last_time_spent(12'000'000L);
     queue.update_statistics(driver.get());

@@ -14,21 +14,14 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD:be/test/exec/workgroup/work_group_manager_test.cpp
-#include "exec/workgroup/work_group.h"
-=======
 #include <optional>
 
-#include "base/metrics.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/parallel_test.h"
-#include "common/statusor.h"
-#include "compute_env/workgroup/work_group.h"
-#include "exec_primitive/pipeline/primitives/driver_executor.h"
-#include "exec_primitive/pipeline/primitives/driver_queue.h"
->>>>>>> 5467453 ([BugFix] Keep pipeline driver queue levels from starving level 0 (#80760)):be/test/compute_env/workgroup/work_group_manager_test.cpp
+#include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/mem_tracker.h"
 #include "testutil/parallel_test.h"
+#include "util/metrics.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks::workgroup {
 TWorkGroup create_twg(const int64_t id, const int64_t version, const std::string& name, const std::string& mem_pool,
@@ -49,8 +42,6 @@ TWorkGroupOp make_twg_op(const TWorkGroup& twg, const TWorkGroupOpType::type op_
     return op;
 }
 
-<<<<<<< HEAD:be/test/exec/workgroup/work_group_manager_test.cpp
-=======
 // In an anonymous namespace, since other test files linked into the same binary define their own FakeDriverQueue.
 namespace {
 class FakeDriverQueue final : public pipeline::DriverQueue {
@@ -74,66 +65,21 @@ public:
 };
 } // namespace
 
-WorkGroupManager::DriverQueueFactory make_fake_driver_queue_factory(int* create_count = nullptr) {
-    return [create_count](pipeline::DriverQueueMetrics*) {
-        if (create_count != nullptr) {
-            ++(*create_count);
-        }
-        return std::make_unique<FakeDriverQueue>();
-    };
-}
-
-DriverExecutorFactory unused_driver_executor_factory() {
-    return [](const std::string& name, const CpuUtil::CpuIds& cpuids,
-              const std::vector<CpuUtil::CpuIds>& borrowed_cpuids, uint32_t num_driver_threads,
-              pipeline::PipelineExecutorMetrics* metrics,
-              const WorkGroupSchedulePolicy& schedule_policy) -> StatusOr<std::unique_ptr<pipeline::DriverExecutor>> {
-        (void)name;
-        (void)cpuids;
-        (void)borrowed_cpuids;
-        (void)num_driver_threads;
-        (void)metrics;
-        (void)schedule_policy;
-        return Status::InternalError("unexpected driver executor creation");
-    };
-}
-
-PARALLEL_TEST(WorkGroupManagerTest, injects_driver_queue_factory_for_accepted_workgroups) {
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    int create_count = 0;
-    WorkGroupManager manager(config, nullptr, make_fake_driver_queue_factory(&create_count),
-                             unused_driver_executor_factory());
-
-    auto accepted = std::make_shared<WorkGroup>(create_twg(120, 2, "wg120", WorkGroup::DEFAULT_MEM_POOL, 0.5));
-    manager.add_workgroup(accepted);
-
-    EXPECT_EQ(1, create_count);
-    EXPECT_NE(nullptr, accepted->driver_sched_entity()->queue());
-
-    auto stale = create_twg(120, 1, "wg120_stale", WorkGroup::DEFAULT_MEM_POOL, 0.5);
-    manager.apply({make_twg_op(stale, TWorkGroupOpType::WORKGROUP_OP_CREATE)});
-
-    EXPECT_EQ(1, create_count);
-
-    manager.destroy();
-}
-
 PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_metrics) {
-    MetricRegistry registry("test");
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    auto driver_queue_factory = [](pipeline::DriverQueueMetrics*) {
-        auto queue = std::make_unique<FakeDriverQueue>();
-        queue->stats = {{}, {.accu_time_ns = 300, .wait_time_ns = 200, .schedule_count = 2}};
-        return queue;
-    };
-    WorkGroupManager manager(config, &registry, driver_queue_factory, unused_driver_executor_factory());
-
-    auto wg = std::make_shared<WorkGroup>(create_twg(130, 1, "wg130", WorkGroup::DEFAULT_MEM_POOL, 0.5));
+    WorkGroupManager manager(config);
+    auto wg = std::make_shared<WorkGroup>(create_twg(130, 1, "wg_mlfq_metrics", WorkGroup::DEFAULT_MEM_POOL, 0.5));
     manager.add_workgroup(wg);
+
+    auto queue = std::make_unique<FakeDriverQueue>();
+    queue->stats.resize(pipeline::QuerySharedDriverQueue::QUEUE_SIZE);
+    queue->stats[1] = {.accu_time_ns = 300, .wait_time_ns = 200, .schedule_count = 2};
+    wg->driver_sched_entity()->set_queue(std::move(queue));
     manager.update_metrics();
 
-    auto get_value = [&registry](const std::string& name, const std::string& level) -> std::optional<int64_t> {
-        auto* metric = registry.get_metric(name, MetricLabels().add("name", "wg130").add("level", level));
+    auto get_value = [](const std::string& name, const std::string& level) -> std::optional<int64_t> {
+        auto* metric = StarRocksMetrics::instance()->metrics()->get_metric(
+                name, MetricLabels().add("name", "wg_mlfq_metrics").add("level", level));
         if (metric == nullptr) {
             return std::nullopt;
         }
@@ -143,35 +89,11 @@ PARALLEL_TEST(WorkGroupManagerTest, driver_queue_level_metrics) {
     EXPECT_EQ(300, get_value("resource_group_driver_queue_level_accu_time_ns", "1"));
     EXPECT_EQ(200, get_value("resource_group_driver_queue_level_wait_time_ns", "1"));
     EXPECT_EQ(2, get_value("resource_group_driver_queue_level_schedule_count", "1"));
-    EXPECT_EQ(std::nullopt, get_value("resource_group_driver_queue_level_accu_time_ns", "2"));
+    EXPECT_EQ(std::nullopt, get_value("resource_group_driver_queue_level_accu_time_ns", "8"));
 
     manager.destroy();
 }
 
-TEST(WorkGroupManagerTest, default_workgroup_reverts_after_temporary_manager_destroy) {
-    const auto previous_default = WorkGroup::default_workgroup();
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
-    WorkGroupManager original_manager(config, nullptr, make_fake_driver_queue_factory(),
-                                      unused_driver_executor_factory());
-    DefaultWorkGroupInitialization original_init(&original_manager, 1);
-    const auto original_default = original_manager.get_default_workgroup();
-    ASSERT_EQ(original_default, WorkGroup::default_workgroup());
-
-    WorkGroupManager temporary_manager(config, nullptr, make_fake_driver_queue_factory(),
-                                       unused_driver_executor_factory());
-    DefaultWorkGroupInitialization temporary_init(&temporary_manager, 2);
-    const auto temporary_default = temporary_manager.get_default_workgroup();
-    ASSERT_EQ(temporary_default, WorkGroup::default_workgroup());
-    ASSERT_NE(original_default.get(), temporary_default.get());
-
-    temporary_manager.destroy();
-    EXPECT_EQ(original_default, WorkGroup::default_workgroup());
-
-    original_manager.destroy();
-    EXPECT_EQ(previous_default, WorkGroup::default_workgroup());
-}
-
->>>>>>> 5467453 ([BugFix] Keep pipeline driver queue levels from starving level 0 (#80760)):be/test/compute_env/workgroup/work_group_manager_test.cpp
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
     PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);

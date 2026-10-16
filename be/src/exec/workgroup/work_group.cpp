@@ -406,8 +406,8 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
                 resource_group_bigquery_count.get());
 
         // accumulated time and ready wait of each driver queue level
-        auto register_or_reset = [this](const std::string& name, const MetricLabels& labels, auto& metric) {
-            if (!_metrics->register_metric(name, labels, metric.get())) {
+        auto register_or_reset = [](const std::string& name, const MetricLabels& labels, auto& metric) {
+            if (!StarRocksMetrics::instance()->metrics()->register_metric(name, labels, metric.get())) {
                 metric.reset();
             }
         };

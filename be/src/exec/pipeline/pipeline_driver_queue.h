@@ -27,6 +27,15 @@ class DriverQueue;
 using DriverQueuePtr = std::unique_ptr<DriverQueue>;
 class DriverQueueMetrics;
 
+// Scheduling statistics of one level of a multi-level driver queue.
+struct DriverQueueLevelStats {
+    // Execution time charged to the level divided by the level's factor.
+    int64_t accu_time_ns = 0;
+    // Total ready wait and number of drivers taken from the level.
+    int64_t wait_time_ns = 0;
+    int64_t schedule_count = 0;
+};
+
 class DriverQueue {
 public:
     DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
@@ -49,6 +58,9 @@ public:
     bool empty() const { return size() == 0; }
 
     virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
+
+    // Statistics of each level, empty for a queue without levels.
+    virtual std::vector<DriverQueueLevelStats> level_stats() const { return {}; }
 
     DriverQueueMetrics* _metrics;
 };
@@ -137,13 +149,9 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
-<<<<<<< HEAD
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
-=======
     std::vector<DriverQueueLevelStats> level_stats() const override;
 
-    static double ratio_of_adjacent_queue();
->>>>>>> 5467453 ([BugFix] Keep pipeline driver queue levels from starving level 0 (#80760))
+    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
     static constexpr size_t QUEUE_SIZE = 8;
 
 private:

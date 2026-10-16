@@ -14,22 +14,13 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
-<<<<<<< HEAD
+#include <limits>
+
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
-=======
-#include <limits>
-
-#include "base/time/time.h"
-#include "common/config_exec_flow_fwd.h"
-#include "compute_env/workgroup/work_group.h"
-#include "exec/runtime/schedule/utils.h"
-#include "exec_primitive/pipeline/primitives/driver_state.h"
-#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
-#include "exec_primitive/pipeline/source_operator.h"
->>>>>>> 5467453 ([BugFix] Keep pipeline driver queue levels from starving level 0 (#80760))
 #include "gutil/strings/substitute.h"
+#include "util/time.h"
 
 namespace starrocks::pipeline {
 
