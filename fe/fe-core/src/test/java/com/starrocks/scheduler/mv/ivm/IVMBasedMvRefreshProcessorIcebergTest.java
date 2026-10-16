@@ -22,13 +22,9 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
->>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrDeltaStats;

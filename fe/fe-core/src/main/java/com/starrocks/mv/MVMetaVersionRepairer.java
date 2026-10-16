@@ -25,7 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorTableInfo;
-import com.starrocks.scheduler.mv.MVVersionManager;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
@@ -86,9 +86,6 @@ public class MVMetaVersionRepairer {
     private static void repairBaseTableTableVersionChange(MaterializedView mv,
                                                           Table table,
                                                           List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
-        // Read before the copy: an inactivation can clear the version map without the MV lock (see
-        // MVVersionManager#publishRefreshScheme).
-        long versionMapResetEpoch = mv.getVersionMapResetEpoch();
         MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         // check table existed in mv's version map
         MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
@@ -108,7 +105,10 @@ public class MVMetaVersionRepairer {
         // update edit log
         long maxChangedTableRefreshTime = MvUtils.getMaxTablePartitionInfoRefreshTime(changedVersions);
         copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
-        MVVersionManager.publishRefreshScheme(mv, copiedScheme, versionMapResetEpoch, LOG);
+        ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
+                new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
+        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
+                wal -> mv.setRefreshScheme(copiedScheme));
         LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
                 mv.getName(), maxChangedTableRefreshTime);
     }

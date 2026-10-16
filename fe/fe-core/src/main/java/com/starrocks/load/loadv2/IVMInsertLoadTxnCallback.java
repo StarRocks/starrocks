@@ -22,7 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.scheduler.mv.MVVersionManager;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -104,9 +104,6 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
         }
         LOG.info("Materialized view {} has been committed, update the base table info tvr version range: {}",
                 mv.getName(), baseTableInfoTvrDeltaMap);
-        // Read before the copy: an inactivation can clear the version map without the MV lock (see
-        // MVVersionManager#publishRefreshScheme).
-        final long versionMapResetEpoch = mv.getVersionMapResetEpoch();
         final MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         final MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
         Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
@@ -125,24 +122,10 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
 
         long maxChangedTableRefreshTime = mv.getRefreshScheme().getLastRefreshTime();
         copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);
-<<<<<<< HEAD
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(mv, copiedScheme);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog,
                 wal -> mv.setRefreshScheme(copiedScheme));
-=======
-        try {
-            MVVersionManager.publishRefreshScheme(mv, copiedScheme, versionMapResetEpoch, LOG);
-        } catch (Throwable t) {
-            // Only for a node that demotes and keeps running: it advances its replay position past its own
-            // writes, so it alone never replays the txn record that already carries this window. A node that
-            // exits replays that record normally on restart and needs nothing here.
-            promoteCommittedTvr(mv.getRefreshScheme().getAsyncRefreshContext(), baseTableInfoTvrDeltaMap);
-            throw t;
-        }
-        // The COMMITTED record is durable by now, and replay reads the window off it, not off this object.
-        clearRefreshCommitInfo(txnState);
->>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
         LOG.info("Update materialized view {} refresh scheme, " +
                 "last refresh time: {}, version meta changed", mv.getName(), maxChangedTableRefreshTime);
     }

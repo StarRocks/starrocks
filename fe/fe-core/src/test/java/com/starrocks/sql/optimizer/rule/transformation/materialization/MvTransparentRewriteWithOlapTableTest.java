@@ -416,7 +416,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         // restricted scan is not read as written.
                         cluster.runSql("test", "truncate table m1;");
                         MaterializedView mv = getMv("test", "mv_np");
-                        mv.resetVisibleVersionMap();
+                        mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
                         long tabletId = mv.getPartitions().iterator().next().getDefaultPhysicalPartition()
                                 .getLatestBaseIndex().getTablets().get(0).getId();
                         String plan = getFragmentPlan("SELECT * from mv_np TABLET(" + tabletId + ") where k1<6");

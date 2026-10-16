@@ -81,11 +81,11 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
     /**
      * A transparent plan reads the fresh part of the MV and the base tables at their current state for the rest. A
-     * scan narrowed by PARTITION(...), tablet or replica hints or a sample clause, or reading a snapshot (BEFORE, a
-     * bookmark), has no equivalent in it.
+     * scan narrowed by PARTITION(...), tablet or replica hints or a sample clause, or reading a snapshot (BEFORE), has
+     * no equivalent in it.
      */
     private static boolean isRestrictedScan(LogicalOlapScanOperator scan) {
-        return scan.hasTableHints() || scan.getSample() != null || scan.getGtid() != 0 || scan.isBookmarkScoped();
+        return scan.hasTableHints() || scan.getSample() != null || scan.getGtid() != 0;
     }
 
     /**
@@ -119,7 +119,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         PartitionNames partitionNames = scan.getPartitionNames();
         boolean narrowedByPartitionsOnly = partitionNames != null && !partitionNames.isTemp()
                 && CollectionUtils.isEmpty(scan.getHintsTabletIds()) && CollectionUtils.isEmpty(scan.getHintsReplicaIds())
-                && scan.getSample() == null && scan.getGtid() == 0 && !scan.isBookmarkScoped();
+                && scan.getSample() == null && scan.getGtid() == 0;
         if (!narrowedByPartitionsOnly) {
             return false;
         }

@@ -40,8 +40,6 @@ import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.IntegerType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,14 +51,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class MVVersionManagerTest {
-    private static final Logger LOG = LogManager.getLogger(MVVersionManagerTest.class);
 
     private final AtomicInteger editLogCount = new AtomicInteger();
 
@@ -276,101 +271,5 @@ public class MVVersionManagerTest {
                 return List.of("p1", "p2");
             }
         };
-    }
-
-    /** A copy of mv's scheme carrying one version entry, as a writer holding the MV write lock would publish it. */
-    private static MaterializedView.MvRefreshScheme copyWithOneEntry(MaterializedView mv) {
-        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy();
-        Map<String, MaterializedView.BasePartitionInfo> partitions = new HashMap<>();
-        partitions.put("p1", new MaterializedView.BasePartitionInfo(1L, 1L, 1L));
-        copiedScheme.getAsyncRefreshContext().getBaseTableVisibleVersionMap().put(3000L, partitions);
-        return copiedScheme;
-    }
-
-    @Test
-    public void publishRefreshSchemeKeepsVersionStateWithoutAReset() {
-        MaterializedView mv = buildMv(1000L);
-        long epoch = mv.getVersionMapResetEpoch();
-        MVVersionManager.publishRefreshScheme(mv, copyWithOneEntry(mv), epoch, LOG);
-        Assertions.assertEquals(Set.of(3000L),
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().keySet());
-        Assertions.assertEquals(1000L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(1, editLogCount.get());
-    }
-
-    @Test
-    public void publishRefreshSchemeDropsVersionStateOfAWriterThatStartedDuringAReset() {
-        // The inactivation bumps the epoch before journaling and clears the maps in the journal's applier: a writer
-        // that read the odd epoch may have copied the maps before the clear, even if the epoch has not moved since.
-        MaterializedView mv = buildMv(1000L);
-        mv.markVersionMapReset();
-        long epoch = mv.getVersionMapResetEpoch();
-        MaterializedView.MvRefreshScheme copiedScheme = copyWithOneEntry(mv);
-        MVVersionManager.publishRefreshScheme(mv, copiedScheme, epoch, LOG);
-        Assertions.assertTrue(
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
-        Assertions.assertEquals(0L, mv.getRefreshScheme().getLastFreshnessConfirmedAt());
-        Assertions.assertEquals(1, editLogCount.get());
-    }
-
-    @Test
-    public void publishRefreshSchemeJournalsTheClearOfAResetRacingThePublish() {
-        // What a follower replays must end where the leader does: the clear of a reset that lands after the check
-        // and before the publish is journaled after the publish.
-        MaterializedView mv = buildMv(1000L);
-        List<ChangeMaterializedViewRefreshSchemeLog> journaled = new LinkedList<>();
-        new MockUp<EditLog>() {
-            @Mock
-            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
-                if (journaled.isEmpty()) {
-                    mv.resetVisibleVersionMap();
-                }
-                journaled.add(log);
-                walApplier.apply(null);
-            }
-        };
-        long epoch = mv.getVersionMapResetEpoch();
-        MVVersionManager.publishRefreshScheme(mv, copyWithOneEntry(mv), epoch, LOG);
-
-        Assertions.assertTrue(
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
-        Assertions.assertEquals(2, journaled.size());
-        // Each entry carries the whole scheme and a replay applies them in order, so the last one is what it ends with.
-        ChangeMaterializedViewRefreshSchemeLog last = journaled.get(1);
-        Assertions.assertTrue(last.getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty());
-        Assertions.assertEquals(0L, last.getLastFreshnessConfirmedAt());
-    }
-
-    @Test
-    public void publishRefreshSchemeFencesTheRemedialClearAgainstAnotherWriter() {
-        // Between installing its copy and journaling the clear, the publish leaves the cleared entries in the live
-        // scheme. Another writer copying it then, at the epoch after the reset, must notice when it publishes.
-        MaterializedView mv = buildMv(1000L);
-        AtomicReference<MaterializedView.MvRefreshScheme> otherCopy = new AtomicReference<>();
-        AtomicLong otherEpoch = new AtomicLong();
-        new MockUp<EditLog>() {
-            @Mock
-            public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
-                boolean first = otherCopy.get() == null;
-                if (first) {
-                    mv.resetVisibleVersionMap();
-                }
-                walApplier.apply(null);
-                if (first) {
-                    otherEpoch.set(mv.getVersionMapResetEpoch());
-                    otherCopy.set(mv.getRefreshScheme().copy());
-                }
-            }
-        };
-        long epoch = mv.getVersionMapResetEpoch();
-        MVVersionManager.publishRefreshScheme(mv, copyWithOneEntry(mv), epoch, LOG);
-        Assertions.assertFalse(otherCopy.get().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty(),
-                "the other writer did not copy the entries the reset cleared, nothing was tested");
-
-        MVVersionManager.publishRefreshScheme(mv, otherCopy.get(), otherEpoch.get(), LOG);
-        Assertions.assertTrue(
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap().isEmpty(),
-                "the other writer published the entries the reset cleared");
-        Assertions.assertEquals(0, mv.getVersionMapResetEpoch() % 2, "the reset epoch was left odd");
     }
 }

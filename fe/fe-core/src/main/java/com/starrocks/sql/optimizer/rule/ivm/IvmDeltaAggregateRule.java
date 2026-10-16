@@ -116,14 +116,10 @@ public class IvmDeltaAggregateRule extends TransformationRule {
 
         // Step 2: Create MV scan
         LogicalOlapScanOperator mvScan = MvRewritePreprocessor.createScanMvOperator(
-<<<<<<< HEAD
                 mv, columnRefFactory, PCellSortedSet.of(), true);
-=======
-                mv, columnRefFactory, context.getTvrOptContext().getIvmExcludedMvPartitions(), true);
         // The refresh reads back the state it maintains, hidden columns included: a transparent rewrite of the MV
         // (transparent_mv_rewrite_mode) would replace it with the defined query, which outputs none of them.
         mvScan.setOpRuleBit(OpRuleBit.OP_MV_TRANSPARENT_REWRITE);
->>>>>>> 457f87225cb... [BugFix][RB-374] Keep MV version map resets, TRUE transparent rewrite and the timeliness cache from serving stale results (#65542)
         ColumnRefOperator mvRowIdRef = mvScan.getColumnMetaToColRefMap().get(rowIdColumn);
         Map<Column, ColumnRefOperator> mvColMetaToRefMap = mvScan.getColumnMetaToColRefMap();
 

@@ -54,9 +54,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     private long gtid = 0;
 
-    // The table is the snapshot of a bookmark (a [_BOOKMARK_<id>_] hint, or a pinned MV refresh), not its current state.
-    private boolean bookmarkScoped;
-
     private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
 
     // Only for UT
@@ -142,10 +139,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return gtid;
     }
 
-    public boolean isBookmarkScoped() {
-        return bookmarkScoped;
-    }
-
     @Override
     public boolean isEmptyOutputRows() {
         return selectedTabletId == null || selectedTabletId.isEmpty() ||
@@ -214,7 +207,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
-                bookmarkScoped == that.bookmarkScoped &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
@@ -226,7 +218,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, bookmarkScoped, selectedPartitionId,
+        return Objects.hash(super.hashCode(), selectedIndexMetaId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
     }
 
@@ -248,7 +240,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.selectedIndexMetaId = scanOperator.selectedIndexMetaId;
             builder.gtid = scanOperator.gtid;
-            builder.bookmarkScoped = scanOperator.bookmarkScoped;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
             builder.hasTableHints = scanOperator.hasTableHints;
@@ -270,11 +261,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setGtid(long gtid) {
             builder.gtid = gtid;
-            return this;
-        }
-
-        public Builder setBookmarkScoped(boolean bookmarkScoped) {
-            builder.bookmarkScoped = bookmarkScoped;
             return this;
         }
 
