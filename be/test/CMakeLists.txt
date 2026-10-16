@@ -305,6 +305,7 @@ set(EXEC_FILES
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
         ./http/ev_http_server_test.cpp
+        ./http/greplog_action_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp

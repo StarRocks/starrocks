@@ -94,4 +94,43 @@ TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials)
     // Non-credential configs are still printed as is.
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_endpoint=" + config::object_storage_endpoint + "\n"));
 }
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_with_non_numeric_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "abc";
+    auto* mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    // The page still renders, with the default two levels.
+    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_with_negative_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "-1";
+    auto* mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
+}
+
+TEST_F(DefaultPathHandlersTest, mem_tracker_does_not_echo_upper_level) {
+    WebPageHandler::ArgumentMap args;
+    args["upper_level"] = "<script>alert(1)</script>";
+    auto* mem_tracker = GlobalEnv::GetInstance()->process_mem_tracker();
+
+    std::stringstream output;
+    MemTrackerWebPageHandler::handle(mem_tracker, args, &output);
+
+    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
+    ASSERT_TRUE(output.str().find("<script>") == std::string::npos);
+}
 } // namespace starrocks
