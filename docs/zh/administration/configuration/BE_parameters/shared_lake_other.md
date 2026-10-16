@@ -57,6 +57,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 每批 MemTable 修改前，会把有界增长及下一次 SST 打开所需的可复用读额度向实际 update 根 tracker 预留。两者无法共存时，已 join reader 的 tablet 持锁方可先退休 pending MemTable，再写入新值。读额度持续记账，直到本批 old-value lookup 全部 join；原生对象、压缩输入窗口及解码块的预留从中借还字节，不释放后重抢，也不重复计入 root。使用额度新打开的 reader 保持临时状态，已有 resident reader 继续保留。持有额度期间暂停填充可选数据块缓存。`pindex_memtable_growth_sst_headroom_bytes` 累加大小提示，`pindex_sst_read_credit_reserved_bytes` 累加包含对象额度的已发放字节，`pindex_sst_read_credit_borrowed_bytes` 累加借用字节；它们均不代表常驻内存或并发峰值。单个索引小于 update 预算一半时也执行。增长准入遇到压力后，本次 publish 的持锁方停止填充可选数据块缓存，包括新刷出的 SST；`pindex_memtable_growth_block_cache_bypass_count` 记录该切换，下次 prepare 重新评估。可选 legacy compaction preload 共用 publish 准入通道，繁忙时立即跳过，发布时仍可按需加载。开关启用前已运行的 preload 会先完成，再准入新 publisher。
 
+update 内存紧张时，即使 cache entry 的计费为零，也会回收空闲的 legacy compaction 预加载状态；这些列仍直接计入 compaction-state tracker。被使用的状态继续由其 owner 持有。publish trace 的 `pindex_compaction_preload_reclaimed_bytes` 记录释放的列字节数。
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - 默认值：30000

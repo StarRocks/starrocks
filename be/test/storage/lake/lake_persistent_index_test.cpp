@@ -1939,12 +1939,18 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     auto input_schema = make_varchar_pk_schema();
     input_schema->to_schema_pb(input_metadata->mutable_schema());
     input_metadata->mutable_schema()->mutable_column(0)->set_length(512);
+    input_metadata->mutable_schema()->set_id(next_id());
     input_schema = std::make_shared<TabletSchema>(input_metadata->schema());
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*input_metadata));
     std::vector<std::string> input_keys;
-    append_cold_rowset(input_metadata.get(), 0, 1024, 3, &input_keys, 256);
+    constexpr int kInputRows = 16384;
+    append_cold_rowset(input_metadata.get(), 0, kInputRows, 3, &input_keys, 256);
     TxnLogPB_OpWrite input_op;
     input_op.mutable_rowset()->CopyFrom(input_metadata->rowsets(0));
+    // PK_ENCODING_TYPE_V2 compacts these long strings. Force the real eager
+    // preload path and enough rows to retain a material input column, rather
+    // than assuming padded string bytes equal the encoded PK allocation.
+    input_op.mutable_txn_meta();
     Tablet input_tablet(_tablet_mgr.get(), input_metadata->id());
     RssidFileInfoContainer input_container;
     RowsetUpdateStateParams input_params{.op_write = input_op,
@@ -1959,6 +1965,8 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     ASSERT_OK(input.prepare(input_params));
     ASSERT_OK(input.load_segment(0, input_params, 1, false, false));
     ASSERT_NE(nullptr, input.upserts(0));
+    ASSERT_EQ(kInputRows, input.upserts(0)->current().chunk->num_rows());
+    const auto input_first_row = input.upserts(0)->current().chunk->debug_row(0);
     const size_t input_bytes = input.memory_usage();
     ASSERT_GT(input_bytes, 256 * 1024);
     _primary_key_mgr->_update_state_cache.update_object_size(input_entry, input_bytes);
@@ -2102,6 +2110,7 @@ TEST_F(LakePersistentIndexTest, manager_growth_reclaims_four_tablet_memtables_wi
     EXPECT_EQ(filename, after.sstables(0).filename());
     EXPECT_NE(nullptr, input.upserts(0));
     EXPECT_EQ(input_bytes, input.memory_usage());
+    EXPECT_EQ(input_first_row, input.upserts(0)->current().chunk->debug_row(0));
     EXPECT_EQ(0, _primary_key_mgr->sst_read_state_memory_context()->active_read_credits.load());
     EXPECT_LE(tracker->peak_consumption(), tracker->limit());
 }

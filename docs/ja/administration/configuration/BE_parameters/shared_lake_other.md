@@ -60,6 +60,8 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 各 MemTable 変更の前に、上限付きの増加分と次の SST オープン用の再利用可能な読み取り枠を実際の update root tracker で予約します。共存できない場合は、reader の join を完了した tablet 所有者が新しい値の書き込み前に保留中の MemTable を引き渡せます。読み取り枠はバッチの old-value lookup が join するまで計上されます。ネイティブオブジェクト、圧縮入力窓、展開ブロックの予約はこの枠から借用して返却し、解放後の再取得や root の二重計上は行いません。この枠で新しく開く reader は一時的に保持し、既存の resident reader は維持します。枠を保持する間は任意のデータブロックのキャッシュ格納を停止します。`pindex_memtable_growth_sst_headroom_bytes` はサイズ情報、`pindex_sst_read_credit_reserved_bytes` はオブジェクト分を含む発行済みバイト、`pindex_sst_read_credit_borrowed_bytes` は借用バイトの累積値です。常駐メモリや同時ピークではありません。インデックスが update 予算の半分未満でも適用します。増加分の受付で逼迫した場合、その publish の所有者は新しくフラッシュした SST を含め任意のブロック格納を停止します。`pindex_memtable_growth_block_cache_bypass_count` が切り替えを記録し、次の prepare で再評価します。任意の legacy compaction preload は publish と受付枠を共有し、使用中の場合は直ちにスキップして publish 時に必要な状態をロードします。有効化前に開始した preload が完了するまで新しい publisher は待機します。
 
+update メモリ逼迫時には、キャッシュエントリーの課金がゼロでも未使用の legacy compaction 事前ロード状態を破棄します。列は引き続き compaction-state tracker に直接計上し、使用中の状態は所有者が保持します。publish trace の `pindex_compaction_preload_reclaimed_bytes` が解放した列のバイト数を示します。
+
 ### lake_pk_index_publish_wait_timeout_ms
 
 - デフォルト: 30000

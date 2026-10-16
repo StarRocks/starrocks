@@ -2316,7 +2316,13 @@ void PrimaryKeyManager::_relieve_update_pressure() {
         _primary_key_mem_tracker->consumption() > limit * 3 / 4) {
         // Only unused preload state is removed; in-flight state remains pinned by its owner.
         _update_state_cache.try_evict(0);
-        _compaction_cache.try_evict(0);
+        // Compaction columns account directly on their tracker, not the cache's
+        // entry size. try_evict(0) cannot visit these zero-charge entries.
+        // clear() removes only unused entries and destroys them outside the cache lock.
+        const auto compaction_before = _compaction_state_mem_tracker->consumption();
+        _compaction_cache.clear();
+        TRACE_COUNTER_INCREMENT("pindex_compaction_preload_reclaimed_bytes",
+                                std::max<int64_t>(0, compaction_before - _compaction_state_mem_tracker->consumption()));
         _block_cache->update_memory_usage();
     }
 }
