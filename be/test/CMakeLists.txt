@@ -28,6 +28,7 @@ set(EXEC_FILES
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/memory_scratch_sink_operator_test.cpp
+        ./exec/pipeline/sink/olap_table_sink_operator_test.cpp
         ./exec/pipeline/limit_operator_test.cpp
         ./exec/pipeline/nljoin_probe_operator_test.cpp
         ./exec/pipeline/enforce_unique_row_locator_operator_test.cpp

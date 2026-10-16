@@ -15,7 +15,9 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.View;
@@ -35,6 +37,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
@@ -44,6 +47,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -55,6 +59,7 @@ import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -109,6 +114,17 @@ public class PlannerMetaLocker implements AutoCloseable {
      */
     private final Deque<List<Map.Entry<Long, Set<Long>>>> heldStack = new ArrayDeque<>();
 
+    /** A view whose body was walked for the lock set, as it was when walked. */
+    private record WalkedView(TableName name, View view, String inlineViewDef, long sqlMode) {
+    }
+
+    // The session the views were resolved in; null for a locker built by forAllTablesOf, which walks no view body.
+    private final ConnectContext session;
+    private final List<WalkedView> walkedViews;
+    private boolean walkedViewsChecked = false;
+    // Whether the statement reads an external table a policy may apply to; see mayReachExternalTablePolicy.
+    private boolean mayReachExternalTablePolicy = false;
+
     public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
         TableCollector collector = new TableCollector(session, dbs, tables);
         collector.visit(statementBase);
@@ -116,11 +132,54 @@ public class PlannerMetaLocker implements AutoCloseable {
         // (resource groups and the like) and stay what the user wrote.
         session.setCurrentSqlDbIds(new HashSet<>(collector.statementDbIds));
         this.queryId = session.getQueryId();
+        this.session = session;
+        this.walkedViews = collector.walkedViews;
+        this.mayReachExternalTablePolicy = collector.mayReachExternalTablePolicy;
+    }
+
+    /**
+     * Whether the statement reads, directly or through a view, an external table a row access or column masking
+     * policy may apply to. Such a policy may read internal tables, and only resolving the external table -- the
+     * unlocked pre-pass does that -- tells which: see {@link #addTablesReadByExternalTablePolicies}. So the pre-pass
+     * has to run for it even when the statement has no internal table of its own to lock.
+     */
+    public boolean mayReachExternalTablePolicy() {
+        return mayReachExternalTablePolicy;
     }
 
     private PlannerMetaLocker(UUID queryId, long acquireTimeoutMs) {
         this.queryId = queryId;
         this.acquireTimeoutMs = acquireTimeoutMs;
+        this.session = null;
+        this.walkedViews = List.of();
+    }
+
+    /**
+     * Fail when a view whose body was walked for the lock set has changed since: its name now stands for another
+     * view, or it is defined differently. The bodies are walked before the lock is taken, so a view redefined in
+     * between would be expanded by the analyzer to tables this lock does not hold, and read without it.
+     *
+     * <p>Run once, right after the first acquisition: the views are locked from then on and cannot change any more.
+     * A later acquisition -- {@code InsertPlanner} taking the lock back, {@code StatementPlanner#reAnalyzeStmt} --
+     * happens after analysis, and whatever it finds is the planner's to validate. Here it fails the statement, which
+     * is the caller's to retry: for every user of this class, not only {@code StatementPlanner}, the alternative is
+     * planning off tables nobody locked.
+     */
+    private void checkWalkedViewsOnFirstLock() {
+        if (walkedViewsChecked) {
+            return;
+        }
+        walkedViewsChecked = true;
+        for (WalkedView walked : walkedViews) {
+            Pair<Database, Table> current = resolveTable(session, walked.name());
+            View view = walked.view();
+            if (current == null || current.second != view || view.getSqlMode() != walked.sqlMode()
+                    || !Objects.equals(view.getInlineViewDef(), walked.inlineViewDef())) {
+                unlock();
+                throw new StarRocksPlannerException(String.format("View %s was changed while the statement was "
+                        + "being planned, please retry", walked.name()), ErrorType.INTERNAL_ERROR);
+            }
+        }
     }
 
     /**
@@ -133,7 +192,9 @@ public class PlannerMetaLocker implements AutoCloseable {
      */
     public PlannerMetaLocker forAllTablesOf(ConnectContext session, StatementBase analyzedStatement) {
         PlannerMetaLocker all = new PlannerMetaLocker(queryId, acquireTimeoutMs);
-        new TableCollector(session, all.dbs, all.tables).visit(analyzedStatement);
+        TableCollector collector = new TableCollector(session, all.dbs, all.tables);
+        collector.analyzed = true;
+        collector.visit(analyzedStatement);
         return all;
     }
 
@@ -152,6 +213,19 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
         }
         return missing;
+    }
+
+    /**
+     * Add the tables read by the policies of the external tables the unlocked analysis pre-pass resolved: the
+     * constructor cannot see those, since finding an external table's policies takes the table, i.e. the connector,
+     * which it keeps off. The pre-pass has resolved them by now -- outside the lock, on the relations themselves --
+     * and stashed what the policy lookups need, so this asks the catalog nothing. Call it before the first
+     * acquisition.
+     */
+    public void addTablesReadByExternalTablePolicies(ConnectContext session, StatementBase statement) {
+        TableCollector collector = new TableCollector(session, dbs, tables);
+        collector.externalPoliciesOnly = true;
+        collector.visit(statement);
     }
 
     /** Whether every one of {@code boundTables} is among the tables this locker locks, by id. */
@@ -205,6 +279,7 @@ public class PlannerMetaLocker implements AutoCloseable {
                 }
             }
         }
+        checkWalkedViewsOnFirstLock();
         return true;
     }
 
@@ -267,6 +342,8 @@ public class PlannerMetaLocker implements AutoCloseable {
             }
             throw t;
         }
+        // Outside the rollback above: a failed check releases what this acquisition took itself.
+        checkWalkedViewsOnFirstLock();
     }
 
     public void unlock() {
@@ -318,9 +395,8 @@ public class PlannerMetaLocker implements AutoCloseable {
         new TableCollector(session, dbs, tables).visit(statement);
     }
 
-    private static Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-
+    /** {@code tableName} with the session's catalog and database filled in, or null when it stays partial. */
+    private static TableName qualify(ConnectContext session, TableName tableName) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
         String tbName = tableName.getTbl();
@@ -340,6 +416,19 @@ public class PlannerMetaLocker implements AutoCloseable {
         if (catalogName == null || dbName == null || tbName == null) {
             return null;
         }
+        return new TableName(catalogName, dbName, tbName);
+    }
+
+    private static Pair<Database, Table> resolveTable(ConnectContext session, TableName tableName) {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        TableName qualified = qualify(session, tableName);
+        if (qualified == null) {
+            return null;
+        }
+        String catalogName = qualified.getCatalog();
+        String dbName = qualified.getDb();
+        String tbName = qualified.getTbl();
 
         // Judged on the catalog *name*, because that is what the database is about to be resolved through:
         // any other catalog, resource-mapping included, routes getDb to the connector and yields a
@@ -389,6 +478,18 @@ public class PlannerMetaLocker implements AutoCloseable {
         // The CTE names of the with clauses in scope, innermost first. A table of the same name stays unlocked only
         // where the analyzer would read the CTE instead, never more: that would leave a table it reads unlocked.
         private final Deque<Set<String>> cteNames = new ArrayDeque<>();
+        private final List<WalkedView> walkedViews = new ArrayList<>();
+        // Whether the relations being walked get a policy injected by the analyzer, besides the ones the statement
+        // flags itself: everything in the body of a view so flagged (see QueryAnalyzer#inheritPolicyRewriteFlag).
+        private boolean inBodyRewrittenByPolicy = false;
+        // Collect nothing but what the policies of already resolved external tables read.
+        private boolean externalPoliciesOnly = false;
+        // Walking an analyzed statement: every policy the analyzer applied is in it already, as the subquery it was
+        // rewritten to (QueryAnalyzer clears the relation's policy flag then), and the tables it reads are walked as
+        // any other. A relation still flagged had no policy when analyzed, so looking its policies up again -- per
+        // column, through Ranger -- would only find what the statement does not read.
+        private boolean analyzed = false;
+        private boolean mayReachExternalTablePolicy = false;
 
         public TableCollector(ConnectContext session, Map<Long, Database> dbs, Map<Long, Set<Long>> tables) {
             this.session = session;
@@ -548,13 +649,28 @@ public class PlannerMetaLocker implements AutoCloseable {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
+            if (externalPoliciesOnly) {
+                visitExternalTablePolicies(node);
+                return null;
+            }
             if (isCteReference(node.getName())) {
                 return null;
             }
+            noteExternalTablePolicy(node);
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getName());
             put(dbAndTable);
-            if (dbAndTable != null && dbAndTable.second instanceof View view) {
-                visitViewBody(view);
+            if (dbAndTable == null) {
+                return null;
+            }
+            boolean rewrittenByPolicy = (inBodyRewrittenByPolicy || node.isNeedRewrittenByPolicy())
+                    && !node.isSyncMVQuery() && !node.isCacheStatsQuery();
+            if (rewrittenByPolicy && !analyzed) {
+                visitPolicyBodies(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        dbAndTable.first.getFullName(), dbAndTable.second.getName()), dbAndTable.second);
+            }
+            if (dbAndTable.second instanceof View view) {
+                walkedViews.add(new WalkedView(node.getName(), view, view.getInlineViewDef(), view.getSqlMode()));
+                visitViewBody(view, rewrittenByPolicy);
             }
             return null;
         }
@@ -563,21 +679,133 @@ public class PlannerMetaLocker implements AutoCloseable {
          * Before analysis a view is a name and nothing more, yet planning reads the tables behind it -- and copies
          * them, when it runs off copies. Lock those too, by walking the body here.
          */
-        private void visitViewBody(View view) {
+        private void visitViewBody(View view, boolean rewrittenByPolicy) {
             if (!expandingViews.add(view.getId())) {
                 return;
             }
-            // A view body is its own name scope: a CTE of the enclosing statement does not shadow a table in it.
+            // The name scope and resolvedDepth are visitOutsideTheStatement's.
+            try {
+                visitOutsideTheStatement(rewrittenByPolicy, () -> visit(view.getQueryStatement()));
+            } finally {
+                expandingViews.remove(view.getId());
+            }
+        }
+
+        /**
+         * The analyzer applies a row access or column masking policy by injecting it as a subquery over the relation
+         * it guards (SecurityPolicyRewriteRule), and a policy may read other tables -- a mapping table, say. Before
+         * analysis nothing of that is in the statement; lock those tables too, by walking the policy expressions here.
+         * The analyzer does not apply policies to what a policy reads, so neither does this.
+         */
+        private void visitPolicyBodies(TableName name, Table table) {
+            List<Expr> bodies = new ArrayList<>();
+            try {
+                Expr rowAccess = Authorizer.getRowAccessPolicy(session, name);
+                if (rowAccess != null) {
+                    bodies.add(rowAccess);
+                }
+                // The columns SecurityPolicyRewriteRule#buildView masks.
+                List<Column> columns = table.getBaseSchema().stream()
+                        .filter(c -> !c.getType().isUnknown()).filter(Column::isVisible).toList();
+                Map<String, Expr> masking = Authorizer.getColumnMaskingPolicy(session, name, columns);
+                if (masking != null) {
+                    bodies.addAll(masking.values());
+                }
+            } catch (RuntimeException e) {
+                // The analyzer looks the policies up again, and reports what fails.
+                return;
+            }
+            if (!bodies.isEmpty()) {
+                boolean enclosingExternalPoliciesOnly = externalPoliciesOnly;
+                externalPoliciesOnly = false;
+                try {
+                    visitOutsideTheStatement(false, () -> bodies.forEach(this::visit));
+                } finally {
+                    externalPoliciesOnly = enclosingExternalPoliciesOnly;
+                }
+            }
+        }
+
+        /** Asks the access controller only, by name: resolving the external table is the pre-pass's to do. */
+        private void noteExternalTablePolicy(TableRelation node) {
+            if (mayReachExternalTablePolicy || node.getName() == null
+                    || !(inBodyRewrittenByPolicy || node.isNeedRewrittenByPolicy())) {
+                return;
+            }
+            TableName name = qualify(session, node.getName());
+            if (name != null && !CatalogMgr.isInternalCatalog(name.getCatalog())) {
+                try {
+                    mayReachExternalTablePolicy = Authorizer.mayHavePolicy(session, name);
+                } catch (RuntimeException e) {
+                    // A catalog the access controllers do not know: the analyzer reports it.
+                }
+            }
+        }
+
+        /**
+         * An external table the pre-pass resolved carries its table, and is named the way the pre-pass keyed what it
+         * stashed for the policy lookups (see Authorizer#preResolvePolicyTarget). An internal view is followed into
+         * the bodies the pre-pass resolved for it (PreResolvedViewBodies), where its external tables are resolved the
+         * same way; the view inherits the policy rewrite to its body, as in QueryAnalyzer#inheritPolicyRewriteFlag.
+         * What the pre-pass did not resolve is left to the analyzer, as before.
+         */
+        private void visitExternalTablePolicies(TableRelation node) {
+            if (isCteReference(node.getName()) || node.isSyncMVQuery() || node.isCacheStatsQuery()) {
+                return;
+            }
+            TableName name = node.getName() == null ? null : qualify(session, node.getName());
+            if (name == null) {
+                return;
+            }
+            boolean rewrittenByPolicy = inBodyRewrittenByPolicy || node.isNeedRewrittenByPolicy();
+            if (!CatalogMgr.isInternalCatalog(name.getCatalog())) {
+                if (rewrittenByPolicy && node.getTable() != null) {
+                    visitPolicyBodies(name, node.getTable());
+                }
+                return;
+            }
+            Pair<Database, Table> dbAndTable = resolveTable(session, name);
+            if (node.isCreateByPolicyRewritten()) {
+                // Already analyzed -- the deferred-lock INSERT analyzes its SELECT before taking the lock -- so a
+                // policy is in the statement as the subquery it was rewritten to, and this table is what it reads.
+                resolvedDepth++;
+                try {
+                    put(dbAndTable);
+                } finally {
+                    resolvedDepth--;
+                }
+                return;
+            }
+            if (dbAndTable == null || !(dbAndTable.second instanceof View view) || !expandingViews.add(view.getId())) {
+                return;
+            }
+            try {
+                // The bodies the pre-pass parsed for this view, which expansion will take.
+                List<QueryStatement> bodies = session.getPreResolvedState().viewBodies().peek(view);
+                visitOutsideTheStatement(rewrittenByPolicy, () -> bodies.forEach(this::visit));
+            } finally {
+                expandingViews.remove(view.getId());
+            }
+        }
+
+        /**
+         * Walk what the analyzer will bring into the statement: tables locked, but not counted among the databases
+         * the statement names. It is its own name scope -- a CTE of the enclosing statement does not shadow a table
+         * in it.
+         */
+        private void visitOutsideTheStatement(boolean rewrittenByPolicy, Runnable walk) {
             Deque<Set<String>> enclosingCtes = new ArrayDeque<>(cteNames);
+            boolean enclosingRewrittenByPolicy = inBodyRewrittenByPolicy;
             cteNames.clear();
+            inBodyRewrittenByPolicy = rewrittenByPolicy;
             resolvedDepth++;
             try {
-                visit(view.getQueryStatement());
+                walk.run();
             } catch (StarRocksPlannerException e) {
                 // A definition that does not parse is the analyzer's to report.
             } finally {
                 resolvedDepth--;
-                expandingViews.remove(view.getId());
+                inBodyRewrittenByPolicy = enclosingRewrittenByPolicy;
                 cteNames.clear();
                 cteNames.addAll(enclosingCtes);
             }

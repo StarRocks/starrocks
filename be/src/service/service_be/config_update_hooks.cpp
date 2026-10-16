@@ -346,6 +346,16 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
         }
         return Status::OK();
     });
+    registry->register_callback("load_sink_close_thread_pool_num_max", [=]() -> Status {
+        if (config::load_sink_close_thread_pool_num_max <= 0) {
+            return Status::InvalidArgument("load_sink_close_thread_pool_num_max must be greater than 0");
+        }
+        auto* thread_pool = runtime_env_ptr->load_sink_close_thread_pool();
+        if (thread_pool != nullptr) {
+            return thread_pool->update_max_threads(config::load_sink_close_thread_pool_num_max);
+        }
+        return Status::OK();
+    });
     registry->register_callback("transaction_publish_version_worker_count", [=]() -> Status {
         Status st1 = ExecEnv::GetInstance()
                              ->agent_server()

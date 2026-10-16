@@ -535,6 +535,9 @@ public class AlterJobMgr {
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
+            if (log.isClearVersionMap()) {
+                mv.getRefreshScheme().clearVersionState();
+            }
         } catch (Throwable e) {
             LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
@@ -739,8 +742,14 @@ public class AlterJobMgr {
 
     public void alterView(AlterViewInfo alterViewInfo) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
+        if (db == null) {
+            throw new AlterJobException("database " + alterViewInfo.getDbId() + " was dropped concurrently");
+        }
         View view = (View) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            throw new AlterJobException("view " + alterViewInfo.getTableId() + " was dropped concurrently");
+        }
         String inlineViewDef = alterViewInfo.getInlineViewDef();
         long sqlMode = alterViewInfo.getSqlMode();
         String originalViewDef = alterViewInfo.getOriginalViewDef();
@@ -748,6 +757,11 @@ public class AlterJobMgr {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);
         try {
+            // The view was looked up before the lock: a DROP VIEW in between leaves it detached from the db, and
+            // altering it would write a MODIFY entry for a view that no longer exists.
+            if (!db.isExist() || db.getTable(view.getId()) != view) {
+                throw new AlterJobException("view " + view.getName() + " was dropped concurrently");
+            }
             try {
                 view.checkInlineViewDef(inlineViewDef, sqlMode);
             } catch (StarRocksException e) {
@@ -774,8 +788,15 @@ public class AlterJobMgr {
 
     public void replayAlterView(AlterViewInfo alterViewInfo) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterViewInfo.getDbId());
-        View view = (View) GlobalStateMgr.getCurrentState()
+        View view = db == null ? null : (View) GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getTable(db.getId(), alterViewInfo.getTableId());
+        if (view == null) {
+            // Journals written before the alter path rechecked the view under its lock can carry a MODIFY
+            // after the DROP of the same view.
+            LOG.warn("skip replaying alter of view {} in db {}: it no longer exists",
+                    alterViewInfo.getTableId(), alterViewInfo.getDbId());
+            return;
+        }
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(view.getId()), LockType.WRITE);

@@ -16,17 +16,20 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.api.client.util.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor.MvCopyFailurePolicy;
@@ -45,11 +48,13 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -74,6 +79,73 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         return true;
     }
 
+    /**
+     * A transparent plan reads the fresh part of the MV and the base tables at their current state for the rest. A
+     * scan narrowed by PARTITION(...), tablet or replica hints or a sample clause, or reading a snapshot (BEFORE), has
+     * no equivalent in it.
+     */
+    private static boolean isRestrictedScan(LogicalOlapScanOperator scan) {
+        return scan.hasTableHints() || scan.getSample() != null || scan.getGtid() != 0;
+    }
+
+    /**
+     * Whether a restricted scan reads only fresh data of the MV, so that scanning it as written is what the
+     * transparent plan would return: the whole MV is fresh, or the scan is narrowed by PARTITION(...) alone to
+     * partitions that are all fresh.
+     * <p>
+     * The check runs on the MV in the catalog, as the transparent plan does: the timeliness it computes may be cached
+     * across queries, and the scan's copy may predate a partition drop. A base table without any recorded version
+     * (never refreshed against, or cleared by a reset) proves nothing about the data the MV holds, even when the
+     * check finds nothing to refresh: it ignores partitions that were never written to.
+     */
+    private static boolean readsOnlyFreshData(OptimizerContext context, MvId mvId, LogicalOlapScanOperator scan) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvId.getDbId(), mvId.getId());
+        if (!(table instanceof MaterializedView)) {
+            return false;
+        }
+        MaterializedView mv = (MaterializedView) table;
+        if (!recordsVersionsOfAllBaseTables(mv)) {
+            return false;
+        }
+        MvUpdateInfo mvUpdateInfo = context.getQueryMaterializationContext().getOrInitMVTimelinessInfos(mv,
+                MVTimelinessArbiter.QueryRewriteParams.ofQueryRewrite(context));
+        if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
+            return false;
+        }
+        PCellSortedSet stalePartitions = mvUpdateInfo.getMVToRefreshPCells();
+        if (stalePartitions == null || stalePartitions.isEmpty()) {
+            return true;
+        }
+        PartitionNames partitionNames = scan.getPartitionNames();
+        boolean narrowedByPartitionsOnly = partitionNames != null && !partitionNames.isTemp()
+                && CollectionUtils.isEmpty(scan.getHintsTabletIds()) && CollectionUtils.isEmpty(scan.getHintsReplicaIds())
+                && scan.getSample() == null && scan.getGtid() == 0;
+        if (!narrowedByPartitionsOnly) {
+            return false;
+        }
+        Set<String> stale = stalePartitions.getPartitionNames().stream()
+                .map(name -> name.toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+        return partitionNames.getPartitionNames().stream()
+                .noneMatch(name -> stale.contains(name.toLowerCase(Locale.ROOT)));
+    }
+
+    private static boolean recordsVersionsOfAllBaseTables(MaterializedView mv) {
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        if (CollectionUtils.isEmpty(baseTableInfos)) {
+            return false;
+        }
+        MaterializedView.AsyncRefreshContext refreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Map<String, MaterializedView.BasePartitionInfo> versions = baseTableInfo.isInternalCatalog()
+                    ? refreshContext.getBaseTableVisibleVersionMap().get(baseTableInfo.getTableId())
+                    : refreshContext.getBaseTableInfoVisibleVersionMap().get(baseTableInfo);
+            if (versions == null || versions.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) input.getOp();
@@ -91,11 +163,26 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             return Collections.emptyList();
         }
 
+        // A restricted scan that reads only fresh data is scanned as written. One that reads stale data still takes the
+        // transparent plan, which compensates it but does not keep the restriction.
+        boolean restrictedScan = isRestrictedScan(olapScanOperator);
+        if (restrictedScan) {
+            try {
+                if (readsOnlyFreshData(context, mv.getMvId(), olapScanOperator)) {
+                    logMVRewrite(mv.getName(), "Restricted scan of mv reads only fresh data, scan it as written");
+                    return Collections.emptyList();
+                }
+            } catch (Exception e) {
+                LOG.warn("Failed to check the timeliness of mv: {} for a restricted scan, error: {}",
+                        mv.getName(), e.getMessage(), e);
+            }
+        }
+
         logMVRewrite(mv.getName(), "Start to generate transparent rewrite plan for mv");
         ConnectContext connectContext = context.getConnectContext() == null ?
                 new ConnectContext() : context.getConnectContext();
         try {
-            OptExpression result = doTransform(connectContext, context, olapScanOperator, input, mv.getMvId());
+            OptExpression result = doTransform(connectContext, context, olapScanOperator, input, mv.getMvId(), false);
             return Collections.singletonList(result);
         } catch (Exception e) {
             LOG.warn("Failed to generate transparent rewrite plan for mv: {}, error: {}",
@@ -103,6 +190,21 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             TableProperty.MVTransparentRewriteMode transparentRewriteMode = mv.getTransparentRewriteMode();
             switch (transparentRewriteMode) {
                 case TRUE:
+                    // Scanning the MV as it is would return data the timeliness check may have found stale: the
+                    // failure can be a metadata race (a partition dropped, a refresh publishing) mid-check. The
+                    // defined query reads the base tables at their current state and needs no timeliness check, so try
+                    // it before that, unless the scan is restricted: the defined query has no equivalent of that.
+                    if (restrictedScan) {
+                        return Collections.emptyList();
+                    }
+                    try {
+                        return Collections.singletonList(
+                                doTransform(connectContext, context, olapScanOperator, input, mv.getMvId(), true));
+                    } catch (Exception redirectFailure) {
+                        LOG.warn("Failed to redirect mv: {} to its defined query, scan it as it is, error: {}",
+                                mv.getName(), redirectFailure.getMessage(), redirectFailure);
+                        return Collections.emptyList();
+                    }
                 case TRANSPARENT_OR_DEFAULT:
                     return Collections.emptyList();
                 case TRANSPARENT_OR_ERROR:
@@ -117,8 +219,10 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                       OptimizerContext context,
                                       LogicalOlapScanOperator olapScanOperator,
                                       OptExpression input,
-                                      MvId mvId) {
-        OptExpression mvTransparentPlan = doGetMvTransparentPlan(connectContext, context, mvId, olapScanOperator, input);
+                                      MvId mvId,
+                                      boolean definedQueryOnly) {
+        OptExpression mvTransparentPlan = doGetMvTransparentPlan(connectContext, context, mvId, olapScanOperator, input,
+                definedQueryOnly);
         if (mvTransparentPlan == null) {
             throw new RuntimeException("Build mv transparent plan failed: " + mvId);
         }
@@ -146,12 +250,14 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
     /**
      * Wrap getTransparentPlan and getDefinedQueryPlan methods to ensure the transparent plan is returned if possible.
+     * With {@code definedQueryOnly} the plan is always the MV's defined query, without checking the MV's timeliness.
      */
     private OptExpression doGetMvTransparentPlan(ConnectContext connectContext,
                                                  OptimizerContext context,
                                                  MvId mvId,
                                                  LogicalOlapScanOperator olapScanOperator,
-                                                 OptExpression input) {
+                                                 OptExpression input,
+                                                 boolean definedQueryOnly) {
         // Fetch mv from catalog again since table from olap scan operator is copied.
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
         Preconditions.checkState(db != null, "Database not found: %s", mvId.getDbId());
@@ -172,6 +278,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         }
 
         Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
+        if (definedQueryOnly) {
+            return redirectToMVDefinedQuery(context, mv, mvPlanContext, olapScanOperator, queryTables);
+        }
 
         // mv's to refresh partition info
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
