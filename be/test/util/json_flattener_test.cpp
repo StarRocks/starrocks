@@ -42,6 +42,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "exprs/hyper_json_transformer.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
@@ -725,6 +726,44 @@ TEST_F(JsonFlattenerTest, testNumericPathTypeKeepsValuesExact) {
             EXPECT_EQ(0, json_column->get_object(row)->compare(*got))
                     << "row " << row << ": " << got->to_string_uncheck();
         }
+    }
+}
+
+// Before numeric paths were kept exact, the deriver met negative integers with integers past INT64_MAX at
+// LARGEINT, so existing segments may hold negative LARGEINT values. Rebuilding them as JSON -- whole-JSON reads
+// (JsonMerger) and the conversion to a JSON sub-column (HyperJsonTransformer) -- must keep them negative.
+TEST_F(JsonFlattenerTest, testLegacyNegativeLargeintSubColumnKeepsSign) {
+    const std::vector<int128_t> values = {-2, std::numeric_limits<int64_t>::min(), 5,
+                                          static_cast<int128_t>(std::numeric_limits<uint64_t>::max())};
+    const std::vector<std::string> expected = {"-2", "-9223372036854775808", "5", "18446744073709551615"};
+    auto data = Int128Column::create();
+    for (auto v : values) {
+        data->append(v);
+    }
+    ColumnPtr largeint = NullableColumn::create(std::move(data), NullColumn::create(values.size(), 0));
+
+    JsonMerger merger({"a"}, {TYPE_LARGEINT}, false);
+    auto merged = merger.merge({largeint});
+    const auto* merged_json =
+            merged->is_nullable() ? down_cast<const NullableColumn*>(merged.get())->data_column().get() : merged.get();
+    ASSERT_EQ(values.size(), merged_json->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        EXPECT_EQ(R"({"a": )" + expected[row] + "}",
+                  down_cast<const JsonColumn*>(merged_json)->get_object(row)->to_string_uncheck())
+                << "row " << row;
+    }
+
+    HyperJsonTransformer transformer({"a"}, {TYPE_JSON}, false);
+    transformer.init_compaction_task({"a"}, {TYPE_LARGEINT}, false);
+    ASSERT_OK(transformer.trans({largeint}));
+    auto result = transformer.mutable_result();
+    ASSERT_EQ(1, result.size());
+    const auto* json_values =
+            down_cast<const JsonColumn*>(down_cast<NullableColumn*>(result[0].get())->data_column().get());
+    ASSERT_EQ(values.size(), json_values->size());
+    for (size_t row = 0; row < values.size(); row++) {
+        // Compare the text: JsonValue::compare also tells apart the integer encodings (SmallInt, Int, UInt).
+        EXPECT_EQ(expected[row], json_values->get_object(row)->to_string_uncheck()) << "row " << row;
     }
 }
 
