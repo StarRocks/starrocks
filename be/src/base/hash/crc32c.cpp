@@ -19,12 +19,24 @@
 // https://github.com/facebook/rocksdb/blob/master/util/crc32c.cc
 
 #include "base/hash/crc32c.h"
-#ifdef __SSE4_2__
+
+#if defined(__SSE4_2__)
 #include <nmmintrin.h>
 #endif
-#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+#if defined(__aarch64__)
 #include <arm_acle.h>
 #endif
+#if defined(__linux__)
+#include <sys/auxv.h>
+#if __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#endif
+#elif defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
+
+#include <atomic>
+
 #include "base/coding.h"
 
 namespace starrocks::crc32c {
@@ -155,7 +167,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))
+#if (defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))) || defined(__aarch64__)
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }
@@ -172,15 +184,10 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 }
 
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
-#ifndef __SSE4_2__
-#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
-#else
+#if defined(__aarch64__)
+    Slow_CRC32(l, p); // Only used if called statically without dispatch
+#elif !defined(__SSE4_2__)
     Slow_CRC32(l, p);
-#endif // defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 #elif defined(__LP64__) || defined(_WIN64)
     *l = _mm_crc32_u64(*l, LE_LOAD64(*p));
     *p += 8;
@@ -193,30 +200,11 @@ static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 }
 
 template <void (*CRC32)(uint64_t*, uint8_t const**)>
-uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
+__attribute__((always_inline)) inline uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
     const auto* p = reinterpret_cast<const uint8_t*>(buf);
     const uint8_t* e = p + size;
     uint64_t l = crc ^ 0xffffffffu;
 
-// Align n to (1 << m) byte boundary
-#define ALIGN(n, m) ((n + ((1 << m) - 1)) & ~((1 << m) - 1))
-
-#define STEP1                      \
-    do {                           \
-        int c = (l & 0xff) ^ *p++; \
-        l = table0_[c] ^ (l >> 8); \
-    } while (0)
-
-    // Point x at first 16-byte aligned byte in string.  This might be
-    // just past the end of the string.
-    const auto pval = reinterpret_cast<uintptr_t>(p);
-    const auto* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4)); // NOLINT
-    if (x <= e) {
-        // Process bytes until finished or p is 16-byte aligned
-        while (p != x) {
-            STEP1;
-        }
-    }
     // Process bytes 16 at a time
     while ((e - p) >= 16) {
         CRC32(&l, &p);
@@ -227,11 +215,16 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
         CRC32(&l, &p);
     }
     // Process the last few bytes
+#define STEP1                      \
+    do {                           \
+        int c = (l & 0xff) ^ *p++; \
+        l = table0_[c] ^ (l >> 8); \
+    } while (0)
+
     while (p != e) {
         STEP1;
     }
 #undef STEP1
-#undef ALIGN
     return static_cast<uint32_t>(l ^ 0xffffffffu);
 }
 
@@ -239,7 +232,89 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
+#if defined(__aarch64__)
+#if !defined(HWCAP_CRC32)
+#define HWCAP_CRC32 (1 << 7)
+#endif
+
+// Force compilation of CRC32 instructions even if global -march doesn't include +crc
+#if defined(__clang__)
+#pragma clang attribute push(__attribute__((target("crc"))), apply_to = function)
+#elif defined(__GNUC__)
+#pragma GCC push_options
+#pragma GCC target("+crc")
+#endif
+static inline void Fast_CRC32_Arm(uint64_t* l, uint8_t const** p) {
+    *l = __crc32cd(static_cast<uint32_t>(*l), LE_LOAD64(*p));
+    *p += 8;
+}
+
+// GCC applies target options at a template's definition, so ExtendImpl is force-inlined to make
+// its loop compile under target("+crc") on both GCC and Clang, while the Slow_CRC32 instantiation
+// stays generic.
+static uint32_t ExtendArmCrc32(uint32_t crc, const char* buf, size_t size) {
+    return ExtendImpl<Fast_CRC32_Arm>(crc, buf, size);
+}
+#if defined(__clang__)
+#pragma clang attribute pop
+#elif defined(__GNUC__)
+#pragma GCC pop_options
+#endif
+#endif // defined(__aarch64__)
+
+#ifdef BE_TEST
+#if defined(__aarch64__)
+static std::atomic<bool> g_arm_crc32_disabled_for_testing{false};
+
+void SetArmCrc32DisabledForTesting(bool disabled) {
+    g_arm_crc32_disabled_for_testing.store(disabled, std::memory_order_relaxed);
+}
+
+void ResetArmCrc32cCacheForTesting() {}
+#else
+void SetArmCrc32DisabledForTesting(bool /*disabled*/) {}
+void ResetArmCrc32cCacheForTesting() {}
+#endif
+#endif
+
+#if defined(__aarch64__)
+
+static inline bool has_arm_crc32() {
+#ifdef BE_TEST
+    if (__builtin_expect(g_arm_crc32_disabled_for_testing.load(std::memory_order_relaxed), 0)) {
+        return false;
+    }
+#endif
+    static const bool has_feature = []() {
+#if defined(__APPLE__)
+        int val = 0;
+        size_t len = sizeof(val);
+        if (sysctlbyname("hw.optional.armv8_crc32", &val, &len, nullptr, 0) == 0 && val != 0) {
+            return true;
+        }
+        val = 0;
+        len = sizeof(val);
+        if (sysctlbyname("hw.optional.arm.FEAT_CRC32", &val, &len, nullptr, 0) == 0 && val != 0) {
+            return true;
+        }
+        return false;
+#elif defined(__linux__)
+        return (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
+#else
+        return false;
+#endif
+    }();
+    return has_feature;
+}
+#endif
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
+#if defined(__aarch64__)
+    if (__builtin_expect(has_arm_crc32(), 1)) {
+        return ExtendArmCrc32(crc, buf, size);
+    }
+    return ExtendImpl<Slow_CRC32>(crc, buf, size);
+#else
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
     constexpr size_t CRC32C_SSE42_MINIMUM_LENGTH = (1 << 6);
@@ -253,6 +328,7 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #endif
 
     return ExtendImpl<Fast_CRC32>(crc, buf, size);
+#endif // defined(__aarch64__)
 }
 
 } // namespace starrocks::crc32c
