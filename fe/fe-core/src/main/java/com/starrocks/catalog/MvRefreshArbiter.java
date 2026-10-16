@@ -218,17 +218,6 @@ public class MvRefreshArbiter {
      * The base table partitions the mv still tracks a refreshed version for, but which no longer exist in the base
      * table.
      *
-<<<<<<< HEAD
-     * @param mv the materialized view
-     * @param baseTableInfo the base table info
-     * @param table the base table
-     * @return true if partitions have been deleted from the base table, false otherwise
-     */
-    public static boolean hasDeletedPartitions(MaterializedView mv, BaseTableInfo baseTableInfo, Table table) {
-        // Only check for external tables (Iceberg, Hive, etc.)
-        if (table.isNativeTableOrMaterializedView()) {
-            return false;
-=======
      * @param pinnedVersionRange the frozen snapshot to answer from, null to answer from the live table
      */
     public static Set<String> getDroppedTrackedPartitions(MaterializedView mv, Table table,
@@ -236,34 +225,10 @@ public class MvRefreshArbiter {
         Map<String, MaterializedView.BasePartitionInfo> versionMap = getTrackedPartitionVersions(mv, table);
         if (MapUtils.isEmpty(versionMap)) {
             return Sets.newHashSet();
->>>>>>> 8600f8bc580 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#62450))
         }
 
         Set<String> dropped;
         try {
-<<<<<<< HEAD
-            // Get current partitions from the base table
-            ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table);
-            Map<String, com.starrocks.connector.PartitionInfo> latestPartitionInfo =
-                    traits.getPartitionNameWithPartitionInfo();
-
-            // Get the partitions that were previously refreshed
-            Map<String, MaterializedView.BasePartitionInfo> versionMap =
-                    mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
-
-            if (MapUtils.isEmpty(versionMap)) {
-                return false;
-            }
-
-            // Check if any previously refreshed partitions no longer exist
-            Set<String> currentPartitions = latestPartitionInfo.keySet();
-            for (String refreshedPartition : versionMap.keySet()) {
-                if (!currentPartitions.contains(refreshedPartition)) {
-                    logMVPrepare(mv, String.format(
-                            "Base table partition %s has been deleted, need refresh totally.", refreshedPartition));
-                    return true;
-                }
-=======
             if (table instanceof OlapTable olapTable) {
                 dropped = versionMap.keySet().stream()
                         .filter(name -> olapTable.getPartition(name) == null)
@@ -272,7 +237,6 @@ public class MvRefreshArbiter {
                 ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(mv, table, pinnedVersionRange);
                 Set<String> livePartitions = traits.getPartitionNameWithPartitionInfo().keySet();
                 dropped = Sets.difference(versionMap.keySet(), livePartitions).immutableCopy();
->>>>>>> 8600f8bc580 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#62450))
             }
         } catch (Exception e) {
             // A connector that cannot enumerate partitions would otherwise report every tracked partition as dropped

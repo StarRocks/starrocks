@@ -523,12 +523,7 @@ public abstract class MVPCTRefreshPartitioner {
             if (needsToRefreshTable(mv, snapshotInfo.getBaseTableInfo(), snapshotTable, queryRewriteParams)) {
                 return true;
             }
-<<<<<<< HEAD
-            // Check if any partitions have been deleted from external tables
-            if (hasDeletedPartitions(mv, snapshotInfo.getBaseTableInfo(), snapshotTable)) {
-=======
             if (hasDeletedPartitions(mv, snapshotTable, pinnedRange)) {
->>>>>>> 8600f8bc580 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#62450))
                 return true;
             }
         }
