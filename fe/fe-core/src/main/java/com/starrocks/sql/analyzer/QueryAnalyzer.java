@@ -716,6 +716,11 @@ public class QueryAnalyzer {
                 // External connector table has been pre-resolved in the unlocked phase.
                 if (table == null || catalogName == null || CatalogMgr.isInternalCatalog(catalogName)) {
                     table = resolveTable(tableRelation);
+                } else {
+                    // resolveTable qualifies the relation's name in place, and the policy lookup below goes by that
+                    // name: a pre-resolved table skips it, so qualify it here, or an unqualified name in the
+                    // current external catalog reaches the lookup without its catalog and database.
+                    tableName.normalization(session);
                 }
                 // Taken before time travel binds, which reads the native table too.
                 if (table != null) {

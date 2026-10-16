@@ -1865,7 +1865,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("S_ADDRESS"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("S_ADDRESS"), anyLong);
                 result = true;
                 dictManager.getGlobalDict(anyLong, ColumnId.create("S_ADDRESS"));
                 result = Optional.empty();
