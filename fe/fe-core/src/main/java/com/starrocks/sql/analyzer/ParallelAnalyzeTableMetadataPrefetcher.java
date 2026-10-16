@@ -71,7 +71,7 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
             return;
         }
 
-        List<TableKey> tableKeys = collectTableKeys(statement, session);
+        Set<TableKey> tableKeys = collectTableKeys(statement, session);
         if (tableKeys.isEmpty()) {
             return;
         }
@@ -86,12 +86,11 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_analyze_table_metadata")) {
             List<Tracers> forks = new ArrayList<>(tableKeys.size());
-            CompletableFuture<?>[] futures = new CompletableFuture[tableKeys.size()];
-            for (int i = 0; i < tableKeys.size(); i++) {
-                TableKey tableKey = tableKeys.get(i);
+            List<CompletableFuture<?>> futures = new ArrayList<>(tableKeys.size());
+            for (TableKey tableKey : tableKeys) {
                 Tracers forked = ownerTracers.fork(true);
                 forks.add(forked);
-                futures[i] = CompletableFuture.runAsync(() -> prefetchTable(metadataMgr, queryIdString, tableKey,
+                futures.add(CompletableFuture.runAsync(() -> prefetchTable(metadataMgr, queryIdString, tableKey,
                         session, forked), executorService).handle((ignoredResult, throwable) -> {
                     if (throwable != null) {
                         LOG.warn("Failed to prefetch metadata for query [{}], table [{}.{}.{}]; " +
@@ -99,9 +98,9 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
                                 queryIdString, tableKey.catalog, tableKey.database, tableKey.table, throwable);
                     }
                     return null;
-                });
+                }));
             }
-            CompletableFuture.allOf(futures).join();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture<?>[0])).join();
             for (Tracers fork : forks) {
                 ownerTracers.mergeFrom(fork);
             }
@@ -129,7 +128,7 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
         }
     }
 
-    private static List<TableKey> collectTableKeys(StatementBase statement, ConnectContext session) {
+    private static Set<TableKey> collectTableKeys(StatementBase statement, ConnectContext session) {
         Set<TableKey> tableKeys = new LinkedHashSet<>();
         for (TableRelation relation : AnalyzerUtils.collectNonCTETableRelations(statement)) {
             TableName tableName = relation.getName();
@@ -143,7 +142,7 @@ public class ParallelAnalyzeTableMetadataPrefetcher {
             }
             tableKeys.add(new TableKey(catalog, database, table));
         }
-        return new ArrayList<>(tableKeys);
+        return tableKeys;
     }
 
     private record TableKey(String catalog, String database, String table) {
