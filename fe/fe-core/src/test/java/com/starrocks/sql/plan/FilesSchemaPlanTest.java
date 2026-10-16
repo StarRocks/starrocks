@@ -16,6 +16,12 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.planner.DescriptorTable;
+import com.starrocks.planner.FileScanNode;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.sql.InsertPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -28,11 +34,15 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class FilesSchemaPlanTest extends PlanTestBase {
 
@@ -41,6 +51,10 @@ public class FilesSchemaPlanTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         starRocksAssert.withTable(
                 "CREATE TABLE t_sink (x BIGINT, y VARCHAR(64)) " +
+                "DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES('replication_num'='1')");
+        // A regular OLAP table used as an INSERT source, to cover the non-file scan case.
+        starRocksAssert.withTable(
+                "CREATE TABLE t_source (x BIGINT, y VARCHAR(64)) " +
                 "DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES('replication_num'='1')");
     }
 
@@ -147,5 +161,50 @@ public class FilesSchemaPlanTest extends PlanTestBase {
         assertEquals("b", t.getFullSchema().get(1).getName());
         assertEquals(PrimitiveType.BIGINT, t.getColumn("a").getType().getPrimitiveType());
         assertEquals(PrimitiveType.VARCHAR, t.getColumn("b").getType().getPrimitiveType());
+    }
+
+    /**
+     * A FileScanNode (FILES()) does not consume scan ranges from the per-driver-seq channel, so the
+     * sink fragment must NOT force per-driver-seq assignment when the scan is a file scan.
+     */
+    @Test
+    public void testInsertFromFilesDoesNotForcePerDriverSeq() throws Exception {
+        new MockUp<FileScanNode>() {
+            @Mock
+            public void init(DescriptorTable descriptorTable) {
+            }
+
+            @Mock
+            public void finalizeStats() {
+            }
+        };
+        String sql = "INSERT INTO t_sink SELECT x, y FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x BIGINT, y VARCHAR(64)')";
+        PlanFragment sinkFragment = sinkFragmentOf(sql);
+        assertFalse(sinkFragment.isForceAssignScanRangesPerDriverSeq(),
+                "FILES() source must not force per-driver-seq assignment on the OlapTableSink fragment");
+    }
+
+    /**
+     * The complementary case: a regular OLAP-table source still forces per-driver-seq assignment, so the
+     * fix is scoped to file scans only and does not regress the normal table-to-table INSERT path.
+     */
+    @Test
+    public void testInsertFromOlapTableStillForcesPerDriverSeq() throws Exception {
+        String sql = "INSERT INTO t_sink SELECT x, y FROM t_source";
+        PlanFragment sinkFragment = sinkFragmentOf(sql);
+        assertTrue(sinkFragment.isForceAssignScanRangesPerDriverSeq(),
+                "OLAP-table source must keep per-driver-seq assignment on the OlapTableSink fragment");
+    }
+
+    /** Plans an INSERT through InsertPlanner (non-optimistic, lock-free path) and returns its sink fragment. */
+    private static PlanFragment sinkFragmentOf(String sql) throws Exception {
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Analyzer.analyze(insertStmt, connectContext);
+        AnalyzerUtils.collectAllDatabase(connectContext, insertStmt);
+        ExecPlan execPlan = new InsertPlanner().plan(insertStmt, connectContext);
+        return execPlan.getFragments().get(0);
     }
 }
