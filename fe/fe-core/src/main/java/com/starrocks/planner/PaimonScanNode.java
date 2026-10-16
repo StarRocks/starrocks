@@ -28,7 +28,6 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -153,7 +152,7 @@ public class PaimonScanNode extends ScanNode {
                 .build();
         long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
         if (globalIndexScanStage == 2 && indexCondition != null
-                && !indexCondition.getFieldIds().isEmpty() && !(indexCondition instanceof TopNIndexCondition) && snapshotId >= 0) {
+                && !indexCondition.getFieldIds().isEmpty() && snapshotId >= 0) {
             try {
                 Optional<ConnectorMetadata> metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getOptionalMetadata(paimonTable.getCatalogName());

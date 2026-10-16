@@ -15,7 +15,6 @@
 package com.starrocks.connector.index;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.ConnectorIndexDescriptor.Operation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.Utils;
@@ -29,12 +28,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.Type;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -43,13 +38,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /** Normalizes SQL index operations and matches them against connector-declared capabilities. */
 public final class IndexAnalyzer {
-    private static final Pattern DECIMAL_FLOAT =
-            Pattern.compile("[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?");
-
     private final ConnectorIndexMetadata metadata;
     private final Map<Integer, Integer> columnRefToFieldId;
     private final Set<Integer> partitionColumnRefs;
@@ -146,73 +137,6 @@ public final class IndexAnalyzer {
             fieldIds.put(column.getId(), fieldId.getAsInt());
         }
         return new IndexCondition(indexPredicate, fieldIds);
-    }
-
-    /**
-     * Normalizes a vector score expression without consulting connector metadata.
-     * L2 is ascending; cosine similarity and inner product are descending.
-     */
-    public static Optional<VectorTopNShape> analyzeVectorTopNShape(
-            ScalarOperator scoreExpression, boolean ascending) {
-        ScalarOperator unwrapped = unwrapFloatingPointCast(scoreExpression);
-        if (!(unwrapped instanceof CallOperator)) {
-            return Optional.empty();
-        }
-
-        CallOperator call = (CallOperator) unwrapped;
-        Optional<VectorIndexMetric> metric = metricForFunction(call.getFnName());
-        if (metric.isEmpty() || call.getChildren().size() != 2 || !supportsDirection(metric.get(), ascending)) {
-            return Optional.empty();
-        }
-
-        ScalarOperator first = call.getChild(0);
-        ScalarOperator second = call.getChild(1);
-        if (first instanceof ColumnRefOperator) {
-            Optional<float[]> vector = extractFloatArrayLiteral(second);
-            if (vector.isPresent()) {
-                return Optional.of(new VectorTopNShape(
-                        (ColumnRefOperator) first, vector.get(), metric.get(), ascending));
-            }
-        }
-        if (second instanceof ColumnRefOperator) {
-            Optional<float[]> vector = extractFloatArrayLiteral(first);
-            if (vector.isPresent()) {
-                return Optional.of(new VectorTopNShape(
-                        (ColumnRefOperator) second, vector.get(), metric.get(), ascending));
-            }
-        }
-        return Optional.empty();
-    }
-
-    /** Finds the exact vector index required by a normalized TopN expression. */
-    public Optional<ConnectorIndexDescriptor> findVectorIndex(VectorTopNShape shape) {
-        return findVectorIndex(shape, false);
-    }
-
-    /**
-     * Finds an ANN descriptor for the requested null ordering.
-     * ANN candidates omit null vectors, so a nullable vector cannot satisfy NULLS FIRST.
-     * NULLS LAST remains a valid planning request; the later execution layer must either
-     * replenish trailing null rows when fewer than {@code k} non-null rows exist or fall back.
-     */
-    public Optional<ConnectorIndexDescriptor> findVectorIndex(VectorTopNShape shape, boolean nullsFirst) {
-        OptionalInt fieldId = resolveFieldId(shape.getColumn());
-        if (fieldId.isEmpty()) {
-            return Optional.empty();
-        }
-        return metadata.getDescriptors(fieldId.getAsInt()).stream()
-                .filter(descriptor -> descriptor.getType() == IndexType.VECTOR)
-                .filter(descriptor -> descriptor.supports(Operation.VECTOR_TOP_N))
-                .filter(descriptor -> descriptor.getVectorMetric().filter(shape.getMetric()::equals).isPresent())
-                .filter(descriptor -> descriptor.getVectorDimension().orElse(-1) == shape.getQueryVector().length)
-                .filter(descriptor -> !nullsFirst || !descriptor.isNullable())
-                .findFirst();
-    }
-
-    public boolean supportsVectorTopN(ScalarOperator scoreExpression, boolean ascending) {
-        return analyzeVectorTopNShape(scoreExpression, ascending)
-                .flatMap(this::findVectorIndex)
-                .isPresent();
     }
 
     private boolean supports(ScalarPredicateShape shape) {
@@ -329,31 +253,6 @@ public final class IndexAnalyzer {
         }
     }
 
-    private static Optional<VectorIndexMetric> metricForFunction(String function) {
-        if (FunctionSet.APPROX_L2_DISTANCE.equalsIgnoreCase(function)) {
-            return Optional.of(VectorIndexMetric.L2);
-        }
-        if (FunctionSet.APPROX_COSINE_SIMILARITY.equalsIgnoreCase(function)) {
-            return Optional.of(VectorIndexMetric.COSINE);
-        }
-        if (FunctionSet.APPROX_INNER_PRODUCT.equalsIgnoreCase(function)) {
-            return Optional.of(VectorIndexMetric.INNER_PRODUCT);
-        }
-        return Optional.empty();
-    }
-
-    private static boolean supportsDirection(VectorIndexMetric metric, boolean ascending) {
-        return metric == VectorIndexMetric.L2 ? ascending : !ascending;
-    }
-
-    private static ScalarOperator unwrapFloatingPointCast(ScalarOperator expression) {
-        ScalarOperator current = expression;
-        while (current instanceof CastOperator && current.getType().isFloatingPointType()) {
-            current = current.getChild(0);
-        }
-        return current;
-    }
-
     private static boolean isNonNullLiteral(ScalarOperator expression) {
         if (expression instanceof ConstantOperator) {
             return !((ConstantOperator) expression).isNull();
@@ -364,107 +263,6 @@ public final class IndexAnalyzer {
         return expression instanceof ArrayOperator
                 && !expression.getChildren().isEmpty()
                 && expression.getChildren().stream().allMatch(IndexAnalyzer::isNonNullLiteral);
-    }
-
-    private static Optional<float[]> extractFloatArrayLiteral(ScalarOperator expression) {
-        ScalarOperator unwrapped = expression;
-        while (unwrapped instanceof CastOperator) {
-            // Prepared statements bind vector parameters as CAST(string AS ARRAY<FLOAT>).
-            // Preserve the cast's target type before looking through it for a literal array.
-            if (unwrapped.getType() instanceof ArrayType
-                    && ((ArrayType) unwrapped.getType()).getItemType().isFloatingPointType()
-                    && unwrapped.getChild(0) instanceof ConstantOperator
-                    && unwrapped.getChild(0).getType().isStringType()) {
-                return extractFloatArrayString((ConstantOperator) unwrapped.getChild(0));
-            }
-            // Do not look through conversions such as FLOAT -> INT -> FLOAT: the
-            // normalized vector must have the same values as the SQL expression.
-            if (!(unwrapped.getType() instanceof ArrayType)
-                    || !(unwrapped.getChild(0).getType() instanceof ArrayType)
-                    || !isValuePreservingFloatCast(
-                            ((ArrayType) unwrapped.getChild(0).getType()).getItemType(),
-                            ((ArrayType) unwrapped.getType()).getItemType())) {
-                return Optional.empty();
-            }
-            unwrapped = unwrapped.getChild(0);
-        }
-        if (!(unwrapped instanceof ArrayOperator) || !(unwrapped.getType() instanceof ArrayType)
-                || !((ArrayType) unwrapped.getType()).getItemType().isFloatingPointType()
-                || unwrapped.getChildren().isEmpty()) {
-            return Optional.empty();
-        }
-
-        float[] vector = new float[unwrapped.getChildren().size()];
-        for (int i = 0; i < unwrapped.getChildren().size(); i++) {
-            Optional<Float> value = extractFloatLiteral(unwrapped.getChild(i));
-            if (value.isEmpty() || !Float.isFinite(value.get())) {
-                return Optional.empty();
-            }
-            vector[i] = value.get();
-        }
-        return Optional.of(vector);
-    }
-
-    private static Optional<float[]> extractFloatArrayString(ConstantOperator constant) {
-        if (constant.isNull()) {
-            return Optional.empty();
-        }
-        String literal = constant.getVarchar().trim();
-        if (!literal.startsWith("[") || !literal.endsWith("]")) {
-            return Optional.empty();
-        }
-        // Keep empty tokens so empty arrays and missing/trailing elements cannot become vectors.
-        String[] elements = literal.substring(1, literal.length() - 1).split(",", -1);
-        float[] vector = new float[elements.length];
-        try {
-            for (int i = 0; i < elements.length; i++) {
-                String element = elements[i].trim();
-                // Java also accepts hex floats and f/d suffixes, unlike SQL casts.
-                if (!DECIMAL_FLOAT.matcher(element).matches()) {
-                    return Optional.empty();
-                }
-                vector[i] = Float.parseFloat(element);
-                if (!Float.isFinite(vector[i])) {
-                    return Optional.empty();
-                }
-            }
-        } catch (NumberFormatException e) {
-            // Recognition must not change the errors or semantics of the original SQL expression.
-            return Optional.empty();
-        }
-        return Optional.of(vector);
-    }
-
-    private static Optional<Float> extractFloatLiteral(ScalarOperator expression) {
-        if (expression instanceof CastOperator) {
-            if (!isValuePreservingFloatCast(expression.getChild(0).getType(), expression.getType())) {
-                return Optional.empty();
-            }
-            return extractFloatLiteral(expression.getChild(0));
-        }
-        if (!(expression instanceof ConstantOperator)) {
-            return Optional.empty();
-        }
-        ConstantOperator constant = (ConstantOperator) expression;
-        if (constant.isNull()) {
-            return Optional.empty();
-        }
-        if (constant.getType().equals(FloatType.FLOAT)) {
-            return Optional.of((float) constant.getFloat());
-        }
-        if (constant.getType().equals(FloatType.DOUBLE)) {
-            return Optional.of((float) constant.getDouble());
-        }
-        Optional<ConstantOperator> converted = constant.castTo(FloatType.FLOAT);
-        if (converted.isEmpty() || converted.get().isNull()) {
-            return Optional.empty();
-        }
-        return Optional.of((float) converted.get().getFloat());
-    }
-
-    private static boolean isValuePreservingFloatCast(Type source, Type target) {
-        return source.isFloatingPointType() && (source.equals(target)
-                || (source.equals(FloatType.FLOAT) && target.equals(FloatType.DOUBLE)));
     }
 
     private static ScalarOperator compoundAndOrNull(List<ScalarOperator> conjuncts) {
@@ -517,47 +315,6 @@ public final class IndexAnalyzer {
 
         public boolean hasResidual() {
             return residualPredicate != null;
-        }
-    }
-
-    public static final class VectorTopNShape {
-        private final ColumnRefOperator column;
-        private final float[] queryVector;
-        private final VectorIndexMetric metric;
-        private final boolean ascending;
-
-        private VectorTopNShape(ColumnRefOperator column, float[] queryVector,
-                                VectorIndexMetric metric, boolean ascending) {
-            this.column = column;
-            this.queryVector = queryVector.clone();
-            this.metric = metric;
-            this.ascending = ascending;
-        }
-
-        public String getColumnName() {
-            return column.getName();
-        }
-
-        public ColumnRefOperator getColumn() {
-            return column;
-        }
-
-        public float[] getQueryVector() {
-            return queryVector.clone();
-        }
-
-        public VectorIndexMetric getMetric() {
-            return metric;
-        }
-
-        public boolean isAscending() {
-            return ascending;
-        }
-
-        @Override
-        public String toString() {
-            return "column=" + column + ", vector=" + Arrays.toString(queryVector)
-                    + ", metric=" + metric + ", ascending=" + ascending;
         }
     }
 }

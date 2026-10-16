@@ -181,7 +181,7 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         // create unpartitioned table
         createPaimonUnpartitionedTable(catalog, db);
 
-        // create a table used by connector vector TopN planning tests
+        // create a table used to verify ordinary vector expressions with scalar index planning
         createPaimonVectorTable(catalog, db);
 
         // create partitioned table

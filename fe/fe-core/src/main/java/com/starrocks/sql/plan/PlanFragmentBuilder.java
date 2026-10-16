@@ -1865,14 +1865,27 @@ public class PlanFragmentBuilder {
                     new PaimonIndexScanNode(context.getNextNodeId(), tupleDescriptor, indexTable);
             scanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(scanNode, true);
-            scanNode.setupScanRangeLocations(node.getPredicate());
-            scanNode.setLimit(node.getLimit());
+            List<ScalarOperator> residualPredicates = scanNode.setupScanRangeLocations(node.getPredicate());
             scanNode.setDataCacheOptions(node.getDataCacheOptions());
 
             tupleDescriptor.computeMemLayout();
             registerScanNode(node, scanNode, context);
+
+            PlanNode planRoot = scanNode;
+            if (!residualPredicates.isEmpty()) {
+                List<Expr> predicates = residualPredicates.stream()
+                        .map(predicate -> ScalarOperatorToExpr.buildExecExpression(predicate,
+                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                        .collect(Collectors.toList());
+                SelectNode selectNode = new SelectNode(context.getNextNodeId(), scanNode, predicates);
+                selectNode.computeStatistics(optExpression.getStatistics());
+                currentExecGroup.add(selectNode);
+                planRoot = selectNode;
+            }
+            // Result predicates run outside the specialized scanner, so its limit cannot run first.
+            planRoot.setLimit(node.getLimit());
             PlanFragment fragment = new PlanFragment(
-                    context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
+                    context.getNextFragmentId(), planRoot, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

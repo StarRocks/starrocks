@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -37,9 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
-import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
@@ -54,8 +51,6 @@ public class IndexAnalyzerTest {
             new ColumnRefOperator(1, IntegerType.INT, "bitmap_col", true);
     private final ColumnRefOperator rangeColumn =
             new ColumnRefOperator(2, IntegerType.INT, "range_col", true);
-    private final ColumnRefOperator vectorColumn =
-            new ColumnRefOperator(3, ArrayType.ARRAY_FLOAT, "embedding", true);
 
     private final ConnectorIndexMetadata metadata = ConnectorIndexMetadata.of(
             42, TableType.DATA_EVOLUTION, List.of(
@@ -67,9 +62,7 @@ public class IndexAnalyzerTest {
                             Operation.EQUAL, Operation.LESS_THAN,
                             Operation.LESS_THAN_OR_EQUAL, Operation.GREATER_THAN,
                             Operation.GREATER_THAN_OR_EQUAL, Operation.IN,
-                            Operation.NOT_IN, Operation.STARTS_WITH)),
-                    vectorDescriptor(VectorIndexMetric.L2), vectorDescriptor(VectorIndexMetric.COSINE),
-                    vectorDescriptor(VectorIndexMetric.INNER_PRODUCT)));
+                            Operation.NOT_IN, Operation.STARTS_WITH))));
 
     @Test
     public void testConnectorMetadataContract() {
@@ -92,8 +85,8 @@ public class IndexAnalyzerTest {
         };
         ConnectorIndexMetadata actual = fakeProvider.getIndexMetadata(new PaimonTable(), null);
         Assertions.assertEquals(42, actual.getSnapshotId());
-        Assertions.assertEquals(3, actual.getDescriptors("embedding").size());
-        Assertions.assertTrue(actual.findDescriptor("embedding", IndexType.VECTOR).isPresent());
+        Assertions.assertEquals(1, actual.getDescriptors("range_col").size());
+        Assertions.assertTrue(actual.findDescriptor("range_col", IndexType.RANGE).isPresent());
     }
 
     @Test
@@ -186,200 +179,35 @@ public class IndexAnalyzerTest {
     }
 
     @Test
-    public void testVectorTopNRecognitionRequiresCompatibleDirection() {
-        ArrayOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
-        CallOperator l2 = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(vectorColumn, queryVector));
-        CallOperator cosine = new CallOperator(FunctionSet.APPROX_COSINE_SIMILARITY, FloatType.FLOAT,
-                List.of(queryVector, vectorColumn));
-
-        IndexAnalyzer analyzer = new IndexAnalyzer(metadata);
-        Assertions.assertFalse(analyzer.supportsVectorTopN(ConstantOperator.createFloat(1), true));
-        Assertions.assertTrue(analyzer.supportsVectorTopN(l2, true));
-        Assertions.assertFalse(analyzer.supportsVectorTopN(l2, false));
-        Assertions.assertTrue(analyzer.supportsVectorTopN(cosine, false));
-        Assertions.assertFalse(analyzer.supportsVectorTopN(cosine, true));
-
-        CallOperator innerProduct = new CallOperator(FunctionSet.APPROX_INNER_PRODUCT, FloatType.FLOAT,
-                List.of(vectorColumn, new CastOperator(ArrayType.ARRAY_FLOAT, queryVector)));
-        Assertions.assertTrue(analyzer.supportsVectorTopN(innerProduct, false));
-        Assertions.assertTrue(analyzer.supportsVectorTopN(new CastOperator(FloatType.DOUBLE, l2), true));
-
-        CallOperator unsupported = new CallOperator("unsupported_distance", FloatType.FLOAT,
-                List.of(vectorColumn, queryVector));
-        Assertions.assertFalse(analyzer.supportsVectorTopN(unsupported, true));
-
-        ColumnRefOperator unindexed = new ColumnRefOperator(4, ArrayType.ARRAY_FLOAT, "other", true);
-        CallOperator unindexedL2 = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(unindexed, queryVector));
-        Assertions.assertFalse(analyzer.supportsVectorTopN(unindexedL2, true));
-
-        ConnectorIndexMetadata cosineOnly = ConnectorIndexMetadata.of(
-                42, TableType.DATA_EVOLUTION, List.of(vectorDescriptor(VectorIndexMetric.COSINE)));
-        Assertions.assertFalse(new IndexAnalyzer(cosineOnly).supportsVectorTopN(l2, true));
-
-        IndexAnalyzer.VectorTopNShape shape = IndexAnalyzer.analyzeVectorTopNShape(l2, true).orElseThrow();
-        float[] vector = shape.getQueryVector();
-        vector[0] = 99;
-        Assertions.assertArrayEquals(new float[] {1, 2}, shape.getQueryVector());
-
-        ArrayOperator emptyVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false, List.of());
-        Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
-                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, emptyVector)), true).isEmpty());
-        ArrayOperator nullVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createNull(FloatType.FLOAT)));
-        Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
-                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, nullVector)), true).isEmpty());
-        ArrayOperator nanVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createObject(Double.NaN, FloatType.FLOAT)));
-        Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
-                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, nanVector)), true).isEmpty());
-    }
-
-    @Test
-    public void testVectorTopNRecognizesBoundStringCasts() {
-        IndexAnalyzer analyzer = new IndexAnalyzer(metadata);
-        for (ArrayType targetType : List.of(new ArrayType(FloatType.FLOAT), new ArrayType(FloatType.DOUBLE))) {
-            CastOperator queryVector = new CastOperator(targetType,
-                    ConstantOperator.createVarchar(" [ 1e0, +2.0 ] "));
-            CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                    List.of(vectorColumn, queryVector));
-            IndexAnalyzer.VectorTopNShape shape = IndexAnalyzer.analyzeVectorTopNShape(score, true).orElseThrow();
-            Assertions.assertArrayEquals(new float[] {1, 2}, shape.getQueryVector());
-            Assertions.assertTrue(analyzer.supportsVectorTopN(score, true));
-        }
-
-        CastOperator wrongDimension = new CastOperator(ArrayType.ARRAY_FLOAT,
-                ConstantOperator.createVarchar("[1, 2, 3]"));
-        Assertions.assertFalse(analyzer.supportsVectorTopN(new CallOperator(
-                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, wrongDimension)), true));
-    }
-
-    @Test
-    public void testVectorTopNRejectsInvalidBoundStringCasts() {
-        for (String literal : List.of("", "[]", "[ ]", "1,2", "[1,2", "1,2]", "[1,,2]", "[1,2,]",
-                "[null,2]", "[NaN,2]", "[Infinity,2]", "[1e50,2]", "[[1],2]", "[invalid,2]",
-                "[1f,2f]", "[1d,2d]", "[0x1p0,0x1p1]")) {
-            CastOperator queryVector = new CastOperator(ArrayType.ARRAY_FLOAT, ConstantOperator.createVarchar(literal));
-            Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
-                    FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, queryVector)), true).isEmpty(),
-                    literal);
-        }
-        for (ScalarOperator queryVector : List.of(
-                new CastOperator(ArrayType.ARRAY_FLOAT, ConstantOperator.createNull(VarcharType.VARCHAR)),
-                ConstantOperator.createVarchar("[1,2]"),
-                new CastOperator(new ArrayType(IntegerType.INT), ConstantOperator.createVarchar("[1,2]")))) {
-            Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(new CallOperator(
-                    FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, queryVector)), true).isEmpty());
-        }
-    }
-
-    @Test
-    public void testVectorTopNRejectsValueChangingCasts() {
-        ScalarOperator boundVector = new CastOperator(ArrayType.ARRAY_FLOAT,
-                ConstantOperator.createVarchar("[1.9,2.9]"));
-        ScalarOperator truncatedVector = new CastOperator(ArrayType.ARRAY_FLOAT,
-                new CastOperator(new ArrayType(IntegerType.INT), boundVector));
-        ScalarOperator truncatedElement = new ArrayOperator(ArrayType.ARRAY_FLOAT, false, List.of(
-                new CastOperator(FloatType.FLOAT,
-                        new CastOperator(IntegerType.INT, ConstantOperator.createFloat(1.9))),
-                ConstantOperator.createFloat(2.9)));
-        ScalarOperator narrowedElement = new ArrayOperator(ArrayType.ARRAY_DOUBLE, false, List.of(
-                new CastOperator(FloatType.DOUBLE,
-                        new CastOperator(FloatType.FLOAT, ConstantOperator.createDouble(1.9))),
-                ConstantOperator.createDouble(2.9)));
-        for (ScalarOperator queryVector : List.of(truncatedVector, truncatedElement, narrowedElement)) {
-            CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                    List.of(vectorColumn, queryVector));
-            Assertions.assertTrue(IndexAnalyzer.analyzeVectorTopNShape(score, true).isEmpty());
-        }
-    }
-
-    @Test
-    public void testVectorTopNPreservesSafeFloatingCastsAndDecimalLiterals() {
-        ScalarOperator array = new ArrayOperator(ArrayType.ARRAY_FLOAT, false, List.of(
-                new CastOperator(FloatType.FLOAT, ConstantOperator.createFloat(1.5)),
-                ConstantOperator.createFloat(2)));
-        ScalarOperator widenedElements = new ArrayOperator(ArrayType.ARRAY_DOUBLE, false, List.of(
-                new CastOperator(FloatType.DOUBLE, ConstantOperator.createFloat(1.5)),
-                ConstantOperator.createDouble(2)));
-        ScalarOperator boundVector = new CastOperator(ArrayType.ARRAY_FLOAT,
-                ConstantOperator.createVarchar("[ +.15e1, 2. ]"));
-        for (ScalarOperator queryVector : List.of(array, widenedElements, boundVector,
-                new CastOperator(ArrayType.ARRAY_DOUBLE, new CastOperator(ArrayType.ARRAY_FLOAT, array)))) {
-            CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                    List.of(vectorColumn, queryVector));
-            Assertions.assertArrayEquals(new float[] {1.5f, 2},
-                    IndexAnalyzer.analyzeVectorTopNShape(score, true).orElseThrow().getQueryVector());
-        }
-    }
-
-    @Test
-    public void testVectorTopNRequiresMatchingDimensionAndNullSemantics() {
-        ArrayOperator threeDimensions = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2),
-                        ConstantOperator.createFloat(3)));
-        CallOperator wrongDimension = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(vectorColumn, threeDimensions));
-        Assertions.assertFalse(new IndexAnalyzer(metadata).supportsVectorTopN(wrongDimension, true));
-
-        ConnectorIndexDescriptor nullableDescriptor = new ConnectorIndexDescriptor(
-                IndexType.VECTOR, "test", vectorColumn.getId(), vectorColumn.getName(), true, false,
-                Map.of(ConnectorIndexDescriptor.OPTION_METRIC, VectorIndexMetric.L2.name(),
-                        ConnectorIndexDescriptor.OPTION_DIMENSION, "2"),
-                Set.of(Operation.VECTOR_TOP_N), Coverage.FULL);
-        IndexAnalyzer nullableAnalyzer = new IndexAnalyzer(ConnectorIndexMetadata.of(
-                42, TableType.DATA_EVOLUTION, List.of(nullableDescriptor)));
-        ArrayOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
-        CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(vectorColumn, queryVector));
-        IndexAnalyzer.VectorTopNShape shape = IndexAnalyzer.analyzeVectorTopNShape(score, true).orElseThrow();
-
-        // ANN candidates omit NULL vectors. Until execution can replenish those rows, neither
-        // ANN cannot represent leading nulls. NULLS LAST is still a valid request, but the
-        // execution layer must replenish trailing null rows or fall back when candidates run short.
-        Assertions.assertTrue(nullableAnalyzer.findVectorIndex(shape, true).isEmpty());
-        Assertions.assertTrue(nullableAnalyzer.findVectorIndex(shape, false).isPresent());
-        Assertions.assertTrue(new IndexAnalyzer(metadata).findVectorIndex(shape, true).isPresent());
-    }
-
-    @Test
     public void testScanBindingUsesCurrentFieldIdInsteadOfColumnRefName() {
         ConnectorIndexDescriptor historicalDescriptor = new ConnectorIndexDescriptor(
-                IndexType.VECTOR, "test", 7, "old_embedding", false, false,
-                Map.of(ConnectorIndexDescriptor.OPTION_METRIC, VectorIndexMetric.L2.name(),
-                        ConnectorIndexDescriptor.OPTION_DIMENSION, "2"),
-                Set.of(Operation.VECTOR_TOP_N), Coverage.FULL);
+                IndexType.RANGE, "btree", 7, "old_id", Map.of(), Set.of(Operation.EQUAL), Coverage.FULL);
         ConnectorIndexMetadata renamedMetadata = ConnectorIndexMetadata.of(
                 42, TableType.DATA_EVOLUTION, List.of(historicalDescriptor),
-                Map.of("renamed_embedding", 7, "old_embedding", 8), Set.of());
-        ArrayOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
-                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+                Map.of("renamed_id", 7, "old_id", 8), Set.of());
 
-        // The ColumnRef deliberately keeps the old name. The scan's actual Column is the source
-        // of truth and binds it to field id 7 in the current schema.
-        ColumnRefOperator renamedRef = new ColumnRefOperator(10, ArrayType.ARRAY_FLOAT, "old_embedding", true);
-        Column renamedColumn = new Column("renamed_embedding", ArrayType.ARRAY_FLOAT);
+        // The scan's actual Column binds the stale ColumnRef name to the current stable field id.
+        ColumnRefOperator renamedRef = new ColumnRefOperator(10, IntegerType.INT, "old_id", true);
+        Column renamedColumn = new Column("renamed_id", IntegerType.INT);
         LogicalPaimonScanOperator renamedScan = new LogicalPaimonScanOperator(new PaimonTable(),
                 Map.of(renamedRef, renamedColumn), Map.of(renamedColumn, renamedRef), -1, null);
-        CallOperator renamedScore = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(renamedRef, queryVector));
-        Assertions.assertTrue(IndexAnalyzer.forScan(renamedMetadata, renamedScan)
-                .supportsVectorTopN(renamedScore, true));
+        ScalarOperator renamedPredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, renamedRef, ConstantOperator.createInt(7));
+        IndexCondition condition = IndexAnalyzer.forScan(renamedMetadata, renamedScan)
+                .getIndexCondition(renamedPredicate);
+        Assertions.assertNotNull(condition);
+        Assertions.assertSame(renamedPredicate, condition.getPredicate());
+        Assertions.assertEquals(Map.of(renamedRef.getId(), 7), condition.getFieldIds());
 
-        // Conversely, a ColumnRef name that happens to match the renamed indexed column must not
-        // cross-bind when its actual current-schema Column owns a different field id.
-        ColumnRefOperator reusedNameRef = new ColumnRefOperator(
-                11, ArrayType.ARRAY_FLOAT, "renamed_embedding", true);
-        Column reusedNameColumn = new Column("old_embedding", ArrayType.ARRAY_FLOAT);
+        // Reusing the indexed name for a different current-schema field must not cross-bind.
+        ColumnRefOperator reusedNameRef = new ColumnRefOperator(11, IntegerType.INT, "renamed_id", true);
+        Column reusedNameColumn = new Column("old_id", IntegerType.INT);
         LogicalPaimonScanOperator reusedNameScan = new LogicalPaimonScanOperator(new PaimonTable(),
                 Map.of(reusedNameRef, reusedNameColumn), Map.of(reusedNameColumn, reusedNameRef), -1, null);
-        CallOperator reusedNameScore = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
-                List.of(reusedNameRef, queryVector));
-        Assertions.assertFalse(IndexAnalyzer.forScan(renamedMetadata, reusedNameScan)
-                .supportsVectorTopN(reusedNameScore, true));
+        ScalarOperator reusedNamePredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, reusedNameRef, ConstantOperator.createInt(7));
+        Assertions.assertNull(IndexAnalyzer.forScan(renamedMetadata, reusedNameScan)
+                .getIndexCondition(reusedNamePredicate));
     }
 
     @Test
@@ -388,7 +216,7 @@ public class IndexAnalyzerTest {
         ConnectorIndexMetadata partitionedMetadata = ConnectorIndexMetadata.of(
                 42, TableType.DATA_EVOLUTION, metadata.getDescriptors(),
                 Map.of("bitmap_col", bitmapColumn.getId(), "range_col", rangeColumn.getId(),
-                        "embedding", vectorColumn.getId(), "pt", partitionColumn.getId()),
+                        "pt", partitionColumn.getId()),
                 Set.of(partitionColumn.getId()));
         BinaryPredicateOperator partitionPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, partitionColumn, ConstantOperator.createInt(20260928));
@@ -460,13 +288,5 @@ public class IndexAnalyzerTest {
                                                 Set<Operation> operations) {
         return new ConnectorIndexDescriptor(type, "test", column.getId(), column.getName(), Map.of(), operations,
                 Coverage.FULL);
-    }
-
-    private ConnectorIndexDescriptor vectorDescriptor(VectorIndexMetric metric) {
-        return new ConnectorIndexDescriptor(IndexType.VECTOR, "test", vectorColumn.getId(),
-                vectorColumn.getName(), false, false, Map.of(
-                ConnectorIndexDescriptor.OPTION_METRIC, metric.name(),
-                ConnectorIndexDescriptor.OPTION_DIMENSION, "2"),
-                Set.of(Operation.VECTOR_TOP_N), Coverage.FULL);
     }
 }

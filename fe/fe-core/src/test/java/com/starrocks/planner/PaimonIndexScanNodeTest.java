@@ -25,15 +25,21 @@ import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -61,6 +67,39 @@ public class PaimonIndexScanNodeTest {
                 new BinaryPredicateOperator(BinaryType.NE, args, ConstantOperator.createVarchar("request"))));
         Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonIndexScanNode.extractRequest(
                 new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createInt(1))));
+    }
+
+    @Test
+    public void testExtractRequestRejectsAmbiguousOrResidualArgsPredicates() {
+        ColumnRefOperator args = new ColumnRefOperator(1, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
+        ColumnRefOperator result = new ColumnRefOperator(
+                2, VarbinaryType.VARBINARY, IndexTable.INDEX_RESULT_COLUMN_NAME, true);
+        ScalarOperator request = new BinaryPredicateOperator(
+                BinaryType.EQ, args, ConstantOperator.createVarchar("request"));
+        ScalarOperator residual = new IsNullPredicateOperator(result);
+        Assertions.assertEquals("request", PaimonIndexScanNode.extractRequest(Utils.compoundAnd(residual, request)));
+
+        List<ScalarOperator> invalidPredicates = List.of(
+                new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createVarchar("")),
+                new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createNull(VarcharType.VARCHAR)),
+                new BinaryPredicateOperator(BinaryType.EQ, args, args),
+                new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, args, ConstantOperator.createVarchar("request")),
+                Utils.compoundAnd(request, request),
+                Utils.compoundAnd(request, new BinaryPredicateOperator(
+                        BinaryType.EQ, args, ConstantOperator.createVarchar("another request"))),
+                Utils.compoundAnd(request, new BinaryPredicateOperator(
+                        BinaryType.NE, args, ConstantOperator.createVarchar("another request"))),
+                Utils.compoundAnd(request, new IsNullPredicateOperator(true, args)),
+                Utils.compoundAnd(request, new BinaryPredicateOperator(BinaryType.GT,
+                        new CallOperator("length", IntegerType.INT, List.of(args)), ConstantOperator.createInt(0))),
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, request, residual),
+                residual);
+        for (ScalarOperator predicate : invalidPredicates) {
+            IllegalArgumentException exception = Assertions.assertThrows(IllegalArgumentException.class,
+                    () -> PaimonIndexScanNode.extractRequest(predicate), predicate.toString());
+            Assertions.assertTrue(exception.getMessage().contains("exactly one non-empty string"));
+        }
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonIndexScanNode.extractRequest(null));
     }
 
     @Test
@@ -121,8 +160,9 @@ public class PaimonIndexScanNodeTest {
                 3L, 1000L, condition).toTransportString();
         ColumnRefOperator argsColumn = new ColumnRefOperator(
                 2, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
-        scanNode.setupScanRangeLocations(new BinaryPredicateOperator(
-                BinaryType.EQ, argsColumn, ConstantOperator.createVarchar(transport)));
+        ScalarOperator requestPredicate = new BinaryPredicateOperator(
+                BinaryType.EQ, argsColumn, ConstantOperator.createVarchar(transport));
+        Assertions.assertTrue(scanNode.setupScanRangeLocations(requestPredicate).isEmpty());
 
         Assertions.assertTrue(scanNode.getTablePath().endsWith("/tmp/paimon/orders"));
         List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0L);
@@ -150,5 +190,12 @@ public class PaimonIndexScanNodeTest {
         Assertions.assertTrue(explain.contains("TABLE: orders$global_index"));
         Assertions.assertTrue(explain.contains("SNAPSHOT: 42"));
         Assertions.assertTrue(explain.contains("SHARDS: 2"));
+
+        PaimonIndexScanNode residualScan = new PaimonIndexScanNode(new PlanNodeId(6), descriptor, indexTable);
+        ScalarOperator residual = new IsNullPredicateOperator(new ColumnRefOperator(
+                3, VarbinaryType.VARBINARY, IndexTable.INDEX_RESULT_COLUMN_NAME, true));
+        Assertions.assertEquals(List.of(residual),
+                residualScan.setupScanRangeLocations(Utils.compoundAnd(requestPredicate, residual)));
+        Assertions.assertEquals(locations, residualScan.getScanRangeLocations(0L));
     }
 }
